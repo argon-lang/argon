@@ -1,14 +1,16 @@
 <ArgonTest>
 
-    <Name>Hello World (val with type annotation)</Name>
+    <Name>Hello World (let with type annotation)</Name>
 
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         proc main(): () do
-            val msg: String = "Hello World"
+            let msg: String = "Hello World"
             puts msg
         end
         

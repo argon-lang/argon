@@ -5,13 +5,15 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
 
-        def identity [erased T: type] (value: boxed T): boxed T = value
+        import Argon.Core::*
+
+        def identity [erased T: type] (value: T.boxed): T.boxed = value
 
         proc main(): () do
 
-            val str: String = unbox (identity "A")
+            let str: String = (identity "A").unbox
 
         end
         

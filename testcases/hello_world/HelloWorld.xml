@@ -3,8 +3,9 @@
     <Name>Hello World</Name>
 
     <InputSource name="index.argon">
+        module _
 
-        import Argon.Core/*
+        import Argon.Core::*
 
         proc main(): () do
             puts "Hello World"

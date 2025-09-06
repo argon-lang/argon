@@ -18,12 +18,13 @@ private[source] object SourceModule {
   : ctx.Comp[ArModuleC & HasContext[ctx.type]] =
     for
       exportMapCell <- MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]]
+      moduleDef <- sourceCode.parsed
     yield new ArModuleC {
       override val context: ctx.type = ctx
       import context.Scopes.GlobalScopeBuilder
 
       override def tubeName: TubeName = tn
-      override def path: ModulePath = p
+      override def path: ModulePath = ModulePath(moduleDef.modulePath)
 
       override def allExports(reexportingModules: Set[ModuleName]): Comp[Map[Option[IdentifierExpr], Seq[ModuleExport]]] =
         exportMapCell.get(loadExports(reexportingModules))
@@ -35,14 +36,13 @@ private[source] object SourceModule {
         if reexportingModules.contains(ModuleName(tubeName, path)) then
           ???
         else
-          sourceCode.parsed
-            .runFoldZIO((GlobalScopeBuilder.empty(this), Map.empty[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]])) {
-              case ((scope, acc), stmt) =>
-                processStmt(reexportingModules)(stmt, scope)
-                  .map { (scope, defs) =>
-                    (scope, acc |+| defs)
-                  }
-            }
+          ZIO.foldLeft(moduleDef.stmts)((GlobalScopeBuilder.empty(this), Map.empty[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]])) {
+            case ((scope, acc), stmt) =>
+              processStmt(reexportingModules)(stmt, scope)
+                .map { (scope, defs) =>
+                  (scope, acc |+| defs)
+                }
+          }
             .map { (_, acc) => acc }
 
       private def processStmt(reexportingModules: Set[ModuleName])(stmt: WithSource[ast.Stmt], scope: GlobalScopeBuilder): Comp[(GlobalScopeBuilder, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]])] =

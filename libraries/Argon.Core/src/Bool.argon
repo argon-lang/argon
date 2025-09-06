@@ -1,5 +1,6 @@
+module Bool
 
-import ../String/*
+import ::String::*
 
 public inline def Bool: type = __argon_builtin bool_type
 

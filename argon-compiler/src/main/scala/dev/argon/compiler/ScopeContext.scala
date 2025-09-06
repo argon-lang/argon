@@ -90,7 +90,7 @@ trait ScopeContext {
 
     private def toExportedGiven(exp: ModuleExportC[self.type]): Option[ImplicitValue] =
       exp match {
-        case ModuleExportC.Function(f) if f.isProof =>
+        case ModuleExportC.Function(f) if f.isWitness =>
           Some(ImplicitValue.OfFunction(f))
 
         case ModuleExportC.Function(_) => None

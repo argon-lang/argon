@@ -249,7 +249,7 @@ abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqua
 
   def isInline: Boolean
   def isErased: Boolean
-  def isProof: Boolean
+  def isWitness: Boolean
   def effects: context.DefaultExprContext.EffectInfo
 
   def importSpecifier: Comp[ImportSpecifier]

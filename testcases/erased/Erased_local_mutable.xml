@@ -4,13 +4,15 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc printMessage(erased n: Int): () =
             puts "Hello World"
 
         proc main(): () do
-            erased var erasedValue: Int = 3
+            erased let mut erasedValue: Int = 3
             printMessage(erasedValue)
         end
 

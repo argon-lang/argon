@@ -242,7 +242,7 @@ trait TypeResolver extends UsingContext {
               isProof <- Ref.make(false)
               _ <- ModifierParser()
                 .withErased(isErased)
-                .withProof(isProof)
+                .withWitness(isProof)
                 .parse(decl.modifiers)
               isErased <- isErased.get
               isProof <- isProof.get
@@ -572,7 +572,7 @@ trait TypeResolver extends UsingContext {
                   ))
               }
 
-            case ast.StringFragment.Interpolate(_, _) => ???
+            case ast.StringFragment.Interpolate(_) => ???
           }
           .reduceLeft((a, b) =>
             new InferFactory {
@@ -592,7 +592,7 @@ trait TypeResolver extends UsingContext {
       case ast.Expr.Tuple(items) =>
         TupleExprFactory(expr.location, items.map(resolveExpr))
 
-      case ast.Expr.Type(None) =>
+      case _: ast.Expr.Type.type =>
         new InferFactory {
           override def loc: Loc = expr.location
 

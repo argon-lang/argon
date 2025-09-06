@@ -5,10 +5,12 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc main(): () do
-            val name = "Bob"
+            let name = "Bob"
             puts "Hello #{name}"
         end
 

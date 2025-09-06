@@ -23,7 +23,7 @@ private[source] object SourceFunction {
 
       override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
       override def isErased: Boolean = erased
-      override def isProof: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Proof)
+      override def isWitness: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Witness)
 
       override def effects: context.DefaultExprContext.EffectInfo =
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
@@ -47,27 +47,27 @@ private[source] object SourceFunction {
             scope <- scope.toScope
             sig <- signature
             scope2 = context.Scopes.ParameterScope(context.TRExprContext.ParameterOwner.Func(this), scope, sig.parameters)
-            impl <- decl.body.value match {
-              case ast.Expr.Extern(name) =>
+            impl <- decl.body match {
+              case ast.FunctionBody.ExternBody(WithLocation(name, loc)) =>
                 externProvider.getExternFunction(name)
                   .flatMap {
                     case Some(ext) =>
                       ZIO.succeed(ctx.implementations.FunctionImplementation.Extern(ext))
 
                     case None =>
-                      ErrorLog.logError(CompilerError.UnknownExtern(name))
+                      ErrorLog.logError(CompilerError.UnknownExtern(loc, name))
                         .as(context.implementations.FunctionImplementation.Expr(
                           context.DefaultExprContext.Expr.Error()
                         ))
                   }
 
 
-              case _ =>
+              case ast.FunctionBody.ExprBody(expr) =>
                 val tr = new TypeResolver {
                   override val context: ctx.type = ctx
                 }
 
-                tr.typeCheckExpr(scope2)(decl.body, sig.returnType, effects, erased = isErased)
+                tr.typeCheckExpr(scope2)(expr, sig.returnType, effects, erased = isErased)
                   .map(context.implementations.FunctionImplementation.Expr.apply)
             }
           yield impl

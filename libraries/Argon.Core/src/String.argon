@@ -1,5 +1,6 @@
+module String
 
-import ../Bool/*
+import ::Bool::*
 
 public inline def String: type = __argon_builtin string_type
 

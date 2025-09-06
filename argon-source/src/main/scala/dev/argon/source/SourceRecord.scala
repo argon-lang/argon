@@ -38,7 +38,7 @@ private[source] object SourceRecord {
               WithLocation(
                 ast.ReturnTypeSpecifier(
                   returnType = WithLocation(
-                    ast.Expr.Type(None),
+                    ast.Expr.Type,
                     decl.name.location,
                   ),
                   ensuresClauses = Seq(),

@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         class ValueBox(T: type) <: Object
 
@@ -19,7 +21,7 @@
         end
         
         proc main(): () do
-            val box = ValueBox(String).new 'Hello World'
+            let box = ValueBox(String).new 'Hello World'
             puts box.value
         end
         

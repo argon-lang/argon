@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         def factorial(n: Int): Int =
             if n = 1 then

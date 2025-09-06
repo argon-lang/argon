@@ -4,15 +4,17 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc callFunc (f: Int -> Int) (i: Int): Int =
             f i
 
         proc main(): () do
-            var addNum: Int = 25
-            val g: Int -> Int = x => x + addNum
-            puts ((callFunc (y => y + addNum + 1) 10).to_s())
+            let mut addNum: Int = 25
+            let g: Int -> Int = |x| x + addNum
+            puts ((callFunc (|y| y + addNum + 1) 10).to_s())
         end
 
 

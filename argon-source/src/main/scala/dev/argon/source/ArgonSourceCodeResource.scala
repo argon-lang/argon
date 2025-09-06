@@ -1,17 +1,18 @@
 package dev.argon.source
 
-import dev.argon.ast.Stmt
+import dev.argon.ast.{ModuleDeclaration, Stmt}
 import dev.argon.compiler.*
 import dev.argon.io.*
 import dev.argon.parser.{ArgonSourceParser, SyntaxError}
 import dev.argon.util.WithSource
+import zio.ZIO
 import zio.stream.*
 
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
 abstract class ArgonSourceCodeResource[+E] extends TextResource[E]:
-  def parsed: ZStream[Any, E, WithSource[Stmt]]
+  def parsed: ZIO[Any, E, ModuleDeclaration]
 end ArgonSourceCodeResource
 
 object ArgonSourceCodeResource:
@@ -21,11 +22,8 @@ object ArgonSourceCodeResource:
         case resource: ArgonSourceCodeResource[E] => resource
         case _ =>
           new ArgonSourceCodeResource[E]:
-            override def parsed: ZStream[Any, E, WithSource[Stmt]] =
-              resource.decode[TextResource]
-                .asText
-                .mapChunks { strings => strings.flatMap(_.toCharArray.nn) }
-                .via(ArgonSourceParser.parse(fileName))
+            override def parsed: ZIO[Any, E, ModuleDeclaration] =
+              ArgonSourceParser.parse[Any, E](fileName, resource.decode[TextResource].asText)
 
             override def asText: ZStream[Any, E, String] =
               resource.decode[TextResource]

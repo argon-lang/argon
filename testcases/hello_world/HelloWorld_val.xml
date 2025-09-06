@@ -1,14 +1,16 @@
 <ArgonTest>
 
-    <Name>Hello World (val)</Name>
+    <Name>Hello World (let)</Name>
 
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         proc main(): () do
-            val msg = "Hello World"
+            let msg = "Hello World"
             puts msg
         end
         

@@ -5,18 +5,20 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         record MyRecord
             name: String
         end
         
         proc main(): () do
-            val r = MyRecord {
+            let r = MyRecord {
                 name: "Hello"
             }
 
-            val s = r.name
+            let s = r.name
             puts s
         end
             

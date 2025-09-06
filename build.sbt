@@ -2,10 +2,12 @@ import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits.*
 import org.scalajs.linker.interface.ESVersion
-import complete.DefaultParsers._
+import complete.DefaultParsers.*
+import org.scalajs.ir.Trees.JSUnaryOp.!
 
 import java.io.File
-import scala.sys.process.Process
+import scala.collection.mutable.ArrayBuffer
+import scala.sys.process.{Process, ProcessLogger}
 
 ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
@@ -31,6 +33,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.argon" %%% "argon-async-util" % "2.1.0",
     "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.2",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
+
+    "com.lihaoyi" %%% "sourcecode" % "0.4.2",
 
     "dev.optics" %%% "monocle-core"  % "3.3.0",
     "dev.optics" %%% "monocle-macro" % "3.3.0",
@@ -128,7 +132,7 @@ lazy val compilerOptions = Seq(
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-release", "22",
+    "-release", "24",
     "-source", "future",
     "-language:higherKinds",
     "-language:existentials",
@@ -145,7 +149,7 @@ lazy val compilerOptions = Seq(
 
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "--release", "22",
+    "--release", "24",
     "-Werror",
     "-Xlint:all,-serial,-try,-processing",
   ),
@@ -269,6 +273,58 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
   .settings(
     commonSettings,
     compilerOptions,
+
+
+    Compile / managedSourceDirectories += sourceManaged.value / "parser",
+    Compile / sourceGenerators += Def.task {
+      val s = streams.value
+      val log = s.log
+
+
+
+      val resDir = sourceManaged.value / "parser"
+
+      val parserGenFiles = Seq(
+        ("token_lexer", "TokenLexer"),
+        ("double_quote_string_lexer", "StringLexer"),
+        ("argon_parser", "ArgonParserImpl"),
+      )
+
+
+      parserGenFiles
+        .flatMap { case (exeName, sourceFileName) =>
+          val backendDestFile = resDir / s"dev/argon/parser/$sourceFileName.scala"
+          val ext = if(System.getProperty("os.name", "").startsWith("Windows")) ".exe" else ""
+          val exeFile = file(s"parse18/target/release/$exeName$ext")
+
+          val cargoBuildErrors = ArrayBuffer[String]()
+          val ignoreOutput = ProcessLogger(
+            out => cargoBuildErrors += out,
+            err => cargoBuildErrors += err,
+          )
+
+          val buildExitCode = Process(Seq("cargo", "build", "--bin", exeName, "--release"), Some(file("parse18"))) ! ignoreOutput
+          if(buildExitCode != 0) {
+            cargoBuildErrors.foreach(log.error(_))
+            throw new Exception("cargo build failed with exit code " + buildExitCode)
+          }
+
+          val f = FileFunction.cached(s.cacheDirectory / ("parser-" + exeName)) { (in: Set[File]) =>
+            log.info("Generating parser in " + backendDestFile)
+
+            IO.createDirectory(backendDestFile.getParentFile)
+            val genExitCode = Process(Seq(exeFile.toString)) #> backendDestFile ! log
+            if(genExitCode != 0) {
+              throw new Exception(s"Parser generation ($exeName) failed with exit code $genExitCode")
+            }
+
+            Set(backendDestFile)
+          }
+
+          f(Set(exeFile))
+        }
+        .toSeq
+    }.taskValue,
 
     name := "argon-parser",
   )

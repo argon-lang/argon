@@ -4,13 +4,15 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc callFunc (f: Int -> String) (i: Int): String =
             f i
 
         proc main(): () do
-            puts (callFunc (x => (x + 4).to_s()) 10)
+            puts (callFunc (|x| (x + 4).to_s()) 10)
         end
 
 

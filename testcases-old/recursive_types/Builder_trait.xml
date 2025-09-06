@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         trait IntBuilder(self: type) <: Object
             public abstract def _.withValue(i: Int): self
@@ -31,8 +33,8 @@
         end
 
         proc main(): () do
-            val builder = IntStrBuilder.new 5 'Hello'
-            val builder2 = builder.withValue 10
+            let builder = IntStrBuilder.new 5 'Hello'
+            let builder2 = builder.withValue 10
 
             puts (builder2.intValue.to_s())
             puts builder2.strValue

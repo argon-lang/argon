@@ -1,25 +1,17 @@
 package dev.argon.parser
 
-import dev.argon.grammar.Characterizer
-import dev.argon.ast.{Stmt, ModulePatternMapping}
-import dev.argon.util.*
-import zio.Chunk
+import dev.argon.ast.ModuleDeclaration
 import zio.stream.*
+import zio.{Scope, ZIO}
 
-object ArgonSourceParser {
-
-  def parse(fileName: Option[String]): ZPipeline[Any, SyntaxError, Char, WithSource[Stmt]] =
-    ZPipeline.fromChannel(
-      Characterizer.characterize(fileName)
-        .pipeToOrFail(Lexer.lex(fileName))
-        .pipeToOrFail(ArgonParser.parse(fileName))
+object ArgonSourceParser {  
+  def parse[R, E >: SyntaxError](fileName: Option[String], stream: ZStream[R, E, String]): ZIO[R, E, ModuleDeclaration] =
+    ZIO.scoped(
+      for
+        textReader <- StreamTextReader.make(stream)
+        lexer <- ArgonLexer.make(fileName)(textReader)
+        parser <- ArgonParser.make(fileName)(lexer)
+        module <- parser.parse
+      yield module
     )
-
-  def parseTubeSpec(fileName: Option[String]): ZPipeline[Any, SyntaxError, Char, ModulePatternMapping] =
-    ZPipeline.fromChannel(
-      Characterizer.characterize(fileName)
-        .pipeToOrFail(Lexer.lex(fileName))
-        .pipeToOrFail(ArgonParser.parseTubeSpec(fileName))
-    )
-
 }

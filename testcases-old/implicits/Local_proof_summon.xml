@@ -4,7 +4,9 @@
 
     <InputSource name="index.argon"><![CDATA[
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         sealed trait IsEven (n: Int) <: Object
         end
@@ -18,7 +20,7 @@
             puts (n.to_s())
 
         proc main(): () do
-            proof val zeroIsEven: IsEven 0 = ZeroIsEven.new()
+            proof let zeroIsEven: IsEven 0 = ZeroIsEven.new()
             printEven 0 (summon IsEven 0)
         end
 

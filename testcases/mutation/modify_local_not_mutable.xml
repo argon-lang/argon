@@ -4,10 +4,12 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc main(): () do
-            val x = 5
+            let x = 5
             x := x + 1
             puts (x.to_s())
         end

@@ -4,7 +4,9 @@
 
     <InputSource name="index.argon"><![CDATA[
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         sealed trait IsEven (n: Int) <: Object
         end

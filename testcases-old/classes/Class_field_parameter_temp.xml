@@ -5,11 +5,13 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         class MyClass <: Object
             public new(name: String)
-                val t = name
+                let t = name
                 field name = t
             end
 

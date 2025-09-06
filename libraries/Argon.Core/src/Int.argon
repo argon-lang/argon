@@ -1,6 +1,7 @@
+module Int
 
-import ../Bool/*
-import ../String/*
+import ::Bool::*
+import ::String::*
 
 public inline def Int: type = __argon_builtin int_type
 

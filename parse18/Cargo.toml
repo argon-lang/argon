@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["parse18-lexer-gen", "parse18-ll-gen", "argon-parser"]

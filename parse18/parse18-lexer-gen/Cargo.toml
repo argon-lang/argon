@@ -1,0 +1,7 @@
+[package]
+name = "parse18-lexer-gen"
+edition = "2024"
+
+[dependencies]
+regex-syntax = "0.8.6"
+unicode-general-category = "1.0.0"

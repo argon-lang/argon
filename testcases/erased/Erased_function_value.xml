@@ -4,7 +4,9 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc printMessage(erased n: Int): () =
             puts "Hello World"

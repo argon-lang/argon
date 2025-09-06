@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         proc add(a: Int, b: Int): Int do
             begin

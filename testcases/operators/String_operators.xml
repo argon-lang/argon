@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon">
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         proc main(): () do
             puts ("A" ++ "B")

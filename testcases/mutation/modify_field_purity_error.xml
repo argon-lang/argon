@@ -4,10 +4,12 @@
 
     <InputSource name="index.argon"><![CDATA[
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         record MyRecord
-            var msg: String
+            mut msg: String
         end
 
         def doMut(r: MyRecord): () do
@@ -15,7 +17,7 @@
         end
 
         proc main(): () do
-            val o = MyRecord {
+            let o = MyRecord {
                 msg: "Hello Variable"
             }
             doMut o

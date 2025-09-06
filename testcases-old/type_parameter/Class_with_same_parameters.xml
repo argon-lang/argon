@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         class MyClass(T: type) <: Object
         end

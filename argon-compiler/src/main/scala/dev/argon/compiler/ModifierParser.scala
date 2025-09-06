@@ -8,13 +8,13 @@ import zio.*
 
 final case class ModifierParser(
   isErased: Option[Ref[Boolean]] = None,
-  isProof: Option[Ref[Boolean]] = None,
+  isWitness: Option[Ref[Boolean]] = None,
 ) {
   def withErased(r: Ref[Boolean]): ModifierParser =
     copy(isErased = Some(r))
 
-  def withProof(r: Ref[Boolean]): ModifierParser =
-    copy(isProof = Some(r))
+  def withWitness(r: Ref[Boolean]): ModifierParser =
+    copy(isWitness = Some(r))
 
   def parse(modifiers: Seq[WithSource[Modifier]]): URIO[ErrorLog, Unit] =
     ZIO.foreachDiscard(modifiers) { modifier =>
@@ -30,7 +30,7 @@ final case class ModifierParser(
 
       modifier.value match {
         case Modifier.Erased => parseFlag(isErased)
-        case Modifier.Proof => parseFlag(isProof)
+        case Modifier.Witness => parseFlag(isWitness)
         case _ => ???
       }
     }

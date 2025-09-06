@@ -7,7 +7,13 @@ sealed trait TokenCategory derives CanEqual {
 object TokenCategory {
   final case class Wrap[T](value: TokenCategory { type TokenType = T })
 
-  case object StringToken extends TokenCategory
+  case object EndOfFile extends TokenCategory
+  
+  case object StringStart extends TokenCategory
+  case object StringEnd extends TokenCategory
+  case object StringText extends TokenCategory
+  case object StringInterpolationStart extends TokenCategory
+  
   case object IntToken extends TokenCategory
 
   case object Identifier extends TokenCategory
@@ -20,8 +26,9 @@ object TokenCategory {
   case object KW_PROC extends TokenCategory
   case object KW_DO extends TokenCategory
   case object KW_END extends TokenCategory
-  case object KW_VAR extends TokenCategory
-  case object KW_VAL extends TokenCategory
+  case object KW_LET extends TokenCategory
+  case object KW_MUT extends TokenCategory
+  case object KW_MODULE extends TokenCategory
   case object KW_RECORD extends TokenCategory
   case object KW_WITH extends TokenCategory
   case object KW_CASE extends TokenCategory
@@ -55,7 +62,7 @@ object TokenCategory {
   case object KW_MAINTAINS extends TokenCategory
   case object KW_ASSERT extends TokenCategory
   case object KW_SUMMON extends TokenCategory
-  case object KW_PROOF extends TokenCategory
+  case object KW_WITNESS extends TokenCategory
   case object KW_INLINE extends TokenCategory
   case object KW_EXTENSION extends TokenCategory
   case object KW_INVERSE extends TokenCategory
@@ -65,6 +72,7 @@ object TokenCategory {
   case object KW_BOXED extends TokenCategory
   case object KW_BOX extends TokenCategory
   case object KW_UNBOX extends TokenCategory
+  case object KW_FN extends TokenCategory
 
   case object OP_LOGICAL_AND extends TokenCategory
   case object OP_LOGICAL_OR extends TokenCategory
@@ -78,7 +86,9 @@ object TokenCategory {
   case object OP_LOGICAL_NOT extends TokenCategory
   case object OP_PLUS extends TokenCategory
   case object OP_MINUS extends TokenCategory
+  case object OP_STAR extends TokenCategory
   case object OP_MUL extends TokenCategory
+  case object OP_SLASH extends TokenCategory
   case object OP_DIV extends TokenCategory
   case object OP_BITAND extends TokenCategory
   case object OP_BITOR extends TokenCategory
@@ -86,8 +96,8 @@ object TokenCategory {
   case object OP_BITNOT extends TokenCategory
   case object OP_LESSTHAN extends TokenCategory
   case object OP_GREATERTHAN extends TokenCategory
-  case object OP_LAMBDA_TYPE extends TokenCategory
-  case object OP_LAMBDA extends TokenCategory
+  case object OP_ARROW extends TokenCategory
+  case object OP_FAT_ARROW extends TokenCategory
   case object OP_UNION extends TokenCategory
   case object OP_INTERSECTION extends TokenCategory
   case object OP_CONCAT extends TokenCategory
@@ -95,12 +105,13 @@ object TokenCategory {
   case object OP_PROP_EQUAL extends TokenCategory
   case object OP_PROP_DISJUNCTION extends TokenCategory
   case object OP_PROP_CONJUNCTION extends TokenCategory
+  case object OP_DOTDOT extends TokenCategory
   
   
   case object SYM_DOT extends TokenCategory
-  case object SYM_DOTDOT extends TokenCategory
   case object SYM_COMMA extends TokenCategory
   case object SYM_COLON extends TokenCategory
+  case object SYM_COLONCOLON extends TokenCategory
   case object SYM_SEMICOLON extends TokenCategory
   case object SYM_OPENPAREN extends TokenCategory
   case object SYM_CLOSEPAREN extends TokenCategory
@@ -108,6 +119,7 @@ object TokenCategory {
   case object SYM_CLOSEBRACKET extends TokenCategory
   case object SYM_OPENCURLY extends TokenCategory
   case object SYM_CLOSECURLY extends TokenCategory
-  case object SYM_FUNCTION_RESULT_VALUE extends TokenCategory
+  case object SYM_PIPE extends TokenCategory
+  case object SYM_AT extends TokenCategory
   
 }

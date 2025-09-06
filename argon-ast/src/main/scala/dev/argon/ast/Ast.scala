@@ -7,16 +7,16 @@ sealed trait Stmt
 sealed trait RecordBodyStmt
 
 final case class FunctionDeclarationStmt(
-  modifiers: Vector[WithSource[Modifier]],
+  modifiers: Seq[WithSource[Modifier]],
   purity: Boolean,
   name: WithSource[Option[IdentifierExpr]],
-  parameters: Vector[WithSource[FunctionParameterList]],
+  parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
-  body: WithSource[Expr],
-) extends Stmt
+  body: FunctionBody,
+) extends Stmt with RecordBodyStmt
 
 final case class VariableDeclarationStmt(
-  modifiers: Vector[WithSource[Modifier]],
+  modifiers: Seq[WithSource[Modifier]],
   isMutable: Boolean,
   name: Option[IdentifierExpr],
   varType: Option[WithSource[Expr]],
@@ -24,11 +24,11 @@ final case class VariableDeclarationStmt(
 ) extends Stmt
 
 final case class RecordDeclarationStmt(
-  modifiers: Vector[WithSource[Modifier]],
+  modifiers: Seq[WithSource[Modifier]],
   name: WithSource[IdentifierExpr],
-  parameters: Vector[WithSource[FunctionParameterList]],
+  parameters: Seq[WithSource[FunctionParameterList]],
   returnType: Option[WithSource[Expr]],
-  body: Vector[WithSource[RecordBodyStmt]],
+  body: Seq[WithSource[RecordBodyStmt]],
 ) extends Stmt
 
 final case class RecordField(
@@ -38,15 +38,15 @@ final case class RecordField(
 ) extends RecordBodyStmt
 
 final case class MethodDeclarationStmt(
-  modifiers: Vector[WithSource[Modifier]],
+  modifiers: Seq[WithSource[Modifier]],
   purity: Boolean,
   instanceName: WithSource[Option[IdentifierExpr]],
   instanceType: Option[WithSource[Expr]],
   name: WithSource[Option[IdentifierExpr]],
-  parameters: Vector[WithSource[FunctionParameterList]],
+  parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
-  body: Option[WithSource[Expr]],
-) extends RecordBodyStmt
+  body: Option[FunctionBody],
+) extends Stmt with RecordBodyStmt
 
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)
@@ -62,7 +62,7 @@ final case class FunctionParameterList
 (
   listType: FunctionParameterListType,
   isErased: Boolean,
-  parameters: Vector[WithSource[FunctionParameter]],
+  parameters: Seq[WithSource[FunctionParameter]],
   hasTrailingComma: Boolean,
 )
 
@@ -74,7 +74,7 @@ final case class ReturnTypeSpecifier
 
 enum Modifier derives CanEqual {
   case Public, Protected, Private, Internal
-  case Erased, Proof, Inline
+  case Erased, Witness, Inline
 }
 
 enum ImportStmt extends Stmt {
@@ -112,7 +112,6 @@ object Expr:
   final case class BoolLiteral(b: Boolean) extends Expr
   final case class Builtin(name: String) extends Expr
   final case class Dot(o: WithSource[Expr], member: WithSource[IdentifierExpr]) extends Expr
-  final case class Extern(name: String) extends Expr
   final case class FunctionLiteral(parameterName: Option[IdentifierExpr], body: WithSource[Expr]) extends Expr
   final case class FunctionCall(func: WithSource[Expr], listType: FunctionParameterListType, arg: WithSource[Expr]) extends Expr
   case object FunctionResultValue extends Expr
@@ -120,10 +119,10 @@ object Expr:
   final case class IfElse(condition: WithSource[Expr], whenTrue: WithSource[Seq[WithSource[Stmt]]], whenFalse: WithSource[Seq[WithSource[Stmt]]]) extends Expr
   final case class IntLiteral(i: BigInt) extends Expr
   final case class RecordLiteral(recordExpr: WithSource[Expr], fields: WithSource[Seq[WithSource[RecordFieldLiteral]]]) extends Expr
-  final case class StringLiteral(parts: NonEmptySeq[StringFragment]) extends Expr
+  final case class StringLiteral(parts: Seq[StringFragment]) extends Expr
   final case class Summon(t: WithSource[Expr]) extends Expr
   final case class Tuple(items: Seq[WithSource[Expr]]) extends Expr
-  final case class Type(n: Option[WithSource[Expr]]) extends Expr
+  case object Type extends Expr
   final case class BigType(n: BigInt) extends Expr
   final case class UnaryOperation(op: UnaryOperator, a: WithSource[Expr]) extends Expr
   final case class BoxedType(t: WithSource[Expr]) extends Expr
@@ -139,6 +138,11 @@ enum IdentifierExpr extends Expr derives CanEqual {
   case Update(inner: IdentifierExpr)
 }
 
+enum FunctionBody derives CanEqual {
+  case ExprBody(expr: WithSource[Expr])
+  case ExternBody(name: WithSource[String])
+}
+
 final case class RecordFieldLiteral(
   name: WithSource[IdentifierExpr],
   value: WithSource[Expr],
@@ -146,7 +150,7 @@ final case class RecordFieldLiteral(
 
 enum StringFragment {
   case Text(s: String)
-  case Interpolate(format: Option[WithSource[String]], value: WithSource[Expr])
+  case Interpolate(value: WithSource[Expr])
 }
 
 sealed trait Operator derives CanEqual:
@@ -209,4 +213,9 @@ enum ModulePatternSegment {
   case Star(boundName: IdentifierExpr)
   case DoubleStar(boundName: IdentifierExpr)
 }
+
+final case class ModuleDeclaration(
+  modulePath: Seq[String],
+  stmts: Seq[WithSource[Stmt]],
+)
 

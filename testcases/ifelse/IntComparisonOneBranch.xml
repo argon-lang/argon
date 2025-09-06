@@ -4,12 +4,14 @@
 
     <InputSource name="index.argon"><![CDATA[
 
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
 
         def zero: Int = 0
 
         proc main(): () do
-            val a = zero
+            let a = zero
             if a = 0 then
                 assert a == 0
                 puts "Zero is 0"

@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         def add(a: Int, b: Int): Int =
             a + b

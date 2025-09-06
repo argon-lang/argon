@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         proc printTuple(a: String, b: String): () do
             puts a
@@ -16,7 +18,7 @@
             printTuple tupleValue
         
         proc main(): () do
-            val tupleValue: (String, String) = "1", "2"
+            let tupleValue: (String, String) = "1", "2"
             printTuple2 tupleValue
         end
         

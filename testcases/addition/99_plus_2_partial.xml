@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon">
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         def add(a: Int)(b: Int): Int =
             a + b
@@ -14,8 +16,8 @@
             f 2
 
         proc main(): () do
-            val f: Int -> Int = add 99
-            val result = callWithTwo f
+            let f: Int -> Int = add 99
+            let result = callWithTwo f
             puts (result.to_s())
         end
         

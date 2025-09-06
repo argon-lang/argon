@@ -1,0 +1,8 @@
+[package]
+name = "argon-parser"
+edition = "2024"
+
+[dependencies]
+parse18-lexer-gen = { path = "../parse18-lexer-gen" }
+parse18-ll-gen = { path = "../parse18-ll-gen" }
+strum = { version = "0.27.2", features = ["derive"] }

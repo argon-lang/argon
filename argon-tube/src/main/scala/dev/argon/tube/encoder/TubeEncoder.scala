@@ -254,7 +254,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             `import` = importSpec,
             `inline` = func.isInline,
             erased = func.isErased,
-            proof = func.isProof,
+            proof = func.isWitness,
             effects = encodeEffectInfo(func.effects),
             signature = sig,
             implementation = impl,

@@ -84,7 +84,7 @@ enum CompilerError {
   case AmbiguousOverload(loc: Location[FilePosition], attempted: Seq[AttemptedOverload])
   case InvalidOverload(loc: Location[FilePosition], attempted: Seq[AttemptedOverloadWithErrors])
   
-  case UnknownExtern(name: String)
+  case UnknownExtern(loc: Location[FilePosition], name: String)
 }
 
 

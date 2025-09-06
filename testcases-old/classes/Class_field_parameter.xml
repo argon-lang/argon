@@ -5,7 +5,9 @@
 
     <InputSource name="index.argon"><![CDATA[
             
-        import Argon.Core/*
+        module _
+
+        import Argon.Core::*
         
         class MyClass <: Object
             public new(name: String)
