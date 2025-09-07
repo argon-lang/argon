@@ -1,4 +1,4 @@
-import type { FunctionInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TubeInfo } from "./program-model.js";
+import type { EnumInfo, EnumVariantInfo, FunctionInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TubeInfo } from "./program-model.js";
 import type { TubeHeader, TubeFileEntry, TubeMetadata, ImportSpecifier } from "@argon-lang/js-backend-api/vm";
 import { getModuleId } from "./util.js";
 
@@ -21,7 +21,9 @@ class IrReader {
     readonly moduleRefMap = new Map<bigint, TubeFileEntry & { $type: "module-reference" }>();
     readonly functionMap = new Map<bigint, (TubeFileEntry & { $type: "function-reference" | "function-definition" })>();
     readonly recordMap = new Map<bigint, (TubeFileEntry & { $type: "record-reference" | "record-definition" })>();
-    readonly recordFieldMap = new Map<bigint, (TubeFileEntry & { $type: "record-field-reference" })>();
+    readonly recordFieldMap = new Map<bigint, (TubeFileEntry & { $type: "record-field-reference" | "enum-variant-record-field-reference" })>();
+    readonly enumMap = new Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>();
+    readonly enumVariantMap = new Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>();
 
 
     build(): ProgramModel {
@@ -49,6 +51,8 @@ class IrReader {
             functionMap: this.functionMap,
             recordMap: this.recordMap,
             recordFieldMap: this.recordFieldMap,
+            enumMap: this.enumMap,
+            enumVariantMap: this.enumVariantMap,
         });
     }
 
@@ -107,8 +111,26 @@ class IrReader {
                 this.recordMap.set(entry.recordId, entry);
                 return;
 
+            case "enum-definition":
+                this.enumMap.set(entry.definition.enumId, entry);
+                importSpec = entry.definition.import;
+                exportEntry = entry;
+                break;
+
+            case "enum-reference":
+                this.enumMap.set(entry.enumId, entry);
+                return;
+
+            case "enum-variant-reference":
+                this.enumVariantMap.set(entry.variantId, entry);
+                return;
+
             case "record-field-reference":
                 this.recordFieldMap.set(entry.recordId, entry);
+                return;
+
+            case "enum-variant-record-field-reference":
+                this.recordFieldMap.set(entry.recordFieldId, entry);
                 return;
         }
 
@@ -144,7 +166,9 @@ type ProgramModelOptions = Pick<ProgramModel, "header" | "metadata" | "modules">
     readonly moduleRefMap: Map<bigint, TubeFileEntry & { $type: "module-reference" }>;
     readonly functionMap: Map<bigint, (TubeFileEntry & { $type: "function-reference" | "function-definition" })>;
     readonly recordMap: Map<bigint, (TubeFileEntry & { $type: "record-reference" | "record-definition" })>;
-    readonly recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" })>;
+    readonly recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" | "enum-variant-record-field-reference" })>;
+    readonly enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
+    readonly enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
 };
 
 class ProgramModelImpl implements ProgramModel {
@@ -157,6 +181,8 @@ class ProgramModelImpl implements ProgramModel {
         this.#functionMap = options.functionMap;
         this.#recordMap = options.recordMap;
         this.#recordFieldMap = options.recordFieldMap;
+        this.#enumMap = options.enumMap;
+        this.#enumVariantMap = options.enumVariantMap;
     }
 
     readonly header: TubeHeader;
@@ -166,7 +192,9 @@ class ProgramModelImpl implements ProgramModel {
     readonly #moduleRefMap: Map<bigint, TubeFileEntry & { $type: "module-reference" }>;
     readonly #functionMap: Map<bigint, (TubeFileEntry & { $type: "function-reference" | "function-definition" })>;
     readonly #recordMap: Map<bigint, (TubeFileEntry & { $type: "record-reference" | "record-definition" })>;
-    readonly #recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" })>;
+    readonly #recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" | "enum-variant-record-field-reference" })>;
+    readonly #enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
+    readonly #enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
 
     getTubeInfo(id: bigint): TubeInfo {
         if(id === 0n) {
@@ -255,13 +283,57 @@ class ProgramModelImpl implements ProgramModel {
             throw new Error("Invalid record field id");
         }
 
+        let ownerType: RecordFieldInfo["ownerType"];
+        let recordId: bigint;
+        switch(entry.$type) {
+            case "record-field-reference":
+                ownerType = "record";
+                recordId = entry.recordId;
+                break;
+
+            case "enum-variant-record-field-reference":
+                ownerType = "enum-variant";
+                recordId = entry.variantId;
+                break;
+        }
+
         return {
-            recordId: entry.recordId,
+            ownerType,
+            recordId: recordId,
             name: entry.name,
         };
     }
 
-    
+    getEnumInfo(id: bigint): EnumInfo {
+        const entry = this.#enumMap.get(id);
+        if(entry === undefined) {
+            throw new Error("Invalid enum id");
+        }
+
+        let importSpecifier: ImportSpecifier;
+        if(entry.$type === "enum-definition") {
+            importSpecifier = entry.definition.import;
+        }
+        else {
+            importSpecifier = entry.import;
+        }
+
+        return {
+            importSpecifier,
+        };
+    }
+
+    getEnumVariantInfo(id: bigint): EnumVariantInfo {
+        const entry = this.#enumVariantMap.get(id);
+        if(entry === undefined) {
+            throw new Error("Invalid enum variant id");
+        }
+
+        return {
+            enumId: entry.enumId,
+            name: entry.name,
+        };
+    }
 }
 
 

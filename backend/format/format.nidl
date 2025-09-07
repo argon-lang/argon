@@ -42,10 +42,34 @@ enum tube-file-entry {
         import: import-specifier;
     },
 
+    @esexpr:(inline-value)
+    enum-definition {
+        definition: enum-definition;
+    },
+
+    enum-reference {
+        enum-id: nat;
+        import: import-specifier;
+    },
+
+    enum-variant-reference {
+        variant-id: nat;
+
+        enum-id: nat;
+        name: identifier;
+    },
+
     record-field-reference {
         record-field-id: nat;
 
         record-id: nat;
+        name: identifier;
+    },
+
+    enum-variant-record-field-reference {
+        record-field-id: nat;
+
+        variant-id: nat;
         name: identifier;
     },
 }
@@ -106,6 +130,11 @@ enum module-export {
 
     record {
         record-id: nat;
+        signature: erased-signature;
+    },
+
+    enum {
+        enum-id: nat;
         signature: erased-signature;
     },
 
@@ -336,7 +365,7 @@ record record-definition {
     @esexpr:(keyword)
     signature: function-signature;
 
-    @esexpr:(keyword)
+    @esexpr:(vararg)
     fields: list[record-field-definition];
 }
 
@@ -351,6 +380,28 @@ record record-field-definition {
     mutable: bool;
 }
 
+@esexpr:(derive-codec)
+record enum-definition {
+    enum-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    variants: list[enum-variant-definition];
+}
+
+@esexpr:(derive-codec)
+record enum-variant-definition {
+    name: identifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    fields: list[record-field-definition];
+}
 
 
 @esexpr:(derive-codec)
@@ -371,6 +422,20 @@ enum expr {
     },
     boxed {
         t: expr;
+    },
+    @esexpr:(inline-value)
+    enum-type {
+        enum-type: enum-type;
+    },
+    enum-variant-literal {
+        enum-type: enum-type;
+        variant-id: nat;
+
+        @esexpr:(vararg)
+        args: list[expr];
+
+        @esexpr:(vararg)
+        fields: list[record-field-literal];
     },
     nullary-builtin {
         builtin: nullary-builtin;
@@ -565,6 +630,14 @@ record record-field-literal {
 }
 
 @esexpr:(derive-codec)
+record enum-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
 enum var {
     local-var {
         id: nat;
@@ -593,6 +666,11 @@ enum parameter-owner {
     rec {
         index: nat;
     },
+    enum {
+        index: nat;
+    },
+    enum-variant {
+        index: nat;
+    },
 }
-
 

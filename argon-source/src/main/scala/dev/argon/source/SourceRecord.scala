@@ -24,58 +24,21 @@ private[source] object SourceRecord {
 
       override def signature: Comp[FunctionSignature] = sigCache.get(
         scope.toScope.flatMap { scope =>
-          val rt = decl.returnType match {
-            case Some(rt) =>
-              WithLocation(
-                ast.ReturnTypeSpecifier(
-                  returnType = rt,
-                  ensuresClauses = Seq(),
-                ),
-                rt.location,
-              )
-
-            case None =>
-              WithLocation(
-                ast.ReturnTypeSpecifier(
-                  returnType = WithLocation(
-                    ast.Expr.Type,
-                    decl.name.location,
-                  ),
-                  ensuresClauses = Seq(),
-                ),
-                decl.name.location,
-              )
-          }
-
+          val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
           SourceSignature.parse(ctx)(scope)(context.TRExprContext.ParameterOwner.Rec(this))(decl.parameters, rt)
         }
       )
 
-      override def fields: Comp[Seq[RecordFieldC & HasContext[ctx.type]]] =
+      override def fields: Comp[Seq[RecordField]] =
         fieldsCache.get(
           for
             scope <- scope.toScope
             sig <- signature
             scope2 = context.Scopes.ParameterScope(context.TRExprContext.ParameterOwner.Rec(this), scope, sig.parameters)
-            fields <- ZIO.foreach(decl.body.collect { case WithLocation(field: ast.RecordField, loc) => field }) { field =>
-                val owningRec = this
-                val tr = new TypeResolver {
-                  override val context: ctx.type = ctx
-                }
-
-                for
-                  fieldId <- UniqueIdentifier.make
-                  t <- tr.typeCheckExpr(scope2)(field.fieldType, sig.returnType, context.DefaultExprContext.EffectInfo.Pure, erased = true)
-                yield new RecordFieldC {
-                  override val context: ctx.type = ctx
-                  override val id: UniqueIdentifier = fieldId
-
-                  override def owningRecord: ArRecord = owningRec
-
-                  override val isMutable: Boolean = field.isMutable
-                  override val name: IdentifierExpr = field.name.value
-                  override val fieldType: context.DefaultExprContext.Expr = t
-                }
+            fields <- ZIO.foreach(
+              decl.body.collect { case WithLocation(field: ast.RecordField, loc) => field }
+            ) { field =>
+              SourceRecordField(context, scope2, sig, this)(field)
             }
           yield fields
         )

@@ -23,7 +23,9 @@ trait Context extends ScopeContext {
     override type Function = ArFuncC & HasContext[Context.this.type]
     override type Record = ArRecordC & HasContext[Context.this.type]
     override type RecordField = RecordFieldC & HasContext[Context.this.type]
-    
+    override type Enum = ArEnumC & HasContext[Context.this.type]
+    override type EnumVariant = EnumVariantC & HasContext[Context.this.type]
+
     override def getRecordFieldName(f: RecordFieldC & HasContext[Context.this.type]): IdentifierExpr = f.name
   }
 
@@ -63,6 +65,22 @@ trait Context extends ScopeContext {
         fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
           exprContext.ParameterOwner.Rec(r.record),
           r.args,
+          exprFromDefault(field.fieldType),
+        )
+
+      yield FunctionSignature(
+        parameters = Seq(),
+        returnType = fieldType,
+        ensuresClauses = Seq(),
+      )
+
+    def recordFieldSig(v: exprContext.EnumVariant, args: Seq[exprContext.Expr], field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
+      for
+        recordSig <- v.signature
+
+        fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
+          exprContext.ParameterOwner.EnumVariant(v),
+          args,
           exprFromDefault(field.fieldType),
         )
 
@@ -161,8 +179,10 @@ trait UsingContext {
 
   type ArFunc = ArFuncC & HasContext[context.type]
   type ArRecord = ArRecordC & HasContext[context.type]
+  type ArEnum = ArEnumC & HasContext[context.type]
 
   type RecordField = RecordFieldC & HasContext[context.type]
+  type EnumVariant = EnumVariantC & HasContext[context.type]
 }
 
 
@@ -241,6 +261,7 @@ abstract class ArModuleC extends UsingContext {
 enum ModuleExportC[Ctx <: Context] {
   case Function(f: ArFuncC & HasContext[Ctx])
   case Record(r: ArRecordC & HasContext[Ctx])
+  case Enum(e: ArEnumC & HasContext[Ctx])
   case Exported(exp: ModuleExportC[Ctx])
 }
 
@@ -286,7 +307,7 @@ abstract class ArRecordC extends UsingContext with DeclarationBase derives CanEq
 abstract class RecordFieldC extends UsingContext derives CanEqual {
   import context.DefaultExprContext.Expr
 
-  def owningRecord: ArRecord
+  def owningRecord: ArRecord | EnumVariant
 
   val id: UniqueIdentifier
   val isMutable: Boolean
@@ -298,6 +319,39 @@ abstract class RecordFieldC extends UsingContext derives CanEqual {
   override def equals(obj: Any): Boolean =
     obj.asInstanceOf[Matchable] match {
       case other: RecordFieldC => id == other.id
+      case _ => false
+    }
+}
+
+abstract class ArEnumC extends UsingContext with DeclarationBase derives CanEqual {
+  val id: UniqueIdentifier
+
+  def importSpecifier: Comp[ImportSpecifier]
+
+  def signature: Comp[FunctionSignature]
+
+  def variants: Comp[Seq[EnumVariant]]
+
+  override def hashCode(): Int = id.hashCode()
+  override def equals(obj: Any): Boolean =
+    obj.asInstanceOf[Matchable] match {
+      case other: ArEnumC => id == other.id
+      case _ => false
+    }
+}
+
+abstract class EnumVariantC extends UsingContext derives CanEqual {
+  def owningEnum: ArEnum
+
+  val id: UniqueIdentifier
+  val name: IdentifierExpr
+  def signature: Comp[FunctionSignature]
+  def fields: Comp[Seq[RecordField]]
+
+  override def hashCode(): Int = id.hashCode()
+  override def equals(obj: Any): Boolean =
+    obj.asInstanceOf[Matchable] match {
+      case other: EnumVariantC => id == other.id
       case _ => false
     }
 }

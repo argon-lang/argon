@@ -10,6 +10,8 @@ export interface ProgramModel {
     getFunctionInfo(id: bigint): FunctionInfo;
     getRecordInfo(id: bigint): RecordInfo;
     getRecordFieldInfo(id: bigint): RecordFieldInfo;
+    getEnumInfo(id: bigint): EnumInfo;
+    getEnumVariantInfo(id: bigint): EnumVariantInfo;
 }
 
 export interface ModuleModel {
@@ -17,7 +19,7 @@ export interface ModuleModel {
     readonly exports: readonly ModuleExportEntry[];
 }
 
-export type ModuleExportEntry = TubeFileEntry & { $type: "function-definition" | "record-definition" };
+export type ModuleExportEntry = TubeFileEntry & { $type: "function-definition" | "record-definition" | "enum-definition" };
 
 export interface TubeInfo {
     readonly tubeName: TubeName;
@@ -37,7 +39,17 @@ export interface RecordInfo {
 }
 
 export interface RecordFieldInfo {
+    readonly ownerType: "record" | "enum-variant";
     readonly recordId: bigint;
+    readonly name: Identifier;
+}
+
+export interface EnumInfo {
+    readonly importSpecifier: ImportSpecifier;
+}
+
+export interface EnumVariantInfo {
+    readonly enumId: bigint;
     readonly name: Identifier;
 }
 

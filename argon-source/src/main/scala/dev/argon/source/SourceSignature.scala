@@ -1,8 +1,9 @@
 package dev.argon.source
 
 import dev.argon.ast
+import dev.argon.ast.IdentifierExpr
 import dev.argon.compiler.{Context, TypeResolver}
-import dev.argon.util.WithSource
+import dev.argon.util.{WithLocation, WithSource}
 import zio.*
 
 object SourceSignature {
@@ -24,6 +25,8 @@ object SourceSignature {
     val ownerIsErased = owner match
       case ctx.TRExprContext.ParameterOwner.Func(f) => f.isErased
       case ctx.TRExprContext.ParameterOwner.Rec(r) => false
+      case ctx.TRExprContext.ParameterOwner.Enum(e) => false
+      case ctx.TRExprContext.ParameterOwner.EnumVariant(e) => false
 
     def impl(remainingParams: Seq[WithSource[ast.FunctionParameterList]], convParams: Seq[SignatureParameter]): Comp[FunctionSignature] =
       remainingParams match {
@@ -67,4 +70,38 @@ object SourceSignature {
 
     impl(parameters, Seq.empty)
   end parse
+  
+  def exprToReturnType(expr: WithSource[ast.Expr]): WithSource[ast.ReturnTypeSpecifier] =
+    WithLocation(
+      ast.ReturnTypeSpecifier(
+        returnType = expr,
+        ensuresClauses = Seq(),
+      ),
+      expr.location,
+    )
+  
+  def getTypeSigReturnType(name: WithSource[IdentifierExpr], rt: Option[WithSource[ast.Expr]]): WithSource[ast.ReturnTypeSpecifier] =
+    rt match {
+      case Some(rt) =>
+        WithLocation(
+          ast.ReturnTypeSpecifier(
+            returnType = rt,
+            ensuresClauses = Seq(),
+          ),
+          rt.location,
+        )
+
+      case None =>
+        WithLocation(
+          ast.ReturnTypeSpecifier(
+            returnType = WithLocation(
+              ast.Expr.Type,
+              name.location,
+            ),
+            ensuresClauses = Seq(),
+          ),
+          name.location,
+        )
+    }
+  
 }

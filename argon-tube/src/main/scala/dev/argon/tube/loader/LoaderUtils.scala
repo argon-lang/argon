@@ -204,6 +204,10 @@ private[loader] trait LoaderUtils extends UsingContext {
                 elementLoader.getFunction(id).map(context.DefaultExprContext.ParameterOwner.Func.apply)
               case t.ParameterOwner.Rec(id) =>
                 elementLoader.getRecord(id).map(context.DefaultExprContext.ParameterOwner.Rec.apply)
+              case t.ParameterOwner.Enum(id) =>
+                elementLoader.getEnum(id).map(context.DefaultExprContext.ParameterOwner.Enum.apply)
+              case t.ParameterOwner.EnumVariant(id) =>
+                elementLoader.getEnumVariant(id).map(context.DefaultExprContext.ParameterOwner.EnumVariant.apply)
             }
             paramType <- decodeExpr(paramVar.varType)
           yield context.DefaultExprContext.ParameterVar(
@@ -239,6 +243,19 @@ private[loader] trait LoaderUtils extends UsingContext {
           for
             t <- expr(t)
           yield ArExpr.Boxed(t)
+
+        case et: Expr.EnumType =>
+          decodeEnumType(et.enumType)
+
+        case Expr.EnumVariantLiteral(enumType, variantId, args, fields) =>
+          for
+            enumType <- decodeEnumType(enumType)
+            v <- elementLoader.getEnumVariant(variantId)
+            args <- ZIO.foreach(args)(expr)
+            fields <- ZIO.foreach(fields)(decodeRecordLiteralField)
+          yield ArExpr.EnumVariantLiteral(enumType, v, args, fields)
+            
+            
 
         case Expr.NullaryBuiltin(builtin) =>
           val builtin2 = builtin match {
@@ -378,12 +395,7 @@ private[loader] trait LoaderUtils extends UsingContext {
         case Expr.RecordLiteral(recordType, fields) =>
           for
             decodedRecordType <- decodeRecordType(recordType)
-            decodedFields <- ZIO.foreach(fields) { fieldLit =>
-              for
-                field <- elementLoader.getRecordField(fieldLit.fieldId)
-                fieldValue <- expr(fieldLit.value)
-              yield context.DefaultExprContext.RecordFieldLiteral(field, fieldValue)
-            }
+            decodedFields <- ZIO.foreach(fields)(decodeRecordLiteralField)
           yield ArExpr.RecordLiteral(decodedRecordType, decodedFields)
 
         case Expr.Sequence(head, tail) =>
@@ -441,6 +453,17 @@ private[loader] trait LoaderUtils extends UsingContext {
         args = decodedArgs,
       )
 
+    private def decodeEnumType(enumType: t.EnumType): Comp[ArExpr.EnumType] =
+      for
+        e <- elementLoader.getEnum(enumType.id)
+        args <- ZIO.foreach(enumType.args)(expr)
+      yield ArExpr.EnumType(e, args)
+
+    private def decodeRecordLiteralField(fieldLit: t.RecordFieldLiteral): Comp[context.DefaultExprContext.RecordFieldLiteral] =
+      for
+        field <- elementLoader.getRecordField(fieldLit.fieldId)
+        fieldValue <- expr(fieldLit.value)
+      yield context.DefaultExprContext.RecordFieldLiteral(field, fieldValue)
 
   }
 

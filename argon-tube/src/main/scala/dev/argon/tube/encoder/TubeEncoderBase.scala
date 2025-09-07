@@ -32,6 +32,8 @@ trait TubeEncoderBase[Entry] {
     def newSyntheticFunctionId: UIO[BigInt]
     def getRecordId(rec: ArRecord): UIO[BigInt]
     def getRecordFieldId(field: RecordField): UIO[BigInt]
+    def getEnumId(e: ArEnum): UIO[BigInt]
+    def getEnumVariantId(v: EnumVariant): UIO[BigInt]
 
     trait Emitter {
       def emitTube: Comp[Unit]
@@ -40,6 +42,8 @@ trait TubeEncoderBase[Entry] {
       def emitFunction(func: ArFunc, id: BigInt): Comp[Entry]
       def emitRecord(rec: ArRecord, id: BigInt): Comp[Entry]
       def emitRecordFieldInfo(field: RecordField, id: BigInt): Comp[Entry]
+      def emitEnum(e: ArEnum, id: BigInt): Comp[Entry]
+      def emitEnumVariantInfo(v: EnumVariant, id: BigInt): Comp[Entry]
     }
   }
 
@@ -93,6 +97,8 @@ trait TubeEncoderBase[Entry] {
         functionIds <- createIdManager[c.ArFuncC & c.HasContext[context.type]]
         recordIds <- createIdManager[c.ArRecordC & c.HasContext[context.type]]
         recordFieldIds <- createIdManager[c.RecordFieldC & c.HasContext[context.type]]
+        enumIds <- createIdManager[c.ArEnumC & c.HasContext[context.type]]
+        enumVariantIds <- createIdManager[c.EnumVariantC & c.HasContext[context.type]]
 
         encodeState = new EncodeState {
 
@@ -127,6 +133,12 @@ trait TubeEncoderBase[Entry] {
 
           override def getRecordFieldId(field: RecordField): UIO[BigInt] =
             recordFieldIds.getIdWith(field)(entryBuilders)(emitter.emitRecordFieldInfo)
+
+          override def getEnumId(e: ArEnum): UIO[BigInt] =
+            enumIds.getIdWith(e)(entryBuilders)(emitter.emitEnum)
+
+          override def getEnumVariantId(v: EnumVariant): UIO[BigInt] =
+            enumVariantIds.getIdWith(v)(entryBuilders)(emitter.emitEnumVariantInfo)
         }
 
         _ <- encodeState.emitter.emitTube

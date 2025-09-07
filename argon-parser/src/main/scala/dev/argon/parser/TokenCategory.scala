@@ -30,6 +30,7 @@ object TokenCategory {
   case object KW_MUT extends TokenCategory
   case object KW_MODULE extends TokenCategory
   case object KW_RECORD extends TokenCategory
+  case object KW_ENUM extends TokenCategory
   case object KW_WITH extends TokenCategory
   case object KW_CASE extends TokenCategory
   case object KW_TRUE extends TokenCategory

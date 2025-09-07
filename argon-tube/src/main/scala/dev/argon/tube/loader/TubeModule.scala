@@ -48,6 +48,11 @@ private[loader] object TubeModule {
                   rec <- elemLoader.getRecord(recordId)
                 yield ModuleExportC.Record(rec)
 
+              case t.ModuleExport.Enum(enumId, _) =>
+                for
+                  e <- elemLoader.getEnum(enumId)
+                yield ModuleExportC.Enum(e)
+
               case t.ModuleExport.Exported(inner) =>
                 for
                   inner <- loadExport(inner)

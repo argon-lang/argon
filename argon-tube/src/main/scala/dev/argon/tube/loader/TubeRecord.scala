@@ -15,7 +15,7 @@ private[loader] object TubeRecord {
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
       fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[RecordFieldC & HasContext[ctx.type]]]
 
-    yield new ArRecordC with LoaderUtils {
+    yield new ArRecordC with LoaderUtils with TubeRecordFieldBuilder {
 
       override val context: ctx.type = ctx
       override protected def elementLoader: ElementLoader & HasContext[context.type] = elemLoader
@@ -30,26 +30,7 @@ private[loader] object TubeRecord {
 
       override def fields: Comp[Seq[RecordField]] =
         fieldsCell.get(
-          ZIO.foreach(rec.fields) { fieldDef =>
-            val rec = this
-            for
-              fieldId <- UniqueIdentifier.make
-              t <- decodeExpr(fieldDef.fieldType)
-            yield new RecordFieldC with LoaderUtils {
-
-              override val context: ctx.type = ctx
-              override protected def elementLoader: ElementLoader & HasContext[context.type] = elemLoader
-
-              override def owningRecord: ArRecord = rec
-
-              override val id: UniqueIdentifier = fieldId
-              override val isMutable: Boolean = fieldDef.mutable
-              override val name: IdentifierExpr = decodeIdentifier(fieldDef.name)
-              override val fieldType: context.DefaultExprContext.Expr = t
-
-            }
-            
-          }
+          ZIO.foreach(rec.fields)(createRecordField(this))
         )
 
     }

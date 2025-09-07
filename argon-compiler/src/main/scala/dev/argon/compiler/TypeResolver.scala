@@ -179,6 +179,16 @@ trait TypeResolver extends UsingContext {
 
     def assign(assignedValue: AssignedValue): ExprFactory =
       ErrorFactory(loc, CompilerError.InvalidAssignmentTarget(loc))
+
+    def withRecordFields(fields: RecordLiteralInfo): ExprFactory =
+      throw new RuntimeException("withRecordFields not implemented: " + getClass)
+
+    final def accessMember(member: MemberInfo): ExprFactory =
+      OverloadedExprFactory(member.memberAccessLocation, member.memberAccessLocation, memberLookupSource(member), Seq())
+
+    def memberLookupSource(member: MemberInfo): OverloadLookupSource =
+      MemberLookupSource(member.memberAccessLocation, this, hasExplicitAssign = false, member.memberName.value)
+
   }
 
   private abstract class InferFactory extends ExprFactory {
@@ -199,9 +209,30 @@ trait TypeResolver extends UsingContext {
     listType: FunctionParameterListType,
   )
 
+  private final case class RecordFieldValueInfo(
+    fieldLocation: Loc,
+    fieldName: WithSource[IdentifierExpr],
+    value: ExprFactory,
+  )
+
+  private final case class RecordLiteralInfo(
+    recordLiteralLocation: Loc,
+    fields: Seq[RecordFieldValueInfo],
+  )
+
+  private final case class RecordFieldResolved(
+    field: RecordField,
+    fieldType: Expr,
+  )
+
   private final case class AssignedValue(
     assignLocation: Loc,
     value: ExprFactory,
+  )
+
+  private final case class MemberInfo(
+    memberAccessLocation: Loc,
+    memberName: WithSource[IdentifierExpr],
   )
 
   private def resolveStmtBlock(block: WithSource[Seq[WithSource[ast.Stmt]]]): ExprFactory =
@@ -422,9 +453,7 @@ trait TypeResolver extends UsingContext {
         builtinExprFactory(expr.location, name)
 
       case ast.Expr.Dot(o, member) =>
-        val lookupSource = MemberLookupSource(expr.location, resolveExpr(o), hasExplicitAssign = false, member.value)
-        OverloadedExprFactory(expr.location, expr.location, lookupSource, Seq())
-        
+        resolveExpr(o).accessMember(MemberInfo(expr.location, member))
 
       case ast.Expr.FunctionCall(f, listType, arg) =>
         resolveExpr(f).invoke(ArgumentInfo(
@@ -509,54 +538,18 @@ trait TypeResolver extends UsingContext {
         }
 
       case ast.Expr.RecordLiteral(rec, fields) =>
-        new InferFactory {
-          override def loc: Loc = expr.location
-          override def infer(using state: EmitState): Comp[InferredExpr] =
-            for
-              recordExpr <- resolveType(rec)
-              recordExpr <- normalizeToValue(recordExpr)
-              recordExpr <- recordExpr match {
-                case recordExpr: Expr.RecordType => ZIO.succeed(recordExpr)
-                case _ => ???
-              }
-
-              recordFields <- recordExpr.record.fields
-
-              duplicateFieldNames = fields.value
-                .groupBy(_.value.name.value)
-                .view
-                .mapValues(_.size)
-                .filter((_, v) => v > 1)
-                .keySet
-
-              _ <- if duplicateFieldNames.nonEmpty then ??? else ZIO.unit
-
-              _ <- checkAllowedEffect(loc)(
-                if recordFields.exists(_.isMutable) then
-                  EffectInfo.Effectful
-                else
-                  EffectInfo.Pure
+        resolveExpr(rec).withRecordFields(
+          RecordLiteralInfo(
+            recordLiteralLocation = fields.location,
+            fields = fields.value.map { field =>
+              RecordFieldValueInfo(
+                fieldLocation = field.location,
+                fieldName = field.value.name,
+                value = resolveExpr(field.value.value),
               )
-
-              fieldNames = fields.value.map(_.value.name.value).toSet
-
-              _ <- ZIO.foreachDiscard(recordFields) { rf =>
-                if !fieldNames.contains(rf.name) then
-                  ???
-                else
-                  ZIO.unit
-              }
-
-              recFields <- ZIO.foreach(fields.value) { field =>
-                for
-                  recordFieldDecl <- ZIO.fromEither(recordFields.find(_.name == field.value.name.value).toRight { ??? })
-                  fieldSig <- TRSignatureContext.recordFieldSig(recordExpr, recordFieldDecl)
-                  value <- resolveExpr(field.value.value).check(fieldSig.returnType)
-                yield RecordFieldLiteral(recordFieldDecl, value)
-              }
-            yield InferredExpr(Expr.RecordLiteral(recordExpr, recFields), recordExpr)
-
-        }
+            },
+          )
+        )
 
       case ast.Expr.StringLiteral(parts) =>
         parts
@@ -732,6 +725,20 @@ trait TypeResolver extends UsingContext {
         override protected def unwrap(using EmitState): Comp[ExprFactory] =
           WrappedFactory.this.unwrap.map(_.assign(assignedValue))
       }
+
+    override def withRecordFields(fields: RecordLiteralInfo): ExprFactory =
+      new WrappedFactory {
+        override def loc: Loc = fields.recordLiteralLocation
+
+        override protected def unwrap(using EmitState): Comp[ExprFactory] =
+          WrappedFactory.this.unwrap.map(_.withRecordFields(fields))
+      }
+
+    override def memberLookupSource(member: MemberInfo): OverloadLookupSource =
+      new WrappedLookupSource {
+        def unwrap(using EmitState): Comp[OverloadLookupSource] =
+          WrappedFactory.this.unwrap.map(_.memberLookupSource(member))
+      }
   }
 
   private abstract class LambdaExprFactory extends ExprFactory {
@@ -847,11 +854,24 @@ trait TypeResolver extends UsingContext {
     def assignmentTarget: OverloadLookupSource
   }
 
+  private abstract class WrappedLookupSource extends OverloadLookupSource {
+    def unwrap(using EmitState): Comp[OverloadLookupSource]
+
+    override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+      unwrap.flatMap(_.lookup)
+
+    override def assignmentTarget: OverloadLookupSource =
+      new WrappedLookupSource {
+        def unwrap(using EmitState): Comp[OverloadLookupSource] =
+          WrappedLookupSource.this.unwrap.map(_.assignmentTarget)
+      }
+  }
+
   private class MemberLookupSource(
     loc: Loc,
     obj: ExprFactory,
     hasExplicitAssign: Boolean,
-    memberName: IdentifierExpr
+    memberName: IdentifierExpr,
   ) extends OverloadLookupSource {
     override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
       for
@@ -862,17 +882,23 @@ trait TypeResolver extends UsingContext {
       yield overloads
 
     override def assignmentTarget: OverloadLookupSource =
-      MemberLookupSource(loc, obj, hasExplicitAssign = true, IdentifierExpr.Update(memberName))
+      if !hasExplicitAssign then
+        MemberLookupSource(loc, obj, hasExplicitAssign = true, IdentifierExpr.Update(memberName))
+      else
+        EmptyOverloadSource()
 
     private def overloadsFromType(t: Expr, e: Expr, next: Comp[LookupResult.OverloadableOnly]): Comp[LookupResult.OverloadableOnly] =
       def fieldRead = t match {
         case recType @ Expr.RecordType(record, args) =>
           for
             fields <- record.fields
-          yield LookupResult.Overloaded(
-            fields
+
+            fieldOverloads = fields
               .filter { field => field.name == memberName }
-              .map { field => Overloadable.RecordField(recType, field, e) },
+              .map { field => Overloadable.RecordField(recType, field, e) }
+
+          yield LookupResult.Overloaded(
+            fieldOverloads,
             next
           )
 
@@ -919,6 +945,44 @@ trait TypeResolver extends UsingContext {
 
   }
 
+  private class ChainLookupSource(
+    first: OverloadLookupSource,
+    second: OverloadLookupSource,
+  ) extends OverloadLookupSource {
+    override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+      first.lookup.flatMap(_.chainZIO(second.lookup))
+
+    override def assignmentTarget: OverloadLookupSource =
+      ChainLookupSource(first.assignmentTarget, second.assignmentTarget)
+  }
+
+  private class EmptyOverloadSource() extends OverloadLookupSource {
+    override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+      ZIO.succeed(LookupResult.NotFound())
+
+    override def assignmentTarget: OverloadLookupSource =
+      this
+  }
+
+  private class NoArgumentMembersLookupSource(
+    lookupSource: OverloadLookupSource,
+    memberName: IdentifierExpr,
+  ) extends OverloadLookupSource {
+    override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+      lookupSource.lookup.flatMap(lookupFrom)
+
+    private def lookupFrom(lookup: LookupResult.OverloadableOnly)(using EmitState): Comp[LookupResult.OverloadableOnly] =
+      lookup match {
+        case LookupResult.NotFound() => ZIO.succeed(LookupResult.NotFound())
+        case LookupResult.Overloaded(overloads, next) =>
+          for
+            noArgMembers <- ZIO.foreach(overloads)(_.noArgumentMembers(memberName))
+          yield LookupResult.Overloaded(noArgMembers.flatten, next.flatMap(lookupFrom))
+      }
+
+    override def assignmentTarget: OverloadLookupSource = EmptyOverloadSource()
+  }
+
   private final case class RejectedOverload(overloadable: Overloadable, errors: Seq[CompilerError])
 
   private final class OverloadedExprFactory(override val loc: Loc, overloadableLoc: Loc, lookupSource: OverloadLookupSource, args: Seq[ArgumentInfo]) extends ExprFactory {
@@ -926,16 +990,19 @@ trait TypeResolver extends UsingContext {
       overload match {
         case Overloadable.Function(f) => AttemptedOverload.Function(f)
         case Overloadable.Record(r) => AttemptedOverload.Record(r)
+        case Overloadable.Enum(e) => AttemptedOverload.Enum(e)
         case Overloadable.ExtensionMethod(f, _) => AttemptedOverload.Function(f)
         case Overloadable.RecordField(r, field, _) => AttemptedOverload.RecordField(r.record, field)
         case Overloadable.RecordFieldUpdate(r, field, _) => AttemptedOverload.RecordField(r.record, field)
+        case Overloadable.EnumVariant(v) => AttemptedOverload.EnumVariant(v)
       }
 
 
     private def toAttemptedOverloadWithErrors(reject: RejectedOverload): AttemptedOverloadWithErrors =
       AttemptedOverloadWithErrors(toAttemptedOverload(reject.overloadable), reject.errors)
 
-    override def check(t: Expr)(using EmitState): Comp[Expr] =
+
+    private def resolveFactory(using EmitState): Comp[ExprFactory] =
       Ref.make(Seq.empty[RejectedOverload]).flatMap { rejectedOverloads =>
         val resolver = OverloadResolver(rejectedOverloads)
 
@@ -972,6 +1039,7 @@ trait TypeResolver extends UsingContext {
                 else
                   new InferFactory {
                     override def loc: Loc = overloadableLoc
+
                     override def infer(using EmitState): Comp[InferredExpr] =
                       for
                         _ <- checkAllowedEffect(loc)(DefaultToTRShifter[context.type](context).shiftEffectInfo(f.effects))
@@ -981,6 +1049,8 @@ trait TypeResolver extends UsingContext {
                         e,
                         overloadResult.remainingSig.returnType
                       )
+
+                    override def toString: String = "Function ExprFactory"
                   }
 
               def recordOverload(r: ArRecord): ExprFactory =
@@ -989,16 +1059,67 @@ trait TypeResolver extends UsingContext {
                 else
                   new InferFactory {
                     override def loc: Loc = overloadableLoc
+
+                    private def expr: Expr.RecordType = Expr.RecordType(r, overloadResult.arguments)
+
+                    private def exprType: Expr = overloadResult.remainingSig.returnType
+
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      ZIO.succeed(InferredExpr(expr, exprType))
+
+                    private def recordOverloadFactory: ExprFactory = this
+
+                    override def withRecordFields(fields: RecordLiteralInfo): ExprFactory =
+                      new InferFactory {
+                        override def loc: Loc = overloadableLoc
+
+                        override def infer(using EmitState): Comp[InferredExpr] =
+                          for
+                            _ <- ZIO.unit
+
+                            recordExpr = expr
+                            recordFields <- recordExpr.record.fields
+
+                            fieldValues <- ZIO.foreach(fields.fields) { field =>
+                              for
+                                recordFieldDecl <- ZIO.fromEither(recordFields.find(_.name == field.fieldName.value).toRight {
+                                  ???
+                                })
+                                fieldSig <- TRSignatureContext.recordFieldSig(recordExpr, recordFieldDecl)
+                              yield RecordFieldResolved(recordFieldDecl, fieldSig.returnType)
+                            }
+
+                            recFields <- recordLiteralFields(fieldValues, fields)
+
+                          yield InferredExpr(
+                            Expr.RecordLiteral(recordExpr, recFields),
+                            recordExpr,
+                          )
+                      }
+
+                    override def toString: String = "Record ExprFactory"
+                  }
+
+              def enumOverload(e: ArEnum): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    override def loc: Loc = overloadableLoc
+
                     override def infer(using EmitState): Comp[InferredExpr] =
                       ZIO.succeed(InferredExpr(
-                        Expr.RecordType(r, overloadResult.arguments),
+                        Expr.EnumType(e, overloadResult.arguments),
                         overloadResult.remainingSig.returnType
                       ))
+
+                    override def toString: String = "Enum ExprFactory"
                   }
 
               def recordFieldOverload(r: Expr.RecordType, field: RecordField, recordValue: Expr): ExprFactory =
                 new InferFactory {
                   override def loc: Loc = overloadableLoc
+
                   override def infer(using EmitState): Comp[InferredExpr] =
                     for
                       _ <- checkAllowedEffect(loc)(
@@ -1009,6 +1130,8 @@ trait TypeResolver extends UsingContext {
                       Expr.RecordFieldLoad(r, field, recordValue),
                       overloadResult.remainingSig.returnType
                     )
+
+                  override def toString: String = s"Record Field ExprFactory: $r $field"
                 }
 
 
@@ -1028,16 +1151,68 @@ trait TypeResolver extends UsingContext {
                       Expr.Tuple(Seq())
                     )
                   end infer
+
+                  override def toString: String = "Record Field Store ExprFactory"
                 }
 
+              def enumVariantOverload(v: EnumVariant): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    override def loc: Loc = overloadableLoc
+
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      withRecordFields(RecordLiteralInfo(loc, Seq.empty)).infer
+
+                    override def withRecordFields(fields: RecordLiteralInfo): InferFactory =
+                      new InferFactory {
+                        override def loc: Loc = fields.recordLiteralLocation
+
+                        override def infer(using EmitState): Comp[InferredExpr] =
+                          for
+                            _ <- ZIO.unit
+
+                            recordFields <- v.fields
+
+                            fieldValues <- ZIO.foreach(fields.fields) { field =>
+                              for
+                                recordFieldDecl <- ZIO.fromEither(recordFields.find(_.name == field.fieldName.value).toRight {
+                                  ???
+                                })
+                                fieldSig <- TRSignatureContext.recordFieldSig(v, overloadResult.arguments, recordFieldDecl)
+                              yield RecordFieldResolved(recordFieldDecl, fieldSig.returnType)
+                            }
+
+                            recFields <- recordLiteralFields(fieldValues, fields)
+                            
+                          yield InferredExpr(
+                            Expr.EnumVariantLiteral(
+                              overloadResult.remainingSig.returnType match {
+                                case t: Expr.EnumType => t
+                                case _ => ???
+                              },
+                              v,
+                              overloadResult.arguments,
+                              recFields
+                            ),
+                            overloadResult.remainingSig.returnType,
+                          )
+
+                      }
+
+                    override def toString: String = "Enum Variant ExprFactory"
+                  }
 
 
               val factory0: ExprFactory = selectedOverload match {
                 case Overloadable.Function(f) => functionOverload(f)
                 case Overloadable.Record(r) => recordOverload(r)
+                case Overloadable.Enum(e) => enumOverload(e)
                 case Overloadable.ExtensionMethod(f, _) => functionOverload(f)
                 case Overloadable.RecordField(r, field, recordValue) => recordFieldOverload(r, field, recordValue)
                 case Overloadable.RecordFieldUpdate(r, field, recordValue) => recordFieldStoreOverload(r, field, recordValue)
+                case Overloadable.EnumVariant(v) => enumVariantOverload(v)
               }
 
               val factory1 = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
@@ -1048,17 +1223,17 @@ trait TypeResolver extends UsingContext {
                     override def loc: Loc = overloadableLoc
 
                     override def checkFunction(t: Expr.FunctionType)(using EmitState): Comp[Expr] =
-                     for
-                       _ <- unifyParam(t, Expr.FunctionType(param, t.r))
-                       body <- bodyFactory.check(t.r)
-                     yield Expr.Lambda(param, t.r, body)
+                      for
+                        _ <- unifyParam(t, Expr.FunctionType(param, t.r))
+                        body <- bodyFactory.check(t.r)
+                      yield Expr.Lambda(param, t.r, body)
                   }
                 }
-                
+
 
               ErrorLog.logError(CompilerError.AmbiguousOverload(loc, overloads.map { (overload, _) => toAttemptedOverload(overload) })).whenDiscard(overloads.size > 1) *>
                 summon[EmitState].model.set(overloadResult.model) *>
-                factory.check(t)
+                ZIO.succeed(factory)
 
 
             case _ =>
@@ -1071,10 +1246,18 @@ trait TypeResolver extends UsingContext {
                   case _ => ZIO.unit
                 }
                 _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted.map(toAttemptedOverloadWithErrors)))
-              yield Expr.Error()
+              yield new ExprFactory {
+                override def loc: Loc = overloadableLoc
+
+                override def check(t: Expr)(using EmitState): Comp[Expr] =
+                  ZIO.succeed(Expr.Error())
+              }
           }
 
       }
+
+    override def check(t: Expr)(using EmitState): Comp[Expr] =
+      resolveFactory.flatMap(_.check(t))
 
     override def invoke(arg: ArgumentInfo): ExprFactory =
       OverloadedExprFactory(loc, overloadableLoc, lookupSource, args :+ arg)
@@ -1092,7 +1275,123 @@ trait TypeResolver extends UsingContext {
           ),
         )
       )
+
+    override def withRecordFields(fields: RecordLiteralInfo): ExprFactory =
+      new WrappedFactory {
+        override def loc: Loc = OverloadedExprFactory.this.loc
+
+        override protected def unwrap(using EmitState): Comp[ExprFactory] =
+          resolveFactory.map(_.withRecordFields(fields))
+      }
+
+    override def memberLookupSource(member: MemberInfo): OverloadLookupSource =
+      val baseSource = super.memberLookupSource(member)
+
+      if args.isEmpty then
+        ChainLookupSource(
+          NoArgumentMembersLookupSource(
+            lookupSource,
+            member.memberName.value,
+          ),
+          baseSource,
+        )
+      else
+        baseSource
+    end memberLookupSource
+
   }
+
+  private def recordLiteralFactory(
+    recordFields: Seq[RecordFieldResolved],
+    fieldValues: RecordLiteralInfo,
+    createExpr: Seq[RecordFieldLiteral] => InferredExpr,
+  ): ExprFactory =
+    new InferFactory {
+      override def loc: Loc = fieldValues.recordLiteralLocation
+
+      override def infer(using state: EmitState): Comp[InferredExpr] =
+        for
+          _ <- ZIO.unit
+
+          duplicateFieldNames = fieldValues.fields
+            .groupBy(_.fieldName.value)
+            .view
+            .mapValues(_.size)
+            .filter((_, v) => v > 1)
+            .keySet
+
+          _ <- if duplicateFieldNames.nonEmpty then ??? else ZIO.unit
+
+          _ <- checkAllowedEffect(loc)(
+            if recordFields.exists(_.field.isMutable) then
+              EffectInfo.Effectful
+            else
+              EffectInfo.Pure
+          )
+
+          fieldNames = fieldValues.fields.map(_.fieldName.value).toSet
+
+          _ <- ZIO.foreachDiscard(recordFields) { rf =>
+            if !fieldNames.contains(rf.field.name) then
+              ???
+            else
+              ZIO.unit
+          }
+
+          recFields <- ZIO.foreach(fieldValues.fields) { field =>
+            for
+              recordFieldDecl <- ZIO.fromEither(recordFields.find(_.field.name == field.fieldName.value).toRight {
+                ???
+              })
+              value <- field.value.check(recordFieldDecl.fieldType)
+            yield RecordFieldLiteral(recordFieldDecl.field, value)
+          }
+        yield createExpr(recFields)
+
+    }
+
+  private def recordLiteralFields(
+    recordFields: Seq[RecordFieldResolved],
+    fieldValues: RecordLiteralInfo,
+  )(using EmitState): Comp[Seq[RecordFieldLiteral]] =
+    for
+      _ <- ZIO.unit
+
+      duplicateFieldNames = fieldValues.fields
+        .groupBy(_.fieldName.value)
+        .view
+        .mapValues(_.size)
+        .filter((_, v) => v > 1)
+        .keySet
+
+      _ <- if duplicateFieldNames.nonEmpty then ??? else ZIO.unit
+
+      _ <- checkAllowedEffect(fieldValues.recordLiteralLocation)(
+        if recordFields.exists(_.field.isMutable) then
+          EffectInfo.Effectful
+        else
+          EffectInfo.Pure
+      )
+
+      fieldNames = fieldValues.fields.map(_.fieldName.value).toSet
+
+      _ <- ZIO.foreachDiscard(recordFields) { rf =>
+        if !fieldNames.contains(rf.field.name) then
+          ???
+        else
+          ZIO.unit
+      }
+
+      recFields <- ZIO.foreach(fieldValues.fields) { field =>
+        for
+          recordFieldDecl <- ZIO.fromEither(recordFields.find(_.field.name == field.fieldName.value).toRight {
+            ???
+          })
+          value <- field.value.check(recordFieldDecl.fieldType)
+        yield RecordFieldLiteral(recordFieldDecl.field, value)
+      }
+    yield recFields
+
 
   // Disables the inner factory's invoke and assign methods.
   private class BlackBoxExprFactory(inner: ExprFactory) extends ExprFactory {

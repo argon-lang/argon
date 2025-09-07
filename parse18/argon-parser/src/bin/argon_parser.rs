@@ -45,6 +45,8 @@ pub enum Token {
     KwModule,
     #[strum(serialize = "Token.KW_RECORD.type")]
     KwRecord,
+    #[strum(serialize = "Token.KW_ENUM.type")]
+    KwEnum,
     #[strum(serialize = "Token.KW_WITH.type")]
     KwWith,
     #[strum(serialize = "Token.KW_CASE.type")]
@@ -311,10 +313,14 @@ enum Rule {
     FunctionBody,
     ExternFunctionBody,
     RecordDeclarationStmtRest,
-    RecordDeclarationTypeAnnotation,
     RecordBody,
     RecordBodyStmt,
     RecordField,
+    EnumDeclarationStmtRest,
+    EnumBody,
+    EnumBodyStmt,
+    EnumConstructorVariant,
+    TypeDeclarationTypeAnnotation,
 
     TubeName,
     ImportStmt,
@@ -972,6 +978,7 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule(
                         [
+                            term(KwLet).discard(),
                             nonterm(VariableDeclarationBinding),
                             nonterm(VariableDeclarationValue).with_location(),
                         ],
@@ -1159,26 +1166,20 @@ impl GrammarFactory for ParserFactory {
                 ]
             ),
             RecordDeclarationStmtRest => ruleset(
-                "Seq[WithSource[Modifier]] => Stmt",
+                "Seq[WithSource[Modifier]] => RecordDeclarationStmt",
                 [
                     rule(
                         [
+                            term(KwRecord).discard(),
                             nonterm(Identifier).with_location(),
                             nonterm(MethodParameters),
-                            nonterm(RecordDeclarationTypeAnnotation),
+                            nonterm(TypeDeclarationTypeAnnotation),
                             nonterm(StatementSeparator).discard(),
                             nonterm(RecordBody),
                             term(KwEnd).discard(),
                         ],
                         "((name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], typeAnnotation: Option[WithSource[Expr]], body: Seq[WithSource[RecordBodyStmt]]) => modifiers => RecordDeclarationStmt(modifiers, name, parameters, typeAnnotation, body))"
                     ),
-                ],
-            ),
-            RecordDeclarationTypeAnnotation => ruleset(
-                "Option[WithSource[Expr]]",
-                [
-                    rule([], "const(None)"),
-                    rule([ term(SymColon).discard(), nonterm(NewLines).discard(), nonterm(TypeBinding).with_location() ], "Some"),
                 ],
             ),
             RecordBody => ruleset(
@@ -1213,6 +1214,61 @@ impl GrammarFactory for ParserFactory {
                     )
                 ],
             ),
+            EnumDeclarationStmtRest => ruleset(
+                "Seq[WithSource[Modifier]] => Stmt",
+                [
+                    rule(
+                        [
+                            term(KwEnum).discard(),
+                            nonterm(Identifier).with_location(),
+                            nonterm(MethodParameters),
+                            nonterm(TypeDeclarationTypeAnnotation),
+                            nonterm(StatementSeparator).discard(),
+                            nonterm(EnumBody),
+                            term(KwEnd).discard(),
+                        ],
+                        "((name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], typeAnnotation: Option[WithSource[Expr]], body: Seq[WithSource[EnumBodyStmt]]) => modifiers => EnumDeclarationStmt(modifiers, name, parameters, typeAnnotation, body))"
+                    ),
+                ],
+            ),
+            EnumBody => ruleset(
+                "Seq[WithSource[EnumBodyStmt]]",
+                [
+                    rule([ nonterm(EnumBodyStmt).with_location() ], "((s: WithSource[EnumBodyStmt]) => Seq(s))"),
+                    rule([ nonterm(EnumBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(EnumBody) ], "((h: WithSource[EnumBodyStmt], t: Seq[WithSource[EnumBodyStmt]]) => h +: t)"),
+                    rule([ nonterm(StatementSeparator).discard(), nonterm(EnumBody) ], "identity"),
+                    rule([], "const(Seq.empty)"),
+                ],
+            ),
+            EnumBodyStmt => ruleset(
+                "EnumBodyStmt",
+                [
+                    rule([ nonterm(Modifiers), nonterm(EnumConstructorVariant) ], "((modifiers: Seq[WithSource[Modifier]], f: Seq[WithSource[Modifier]] => EnumBodyStmt) => f(modifiers))"),
+                    rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => RecordDeclarationStmt) => EnumVariant.Record(buildDecl(modifiers)))"),
+                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], methodPurity: Boolean, buildDecl: (Seq[WithSource[Modifier]], Boolean) => EnumBodyStmt) => buildDecl(modifiers, methodPurity))"),
+                ],
+            ),
+            EnumConstructorVariant => ruleset(
+                "Seq[WithSource[Modifier]] => EnumBodyStmt",
+                [
+                    rule(
+                        [
+                            nonterm(Identifier).with_location(),
+                            nonterm(MethodParameters),
+                            nonterm(TypeDeclarationTypeAnnotation),
+                        ],
+                        "((name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], typeAnnotation: Option[WithSource[Expr]]) => (modifiers: Seq[WithSource[Modifier]]) => EnumVariant.Constructor(modifiers, name, parameters, typeAnnotation))",
+                    ),
+                ],
+            ),
+            TypeDeclarationTypeAnnotation => ruleset(
+                "Option[WithSource[Expr]]",
+                [
+                    rule([], "const(None)"),
+                    rule([ term(SymColon).discard(), nonterm(NewLines).discard(), nonterm(TypeBinding).with_location() ], "Some"),
+                ],
+            ),
+
 
             ImportStmt => ruleset(
                 "ImportStmt",
@@ -1282,9 +1338,10 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Expression) ], "identity"),
                     rule([ nonterm(ImportStmt) ], "identity"),
                     rule([ nonterm(ExportStmt) ], "identity"),
-                    rule([ nonterm(Modifiers), term(KwLet).discard(), nonterm(VariableDeclarationRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
+                    rule([ nonterm(Modifiers), nonterm(VariableDeclarationRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                     rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], methodPurity: Boolean, buildDecl: (Seq[WithSource[Modifier]], Boolean) => Stmt) => buildDecl(modifiers, methodPurity))"),
-                    rule([ nonterm(Modifiers), term(KwRecord).discard(), nonterm(RecordDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
+                    rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
+                    rule([ nonterm(Modifiers), nonterm(EnumDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                 ],
             ),
 

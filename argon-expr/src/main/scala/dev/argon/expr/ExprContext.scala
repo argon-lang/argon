@@ -40,6 +40,8 @@ trait ExprContext {
   enum ParameterOwner derives CanEqual {
     case Func(f: Function)
     case Rec(r: Record)
+    case Enum(e: ExprContext.this.Enum)
+    case EnumVariant(v: ExprContext.this.EnumVariant)
   }
   
   final case class ParameterVar(
@@ -74,6 +76,12 @@ trait ExprContext {
   given recordFieldCanEqual: CanEqual[RecordField, RecordField] = deferred
   def getRecordFieldName(f: RecordField): IdentifierExpr
 
+  type Enum
+  given enumCanEqual: CanEqual[Enum, Enum] = deferred
+
+  type EnumVariant
+  given enumVariantCanEqual: CanEqual[EnumVariant, EnumVariant] = deferred
+
   type Hole
   given holeCanEqual: CanEqual[Hole, Hole] = deferred
 
@@ -99,6 +107,7 @@ trait ExprContext {
     case Box(t: Expr, value: Expr) // Convert values of T to boxed T    
     case Boxed(t: Expr) // Use an erased type in a non-erased context.
     case Builtin(b: ExprContext.this.Builtin)
+    case EnumVariantLiteral(enumType: EnumType, v: ExprContext.this.EnumVariant, args: Seq[Expr], fields: Seq[RecordFieldLiteral])
     case Finally(action: Expr, ensuring: Expr)
     case FunctionCall(f: Function, args: Seq[Expr])
     case FunctionObjectCall(f: Expr, a: Expr)
@@ -113,6 +122,7 @@ trait ExprContext {
     case IntLiteral(i: BigInt)
     case Lambda(v: LocalVar, returnType: Expr, body: Expr)
     case RecordType(record: Record, args: Seq[Expr])
+    case EnumType(e: Enum, args: Seq[Expr])
     case RecordFieldLoad(record: Expr.RecordType, field: RecordField, recordValue: Expr)
     case RecordFieldStore(record: Expr.RecordType, field: RecordField, recordValue: Expr, fieldValue: Expr)
     case RecordLiteral(record: Expr.RecordType, fields: Seq[RecordFieldLiteral])

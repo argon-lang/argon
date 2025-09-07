@@ -1,15 +1,12 @@
 package dev.argon.tube.encoder
 
 import dev.argon.compiler as c
-
 import dev.argon.tube.*
-
 import zio.*
 import zio.stream.*
-import zio.stm.{ZSTM, TMap}
+import zio.stm.{TMap, ZSTM}
 import dev.argon.ast
-import dev.argon.compiler.SignatureEraser
-import dev.argon.compiler.HasContext
+import dev.argon.compiler.{HasContext, SignatureEraser, UsingContext}
 import esexpr.Dictionary
 
 
@@ -199,6 +196,15 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               sig <- encodeErasedSignature(sig)
             yield dev.argon.tube.ModuleExport.Record(id, sig)
 
+          case c.ModuleExportC.Enum(e) =>
+            for
+              id <- getEnumId(e)
+              sig <- e.signature
+              sig <- SignatureEraser(context).eraseSignature(sig)
+              sig <- encodeErasedSignature(sig)
+            yield dev.argon.tube.ModuleExport.Enum(id, sig)
+            
+
           case c.ModuleExportC.Exported(exp) =>
             for
               inner <- emitModuleExport(exp)
@@ -279,15 +285,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           importSpec <- encodeImportSpecifier(importSpec)
 
           fields <- rec.fields
-          fields <- ZIO.foreach(fields) { field =>
-            for
-              t <- emitExpr(field.fieldType)
-              recordId <- getRecordId(field.owningRecord)
-            yield RecordFieldDefinition(
-              name = encodeIdentifier(field.name),
-              fieldType = t,
-            )
-          }
+          fields <- ZIO.foreach(fields)(emitRecordFieldDef)
 
         yield TubeFileEntry.RecordDefinition(
           RecordDefinition(
@@ -305,12 +303,84 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
         ))
 
       override def emitRecordFieldInfo(field: RecordField, id: BigInt): Comp[TubeFileEntry] =
+        field.owningRecord match {
+          case r: ArRecord =>
+            for
+              recordId <- getRecordId(r)
+            yield TubeFileEntry.RecordFieldReference(
+              recordFieldId = id,
+              recordId = id,
+              name = encodeIdentifier(field.name),
+            )
+
+          case v: EnumVariant =>
+            for
+              variantId <- getEnumVariantId(v)
+            yield TubeFileEntry.EnumVariantRecordFieldReference(
+              recordFieldId = id,
+              variantId = variantId,
+              name = encodeIdentifier(field.name),
+            )
+        }
+
+      private def emitRecordFieldDef(field: RecordField): Comp[RecordFieldDefinition] =
         for
-          recordId <- getRecordId(field.owningRecord)
-        yield TubeFileEntry.RecordFieldReference(
-          recordFieldId = id,
-          recordId = id,
+          t <- emitExpr(field.fieldType)
+        yield RecordFieldDefinition(
           name = encodeIdentifier(field.name),
+          fieldType = t,
+          mutable = field.isMutable,
+        )
+
+
+      override def emitEnum(e: ArEnum, id: BigInt): Comp[TubeFileEntry] =
+        importOrDefine(e, e.importSpecifier)(emitEnumDef(id), emitEnumRef(id))
+
+      private def emitEnumDef(id: BigInt)(e: ArEnum): Comp[TubeFileEntry] =
+        for
+          sig <- e.signature
+          sig <- emitFunctionSignature(sig)
+
+          importSpec <- e.importSpecifier
+          importSpec <- encodeImportSpecifier(importSpec)
+
+          variants <- e.variants
+          variants <- ZIO.foreach(variants) { variant =>
+            for
+              sig <- variant.signature
+              sig <- emitFunctionSignature(sig)
+
+              fields <- variant.fields
+              fields <- ZIO.foreach(fields)(emitRecordFieldDef)
+            yield EnumVariantDefinition(
+              name = encodeIdentifier(variant.name),
+              signature = sig,
+              fields = fields,
+            )
+          }
+
+        yield TubeFileEntry.EnumDefinition(
+          EnumDefinition(
+            enumId = id,
+            `import` = importSpec,
+            signature = sig,
+            variants = variants,
+          )
+        )
+
+      private def emitEnumRef(id: BigInt)(specifier: ImportSpecifier): Comp[TubeFileEntry] =
+        ZIO.succeed(TubeFileEntry.EnumReference(
+          enumId = id,
+          `import` = specifier,
+        ))
+
+      override def emitEnumVariantInfo(v: EnumVariant, id: BigInt): Comp[TubeFileEntry] =
+        for
+          enumId <- getEnumId(v.owningEnum)
+        yield TubeFileEntry.EnumVariantReference(
+          variantId = id,
+          enumId = enumId,
+          name = encodeIdentifier(v.name),
         )
 
       private def emitFunctionSignature(sig: FunctionSignature): Comp[dev.argon.tube.FunctionSignature] =
@@ -398,6 +468,16 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                     for
                       id <- getRecordId(r)
                     yield ParameterOwner.Rec(id)
+
+                  case context.DefaultExprContext.ParameterOwner.Enum(e) =>
+                    for
+                      id <- getEnumId(e)
+                    yield ParameterOwner.Enum(id)
+
+                  case context.DefaultExprContext.ParameterOwner.EnumVariant(v) =>
+                    for
+                      id <- getEnumVariantId(v)
+                    yield ParameterOwner.EnumVariant(id)
                 }
 
                 varType <- expr(v.varType)
@@ -501,6 +581,17 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 t <- expr(t)
                 a <- expr(a)
               yield Expr.BuiltinEqualToRefl(t, a)
+
+            case et: ArExpr.EnumType =>
+              encodeEnumType(et).map(Expr.EnumType.apply)
+              
+            case ArExpr.EnumVariantLiteral(enumType, v, args, fields) =>
+              for
+                enumType <- encodeEnumType(enumType)
+                variantId <- getEnumVariantId(v)
+                args <- ZIO.foreach(args)(expr)
+                fields <- ZIO.foreach(fields)(encodeRecordFieldLiteral)
+              yield Expr.EnumVariantLiteral(enumType, variantId, args, fields)
               
             case ArExpr.Finally(action, ensuring) =>
               for
@@ -566,15 +657,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case ArExpr.RecordLiteral(rt, fields) =>
               for
                 rt <- encodeRecordType(rt)
-                fields <- ZIO.foreach(fields) { field =>
-                  for
-                    fieldId <- getRecordFieldId(field.field)
-                    value <- expr(field.value)
-                  yield RecordFieldLiteral(
-                    fieldId = fieldId,
-                    value = value,
-                  )
-                }
+                fields <- ZIO.foreach(fields)(encodeRecordFieldLiteral)
               yield Expr.RecordLiteral(rt, fields)
 
             case ArExpr.RecordFieldLoad(rt, field, recordValue) =>
@@ -642,6 +725,22 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             recordId <- getRecordId(rt.record)
             args <- ZIO.foreach(rt.args)(expr)
           yield RecordType(recordId, args)
+          
+        private def encodeRecordFieldLiteral(field: context.DefaultExprContext.RecordFieldLiteral): Comp[RecordFieldLiteral] =
+          for
+            fieldId <- getRecordFieldId(field.field)
+            value <- expr(field.value)
+          yield RecordFieldLiteral(
+            fieldId = fieldId,
+            value = value,
+          )
+
+        private def encodeEnumType(e: ArExpr.EnumType): Comp[EnumType] =
+          for
+            enumId <- getEnumId(e.e)
+            args <- ZIO.foreach(e.args)(expr)
+          yield EnumType(enumId, args)
+          
       }
     }
 }

@@ -23,6 +23,7 @@ private trait Substitution {
     end exprShifter
 
     given Shifter[Expr.RecordType, Expr.RecordType] = autoShifter
+    given Shifter[Expr.EnumType, Expr.EnumType] = autoShifter
     given Shifter[RecordFieldLiteral, RecordFieldLiteral] = autoShifter
 
     given Shifter[Builtin, Builtin] = autoShifter
@@ -35,6 +36,8 @@ private trait Substitution {
     given Shifter[Function, Function] = identityShifter
     given Shifter[Record, Record] = identityShifter
     given Shifter[RecordField, RecordField] = identityShifter
+    given Shifter[Enum, Enum] = identityShifter
+    given Shifter[EnumVariant, EnumVariant] = identityShifter
 
     given Shifter[NullaryBuiltin, NullaryBuiltin] = identityShifter
     given Shifter[UnaryBuiltin, UnaryBuiltin] = identityShifter

@@ -19,45 +19,84 @@ trait ScopeContext {
 
     sealed trait LookupResult
     object LookupResult {
-      sealed trait OverloadableOnly extends LookupResult
+      sealed trait OverloadableOnly extends LookupResult {
+        def chain(other: OverloadableOnly): OverloadableOnly
+        def chainZIO(other: Comp[OverloadableOnly]): Comp[OverloadableOnly]
+      }
 
-      final case class NotFound() extends OverloadableOnly
+      final case class NotFound() extends OverloadableOnly {
+        override def chain(other: OverloadableOnly): OverloadableOnly =
+          other
+
+        override def chainZIO(other: Comp[OverloadableOnly]): Comp[OverloadableOnly] =
+          other
+      }
       final case class Variable(v: Var) extends LookupResult
       final case class VariableTupleElement(v: Var, index: Int, t: TRExprContext.Expr) extends LookupResult
-      final case class Overloaded(overloads: Seq[Overloadable], next: Comp[LookupResult.OverloadableOnly]) extends OverloadableOnly
+      final case class Overloaded(overloads: Seq[Overloadable], next: Comp[LookupResult.OverloadableOnly]) extends OverloadableOnly {
+        override def chain(other: OverloadableOnly): OverloadableOnly =
+          Overloaded(overloads, next.map(_.chain(other)))
+
+        override def chainZIO(other: Comp[OverloadableOnly]): Comp[OverloadableOnly] =
+          ZIO.succeed(Overloaded(overloads, next.flatMap(_.chainZIO(other))))
+      }
     }
 
     enum Overloadable {
       case Function(f: ArFuncC & HasContext[self.type])
       case Record(r: ArRecordC & HasContext[self.type])
+      case Enum(e: ArEnumC & HasContext[self.type])
       case ExtensionMethod(f: ArFuncC & HasContext[self.type], obj: TRExprContext.AnnotatedExpr)
       case RecordField(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
       case RecordFieldUpdate(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
+      case EnumVariant(v: EnumVariantC & HasContext[self.type])
 
       def initialArgs: Seq[TRExprContext.AnnotatedExpr] =
         this match {
           case Function(_) | Record(_) => Seq()
+          case Enum(_) => Seq()
           case ExtensionMethod(f, obj) => Seq(obj)
           case RecordField(_, _, _) => Seq()
           case RecordFieldUpdate(_, _, _) => Seq()
+          case EnumVariant(_) => Seq()
         }
 
       def signature: Comp[TRSignatureContext.FunctionSignature] =
         this match {
           case Function(f) => f.signature.map(TRSignatureContext.signatureFromDefault)
           case Record(r) => r.signature.map(TRSignatureContext.signatureFromDefault)
+          case Enum(r) => r.signature.map(TRSignatureContext.signatureFromDefault)
           case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)
           case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
           case RecordFieldUpdate(r, field, _) => TRSignatureContext.recordFieldUpdateSig(r, field)
+          case EnumVariant(v) => v.signature.map(TRSignatureContext.signatureFromDefault)
         }
 
       def asOwner: Option[TRExprContext.ParameterOwner] =
         this match {
           case Function(f) => Some(TRExprContext.ParameterOwner.Func(f))
           case Record(r) => Some(TRExprContext.ParameterOwner.Rec(r))
+          case Enum(e) => Some(TRExprContext.ParameterOwner.Enum(e))
           case ExtensionMethod(f, _) => Some(TRExprContext.ParameterOwner.Func(f))
           case RecordField(_, _, _) => None
           case RecordFieldUpdate(_, field, _) => None
+          case EnumVariant(v) => Some(TRExprContext.ParameterOwner.EnumVariant(v))
+        }
+
+      def noArgumentMembers(name: IdentifierExpr): Comp[Seq[Overloadable]] =
+        this match {
+          case Function(_) | Record(_) => ZIO.succeed(Seq())
+          case Enum(e) =>
+            e.variants.map { variants =>
+              variants
+                .filter(_.name == name)
+                .map(Overloadable.EnumVariant.apply)
+            }
+              
+          case ExtensionMethod(_, _) => ZIO.succeed(Seq())
+          case RecordField(_, _, _) => ZIO.succeed(Seq())
+          case RecordFieldUpdate(_, _, _) => ZIO.succeed(Seq())
+          case EnumVariant(_) => ZIO.succeed(Seq())
         }
     }
 
@@ -95,6 +134,7 @@ trait ScopeContext {
 
         case ModuleExportC.Function(_) => None
         case ModuleExportC.Record(_) => None
+        case ModuleExportC.Enum(_) => None
         case ModuleExportC.Exported(exp) => toExportedGiven(exp)
       }
 
@@ -107,6 +147,7 @@ trait ScopeContext {
       exp match {
         case ModuleExportC.Function(f) => Overloadable.Function(f)
         case ModuleExportC.Record(r) => Overloadable.Record(r)
+        case ModuleExportC.Enum(e) => Overloadable.Enum(e)
         case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
       }
 
@@ -166,6 +207,8 @@ trait ScopeContext {
         val owner2 = owner match {
           case TRExprContext.ParameterOwner.Func(f) => DefaultExprContext.ParameterOwner.Func(f)
           case TRExprContext.ParameterOwner.Rec(r) => DefaultExprContext.ParameterOwner.Rec(r)
+          case TRExprContext.ParameterOwner.Enum(e) => DefaultExprContext.ParameterOwner.Enum(e)
+          case TRExprContext.ParameterOwner.EnumVariant(v) => DefaultExprContext.ParameterOwner.EnumVariant(v)
         }
         DefaultSignatureContext.SignatureParameter.getParameterVariables(owner2, sigParams).map(shifter.shiftVar)
       end parameters

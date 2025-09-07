@@ -60,6 +60,12 @@ private[source] object SourceModule {
               r <- SourceRecord.make(context)(scope, createImportFactory(Some(recordDecl.name.value)))(recordDecl)
             yield (scope, Map(Some(recordDecl.name.value) -> Seq(ModuleExportC.Record(r))))
 
+          case enumDecl: ast.EnumDeclarationStmt =>
+            for
+              e <- SourceEnum.make(context)(scope, createImportFactory(Some(enumDecl.name.value)))(enumDecl)
+            yield (scope, Map(Some(enumDecl.name.value) -> Seq(ModuleExportC.Enum(e))))
+            
+            
           case ast.ExportStmt(fromImport) =>
             ImportUtil.getModuleExports(context)(reexportingModules + ModuleName(tubeName, path))(tubeName, path)(fromImport)
               .map(exports => (scope, exports.map((k, v) => Some(k) -> v.map(ModuleExportC.Exported.apply))))

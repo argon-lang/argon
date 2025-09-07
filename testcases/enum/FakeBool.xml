@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Fake bool</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        enum FakeBool
+            True
+            False
+        end
+
+        proc main(): () do
+            let b = FakeBool.True
+
+        end
+
+    </InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

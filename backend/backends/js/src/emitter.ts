@@ -4,9 +4,12 @@ import { encodeTubePathComponent, ensureExhaustive, getModuleId, getModulePathEx
 import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm";
 import { Identifier } from "@argon-lang/js-backend-api/vm";
-import type { IterableElement, ReadonlyDeep } from "type-fest";
+import type { IterableElement, JsonObject, JsonValue, ReadonlyDeep } from "type-fest";
 import { ExternFunction } from "./platform-data.js";
 import type { ImportHandler } from "./imports.js";
+import { Option } from "@argon-lang/noble-idl-core";
+
+import { name as isValidIdName } from "estree-util-is-identifier-name";
 
 export interface OutputModuleInfo {
     readonly modulePath: ir.ModulePath;
@@ -215,6 +218,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     type: "Literal",
                     value: path,
                 },
+                attributes: [],
             })
         });
 
@@ -232,6 +236,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             type: "ExportNamedDeclaration",
             declaration,
             specifiers: [],
+            attributes: [],
         });
     }
 
@@ -334,6 +339,10 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 this.emitRecord(entry.definition);
                 break;
 
+            case "enum-definition":
+                this.emitEnum(entry.definition);
+                break;
+
             default:
                 ensureExhaustive(entry);
         }
@@ -411,76 +420,76 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
     }
 
     private emitRecord(rec: ir.RecordDefinition): void {
-
         const name = this.getExportNameForImport(rec.import);
-        const params: estree.Pattern[] = [];
-        const body: estree.Statement[] = [];
-
-        for(const field of rec.fields) {
-            const fieldName = "field_" + this.getExportNameForId(field.name);
-            params.push({
-                type: "Identifier",
-                name: fieldName,
-            });
-
-            body.push({
-                type: "ExpressionStatement",
-                expression: {
-                    type: "AssignmentExpression",
-                    operator: "=",
-                    left: {
-                        type: "MemberExpression",
-                        computed: false,
-                        optional: false,
-                        object: {
-                            type: "ThisExpression",
-                        },
-                        property: {
-                            type: "Identifier",
-                            name: fieldName,
-                        },
-                    },
-                    right: {
-                        type: "Identifier",
-                        name: fieldName,
-                    },
-                }
-            });
-        }
 
         this.addDeclaration({
-            type: "FunctionDeclaration",
-            id: {
-                type: "Identifier",
-                name,
-            },
-            params,
-            body: {
-                type: "BlockStatement",
-                body,
-            },
-        });
-
-        this.moduleStatements.push({
-            type: "ExpressionStatement",
-            expression: {
-                type: "AssignmentExpression",
-                operator: "=",
-                left: {
-                    type: "MemberExpression",
-                    computed: false,
-                    optional: false,
-                    object: {
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: {
                         type: "Identifier",
                         name,
                     },
-                    property: {
-                        type: "Identifier",
-                        name: "specialize",
-                    }
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createRecordType"),
+                        arguments: [
+                            jsonToExpression({
+                                typeParameterCount: rec.signature.typeParameters.length,
+                                fields: rec.fields.map(field => ({
+                                    name: this.getExportNameForId(field.name),
+                                    mutable: field.mutable,
+                                })),
+                            }),
+                        ],
+                    },
                 },
-                right: this.getArgonRuntimeExport("specialize"),
-            },
+            ],
+        });
+    }
+
+    private emitEnum(enumDef: ir.EnumDefinition): void {
+        const name = this.getExportNameForImport(enumDef.import);
+
+        const variantsObj: JsonObject = Object.create(null);
+        for(const variant of enumDef.variants) {
+            variantsObj[this.getExportNameForId(variant.name)] = {
+                args: variant.signature.parameters.map(field => ({
+                    name: field.name === null ? null : this.getExportNameForId(Option.get(field.name)),
+                })),
+                fields: variant.fields.map(field => ({
+                    name: this.getExportNameForId(field.name),
+                    mutable: field.mutable,
+                }))
+            };
+        }
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: {
+                        type: "Identifier",
+                        name,
+                    },
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createEnumType"),
+                        arguments: [
+                            jsonToExpression({
+                                typeParameterCount: enumDef.signature.typeParameters.length,
+                                variants: variantsObj,
+                            }),
+                        ],
+                    },
+                },
+            ],
         });
     }
 }
@@ -719,6 +728,80 @@ class BlockEmitter extends EmitterBase {
                 ++this.varOffset;
                 break;
 
+            case "enum-variant-literal":
+            {
+                const variantInfo = this.options.program.getEnumVariantInfo(insn.variantId);
+
+                const args: estree.Expression[] = [];
+                for(const typeArg of insn.typeArgs) {
+                    args.push(this.buildTypeInfo(typeArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                args.push({
+                    type: "ObjectExpression",
+                    properties: insn.fields.map(field => {
+                        const fieldInfo = this.options.program.getRecordFieldInfo(field.fieldId);
+                        const id = this.getExportNameForId(fieldInfo.name);
+                        const isValid = isValidIdName(id);
+
+                        return {
+                            type: "Property",
+                            computed: !isValid,
+                            method: false,
+                            shorthand: false,
+                            kind: "init",
+                            key: isValid ? {
+                                type: "Identifier",
+                                name: id,
+                            } : {
+                                type: "Literal",
+                                value: id,
+                            },
+                            value: this.getReg(field.value),
+                        };
+                    }),
+                });
+
+                const variantName = this.getExportNameForId(variantInfo.name);
+                const nameValid = isValidIdName(variantName) && variantName !== "__proto__";
+
+                assign(insn.dest, {
+                    type: "NewExpression",
+                    callee: {
+                        type: "MemberExpression",
+                        computed: !nameValid,
+                        optional: false,
+
+                        object: {
+                            type: "MemberExpression",
+                            computed: false,
+                            optional: false,
+
+                            object: this.buildTypeInfo(insn.enumType),
+                            property: {
+                                type: "Identifier",
+                                name: "variants",
+                            },
+                        },
+
+                        property: nameValid ? {
+                            type: "Identifier",
+                            name: variantName,
+                        } : {
+                            type: "Literal",
+                            value: variantName,
+                        },
+                    },
+                    arguments: args,
+                });
+
+                break;
+            }
+
             case "finally":
             {
                 stmts.push({
@@ -954,7 +1037,32 @@ class BlockEmitter extends EmitterBase {
                 assign(insn.dest, {
                     type: "NewExpression",
                     callee: this.buildTypeInfo(insn.recordType),
-                    arguments: insn.fields.map(field => this.getReg(field.value)),
+                    arguments: [
+                        {
+                            type: "ObjectExpression",
+                            properties: insn.fields.map(field => {
+                                const fieldInfo = this.options.program.getRecordFieldInfo(field.fieldId);
+                                const id = this.getExportNameForId(fieldInfo.name);
+                                const isValid = isValidIdName(id);
+
+                                return {
+                                    type: "Property",
+                                    computed: !isValid,
+                                    method: false,
+                                    shorthand: false,
+                                    kind: "init",
+                                    key: isValid ? {
+                                        type: "Identifier",
+                                        name: id,
+                                    } : {
+                                        type: "Literal",
+                                        value: id,
+                                    },
+                                    value: this.getReg(field.value),
+                                };
+                            }),
+                        },
+                    ],
                 });
                 break;
 
@@ -1073,6 +1181,30 @@ class BlockEmitter extends EmitterBase {
                 };
             }
 
+            case "enum":
+            {
+                const rec = this.options.program.getEnumInfo(t.enumId);
+                if(t.args.length === 0) {
+                    return this.moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTypeInfo(arg)),
+                };
+            }
+
             case "tuple":
                 return {
                     type: "ArrayExpression",
@@ -1094,6 +1226,73 @@ class BlockEmitter extends EmitterBase {
             case "erased":
                 throw new Error("Cannot get type info for erased");
         }
+    }
+}
+
+function jsonToExpression(expr: JsonValue): ReadonlyDeep<estree.Expression> {
+    switch(typeof expr) {
+        case "string":
+        case "number":
+        case "boolean":
+            return {
+                type: "Literal",
+                value: expr,
+            };
+
+        case "object":
+            if(expr === null) {
+                return {
+                    type: "Literal",
+                    value: null,
+                };
+            }
+            else if(expr instanceof Array) {
+                return {
+                    type: "ArrayExpression",
+                    elements: expr.map(jsonToExpression),
+                };
+            }
+            else {
+                const properties: ReadonlyDeep<estree.Property>[] = [];
+                for(const key of Object.keys(expr)) {
+                    const value = jsonToExpression(expr[key]!);
+                    if(key === "__proto__" || !isValidIdName(key)) {
+                        properties.push({
+                            type: "Property",
+                            computed: true,
+                            shorthand: false,
+                            method: false,
+                            kind: "init",
+                            key: {
+                                type: "Literal",
+                                value: key,
+                            },
+                            value,
+                        });
+                    }
+                    else {
+                        properties.push({
+                            type: "Property",
+                            computed: false,
+                            shorthand: false,
+                            method: false,
+                            kind: "init",
+                            key: {
+                                type: "Identifier",
+                                name: key,
+                            },
+                            value,
+                        });
+                    }
+                }
+                return {
+                    type: "ObjectExpression",
+                    properties,
+                };
+            }
+
+        default:
+            ensureExhaustive(expr);
     }
 }
 

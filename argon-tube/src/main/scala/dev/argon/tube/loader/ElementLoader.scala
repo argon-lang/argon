@@ -9,5 +9,6 @@ private[loader] trait ElementLoader extends UsingContext {
   def getFunction(id: BigInt): Comp[ArFunc]
   def getRecord(id: BigInt): Comp[ArRecord]
   def getRecordField(id: BigInt): Comp[RecordField]
-
+  def getEnum(id: BigInt): Comp[ArEnum]
+  def getEnumVariant(id: BigInt): Comp[EnumVariant]
 }

@@ -14,6 +14,8 @@ object ValueUtil {
       case Expr.Box(_, _) => true
       case Expr.Builtin(_) => true
       case Expr.Boxed(_) => true
+      case Expr.EnumType(_, _) => true
+      case Expr.EnumVariantLiteral(_, _, _, _) => true
       case Expr.Finally(_, _) => false
       case Expr.FunctionCall(_, _) => false
       case Expr.FunctionObjectCall(_, _) => false

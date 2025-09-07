@@ -12,7 +12,6 @@ import { Console } from "node:console";
 import { Writable } from "node:stream";
 import type { ImportAttributes } from "node:module";
 
-
 export function createTestExecutor<E>(): Option<backendApi.TestExecutorFactory<E, JSBackendOutput<E>>> {
     return {
         async create(callback) {
@@ -110,7 +109,7 @@ async function runInVm(moduleRes: ModuleResolution, fileMap: Map<string, string>
             initializeImportMeta(meta: ImportMeta, _module: vm.SourceTextModule): void {
                 meta.url = url.toString();
             },
-            importModuleDynamically(specifier: string, _script: vm.Script, importAttributes: ImportAttributes): vm.Module {
+            importModuleDynamically(specifier: string, _referrer: vm.SourceTextModule, importAttributes: ImportAttributes): vm.Module {
                 return importFrom(specifier, url, importAttributes);
             },
         });

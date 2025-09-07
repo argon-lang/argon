@@ -42,10 +42,34 @@ enum tube-file-entry {
         import: import-specifier;
     },
 
+    @esexpr:(inline-value)
+    enum-definition {
+        definition: enum-definition;
+    },
+
+    enum-reference {
+        enum-id: nat;
+        import: import-specifier;
+    },
+
+    enum-variant-reference {
+        variant-id: nat;
+
+        enum-id: nat;
+        name: identifier;
+    },
+
     record-field-reference {
         record-field-id: nat;
 
         record-id: nat;
+        name: identifier;
+    },
+
+    enum-variant-record-field-reference {
+        record-field-id: nat;
+
+        variant-id: nat;
         name: identifier;
     },
 }
@@ -259,7 +283,7 @@ record record-definition {
     @esexpr:(keyword)
     signature: function-signature;
 
-    @esexpr:(keyword)
+    @esexpr:(vararg)
     fields: list[record-field-definition];
 }
 
@@ -272,6 +296,30 @@ record record-field-definition {
     @esexpr:(keyword)
     @esexpr:(default-value #false)
     mutable: bool;
+}
+
+
+@esexpr:(derive-codec)
+record enum-definition {
+    enum-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    variants: list[enum-variant-definition];
+}
+
+@esexpr:(derive-codec)
+record enum-variant-definition {
+    name: identifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    fields: list[record-field-definition];
 }
 
 
@@ -290,6 +338,10 @@ enum vm-type {
     },
     record {
         record-id: nat;
+        args: list[vm-type];
+    },
+    enum {
+        enum-id: nat;
         args: list[vm-type];
     },
     tuple {
@@ -360,6 +412,21 @@ enum instruction {
         captured: optional-field[variable-capture-mode];
     },
 
+    enum-variant-literal {
+        dest: register-id;
+        enum-type: vm-type;
+        variant-id: nat;
+
+        @esexpr:(vararg)
+        type-args: list[vm-type];
+
+        @esexpr:(vararg)
+        args: list[register-id];
+
+        @esexpr:(vararg)
+        fields: list[record-field-literal];
+    },
+
     finally {
         action: block;
         ensuring: block;
@@ -368,6 +435,7 @@ enum instruction {
     function-call {
         function-id: nat;
         dest: function-result;
+        @esexpr:(vararg)
         type-args: list[vm-type];
         @esexpr:(vararg)
         args: list[register-id];
@@ -455,8 +523,8 @@ enum instruction {
     },
 
     record-literal {
-        record-type: vm-type;
         dest: register-id;
+        record-type: vm-type;
         @esexpr:(vararg)
         fields: list[record-field-literal];
     },

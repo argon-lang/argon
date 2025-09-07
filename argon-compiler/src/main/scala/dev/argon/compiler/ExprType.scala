@@ -105,6 +105,13 @@ trait ExprType {
           exprContext.ParameterOwner.Rec(rec),
           args
         )
+      case Expr.EnumType(e, args) =>
+        for
+          sig <- e.signature
+        yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
+          exprContext.ParameterOwner.Enum(e),
+          args
+        )
 
 
       case Expr.StringLiteral(_) =>

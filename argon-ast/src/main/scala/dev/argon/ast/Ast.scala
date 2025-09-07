@@ -5,6 +5,7 @@ import dev.argon.util.{WithSource, FilePosition, Location}
 
 sealed trait Stmt
 sealed trait RecordBodyStmt
+sealed trait EnumBodyStmt
 
 final case class FunctionDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
@@ -13,7 +14,7 @@ final case class FunctionDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
   body: FunctionBody,
-) extends Stmt with RecordBodyStmt
+) extends Stmt with RecordBodyStmt with EnumBodyStmt
 
 final case class VariableDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
@@ -37,6 +38,24 @@ final case class RecordField(
   fieldType: WithSource[Expr],
 ) extends RecordBodyStmt
 
+final case class EnumDeclarationStmt(
+  modifiers: Seq[WithSource[Modifier]],
+  name: WithSource[IdentifierExpr],
+  parameters: Seq[WithSource[FunctionParameterList]],
+  returnType: Option[WithSource[Expr]],
+  body: Seq[WithSource[EnumBodyStmt]],
+) extends Stmt
+
+enum EnumVariant extends EnumBodyStmt {
+  case Constructor(
+    modifiers: Seq[WithSource[Modifier]],
+    name: WithSource[IdentifierExpr],
+    parameters: Seq[WithSource[FunctionParameterList]],
+    returnType: Option[WithSource[Expr]],
+  )
+  case Record(record: RecordDeclarationStmt)
+}
+
 final case class MethodDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
   purity: Boolean,
@@ -46,7 +65,7 @@ final case class MethodDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
   body: Option[FunctionBody],
-) extends Stmt with RecordBodyStmt
+) extends Stmt with RecordBodyStmt with EnumBodyStmt
 
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)

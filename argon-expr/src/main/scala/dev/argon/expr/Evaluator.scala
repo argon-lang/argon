@@ -25,6 +25,7 @@ trait Evaluator[R, E] {
            Expr.Boxed(_) |
            Expr.Lambda(_, _, _) |
            Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
+           Expr.EnumType(_, _) | Expr.EnumVariantLiteral(_, _, _, _) |
            Expr.Tuple(_) |
            Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
            Expr.Variable(_) => ZIO.succeed(expr)

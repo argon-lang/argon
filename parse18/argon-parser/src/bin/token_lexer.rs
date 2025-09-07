@@ -3,7 +3,9 @@ use parse18_lexer_gen::{builder::DFABuilder, regex::Regex, codegen};
 fn main() {
     let mut b: DFABuilder<String> = DFABuilder::new();
 
+    b.add(Regex::pattern(r"//[^\n]*"), "TokenType.Whitespace");
     b.add(Regex::pattern(r"[^\S\n]+"), "TokenType.Whitespace");
+    b.add(Regex::pattern(r"\\\n"), "TokenType.Whitespace");
     b.add(Regex::pattern(r"\n"), "TokenType.Token(Token.NewLine)");
     b.add(Regex::str("\""), "TokenType.StringStart");
 
@@ -29,6 +31,7 @@ fn main() {
     b.add(Regex::str("mut"), "TokenType.Token(Token.KW_MUT)");
     b.add(Regex::str("module"), "TokenType.Token(Token.KW_MODULE)");
     b.add(Regex::str("record"), "TokenType.Token(Token.KW_RECORD)");
+    b.add(Regex::str("enum"), "TokenType.Token(Token.KW_ENUM)");
     b.add(Regex::str("true"), "TokenType.Token(Token.KW_TRUE)");
     b.add(Regex::str("false"), "TokenType.Token(Token.KW_FALSE)");
     b.add(Regex::str("as"), "TokenType.Token(Token.KW_AS)");

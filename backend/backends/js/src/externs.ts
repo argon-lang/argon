@@ -186,7 +186,7 @@ abstract class VariableScannerBase {
     }
 
     protected abstract withNestedScope(kind: "block" | "function", f: (scanner: VariableScannerBase) => void): void;
-    protected abstract declare(name: string, kind: "let" | "const" | "var"): void;
+    protected abstract declare(name: string, kind: estree.VariableDeclaration["kind"]): void;
     protected abstract identifierReference(name: string): void;
 
 
@@ -430,7 +430,7 @@ abstract class VariableScannerBase {
         }
     }
 
-    protected scanDeclaredVars(node: ReadonlyDeep<estree.Pattern>, kind: "let" | "const" | "var"): void {
+    protected scanDeclaredVars(node: ReadonlyDeep<estree.Pattern>, kind: estree.VariableDeclaration["kind"]): void {
         if(node === null) {
             return;
         }
