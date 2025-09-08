@@ -32,8 +32,26 @@ trait Evaluator[R, E] {
 
       case Expr.Sequence(Seq(), e) => normalizeToValue(e, fuel)
 
-      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.VariableStore(_, _) | (_: Expr.RecordFieldStore) => ???
+      case Expr.BindVariable(_, _) |
+           Expr.Sequence(_, _) |
+           Expr.VariableStore(_, _) |
+           _: Expr.RecordFieldStore |
+           _: Expr.Is => ???
 
+      case Expr.And(Expr.BoolLiteral(false), _) => ZIO.succeed(Expr.BoolLiteral(false))
+      case Expr.And(_, Expr.BoolLiteral(false)) => ZIO.succeed(Expr.BoolLiteral(false))
+      case Expr.And(Expr.BoolLiteral(true), Expr.BoolLiteral(true)) => ZIO.succeed(Expr.BoolLiteral(true))
+      case Expr.And(_, _) => ZIO.succeed(expr)
+      
+      case Expr.Or(Expr.BoolLiteral(true), _) => ZIO.succeed(Expr.BoolLiteral(true))
+      case Expr.Or(_, Expr.BoolLiteral(true)) => ZIO.succeed(Expr.BoolLiteral(true))
+      case Expr.Or(Expr.BoolLiteral(false), Expr.BoolLiteral(false)) => ZIO.succeed(Expr.BoolLiteral(false))
+      case Expr.Or(_, _) => ZIO.succeed(expr)
+
+      case Expr.Not(Expr.BoolLiteral(b)) => ZIO.succeed(Expr.BoolLiteral(!b))
+      case Expr.Not(_) => ZIO.succeed(expr)
+      
+      
       case ifElse: Expr.IfElse =>
         normalizeToValue(ifElse.condition, fuel).flatMap {
           case Expr.BoolLiteral(true) =>

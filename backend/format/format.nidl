@@ -323,7 +323,7 @@ record function-definition {
 
     @esexpr:(keyword)
     @esexpr:(default-value #false)
-    proof: bool;
+    witness: bool;
 
     @esexpr:(keyword)
     @esexpr:(default-value (pure))
@@ -409,6 +409,10 @@ enum expr {
     error,
     erased-value,
     any-type,
+    and {
+        a: expr;
+        b: expr;
+    },
     bind-variable {
         v: local-var;
         value: expr;
@@ -492,10 +496,21 @@ enum expr {
     int-literal {
         i: int;
     },
+    is {
+        value: expr;
+        pattern: pattern;
+    },
     lambda {
         v: local-var;
         return-type: expr;
         body: expr;
+    },
+    not {
+        a: expr;
+    },
+    or {
+        a: expr;
+        b: expr;
     },
     @esexpr:(inline-value)
     record-type {
@@ -552,6 +567,38 @@ enum expr {
         value: expr;
     },
 }
+
+@esexpr:(derive-codec)
+enum pattern {
+    discard {
+        t: expr;
+    },
+    tuple {
+        @esexpr:(vararg)
+        items: list[pattern];
+    },
+    binding {
+        v: local-var;
+        pattern: pattern;
+    },
+    enum-variant {
+        enum-type: enum-type;
+        variant-id: nat;
+
+        @esexpr:(vararg)
+        args: list[pattern];
+
+        @esexpr:(vararg)
+        fields: list[record-field-pattern];
+    }
+}
+
+@esexpr:(derive-codec)
+record record-field-pattern {
+    field-id: nat;
+    pattern: pattern;
+}
+
 
 @esexpr:(derive-codec)
 simple enum nullary-builtin {
@@ -612,7 +659,7 @@ record local-var {
 
     @esexpr:(keyword)
     @esexpr:(default-value #false)
-    proof: bool;
+    witness: bool;
 }
 
 @esexpr:(derive-codec)
@@ -654,7 +701,7 @@ enum var {
 
         @esexpr:(keyword)
         @esexpr:(default-value #false)
-        proof: bool;
+        witness: bool;
     },
 }
 

@@ -39,6 +39,8 @@ pub enum Token {
     KwEnd,
     #[strum(serialize = "Token.KW_LET.type")]
     KwLet,
+    #[strum(serialize = "Token.KW_VAL.type")]
+    KwVal,
     #[strum(serialize = "Token.KW_MUT.type")]
     KwMut,
     #[strum(serialize = "Token.KW_MODULE.type")]
@@ -49,14 +51,14 @@ pub enum Token {
     KwEnum,
     #[strum(serialize = "Token.KW_WITH.type")]
     KwWith,
-    #[strum(serialize = "Token.KW_CASE.type")]
-    KwCase,
     #[strum(serialize = "Token.KW_TRUE.type")]
     KwTrue,
     #[strum(serialize = "Token.KW_FALSE.type")]
     KwFalse,
     #[strum(serialize = "Token.KW_AS.type")]
     KwAs,
+    #[strum(serialize = "Token.KW_IS.type")]
+    KwIs,
     #[strum(serialize = "Token.KW_IMPORT.type")]
     KwImport,
     #[strum(serialize = "Token.KW_EXPORT.type")]
@@ -79,6 +81,10 @@ pub enum Token {
     KwElse,
     #[strum(serialize = "Token.KW_ELSIF.type")]
     KwElsif,
+    #[strum(serialize = "Token.KW_MATCH.type")]
+    KwMatch,
+    #[strum(serialize = "Token.KW_CASE.type")]
+    KwCase,
     #[strum(serialize = "Token.KW_AND.type")]
     KwAnd,
     #[strum(serialize = "Token.KW_OR.type")]
@@ -189,6 +195,8 @@ pub enum Token {
     OpStarStar,
     #[strum(serialize = "Token.OP_ARROW.type")]
     OpArrow,
+    #[strum(serialize = "Token.OP_FAT_ARROW.type")]
+    OpFatArrow,
     #[strum(serialize = "Token.OP_PROP_EQUAL.type")]
     OpPropEqual,
     #[strum(serialize = "Token.OP_PROP_DISJUNCTION.type")]
@@ -231,10 +239,6 @@ enum Rule {
     Start,
 
     IdentifierOptional,
-    OperatorIdentifier,
-    IdentifierNoParen,
-    ComplexIdentifierNoParen,
-    IdentifierParenOnly,
     Identifier,
     ComplexIdentifier,
     BinaryOperatorName,
@@ -252,6 +256,11 @@ enum Rule {
     StringExprContent,
     StringFragment,
     StringInterpolationRest,
+
+    MatchExpr,
+    MatchCases,
+    MatchCase,
+    MatchCaseBody,
 
     #[strum(serialize = "PrimaryExpr_{0}")]
     PrimaryExpr(ParenAllowedState),
@@ -291,12 +300,23 @@ enum Rule {
     TypeBinding,
 
 
+    Pattern,
+    SimplePattern(ParenAllowedState),
+    NonTuplePattern,
+    TuplePattern,
+    NonEmptyTuplePattern,
+    PatternPath,
+    ConstructorArgsPattern,
+    ConstructorArgPattern,
+
+
     Modifiers,
     Modifiers1,
     Modifier,
     VariableDeclarationRest,
     VariableDeclarationBinding,
     VariableMutSpec,
+    MutSpec,
     VariableDeclarationTypeSpec,
     VariableDeclarationValue,
     MethodOrFunctionDeclarationStmtRest,
@@ -394,46 +414,21 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Identifier) ], "Some"),
                 ],
             ),
-            OperatorIdentifier => ruleset(
-                "IdentifierExpr",
-                [
-                    rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "((op: Token.UnaryOperatorToken[UnaryOperator & Operator.ValidIdentifier]) => IdentifierExpr.Op(op.unOperator))"),
-                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "((op: Token.BinaryOperatorToken[BinaryOperator & Operator.ValidIdentifier]) => IdentifierExpr.Op(op.binOperator))"),
-                ],
-            ),
-            IdentifierNoParen => ruleset(
-                "IdentifierExpr",
-                [
-                    rule([ term(IdentifierToken) ], "((id: Token.Identifier) => IdentifierExpr.Named(id.name))"),
-                    rule([ nonterm(ComplexIdentifierNoParen) ], "identity"),
-                ],
-            ),
-            ComplexIdentifierNoParen => ruleset(
-                "IdentifierExpr",
-                [
-                    rule([ term(KwExtension).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "((id: IdentifierExpr) => IdentifierExpr.Extension(id))"),
-                    rule([ term(KwInverse).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "((id: IdentifierExpr) => IdentifierExpr.Inverse(id))"),
-                    rule([ term(KwUpdate).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "((id: IdentifierExpr) => IdentifierExpr.Update(id))"),
-                ],
-            ),
-            IdentifierParenOnly => ruleset(
-                "IdentifierExpr",
-                [
-                    rule([ nonterm(OperatorIdentifier) ], "identity"),
-                ],
-            ),
             Identifier => ruleset(
                 "IdentifierExpr",
                 [
-                    rule([ nonterm(IdentifierNoParen) ], "identity"),
-                    rule([ nonterm(IdentifierParenOnly) ], "identity"),
+                    rule([ term(IdentifierToken) ], "((id: Token.Identifier) => IdentifierExpr.Named(id.name))"),
+                    rule([ nonterm(ComplexIdentifier) ], "identity"),
                 ],
             ),
             ComplexIdentifier => ruleset(
                 "IdentifierExpr",
                 [
-                    rule([ nonterm(ComplexIdentifierNoParen) ], "identity"),
-                    rule([ nonterm(IdentifierParenOnly) ], "identity"),
+                    rule([ term(KwExtension).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "((id: IdentifierExpr) => IdentifierExpr.Extension(id))"),
+                    rule([ term(KwInverse).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "((id: IdentifierExpr) => IdentifierExpr.Inverse(id))"),
+                    rule([ term(KwUpdate).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "((id: IdentifierExpr) => IdentifierExpr.Update(id))"),
+                    rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "((op: Token.UnaryOperatorToken[UnaryOperator & Operator.ValidIdentifier]) => IdentifierExpr.Op(op.unOperator))"),
+                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "((op: Token.BinaryOperatorToken[BinaryOperator & Operator.ValidIdentifier]) => IdentifierExpr.Op(op.binOperator))"),
                 ],
             ),
             MethodName => ruleset(
@@ -574,11 +569,60 @@ impl GrammarFactory for ParserFactory {
                 ],
             ).lex_mode("LexerMode.SkipNewLines"),
 
+            MatchExpr => ruleset(
+                "Expr",
+                [
+                    rule(
+                        [
+                            term(KwMatch).discard(),
+                            nonterm(Expression).with_location(),
+                            nonterm(MatchCases),
+                            term(KwEnd).discard(),
+                        ],
+                        "Expr.Match",
+                    )
+                ]
+            ).lex_mode("LexerMode.SkipNewLines"),
+            MatchCases => ruleset(
+                "Seq[WithSource[MatchCase]]",
+                [
+                    rule([], "const(Seq.empty)"),
+                    rule(
+                        [
+                            nonterm(MatchCase).with_location(),
+                            nonterm(MatchCases),
+                        ],
+                        "((h: WithSource[MatchCase], t: Seq[WithSource[MatchCase]]) => h +: t)",
+                    ),
+                ]
+            ),
+            MatchCase => ruleset(
+                "MatchCase",
+                [
+                    rule(
+                        [
+                            term(KwCase).discard(),
+                            nonterm(Pattern).with_location(),
+                            term(OpFatArrow).discard(),
+                            nonterm(MatchCaseBody).with_location(),
+                        ],
+                        "MatchCase"
+                    ),
+                ],
+            ),
+            MatchCaseBody => ruleset(
+                "Expr",
+                [
+                    rule([ nonterm(BlockBody) ], "identity"),
+                ],
+            ).lex_mode("LexerMode.Normal"),
+
             PrimaryExpr(ParenAllowedState::NotAllowed) => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(IdentifierNoParen) ], "identity"),
+                    rule([ nonterm(Identifier) ], "identity"),
                     rule([ nonterm(StringExpr) ], "identity"),
+                    rule([ nonterm(MatchExpr) ], "identity"),
                     rule([ term(IntToken) ], "((token: Token.IntToken) => Expr.IntLiteral(token.value))"),
                     rule([ term(KwTrue) ], "const(Expr.BoolLiteral(true))"),
                     rule([ term(KwFalse) ], "const(Expr.BoolLiteral(false))"),
@@ -592,7 +636,6 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(PrimaryExpr(ParenAllowedState::NotAllowed)) ], "identity"),
-                    rule([ nonterm(IdentifierParenOnly) ], "identity"),
                     rule([ term(SymOpenParen).discard(), term(SymCloseParen).discard() ], "const(Expr.Tuple(Seq.empty))"),
                     rule([ term(SymOpenParen).discard(), nonterm(Expression), term(SymCloseParen).discard() ], "identity"),
                 ],
@@ -887,6 +930,7 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ nonterm(PropEqualityExpr).with_location() ], "((e: WithSource[Expr]) => e.value)"),
                     rule([ nonterm(AsExpr).with_location(), term(KwAs).discard(), nonterm(PropEqualityExpr).with_location() ], "Expr.As"),
+                    rule([ nonterm(AsExpr).with_location(), term(KwIs).discard(), nonterm(NonTuplePattern).with_location() ], "Expr.Is"),
                 ],
             ),
             ClosureExpr => ruleset(
@@ -945,6 +989,116 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
 
+
+            Pattern => ruleset(
+                "Pattern",
+                [
+                    rule([ nonterm(TuplePattern) ], "identity"),
+                ]
+            ),
+            SimplePattern(paren_allowed) => {
+                let mut rules = vec![
+                    rule(
+                        [
+                            nonterm(MutSpec),
+                            nonterm(Identifier).with_location(),
+                            term(SymAt).discard(),
+                            nonterm(SimplePattern(paren_allowed)).with_location()
+                        ],
+                        "((mutSpec: Boolean, id: WithSource[IdentifierExpr], pattern: WithSource[Pattern]) => Pattern.Binding(mutSpec, id, pattern))",
+                    ),
+                    rule(
+                        [
+                            nonterm(MutSpec),
+                            nonterm(Identifier).with_location(),
+                        ],
+                        "((mutSpec: Boolean, id: WithSource[IdentifierExpr]) => Pattern.Binding(mutSpec, id, WithLocation(Pattern.Discard, id.location)))",
+                    ),
+
+                    rule([ term(KwUnderscore).discard() ], "const(Pattern.Discard)"),
+                ];
+
+                rules.push(rule(
+                    [ term(SymOpenParen).discard(), nonterm(Pattern), term(SymCloseParen).discard() ],
+                    "identity",
+                ));
+
+                ruleset("Pattern", rules)
+            },
+            TuplePattern => ruleset(
+                "Pattern",
+                [
+                    rule([], "const(Pattern.Tuple(Seq.empty))"),
+                    rule([ nonterm(NonTuplePattern).with_location() ], "((p: WithSource[Pattern]) => p.value)"),
+                    rule([ nonterm(NonTuplePattern).with_location(), term(SymComma).discard(), nonterm(NonEmptyTuplePattern) ], "((h: WithSource[Pattern], t: Seq[WithSource[Pattern]]) => Pattern.Tuple(h +: t))"),
+                ],
+            ),
+            NonEmptyTuplePattern => ruleset(
+                "Seq[WithSource[Pattern]]",
+                [
+                    rule([], "const(Seq.empty)"),
+                    rule([ nonterm(NonTuplePattern).with_location() ], "Seq"),
+                    rule(
+                        [ nonterm(NonTuplePattern).with_location(), term(SymComma).discard(), nonterm(NonEmptyTuplePattern) ],
+                        "((h: WithSource[Pattern], t: Seq[WithSource[Pattern]]) => h +: t)",
+                    )
+                ],
+            ),
+            NonTuplePattern => ruleset(
+                "Pattern",
+                [
+                    rule([ nonterm(SimplePattern(ParenAllowedState::NotAllowed)) ], "identity"),
+                    rule(
+                        [
+                            nonterm(PatternPath).with_location(),
+                            nonterm(ConstructorArgsPattern),
+                        ],
+                        "Pattern.Constructor",
+                    ),
+                ],
+            ),
+            PatternPath => ruleset(
+                "PatternPath",
+                [
+                    rule(
+                        [ nonterm(Identifier).with_location() ],
+                        "PatternPath.Base",
+                    ),
+                    rule(
+                        [ nonterm(PatternPath).with_location(), term(SymDot).discard(), nonterm(Identifier).with_location() ],
+                        "PatternPath.Member",
+                    ),
+                ],
+            ),
+            ConstructorArgsPattern => ruleset(
+                "Seq[WithSource[Pattern]]",
+                [
+                    rule([], "const(Seq.empty)"),
+                    rule(
+                        [
+                            nonterm(ConstructorArgPattern).with_location(),
+                            nonterm(ConstructorArgsPattern),
+                        ],
+                        "((h: WithSource[Pattern], t: Seq[WithSource[Pattern]]) => h +: t)",
+                    ),
+
+                ],
+            ),
+            ConstructorArgPattern => ruleset(
+                "Pattern",
+                [
+                    rule(
+                        [ nonterm(PatternPath).with_location() ],
+                        "((path: WithSource[PatternPath]) => Pattern.Constructor(path, Seq.empty))",
+                    ),
+                    rule(
+                        [ nonterm(SimplePattern(ParenAllowedState::NotAllowed)) ],
+                        "identity",
+                    ),
+                ],
+            ),
+
+
             Modifiers => ruleset(
                 "Seq[WithSource[Modifier]]",
                 [
@@ -996,6 +1150,13 @@ impl GrammarFactory for ParserFactory {
                 "Boolean",
                 [
                     rule([], "const(false)"),
+                    rule([ nonterm(MutSpec) ], "identity"),
+                ]
+            ),
+            MutSpec => ruleset(
+                "Boolean",
+                [
+                    rule([ term(KwVal) ], "const(false)"),
                     rule([ term(KwMut) ], "const(true)"),
                 ]
             ),

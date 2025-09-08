@@ -27,15 +27,16 @@ object TokenCategory {
   case object KW_DO extends TokenCategory
   case object KW_END extends TokenCategory
   case object KW_LET extends TokenCategory
+  case object KW_VAL extends TokenCategory
   case object KW_MUT extends TokenCategory
   case object KW_MODULE extends TokenCategory
   case object KW_RECORD extends TokenCategory
   case object KW_ENUM extends TokenCategory
   case object KW_WITH extends TokenCategory
-  case object KW_CASE extends TokenCategory
   case object KW_TRUE extends TokenCategory
   case object KW_FALSE extends TokenCategory
   case object KW_AS extends TokenCategory
+  case object KW_IS extends TokenCategory
   case object KW_IMPORT extends TokenCategory
   case object KW_EXPORT extends TokenCategory
   case object KW_PUBLIC extends TokenCategory
@@ -47,6 +48,8 @@ object TokenCategory {
   case object KW_THEN extends TokenCategory
   case object KW_ELSE extends TokenCategory
   case object KW_ELSIF extends TokenCategory
+  case object KW_MATCH extends TokenCategory
+  case object KW_CASE extends TokenCategory
   case object KW_AND extends TokenCategory
   case object KW_OR extends TokenCategory
   case object KW_TYPE extends TokenCategory

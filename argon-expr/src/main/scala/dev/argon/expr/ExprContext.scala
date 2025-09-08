@@ -10,14 +10,14 @@ import dev.argon.util.SourceLocation
 import java.util.Objects
 import scala.compiletime.{asMatchable, deferred}
 
-trait ExprContext {
+trait ExprContext extends ConditionalVars {
 
   sealed trait Var {
     def name: Option[IdentifierExpr]
     def varType: Expr
     def isErased: Boolean
     def isMutable: Boolean
-    def isProof: Boolean
+    def isWitness: Boolean
   }
 
   final case class LocalVar(
@@ -26,7 +26,7 @@ trait ExprContext {
     name: Option[IdentifierExpr],
     isMutable: Boolean,
     isErased: Boolean,
-    isProof: Boolean,
+    isWitness: Boolean,
   ) extends Var {
     override def hashCode(): Int = id.hashCode()
 
@@ -50,7 +50,7 @@ trait ExprContext {
     varType: Expr,
     name: Option[IdentifierExpr],
     isErased: Boolean,
-    isProof: Boolean,
+    isWitness: Boolean,
   ) extends Var {
     override def isMutable: Boolean = false
 
@@ -100,7 +100,8 @@ trait ExprContext {
     case ErasedValue()
 
     case Hole(hole: ExprContext.this.Hole)
-    
+
+    case And(a: Expr, b: Expr)
     case AnyType()
     case BindVariable(v: LocalVar, value: Expr)
     case BoolLiteral(b: Boolean)
@@ -120,7 +121,10 @@ trait ExprContext {
       falseBody: Expr,
     )
     case IntLiteral(i: BigInt)
+    case Is(value: Expr, pattern: Pattern)
     case Lambda(v: LocalVar, returnType: Expr, body: Expr)
+    case Not(a: Expr)
+    case Or(a: Expr, b: Expr)
     case RecordType(record: Record, args: Seq[Expr])
     case EnumType(e: Enum, args: Seq[Expr])
     case RecordFieldLoad(record: Expr.RecordType, field: RecordField, recordValue: Expr)
@@ -136,6 +140,18 @@ trait ExprContext {
     case Variable(v: Var)
     case VariableStore(v: Var, value: Expr)
   }
+
+  enum Pattern derives CanEqual {
+    case Discard(t: Expr)
+    case Tuple(elements: Seq[Pattern])
+    case Binding(v: LocalVar, pattern: Pattern)
+    case EnumVariant(enumType: Expr.EnumType, variant: ExprContext.this.EnumVariant, args: Seq[Pattern], fields: Seq[RecordFieldPattern])
+  }
+
+  final case class RecordFieldPattern(
+    field: RecordField,
+    pattern: Pattern,
+  )
 
   final case class RecordFieldLiteral(
     field: RecordField,

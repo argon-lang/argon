@@ -7,7 +7,6 @@ import { Identifier } from "@argon-lang/js-backend-api/vm";
 import type { IterableElement, JsonObject, JsonValue, ReadonlyDeep } from "type-fest";
 import { ExternFunction } from "./platform-data.js";
 import type { ImportHandler } from "./imports.js";
-import { Option } from "@argon-lang/noble-idl-core";
 
 import { name as isValidIdName } from "estree-util-is-identifier-name";
 
@@ -457,9 +456,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         const variantsObj: JsonObject = Object.create(null);
         for(const variant of enumDef.variants) {
             variantsObj[this.getExportNameForId(variant.name)] = {
-                args: variant.signature.parameters.map(field => ({
-                    name: field.name === null ? null : this.getExportNameForId(Option.get(field.name)),
-                })),
+                argCount: variant.signature.parameters.length,
                 fields: variant.fields.map(field => ({
                     name: this.getExportNameForId(field.name),
                     mutable: field.mutable,
@@ -730,8 +727,6 @@ class BlockEmitter extends EmitterBase {
 
             case "enum-variant-literal":
             {
-                const variantInfo = this.options.program.getEnumVariantInfo(insn.variantId);
-
                 const args: estree.Expression[] = [];
                 for(const typeArg of insn.typeArgs) {
                     args.push(this.buildTypeInfo(typeArg));
@@ -766,36 +761,9 @@ class BlockEmitter extends EmitterBase {
                     }),
                 });
 
-                const variantName = this.getExportNameForId(variantInfo.name);
-                const nameValid = isValidIdName(variantName) && variantName !== "__proto__";
-
                 assign(insn.dest, {
                     type: "NewExpression",
-                    callee: {
-                        type: "MemberExpression",
-                        computed: !nameValid,
-                        optional: false,
-
-                        object: {
-                            type: "MemberExpression",
-                            computed: false,
-                            optional: false,
-
-                            object: this.buildTypeInfo(insn.enumType),
-                            property: {
-                                type: "Identifier",
-                                name: "variants",
-                            },
-                        },
-
-                        property: nameValid ? {
-                            type: "Identifier",
-                            name: variantName,
-                        } : {
-                            type: "Literal",
-                            value: variantName,
-                        },
-                    },
+                    callee: this.getVariantClass(insn.enumType, insn.variantId),
                     arguments: args,
                 });
 
@@ -882,6 +850,76 @@ class BlockEmitter extends EmitterBase {
                     test: this.getReg(insn.condition),
                     consequent: this.emitNestedBlock(insn.whenTrue),
                     alternate: this.emitNestedBlock(insn.whenFalse),
+                });
+                break;
+
+            case "is-enum-variant":
+                stmts.push({
+                    type: "ExpressionStatement",
+                    expression: {
+                        type: "AssignmentExpression",
+                        operator: "=",
+                        left: this.getReg(insn.dest),
+                        right: {
+                            type: "BinaryExpression",
+                            operator: "instanceof",
+                            left: this.getReg(insn.value),
+                            right: this.getVariantClass(insn.enumType, insn.variantId),
+                        },
+                    },
+                });
+
+                const body: estree.Statement[] = [];
+                for(const [i, arg] of insn.args.entries()) {
+                    body.push({
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            operator: "=",
+                            left: this.getReg(arg),
+                            right: {
+                                type: "MemberExpression",
+                                computed: false,
+                                optional: false,
+                                object: this.getReg(insn.value),
+                                property: {
+                                    type: "Identifier",
+                                    name: `args_${i}`,
+                                },
+                            }
+                        }
+                    });
+                }
+                for(const fieldExtractor of insn.fieldExtractors) {
+                    const fieldInfo = this.options.program.getRecordFieldInfo(fieldExtractor.fieldId);
+
+                    body.push({
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            operator: "=",
+                            left: this.getReg(fieldExtractor.r),
+                            right: {
+                                type: "MemberExpression",
+                                computed: false,
+                                optional: false,
+                                object: this.getReg(insn.value),
+                                property: {
+                                    type: "Identifier",
+                                    name: `field_${this.getExportNameForId(fieldInfo.name)}`,
+                                },
+                            }
+                        }
+                    });
+                }
+
+                stmts.push({
+                    type: "IfStatement",
+                    test: this.getReg(insn.dest),
+                    consequent: {
+                        type: "BlockStatement",
+                        body,
+                    },
                 });
                 break;
 
@@ -1226,6 +1264,40 @@ class BlockEmitter extends EmitterBase {
             case "erased":
                 throw new Error("Cannot get type info for erased");
         }
+    }
+
+    private getVariantClass(enumType: ir.VmType, variantId: bigint): estree.Expression {
+        const variantInfo = this.options.program.getEnumVariantInfo(variantId);
+
+
+        const variantName = this.getExportNameForId(variantInfo.name);
+        const nameValid = isValidIdName(variantName) && variantName !== "__proto__";
+
+        return {
+            type: "MemberExpression",
+            computed: !nameValid,
+            optional: false,
+
+            object: {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+
+                object: this.buildTypeInfo(enumType),
+                property: {
+                    type: "Identifier",
+                    name: "variants",
+                },
+            },
+
+            property: nameValid ? {
+                type: "Identifier",
+                name: variantName,
+            } : {
+                type: "Literal",
+                value: variantName,
+            },
+        };
     }
 }
 

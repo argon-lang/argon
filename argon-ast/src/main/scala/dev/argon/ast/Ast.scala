@@ -137,6 +137,8 @@ object Expr:
   final case class FunctionType(a: WithSource[Expr], r: WithSource[Expr]) extends Expr
   final case class IfElse(condition: WithSource[Expr], whenTrue: WithSource[Seq[WithSource[Stmt]]], whenFalse: WithSource[Seq[WithSource[Stmt]]]) extends Expr
   final case class IntLiteral(i: BigInt) extends Expr
+  final case class Is(value: WithSource[Expr], pattern: WithSource[Pattern]) extends Expr
+  final case class Match(value: WithSource[Expr], cases: Seq[WithSource[MatchCase]]) extends Expr
   final case class RecordLiteral(recordExpr: WithSource[Expr], fields: WithSource[Seq[WithSource[RecordFieldLiteral]]]) extends Expr
   final case class StringLiteral(parts: Seq[StringFragment]) extends Expr
   final case class Summon(t: WithSource[Expr]) extends Expr
@@ -212,6 +214,29 @@ enum UnaryOperator(val symbol: String) extends Operator derives CanEqual:
   case BitNot extends UnaryOperator("~~~") with Operator.ValidIdentifier
   case LogicalNot extends UnaryOperator("!") with Operator.ValidIdentifier
 end UnaryOperator
+
+final case class MatchCase(
+  pattern: WithSource[Pattern],
+  body: WithSource[Expr],
+)
+
+enum Pattern derives CanEqual {
+  case Discard
+  case Tuple(elements: Seq[WithSource[Pattern]])
+  case Binding(isMutable: Boolean, name: WithSource[IdentifierExpr], pattern: WithSource[Pattern])
+  case Constructor(path: WithSource[PatternPath], args: Seq[WithSource[Pattern]])
+  case Record(path: WithSource[PatternPath], args: Seq[WithSource[Pattern]], recordFieldPatterns: Seq[WithSource[RecordFieldPattern]])
+}
+
+enum PatternPath {
+  case Member(base: WithSource[PatternPath], member: WithSource[IdentifierExpr])
+  case Base(name: WithSource[IdentifierExpr])
+}
+
+final case class RecordFieldPattern(
+  fieldName: WithSource[IdentifierExpr],
+  pattern: WithSource[Pattern],
+)
 
 
 

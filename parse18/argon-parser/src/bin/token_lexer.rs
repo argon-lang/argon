@@ -28,6 +28,7 @@ fn main() {
     b.add(Regex::str("do"), "TokenType.Token(Token.KW_DO)");
     b.add(Regex::str("end"), "TokenType.Token(Token.KW_END)");
     b.add(Regex::str("let"), "TokenType.Token(Token.KW_LET)");
+    b.add(Regex::str("val"), "TokenType.Token(Token.KW_VAL)");
     b.add(Regex::str("mut"), "TokenType.Token(Token.KW_MUT)");
     b.add(Regex::str("module"), "TokenType.Token(Token.KW_MODULE)");
     b.add(Regex::str("record"), "TokenType.Token(Token.KW_RECORD)");
@@ -35,6 +36,7 @@ fn main() {
     b.add(Regex::str("true"), "TokenType.Token(Token.KW_TRUE)");
     b.add(Regex::str("false"), "TokenType.Token(Token.KW_FALSE)");
     b.add(Regex::str("as"), "TokenType.Token(Token.KW_AS)");
+    b.add(Regex::str("is"), "TokenType.Token(Token.KW_IS)");
     b.add(Regex::str("import"), "TokenType.Token(Token.KW_IMPORT)");
     b.add(Regex::str("export"), "TokenType.Token(Token.KW_EXPORT)");
     b.add(Regex::str("public"), "TokenType.Token(Token.KW_PUBLIC)");
@@ -45,6 +47,8 @@ fn main() {
     b.add(Regex::str("then"), "TokenType.Token(Token.KW_THEN)");
     b.add(Regex::str("else"), "TokenType.Token(Token.KW_ELSE)");
     b.add(Regex::str("elsif"), "TokenType.Token(Token.KW_ELSIF)");
+    b.add(Regex::str("match"), "TokenType.Token(Token.KW_MATCH)");
+    b.add(Regex::str("case"), "TokenType.Token(Token.KW_CASE)");
     b.add(Regex::str("type"), "TokenType.Token(Token.KW_TYPE)");
     b.add(Regex::str("type!"), "TokenType.Token(Token.KW_BIGTYPE)");
     b.add(Regex::str("extern"), "TokenType.Token(Token.KW_EXTERN)");

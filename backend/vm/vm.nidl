@@ -464,6 +464,20 @@ enum instruction {
         when-false: block;
     },
 
+    is-enum-variant {
+        dest: register-id;
+        enum-type: vm-type;
+        variant-id: nat;
+
+        value: register-id;
+
+        @esexpr:(vararg)
+        args: list[register-id];
+
+        @esexpr:(vararg)
+        field-extractors: list[field-extractor];
+    },
+
     load-type-info {
         dest: register-id;
         type: vm-type;
@@ -613,5 +627,11 @@ simple enum builtin-binary-op {
     string-ne,
     bool-eq,
     bool-ne,
+}
+
+@esexpr:(derive-codec)
+record field-extractor {
+    r: register-id;
+    field-id: nat;
 }
 

@@ -10,13 +10,14 @@ import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
 import dev.argon.compiler.{ArgonEvaluator, HasContext, SignatureEraser, UsingContext}
 import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin, ValueUtil}
+import sourcecode.Text.generate
 
 
 private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
   override def createEmitter(state: EncodeState): state.Emitter =
     new state.Emitter {
       import state.*
-      import context.DefaultExprContext.Expr as ArExpr
+      import context.DefaultExprContext.{Expr as ArExpr, Pattern as ArPattern}
       val ctx: context.type = context
   
       def emitTube: Comp[Unit] =
@@ -933,6 +934,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 emit(Instruction.ConstInt(r, i))
               }
 
+            case ArExpr.Is(value, pattern) =>
+              intoRegister(e, output) { r =>                  
+                expr(value, ExprOutput.AnyRegister).flatMap { valueReg =>
+                  emitPattern(r, valueReg, pattern)
+                }
+              }
+              
             case ArExpr.Lambda(param, returnType, body) =>
               import context.DefaultExprContext.Var
 
@@ -1124,6 +1132,95 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
             case _ =>
               ZIO.logError("Unimplemented block expression: " + e.getClass).as(???)
+          }
+        
+        private def emitPattern(r: RegisterId, valueReg: RegisterId, pattern: ArPattern): Comp[Unit] =
+          pattern match {
+            case ArPattern.Discard(_) =>
+              emit(Instruction.ConstBool(r, true))
+
+            case ArPattern.Tuple(elements) =>              
+              emitTuplePattern(r, valueReg, elements, 0)
+              
+            case ArPattern.Binding(v, pattern) =>
+              for
+                vr <- declareVar(v)
+                _ <- emit(Instruction.Move(vr, valueReg))
+                _ <- emitPattern(r, valueReg, pattern)
+              yield ()
+              
+            case ArPattern.EnumVariant(enumType, variant, args, fields) =>
+              for
+                argPatterns <- ZIO.foreach(args) { arg =>
+                  for
+                    vt <- typeExpr(exprType.getPatternType(arg))
+                    argReg <- addVar(vt).commit
+                  yield (argReg, arg)
+                }
+                
+                fieldPatterns <- ZIO.foreach(fields) { field =>
+                  for
+                    vt <- typeExpr(exprType.getPatternType(field.pattern))
+                    fieldReg <- addVar(vt).commit
+                    fieldId <- getRecordFieldId(field.field)
+                  yield (fieldReg, fieldId, field.pattern)
+                }
+                
+                et <- typeExpr(enumType)
+                variantId <- getEnumVariantId(variant)
+                
+                _ <- emit(Instruction.IsEnumVariant(
+                  r,
+                  et,
+                  variantId,
+                  valueReg,
+                  argPatterns.map(_._1),
+                  fieldPatterns.map { (fieldReg, fieldId, _) => FieldExtractor(fieldReg, fieldId) },
+                ))
+                (block, _) <- nestedBlock { blockEmitter =>
+                  blockEmitter.processPatterns(
+                    r,
+                    argPatterns ++ fieldPatterns.map { (fieldReg, _, fieldPattern) => (fieldReg, fieldPattern) },
+                  )
+                }
+                _ <- emit(Instruction.IfElse(r, block, Block(Seq())))
+              yield ()
+          }
+          
+        private def emitTuplePattern(r: RegisterId, valueReg: RegisterId, elements: Seq[ArPattern], index: BigInt): Comp[Unit] =
+          elements match {
+            case h +: t =>
+              for
+                et <- typeExpr(exprType.getPatternType(h))
+                elementReg <- addVar(et).commit
+                _ <- emit(Instruction.TupleElement(index, elementReg, valueReg))
+                _ <- emitPattern(r, elementReg, h)
+                _ <- (
+                  for
+                    (block, _) <- nestedBlock { blockEmitter =>
+                      blockEmitter.emitTuplePattern(r, valueReg, t, index + 1)
+                    }
+                    _ <- emit(Instruction.IfElse(r, block, Block(Seq())))
+                  yield ()
+                  ).whenDiscard(t.nonEmpty)
+              yield ()
+
+            case _ => emit(Instruction.ConstBool(r, true))
+          }
+        
+        private def processPatterns(r: RegisterId, patterns: Seq[(RegisterId, ArPattern)]): Comp[Unit] =
+          patterns match {
+            case (valueReg, pattern) +: t =>
+              for
+                (block, _) <- nestedBlock { blockEmitter =>
+                  blockEmitter.emitPattern(r, valueReg, pattern) *>
+                    blockEmitter.processPatterns(r, t)      
+                }
+                _ <- emit(Instruction.IfElse(r, block, Block(Seq())))
+              yield ()
+
+            case _ =>
+              ZIO.unit
           }
 
         override protected def fallbackTypeExpr(t: ArExpr): Comp[VmType] =

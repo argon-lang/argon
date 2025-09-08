@@ -14,7 +14,7 @@ trait ExprType {
   }
 
   import context.Comp
-  import exprContext.Expr
+  import exprContext.{Expr, Pattern}
 
   private def boolType = Expr.Builtin(exprContext.Builtin.Nullary(NullaryBuiltin.BoolType))
   private def intType = Expr.Builtin(exprContext.Builtin.Nullary(NullaryBuiltin.IntType))
@@ -82,6 +82,9 @@ trait ExprType {
       case Expr.IntLiteral(_) =>
         ZIO.succeed(intType)
 
+      case Expr.Is(_, _) =>
+        ZIO.succeed(boolType)
+
       case Expr.Lambda(v, returnType, _) =>
         ZIO.succeed(Expr.FunctionType(v, returnType))
 
@@ -133,6 +136,16 @@ trait ExprType {
 
       case _ =>
         ZIO.logError("Unimplemented getExprType expression: " + e).as(???)
+    }
+
+  def getPatternType(p: Pattern): Expr =
+    p match {
+      case Pattern.Discard(t) => t
+      case Pattern.Tuple(elements) =>
+        Expr.Tuple(elements.map(getPatternType))
+
+      case Pattern.Binding(v, pattern) => v.varType
+      case Pattern.EnumVariant(enumType, _, _, _) => enumType
     }
 
 

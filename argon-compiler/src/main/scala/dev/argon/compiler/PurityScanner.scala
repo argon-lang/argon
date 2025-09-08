@@ -44,13 +44,15 @@ object PurityScanner {
             case _ => autoScanner[Expr].scan(a)
           }
       end exprScanner
-      
+
+      private given Scanner[Pattern] = autoScanner
       private given Scanner[Builtin] = autoScanner
       private given Scanner[LocalVar] = autoScanner
       private given Scanner[Var] = autoScanner
       given Scanner[Expr.RecordType] = autoScanner
       given Scanner[Expr.EnumType] = autoScanner
       given Scanner[RecordFieldLiteral] = autoScanner
+      private given Scanner[RecordFieldPattern] = autoScanner
 
       private given Scanner[ParameterOwner] = IgnoreScanner[ParameterOwner]
       private given Scanner[Function] = IgnoreScanner[Function]

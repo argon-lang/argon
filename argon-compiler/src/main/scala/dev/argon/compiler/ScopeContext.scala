@@ -238,7 +238,7 @@ trait ScopeContext {
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
         for
           parentAssertions <- parentScope.givenAssertions
-        yield parentAssertions ++ parameters.view.filter(_.isProof).map(ImplicitValue.OfVar.apply)
+        yield parentAssertions ++ parameters.view.filter(_.isWitness).map(ImplicitValue.OfVar.apply)
 
       override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
@@ -260,7 +260,7 @@ trait ScopeContext {
         for
           parentAssertions <- parent.givenAssertions
           variables <- givenVars.toSet.commit
-        yield parentAssertions ++ variables.view.filter(_.isProof).map(ImplicitValue.OfVar.apply)
+        yield parentAssertions ++ variables.view.filter(_.isWitness).map(ImplicitValue.OfVar.apply)
 
       override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] =
         for

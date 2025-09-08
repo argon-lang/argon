@@ -8,6 +8,7 @@ object ValueUtil {
       case Expr.Error() => false
       case Expr.ErasedValue() => false
       case Expr.Hole(_) => false
+      case Expr.And(_, _) => false
       case Expr.AnyType() => true
       case Expr.BindVariable(_, _) => false
       case Expr.BoolLiteral(_) => true
@@ -22,7 +23,10 @@ object ValueUtil {
       case Expr.FunctionType(_, _) => true
       case Expr.IfElse(_, _, _, _, _) => false
       case Expr.IntLiteral(_) => true
+      case Expr.Is(_, _) => false
       case Expr.Lambda(_, _, _) => true
+      case Expr.Not(_) => false
+      case Expr.Or(_, _) => false
       case Expr.RecordType(_, _) => true
       case Expr.RecordFieldLoad(_, _, _) => false
       case Expr.RecordFieldStore(_, _, _, _) => false

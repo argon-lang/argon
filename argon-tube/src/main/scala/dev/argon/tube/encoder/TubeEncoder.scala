@@ -14,7 +14,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
   override def createEmitter(state: EncodeState): state.Emitter =
     new state.Emitter {
       import state.*
-      import context.DefaultExprContext.Expr as ArExpr
+      import context.DefaultExprContext.{Expr as ArExpr, Pattern as ArPattern}
   
       def emitTube: Comp[Unit] =
         val orderedTubes = tube.referencedTubes.toSeq
@@ -260,7 +260,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             `import` = importSpec,
             `inline` = func.isInline,
             erased = func.isErased,
-            proof = func.isWitness,
+            witness = func.isWitness,
             effects = encodeEffectInfo(func.effects),
             signature = sig,
             implementation = impl,
@@ -445,7 +445,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             name = v.name.map(encodeIdentifier),
             mutable = v.isMutable,
             erased = v.isErased,
-            proof = v.isProof,
+            witness = v.isWitness,
           )
 
         private def getVar(v: context.DefaultExprContext.Var): Comp[Var] =
@@ -488,7 +488,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 name = v.name.map(encodeIdentifier),
                 varType = varType,
                 erased = v.isErased,
-                proof = v.isProof,
+                witness = v.isWitness,
               )
           }
           
@@ -497,6 +497,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           e match {
             case ArExpr.Error() => ZIO.succeed(Expr.Error())
             case ArExpr.ErasedValue() => ZIO.succeed(Expr.ErasedValue())
+            case ArExpr.And(a, b) =>
+              for
+                a <- expr(a)
+                b <- expr(b)
+              yield Expr.And(a, b)
+
             case ArExpr.AnyType() => ZIO.succeed(Expr.AnyType())
             case ArExpr.Hole(hole) => hole
             case ArExpr.BindVariable(v, value) =>
@@ -639,6 +645,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case ArExpr.IntLiteral(i) =>
               ZIO.succeed(Expr.IntLiteral(i))
 
+            case ArExpr.Is(value, p) =>
+              for
+                value <- expr(value)
+                p <- pattern(p)
+              yield Expr.Is(value, p)
+
             case lambda: ArExpr.Lambda =>
               for
                 v <- declareVar(lambda.v)
@@ -650,6 +662,17 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 returnType = returnType,
                 body = body,
               )
+
+            case ArExpr.Not(a) =>
+              for
+                a <- expr(a)
+              yield Expr.Not(a)
+
+            case ArExpr.Or(a, b) =>
+              for
+                a <- expr(a)
+                b <- expr(b)
+              yield Expr.Or(a, b)
 
             case rt: ArExpr.RecordType =>
               encodeRecordType(rt).map(Expr.RecordType.apply)
@@ -720,12 +743,47 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               yield Expr.VariableStore(v, value)
           }
 
+        def pattern(p: ArPattern): Comp[Pattern] =
+          p match {
+            case ArPattern.Discard(t) => 
+              for
+                t <- expr(t)
+              yield Pattern.Discard(t)
+            case ArPattern.Tuple(elements) =>
+              for
+                elements <- ZIO.foreach(elements)(pattern)
+              yield Pattern.Tuple(elements)
+
+            case ArPattern.Binding(v, p) =>
+              for
+                v <- declareVar(v)
+                p <- pattern(p)
+              yield Pattern.Binding(v, p)
+
+            case ArPattern.EnumVariant(enumType, variant, args, fields) =>
+              for
+                enumType <- encodeEnumType(enumType)
+                variant <- getEnumVariantId(variant)
+                args <- ZIO.foreach(args)(pattern)
+                fields <- ZIO.foreach(fields)(encodeRecordFieldPattern)
+              yield Pattern.EnumVariant(enumType, variant, args, fields)
+          }
+
+        private def encodeRecordFieldPattern(field: context.DefaultExprContext.RecordFieldPattern): Comp[RecordFieldPattern] =
+          for
+            fieldId <- getRecordFieldId(field.field)
+            pattern <- pattern(field.pattern)
+          yield RecordFieldPattern(
+            fieldId = fieldId,
+            pattern = pattern,
+          )
+
         private def encodeRecordType(rt: ArExpr.RecordType): Comp[RecordType] =
           for
             recordId <- getRecordId(rt.record)
             args <- ZIO.foreach(rt.args)(expr)
           yield RecordType(recordId, args)
-          
+
         private def encodeRecordFieldLiteral(field: context.DefaultExprContext.RecordFieldLiteral): Comp[RecordFieldLiteral] =
           for
             fieldId <- getRecordFieldId(field.field)
@@ -740,7 +798,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             enumId <- getEnumId(e.e)
             args <- ZIO.foreach(e.args)(expr)
           yield EnumType(enumId, args)
-          
+
       }
     }
 }

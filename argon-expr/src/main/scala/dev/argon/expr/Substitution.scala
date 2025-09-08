@@ -22,9 +22,11 @@ private trait Substitution {
         }).getOrElse(autoShifter[Expr, Expr].shift(a))
     end exprShifter
 
+    given Shifter[Pattern, Pattern] = autoShifter
     given Shifter[Expr.RecordType, Expr.RecordType] = autoShifter
     given Shifter[Expr.EnumType, Expr.EnumType] = autoShifter
     given Shifter[RecordFieldLiteral, RecordFieldLiteral] = autoShifter
+    given Shifter[RecordFieldPattern, RecordFieldPattern] = autoShifter
 
     given Shifter[Builtin, Builtin] = autoShifter
     given Shifter[Hole, Hole] = identity

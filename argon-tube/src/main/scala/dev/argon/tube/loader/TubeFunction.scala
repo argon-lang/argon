@@ -26,7 +26,7 @@ private[loader] object TubeFunction {
 
       override def isErased: Boolean = function.erased
 
-      override def isWitness: Boolean = function.proof
+      override def isWitness: Boolean = function.witness
 
       override def effects: context.DefaultExprContext.EffectInfo =
         function.effects match {

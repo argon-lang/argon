@@ -2,13 +2,14 @@ package dev.argon.compiler
 
 import dev.argon.util.{*, given}
 import dev.argon.ast
-import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
+import dev.argon.ast.{FunctionParameterListType, IdentifierExpr, Pattern, PatternPath}
 import dev.argon.expr.*
 import dev.argon.prover.Proof
 import dev.argon.util.{FilePosition, Location, UniqueIdentifier, WithLocation, WithSource}
 import zio.*
 import cats.*
 import cats.implicits.given
+import cats.mtl.syntax.state
 import zio.interop.catz.core.given
 import zio.stream.ZStream
 
@@ -17,7 +18,7 @@ trait TypeResolver extends UsingContext {
   import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable, ImplicitValue}
 
-  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole, HoleInfo, AnnotatedExpr, RecordFieldLiteral, EffectInfo}
+  import TRExprContext.{Expr, Pattern, Builtin, LocalVar, Var, Hole, HoleInfo, AnnotatedExpr, RecordFieldLiteral, EffectInfo}
   private type Loc = Location[FilePosition]
 
 
@@ -170,7 +171,7 @@ trait TypeResolver extends UsingContext {
           for
             argType <- makeHole(Expr.AnyType(), ErasureMode.Concrete, loc)
             paramId <- UniqueIdentifier.make
-            param = LocalVar(paramId, argType, None, isMutable = false, isErased = false, isProof = false)
+            param = LocalVar(paramId, argType, None, isMutable = false, isErased = false, isWitness = false)
             funcType = Expr.FunctionType(param, t)
             f <- ExprFactory.this.check(funcType)
             arg <- arg.arg.check(argType)
@@ -235,6 +236,18 @@ trait TypeResolver extends UsingContext {
     memberName: WithSource[IdentifierExpr],
   )
 
+  private trait PatternFactory {
+    def loc: Loc
+
+    def infer(using EmitState): Comp[PatternWithType]
+  }
+
+  private final case class PatternWithType(
+    pattern: Pattern,
+    patternType: Expr,
+  )
+
+
   private def resolveStmtBlock(block: WithSource[Seq[WithSource[ast.Stmt]]]): ExprFactory =
     new ExprFactory {
       override def loc: Loc = block.location
@@ -291,7 +304,7 @@ trait TypeResolver extends UsingContext {
                 decl.name,
                 decl.isMutable,
                 isErased = isErased,
-                isProof = isProof,
+                isWitness = isProof,
               )
 
               _ <- state.scope.addVariable(localVar, Some(value))
@@ -341,7 +354,7 @@ trait TypeResolver extends UsingContext {
                 name = None,
                 isMutable = false,
                 isErased = true,
-                isProof = true,
+                isWitness = true,
               )
 
               _ <- state.scope.addVariable(localVar, Some(value))
@@ -469,7 +482,7 @@ trait TypeResolver extends UsingContext {
           override def checkFunction(t: Expr.FunctionType)(using state: EmitState): Comp[Expr] =
             for
               paramId <- UniqueIdentifier.make
-              param = LocalVar(paramId, t.a.varType, parameterName, isMutable = t.a.isMutable, isErased = t.a.isErased, isProof = t.a.isProof)
+              param = LocalVar(paramId, t.a.varType, parameterName, isMutable = t.a.isMutable, isErased = t.a.isErased, isWitness = t.a.isWitness)
 
               nestedScope <- Scopes.LocalScope.make(state.scope)
               _ <- nestedScope.addVariable(param, None)
@@ -485,7 +498,7 @@ trait TypeResolver extends UsingContext {
               a <- resolveType(a)
               r <- resolveType(r)
               paramId <- UniqueIdentifier.make
-              param = LocalVar(paramId, a, None, isMutable = false, isErased = false, isProof = false)
+              param = LocalVar(paramId, a, None, isMutable = false, isErased = false, isWitness = false)
             yield InferredExpr(Expr.FunctionType(param, r), Expr.TypeN(Expr.IntLiteral(0))) // TODO: Infer proper level
         }
 
@@ -504,12 +517,16 @@ trait TypeResolver extends UsingContext {
               whenTrueVar <- createIfBranchVar(condExpr, true).when(isPureCond)
               whenFalseVar <- createIfBranchVar(condExpr, false).when(isPureCond)
 
+              condVars = TRExprContext.getConditionalVars(condExpr)
+              whenTrueVars = condVars.whenTrue ++ whenTrueVar
+              whenFalseVars = condVars.whenFalse ++ whenFalseVar
+
               trueBody <- nestedScope { state ?=>
-                ZIO.foreach(whenTrueVar)(state.scope.addVariable(_, None)) *>
+                ZIO.foreach(whenTrueVars)(state.scope.addVariable(_, None)) *>
                   resolveStmtBlock(whenTrue).check(t)
               }
               falseBody <- nestedScope { state ?=>
-                ZIO.foreach(whenFalseVar)(state.scope.addVariable(_, None)) *>
+                ZIO.foreach(whenFalseVars)(state.scope.addVariable(_, None)) *>
                   resolveStmtBlock(whenFalse).check(t)
               }
             yield Expr.IfElse(whenTrueVar, whenFalseVar, condExpr, trueBody, falseBody)
@@ -523,7 +540,7 @@ trait TypeResolver extends UsingContext {
               name = None,
               isMutable = false,
               isErased = true,
-              isProof = true,
+              isWitness = true,
             )
         }
 
@@ -535,6 +552,21 @@ trait TypeResolver extends UsingContext {
               Expr.IntLiteral(i),
               intType,
             ))
+        }
+
+      case ast.Expr.Is(value, pattern) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+
+          override def infer(using EmitState): Comp[InferredExpr] =
+            for
+              t <- makeHole(Expr.AnyType(), ErasureMode.TypeAnnotation, loc)
+              e <- resolveExpr(value).check(t)
+              p <- resolvePattern(pattern, t)
+            yield InferredExpr(
+              Expr.Is(e, p),
+              Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)),
+            )
         }
 
       case ast.Expr.RecordLiteral(rec, fields) =>
@@ -632,6 +664,116 @@ trait TypeResolver extends UsingContext {
 
   private def resolveType(expr: WithSource[ast.Expr])(using state: EmitState): Comp[Expr] =
     resolveExpr(expr).check(Expr.AnyType())(using state.copy(erased = state.erased || ErasureMode.TypeAnnotation))
+
+  private def resolvePattern(pattern: WithSource[ast.Pattern], t: Expr)(using state: EmitState): Comp[Pattern] =
+    pattern.value match {
+      case ast.Pattern.Discard =>
+        ZIO.succeed(Pattern.Discard(t))
+
+      case ast.Pattern.Tuple(elements) =>
+        normalizeToValue(t).flatMap {
+          case Expr.Tuple(elementTypes) if elementTypes.size == elements.size =>
+            ZIO.foreach(elements.zip(elementTypes))(resolvePattern)
+              .map(Pattern.Tuple.apply)
+
+          case _ => ???
+        }
+
+      case ast.Pattern.Binding(isMutable, name, pattern) =>
+        for
+          id <- UniqueIdentifier.make
+          innerPattern <- resolvePattern(pattern, t)
+
+          v = LocalVar(
+            id,
+            t,
+            Some(name.value),
+            isMutable = isMutable,
+            isErased = state.erased match {
+              case ErasureMode.Erased => true
+              case ErasureMode.TypeAnnotation | ErasureMode.Concrete => false
+            },
+            isWitness = false
+          )
+        yield Pattern.Binding(v, innerPattern)
+
+      case ast.Pattern.Constructor(path, args) =>
+        (
+          for
+            t <- normalizeToValue(t)
+            pathType <- resolvePatternPath(path)
+          yield (t, pathType)
+        ).flatMap {
+          case (t: Expr.EnumType, v: EnumVariant) =>
+            val owner = TRExprContext.ParameterOwner.EnumVariant(v)
+
+            def substituteHolesForArgs(sig: TRSignatureContext.FunctionSignature, prevParams: Seq[TRSignatureContext.SignatureParameter], holes: Seq[Expr]): Comp[(TRSignatureContext.FunctionSignature, Seq[Expr])] =
+              sig.parameters match {
+                case param +: tailParams =>
+                  makeHole(param.paramType, state.erased || ErasureMode.fromBoolean(param.isErased), pattern.location)
+                    .flatMap { hole =>
+                      val v = param.asParameterVar(owner, holes.size)
+                      substituteHolesForArgs(sig.substituteVar(v, hole), prevParams :+ param, holes :+ hole)
+                    }
+
+                case _ => ZIO.succeed((sig.copy(parameters = prevParams), holes))
+              }
+
+            for
+              sig <- v.signature
+              (sig, holes) <- substituteHolesForArgs(TRSignatureContext.signatureFromDefault(sig), Seq(), Seq())
+              _ <- checkTypesMatchNoBox(pattern.location)(t, sig.returnType)
+
+              _ <- ZIO.succeed(???).whenDiscard(sig.parameters.size != args.size)
+
+              argPatterns <- ZIO.foreach(args.zip(sig.parameters)) { (argPattern, param) =>
+                resolvePattern(argPattern, param.paramType)
+              }
+
+            yield Pattern.EnumVariant(t, v, argPatterns, Seq())
+
+          case _ => ???
+        }
+
+      case ast.Pattern.Record(path, args, recordFieldPatterns) => ???
+    }
+
+  private def resolvePatternPath(p: WithSource[ast.PatternPath])(using state: EmitState): Comp[ArRecord | EnumVariant] =
+    def processLookup(res: LookupResult): Comp[ArRecord | ArEnum] =
+      res match {
+        case LookupResult.NotFound() => ???
+        case LookupResult.Overloaded(Seq(Overloadable.Record(r)), next) => ZIO.succeed(r)
+        case LookupResult.Overloaded(Seq(Overloadable.Enum(e)), next) => ZIO.succeed(e)
+        case LookupResult.Overloaded(_, _) => ???
+
+        case LookupResult.Variable(v) => ???
+        case LookupResult.VariableTupleElement(v, index, t) => ???
+      }
+
+    p.value match {
+      case ast.PatternPath.Member(WithLocation(ast.PatternPath.Base(base), _), member) =>
+        state.scope.lookup(base.value)
+          .flatMap(processLookup)
+          .flatMap {
+            case record: ArRecord => ???
+            case e: ArEnum => e.variants
+          }
+          .map { variants =>
+            variants.find(_.name == member.value).getOrElse(???)
+          }
+
+
+      case ast.PatternPath.Base(name) =>
+        state.scope.lookup(name.value)
+          .flatMap(processLookup)
+          .flatMap {
+            case record: ArRecord => ZIO.succeed(record)
+            case e: ArEnum => ???
+          }
+
+      case _ => ???
+    }
+  end resolvePatternPath
 
 
   private def builtinExprFactory(loc: Loc, name: String): ExprFactory =
@@ -826,23 +968,10 @@ trait TypeResolver extends UsingContext {
 
 
         case lookupOverload: LookupResult.Overloaded =>
-          val scopeLookupSource = new OverloadLookupSource {
-            override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
-              ZIO.succeed(lookupOverload)
-
-            override def assignmentTarget: OverloadLookupSource =
-              RerunLookupSource(IdentifierExpr.Update(id))
-
-            private class RerunLookupSource(id: IdentifierExpr) extends OverloadLookupSource {
-              override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
-                state.scope.lookup(id).map {
-                  case res: LookupResult.OverloadableOnly => res
-                  case _ => LookupResult.NotFound()
-                }
-
-              override def assignmentTarget: OverloadLookupSource = RerunLookupSource(IdentifierExpr.Update(id))
-            }
-          }
+          val scopeLookupSource = ResolvedLookupSource(
+            lookupOverload,
+            RerunLookupSource(IdentifierExpr.Update(id))
+          )
 
           OverloadedExprFactory(loc, loc, scopeLookupSource, Seq())
       }
@@ -852,6 +981,27 @@ trait TypeResolver extends UsingContext {
     def lookup(using EmitState): Comp[LookupResult.OverloadableOnly]
 
     def assignmentTarget: OverloadLookupSource
+  }
+
+  private final class ResolvedLookupSource(
+    lookupRes: LookupResult.OverloadableOnly,
+    assignmentSource: OverloadLookupSource,
+  ) extends OverloadLookupSource {
+    override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+      ZIO.succeed(lookupRes)
+
+    override def assignmentTarget: OverloadLookupSource =
+      assignmentSource
+  }
+
+  private class RerunLookupSource(id: IdentifierExpr) extends OverloadLookupSource {
+    override def lookup(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
+      state.scope.lookup(id).map {
+        case res: LookupResult.OverloadableOnly => res
+        case _ => LookupResult.NotFound()
+      }
+
+    override def assignmentTarget: OverloadLookupSource = RerunLookupSource(IdentifierExpr.Update(id))
   }
 
   private abstract class WrappedLookupSource extends OverloadLookupSource {
@@ -1185,7 +1335,7 @@ trait TypeResolver extends UsingContext {
                             }
 
                             recFields <- recordLiteralFields(fieldValues, fields)
-                            
+
                           yield InferredExpr(
                             Expr.EnumVariantLiteral(
                               overloadResult.remainingSig.returnType match {
@@ -1536,7 +1686,7 @@ trait TypeResolver extends UsingContext {
                     name = None,
                     isMutable = false,
                     isErased = param.isErased,
-                    isProof = false,
+                    isWitness = false,
                   )
               yield (Expr.Variable(lambdaParam), Some(lambdaParam))
 
@@ -1829,7 +1979,7 @@ trait TypeResolver extends UsingContext {
                   val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
                   for
                     varId <- UniqueIdentifier.make
-                    local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isProof = false)
+                    local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isWitness = false)
                     loadLocal = Expr.Variable(local)
                     ir.Assertion(witness, assertionType) <- buildCall(sig.copy(parameters = tailParams).substituteVar(variable, loadLocal), args :+ loadLocal)
                   yield ir.Assertion(

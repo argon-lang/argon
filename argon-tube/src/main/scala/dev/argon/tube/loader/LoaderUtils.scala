@@ -3,13 +3,12 @@ package dev.argon.tube.loader
 import dev.argon.compiler as c
 import dev.argon.tube as t
 import dev.argon.ast
-import dev.argon.tube.Identifier
+import dev.argon.tube.{Identifier, ImportSpecifier, Pattern}
 import cats.data.NonEmptySeq
 import zio.*
-import dev.argon.compiler.{UsingContext, HasContext}
+import dev.argon.compiler.{HasContext, UsingContext}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.ast.IdentifierExpr
-import dev.argon.tube.ImportSpecifier
 
 private[loader] trait LoaderUtils extends UsingContext {
 
@@ -172,7 +171,7 @@ private[loader] trait LoaderUtils extends UsingContext {
     knownVars: Ref[Map[BigInt, context.DefaultExprContext.LocalVar]]
   ) {
     import dev.argon.tube.Expr
-    import context.DefaultExprContext.Expr as ArExpr
+    import context.DefaultExprContext.{Expr as ArExpr, Pattern as ArPattern}
 
     private def declareVar(v: t.LocalVar): Comp[context.DefaultExprContext.LocalVar] =
       for
@@ -184,7 +183,7 @@ private[loader] trait LoaderUtils extends UsingContext {
           name = v.name.map(decodeIdentifier),
           isMutable = v.mutable,
           isErased = v.erased,
-          isProof = v.proof,
+          isWitness = v.witness,
         )
         _ <- knownVars.update(kv => kv + (v.id -> localVar))
       yield localVar
@@ -216,7 +215,7 @@ private[loader] trait LoaderUtils extends UsingContext {
             name = paramVar.name.map(decodeIdentifier),
             varType = paramType,
             isErased = paramVar.erased,
-            isProof = paramVar.proof,
+            isWitness = paramVar.witness,
           )
       }
 
@@ -224,6 +223,13 @@ private[loader] trait LoaderUtils extends UsingContext {
       e match {
         case Expr.Error() => ZIO.succeed(ArExpr.Error())
         case Expr.ErasedValue() => ZIO.succeed(ArExpr.ErasedValue())
+
+        case Expr.And(a, b) =>
+          for
+            a <- expr(a)
+            b <- expr(b)
+          yield ArExpr.And(a, b)
+
         case Expr.AnyType() => ZIO.succeed(ArExpr.AnyType())
         case Expr.BindVariable(v, value) =>
           for
@@ -363,6 +369,12 @@ private[loader] trait LoaderUtils extends UsingContext {
             whenFalseWitness = falseWitnessVars,
           )
 
+        case Expr.Is(value, p) =>
+          for
+            value <- expr(value)
+            p <- pattern(p)
+          yield ArExpr.Is(value, p)
+
         case Expr.Lambda(v, returnType, body) =>
           for
             localVar <- declareVar(v)
@@ -373,6 +385,17 @@ private[loader] trait LoaderUtils extends UsingContext {
             returnType = returnTypeExpr,
             body = bodyExpr,
           )
+
+        case Expr.Not(a) =>
+          for
+            a <- expr(a)
+          yield ArExpr.Not(a)
+
+        case Expr.Or(a, b) =>
+          for
+            a <- expr(a)
+            b <- expr(b)
+          yield ArExpr.Or(a, b)
 
         case Expr.RecordType(recordType) =>
           decodeRecordType(recordType)
@@ -444,6 +467,32 @@ private[loader] trait LoaderUtils extends UsingContext {
 
       }
 
+    private def pattern(p: t.Pattern): Comp[ArPattern] =
+      p match {
+        case Pattern.Discard(t) =>
+          for
+            t <- expr(t)
+          yield ArPattern.Discard(t)
+        case Pattern.Tuple(items) =>
+          for
+            items <- ZIO.foreach(items)(pattern)
+          yield ArPattern.Tuple(items)
+
+        case Pattern.Binding(v, p) =>
+          for
+            v <- declareVar(v)
+            p <- pattern(p)
+          yield ArPattern.Binding(v, p)
+
+        case Pattern.EnumVariant(enumType, variantId, args, fields) =>
+          for
+            enumType <- decodeEnumType(enumType)
+            v <- elementLoader.getEnumVariant(variantId)
+            args <- ZIO.foreach(args)(pattern)
+            fields <- ZIO.foreach(fields)(decodeRecordFieldPattern)
+          yield ArPattern.EnumVariant(enumType, v, args, fields)
+      }
+
     private def decodeRecordType(recordType: t.RecordType): Comp[ArExpr.RecordType] =
       for
         record <- elementLoader.getRecord(recordType.id)
@@ -465,6 +514,11 @@ private[loader] trait LoaderUtils extends UsingContext {
         fieldValue <- expr(fieldLit.value)
       yield context.DefaultExprContext.RecordFieldLiteral(field, fieldValue)
 
+    private def decodeRecordFieldPattern(fieldPattern: t.RecordFieldPattern): Comp[context.DefaultExprContext.RecordFieldPattern] =
+      for
+        field <- elementLoader.getRecordField(fieldPattern.fieldId)
+        fieldPattern <- pattern(fieldPattern.pattern)
+      yield context.DefaultExprContext.RecordFieldPattern(field, fieldPattern)
   }
 
     

@@ -57,6 +57,7 @@ private[parser] object Token {
   case object KW_DO extends TokenWithCategory(TokenCategory.KW_DO)
   case object KW_END extends TokenWithCategory(TokenCategory.KW_END)
   case object KW_LET extends TokenWithCategory(TokenCategory.KW_LET)
+  case object KW_VAL extends TokenWithCategory(TokenCategory.KW_VAL)
   case object KW_MUT extends TokenWithCategory(TokenCategory.KW_MUT)
   case object KW_MODULE extends TokenWithCategory(TokenCategory.KW_MODULE)
   case object KW_RECORD extends TokenWithCategory(TokenCategory.KW_RECORD)
@@ -65,6 +66,7 @@ private[parser] object Token {
   case object KW_TRUE extends TokenWithCategory(TokenCategory.KW_TRUE)
   case object KW_FALSE extends TokenWithCategory(TokenCategory.KW_FALSE)
   case object KW_AS extends TokenWithCategory(TokenCategory.KW_AS)
+  case object KW_IS extends TokenWithCategory(TokenCategory.KW_IS)
   case object KW_IMPORT extends TokenWithCategory(TokenCategory.KW_IMPORT)
   case object KW_EXPORT extends TokenWithCategory(TokenCategory.KW_EXPORT)
 
@@ -77,6 +79,8 @@ private[parser] object Token {
   case object KW_THEN extends TokenWithCategory(TokenCategory.KW_THEN)
   case object KW_ELSE extends TokenWithCategory(TokenCategory.KW_ELSE)
   case object KW_ELSIF extends TokenWithCategory(TokenCategory.KW_ELSIF)
+  case object KW_MATCH extends TokenWithCategory(TokenCategory.KW_MATCH)
+  case object KW_CASE extends TokenWithCategory(TokenCategory.KW_CASE)
 
   case object KW_ERASED extends TokenWithCategory(TokenCategory.KW_ERASED) with ModifierToken(Modifier.Erased)
   case object KW_WITNESS extends TokenWithCategory(TokenCategory.KW_WITNESS) with ModifierToken(Modifier.Witness)

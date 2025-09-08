@@ -21,12 +21,14 @@ sealed trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
   end given
 
   given exprScanner: Scanner[Expr] = autoScanner
+  private given Scanner[Pattern] = autoScanner
   private given Scanner[Builtin] = autoScanner
   private given Scanner[LocalVar] = autoScanner
   private given Scanner[Var] = autoScanner
   given Scanner[Expr.RecordType] = autoScanner
   given Scanner[Expr.EnumType] = autoScanner
   given Scanner[RecordFieldLiteral] = autoScanner
+  private given Scanner[RecordFieldPattern] = autoScanner
 
   private given Scanner[ParameterOwner] = IgnoreScanner[ParameterOwner]
   private given Scanner[Function] = IgnoreScanner[Function]

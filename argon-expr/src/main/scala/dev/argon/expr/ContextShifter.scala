@@ -23,6 +23,7 @@ trait ContextShifter[F[_]: Monad] {
     import StandardShifters.given
 
     given exprShifter: Shifter[ec1.Expr, ec2.Expr] = autoShifter
+    given Shifter[ec1.Pattern, ec2.Pattern] = autoShifter
     
     given Shifter[ec1.Builtin, ec2.Builtin] = autoShifter
     given Shifter[ec1.Expr.Hole, ec2.Expr]:
@@ -32,6 +33,7 @@ trait ContextShifter[F[_]: Monad] {
     given Shifter[ec1.Expr.RecordType, ec2.Expr.RecordType] = autoShifter
     given Shifter[ec1.RecordFieldLiteral, ec2.RecordFieldLiteral] = autoShifter
     given Shifter[ec1.Expr.EnumType, ec2.Expr.EnumType] = autoShifter
+    given Shifter[ec1.RecordFieldPattern, ec2.RecordFieldPattern] = autoShifter
 
 
     given varShifter: Shifter[ec1.Var, ec2.Var] = autoShifter

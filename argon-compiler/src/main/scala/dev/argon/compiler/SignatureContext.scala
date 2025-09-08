@@ -64,7 +64,7 @@ trait SignatureContext {
         varType = paramType,
         name = name,
         isErased = isErased,
-        isProof = listType == FunctionParameterListType.RequiresList,
+        isWitness = listType == FunctionParameterListType.RequiresList,
       )
     
   }

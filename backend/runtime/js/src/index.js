@@ -145,18 +145,18 @@ export function createEnumType(enumInfo) {
 
 function createEnumVariant(proto, variant) {
     const variantClass = function(...args) {
-        if(args.length - 1 !== variant.args.length) {
-            throw new Error(`Invalid arguments count expected ${variant.args.length + 1}, actual ${args.length}`);
+        if(args.length - 1 !== variant.argCount) {
+            throw new Error(`Invalid arguments count expected ${variant.argCount + 1}, actual ${args.length}`);
         }
 
-        for(let i = 0; i < variant.args.length; ++i) {
+        for(let i = 0; i < variant.argCount; ++i) {
             Object.defineProperty(
                 this,
-                variant.args[i],
+                `args_${i}`,
                 {
                     value: args[i],
                     writable: false,
-                }
+                },
             );
         }
 

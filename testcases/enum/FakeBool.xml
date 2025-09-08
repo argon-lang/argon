@@ -14,11 +14,15 @@
 
         proc main(): () do
             let b = FakeBool.True
-
+            if b is FakeBool.True then
+                puts "true"
+            else
+                puts "false"
+            end
         end
 
     </InputSource>
 
-    <ExpectedOutput></ExpectedOutput>
+    <ExpectedOutput>true</ExpectedOutput>
 
 </ArgonTest>
