@@ -260,7 +260,9 @@ private[loader] object TubeDeserialized {
               ZChannel.fromZIO(state.enums.put(enumId, importSpec).commit) *> iter(state)
 
             case enumVariantRef: t.TubeFileEntry.EnumVariantReference =>
-              ZChannel.fromZIO(state.enumVariantReferences.put(enumVariantRef.enumId, enumVariantRef).commit) *> iter(state)
+              ZChannel.fromZIO(
+                state.enumVariantReferences.put(enumVariantRef.variantId, enumVariantRef).commit
+              ) *> iter(state)
 
             case recordFieldRef: t.TubeFileEntry.EnumVariantRecordFieldReference =>
               ZChannel.fromZIO(state.recordFieldReferences.put(recordFieldRef.recordFieldId, recordFieldRef).commit) *> iter(state)

@@ -491,6 +491,15 @@ private[loader] trait LoaderUtils extends UsingContext {
             args <- ZIO.foreach(args)(pattern)
             fields <- ZIO.foreach(fields)(decodeRecordFieldPattern)
           yield ArPattern.EnumVariant(enumType, v, args, fields)
+
+        case Pattern.String(s) =>
+          ZIO.succeed(ArPattern.String(s))
+
+        case Pattern.Int(i) =>
+          ZIO.succeed(ArPattern.Int(i))
+
+        case Pattern.Bool(b) =>
+          ZIO.succeed(ArPattern.Bool(b))
       }
 
     private def decodeRecordType(recordType: t.RecordType): Comp[ArExpr.RecordType] =

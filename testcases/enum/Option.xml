@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Option</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        enum Option [T: type]
+            Some(value: T)
+            None
+        end
+
+        proc main(): () do
+            let o = Option.Some "ABC"
+            if o is Option.Some (val s) then
+                puts s
+            else
+                puts "(empty)"
+            end
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>ABC</ExpectedOutput>
+
+</ArgonTest>

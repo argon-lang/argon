@@ -133,6 +133,12 @@ object CompilerTests extends ZIOSpecDefault {
           test(testCase.name) {
             for
               res <- runTestCase(testCase)
+
+//              fiber <- runTestCase(testCase).fork
+//              _ <- Live.live(Clock.sleep(Duration.fromSeconds(15)))
+//              fibers <- Fiber.dumpAll
+//              res <- fiber.join
+              
             yield testCase.expectedResult match {
               case ExpectedResult.ExpectedOutput(text) =>
                 assert(res)(outputMatches(text))

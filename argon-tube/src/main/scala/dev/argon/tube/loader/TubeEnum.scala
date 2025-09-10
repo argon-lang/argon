@@ -34,7 +34,7 @@ private[loader] object TubeEnum {
             val enumInstance = this
             for
               variantId <- UniqueIdentifier.make
-              sig <- decodeFunctionSignature(variantDef.signature)
+              sigCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
               fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[RecordFieldC & HasContext[ctx.type]]]
             yield new EnumVariantC {
               override val context: ctx.type = ctx
@@ -44,7 +44,7 @@ private[loader] object TubeEnum {
               override val name: IdentifierExpr = decodeIdentifier(variantDef.name)
 
               override def signature: Comp[FunctionSignature] =
-                ZIO.succeed(sig)
+                sigCell.get(decodeFunctionSignature(variantDef.signature))
 
               override def fields: Comp[Seq[RecordField]] =
                 fieldsCell.get(

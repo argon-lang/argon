@@ -50,6 +50,9 @@ trait ConditionalVars {
       case Pattern.EnumVariant(_, _, args, fields) =>
         args.flatMap(getPatternVars).toSet ++
           fields.flatMap(field => getPatternVars(field.pattern))
+      case Pattern.String(_) => Set.empty
+      case Pattern.Int(_) => Set.empty
+      case Pattern.Bool(_) => Set.empty
     }
   
 }

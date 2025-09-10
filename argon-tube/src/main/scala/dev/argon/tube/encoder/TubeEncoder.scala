@@ -767,6 +767,15 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 args <- ZIO.foreach(args)(pattern)
                 fields <- ZIO.foreach(fields)(encodeRecordFieldPattern)
               yield Pattern.EnumVariant(enumType, variant, args, fields)
+
+            case ArPattern.String(s) =>
+              ZIO.succeed(Pattern.String(s))
+
+            case ArPattern.Int(i) =>
+              ZIO.succeed(Pattern.Int(i))
+
+            case ArPattern.Bool(b) =>
+              ZIO.succeed(Pattern.Bool(b))
           }
 
         private def encodeRecordFieldPattern(field: context.DefaultExprContext.RecordFieldPattern): Comp[RecordFieldPattern] =

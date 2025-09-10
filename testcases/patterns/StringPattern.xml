@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>String pattern</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let s = "ABC"
+            if s is "XYZ" then
+                puts "XYZ"
+            elsif s is "ABC" then
+                puts "ABC"
+            else
+                puts "other"
+            end
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>ABC</ExpectedOutput>
+
+</ArgonTest>

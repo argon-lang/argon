@@ -146,6 +146,10 @@ trait ExprType {
 
       case Pattern.Binding(v, pattern) => v.varType
       case Pattern.EnumVariant(enumType, _, _, _) => enumType
+
+      case Pattern.String(_) => Expr.Builtin(exprContext.Builtin.Nullary(NullaryBuiltin.StringType))
+      case Pattern.Int(_) => Expr.Builtin(exprContext.Builtin.Nullary(NullaryBuiltin.IntType))
+      case Pattern.Bool(_) => Expr.Builtin(exprContext.Builtin.Nullary(NullaryBuiltin.BoolType))
     }
 
 

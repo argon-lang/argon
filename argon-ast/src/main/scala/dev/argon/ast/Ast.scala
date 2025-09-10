@@ -224,8 +224,11 @@ enum Pattern derives CanEqual {
   case Discard
   case Tuple(elements: Seq[WithSource[Pattern]])
   case Binding(isMutable: Boolean, name: WithSource[IdentifierExpr], pattern: WithSource[Pattern])
-  case Constructor(path: WithSource[PatternPath], args: Seq[WithSource[Pattern]])
-  case Record(path: WithSource[PatternPath], args: Seq[WithSource[Pattern]], recordFieldPatterns: Seq[WithSource[RecordFieldPattern]])
+  case Constructor(path: WithSource[PatternPath], args: Seq[PatternArgument])
+  case Record(path: WithSource[PatternPath], args: Seq[PatternArgument], recordFieldPatterns: Seq[WithSource[RecordFieldPattern]])
+  case String(s: Expr.StringLiteral)
+  case Int(i: BigInt)
+  case Bool(b: Boolean)
 }
 
 enum PatternPath {
@@ -238,6 +241,10 @@ final case class RecordFieldPattern(
   pattern: WithSource[Pattern],
 )
 
+final case class PatternArgument(
+  functionParameterListType: FunctionParameterListType,
+  arg: WithSource[Pattern],
+)
 
 
 

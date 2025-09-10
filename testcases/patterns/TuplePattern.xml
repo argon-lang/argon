@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Tuple pattern</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let t = "ABC", 77
+            if t is ("XYZ", 44) then
+                puts "XYZ 44"
+            elsif t is ("ABC", 44) then
+                puts "ABC 44"
+            elsif t is ("ABC", 77) then
+                puts "ABC 77"
+            else
+                puts "other"
+            end
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>ABC 77</ExpectedOutput>
+
+</ArgonTest>

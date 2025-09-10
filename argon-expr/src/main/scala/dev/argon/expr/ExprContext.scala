@@ -146,6 +146,9 @@ trait ExprContext extends ConditionalVars {
     case Tuple(elements: Seq[Pattern])
     case Binding(v: LocalVar, pattern: Pattern)
     case EnumVariant(enumType: Expr.EnumType, variant: ExprContext.this.EnumVariant, args: Seq[Pattern], fields: Seq[RecordFieldPattern])
+    case String(s: java.lang.String)
+    case Int(i: BigInt)
+    case Bool(b: Boolean)
   }
 
   final case class RecordFieldPattern(

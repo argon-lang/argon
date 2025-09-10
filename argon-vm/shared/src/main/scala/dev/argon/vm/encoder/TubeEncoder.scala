@@ -341,7 +341,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           variants <- e.variants
           variants <- ZIO.foreach(variants) { variant =>
             for
-              sig <- e.signature
+              sig <- variant.signature
               sig <- emitFunctionSignature(context.DefaultExprContext.ParameterOwner.EnumVariant(variant), sig)
               fields <- variant.fields
               fields <- ZIO.foreach(fields)(emitRecordField(typeEmitter))
@@ -511,6 +511,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             varOffset = varOffset,
             knownVars = knownVars,
             instructions = instructions,
+            varInstructions = instructions,
             importSpecifier = funcImport,
             nextSyntheticIndex = nextSyntheticIndex,
             capturedVars = capturedVars,
@@ -626,6 +627,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         varOffset: TRef[Int],
         knownVars: TMap[context.DefaultExprContext.Var, VariableRealization],
         instructions: TRef[Seq[Instruction]],
+        varInstructions: TRef[Seq[Instruction]],
         importSpecifier: ImportSpecifier,
         nextSyntheticIndex: TRef[BigInt],
         capturedVars: Set[context.DefaultExprContext.Var],
@@ -640,6 +642,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             varOffset = varOffset2,
             knownVars = knownVars,
             instructions = instructions,
+            varInstructions = instructions,
             importSpecifier = importSpecifier,
             nextSyntheticIndex = nextSyntheticIndex,
             capturedVars = capturedVars,
@@ -648,6 +651,22 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         private def nestedBlock[A](f: ExprEmitter => Comp[A]): Comp[(Block, A)] =
           for
             scope <- nestedScope
+            a <- f(scope)
+            block <- scope.toBlock
+          yield (block, a)
+
+        private def nestedBlockNoScope[A](f: ExprEmitter => Comp[A]): Comp[(Block, A)] =
+          for
+            instructions <- TRef.makeCommit(Seq.empty[Instruction])
+            scope = ExprEmitter(
+              varOffset = varOffset,
+              knownVars = knownVars,
+              instructions = instructions,
+              varInstructions = this.varInstructions,
+              importSpecifier = importSpecifier,
+              nextSyntheticIndex = nextSyntheticIndex,
+              capturedVars = capturedVars,
+            )
             a <- f(scope)
             block <- scope.toBlock
           yield (block, a)
@@ -661,7 +680,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         private def addVar(t: VmType, captured: Option[VariableCaptureMode] = None): USTM[RegisterId] =
           for
             id <- varOffset.getAndUpdate(_ + 1)
-            _ <- instructions.update(_ :+ Instruction.DeclareVariable(t, captured = captured))
+            _ <- varInstructions.update(_ :+ Instruction.DeclareVariable(t, captured = captured))
           yield RegisterId(id)
           
         def toBlock: Comp[Block] =
@@ -1065,7 +1084,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               }
 
             case ArExpr.Sequence(stmts, result) =>
-              ZIO.foreach(stmts) { stmt => expr(stmt, ExprOutput.Discard) } *>
+              ZIO.foreachDiscard(stmts)(stmt => expr(stmt, ExprOutput.Discard)) *>
                 expr(result, output)
                 
             case ArExpr.StringLiteral(s) =>
@@ -1110,7 +1129,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   }
 
                 case None =>
-                  knownVars.toMap.commit.flatMap(kv => ZIO.succeed { println(kv) }) *>
                   ZIO.fail(TubeFormatException("Could not get index for variable: " + v))
               }
 
@@ -1177,13 +1195,31 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   argPatterns.map(_._1),
                   fieldPatterns.map { (fieldReg, fieldId, _) => FieldExtractor(fieldReg, fieldId) },
                 ))
-                (block, _) <- nestedBlock { blockEmitter =>
+                (block, _) <- nestedBlockNoScope { blockEmitter =>
                   blockEmitter.processPatterns(
                     r,
                     argPatterns ++ fieldPatterns.map { (fieldReg, _, fieldPattern) => (fieldReg, fieldPattern) },
                   )
                 }
                 _ <- emit(Instruction.IfElse(r, block, Block(Seq())))
+              yield ()
+
+            case ArPattern.String(s) =>
+              for
+                sr <- expr(ArExpr.StringLiteral(s), ExprOutput.AnyRegister)
+                _ <- emit(Instruction.BuiltinBinary(BuiltinBinaryOp.StringEq, r, valueReg, sr))
+              yield ()
+
+            case ArPattern.Int(i) =>
+              for
+                sr <- expr(ArExpr.IntLiteral(i), ExprOutput.AnyRegister)
+                _ <- emit(Instruction.BuiltinBinary(BuiltinBinaryOp.IntEq, r, valueReg, sr))
+              yield ()
+
+            case ArPattern.Bool(b) =>
+              for
+                sr <- expr(ArExpr.BoolLiteral(b), ExprOutput.AnyRegister)
+                _ <- emit(Instruction.BuiltinBinary(BuiltinBinaryOp.BoolEq, r, valueReg, sr))
               yield ()
           }
           
@@ -1197,7 +1233,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 _ <- emitPattern(r, elementReg, h)
                 _ <- (
                   for
-                    (block, _) <- nestedBlock { blockEmitter =>
+                    (block, _) <- nestedBlockNoScope { blockEmitter =>
                       blockEmitter.emitTuplePattern(r, valueReg, t, index + 1)
                     }
                     _ <- emit(Instruction.IfElse(r, block, Block(Seq())))
@@ -1212,7 +1248,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           patterns match {
             case (valueReg, pattern) +: t =>
               for
-                (block, _) <- nestedBlock { blockEmitter =>
+                (block, _) <- nestedBlockNoScope { blockEmitter =>
                   blockEmitter.emitPattern(r, valueReg, pattern) *>
                     blockEmitter.processPatterns(r, t)      
                 }

@@ -301,6 +301,7 @@ enum Rule {
 
 
     Pattern,
+    #[strum(serialize = "SimplePattern_{0}")]
     SimplePattern(ParenAllowedState),
     NonTuplePattern,
     TuplePattern,
@@ -537,13 +538,13 @@ impl GrammarFactory for ParserFactory {
             ).lex_mode("LexerMode.Normal"),
 
             StringExpr => ruleset(
-                "Expr",
+                "Expr.StringLiteral",
                 [
                     rule([ term(StringStart).discard(), nonterm(StringExprRest) ], "identity"),
                 ]
             ).lex_mode("LexerMode.StringText"),
             StringExprRest => ruleset(
-                "Expr",
+                "Expr.StringLiteral",
                 [
                     rule([ nonterm(StringExprContent), term(StringEnd).discard() ], "((fragments: List[StringFragment]) => Expr.StringLiteral(simplifyFragments(fragments)))"),
                 ]
@@ -998,30 +999,20 @@ impl GrammarFactory for ParserFactory {
             ),
             SimplePattern(paren_allowed) => {
                 let mut rules = vec![
-                    rule(
-                        [
-                            nonterm(MutSpec),
-                            nonterm(Identifier).with_location(),
-                            term(SymAt).discard(),
-                            nonterm(SimplePattern(paren_allowed)).with_location()
-                        ],
-                        "((mutSpec: Boolean, id: WithSource[IdentifierExpr], pattern: WithSource[Pattern]) => Pattern.Binding(mutSpec, id, pattern))",
-                    ),
-                    rule(
-                        [
-                            nonterm(MutSpec),
-                            nonterm(Identifier).with_location(),
-                        ],
-                        "((mutSpec: Boolean, id: WithSource[IdentifierExpr]) => Pattern.Binding(mutSpec, id, WithLocation(Pattern.Discard, id.location)))",
-                    ),
-
                     rule([ term(KwUnderscore).discard() ], "const(Pattern.Discard)"),
+
+                    rule([ nonterm(StringExpr) ], "Pattern.String"),
+                    rule([ term(IntToken) ], "((token: Token.IntToken) => Pattern.Int(token.value))"),
+                    rule([ term(KwTrue) ], "const(Pattern.Bool(true))"),
+                    rule([ term(KwFalse) ], "const(Pattern.Bool(false))"),
                 ];
 
-                rules.push(rule(
-                    [ term(SymOpenParen).discard(), nonterm(Pattern), term(SymCloseParen).discard() ],
-                    "identity",
-                ));
+                if paren_allowed == ParenAllowedState::Allowed {
+                    rules.push(rule(
+                        [ term(SymOpenParen).discard(), nonterm(Pattern), term(SymCloseParen).discard() ],
+                        "identity",
+                    ));
+                }
 
                 ruleset("Pattern", rules)
             },
@@ -1047,13 +1038,29 @@ impl GrammarFactory for ParserFactory {
             NonTuplePattern => ruleset(
                 "Pattern",
                 [
-                    rule([ nonterm(SimplePattern(ParenAllowedState::NotAllowed)) ], "identity"),
+                    rule([ nonterm(SimplePattern(ParenAllowedState::Allowed)) ], "identity"),
                     rule(
                         [
                             nonterm(PatternPath).with_location(),
                             nonterm(ConstructorArgsPattern),
                         ],
                         "Pattern.Constructor",
+                    ),
+                    rule(
+                        [
+                            nonterm(MutSpec),
+                            nonterm(Identifier).with_location(),
+                            term(SymAt).discard(),
+                            nonterm(SimplePattern(ParenAllowedState::Allowed)).with_location()
+                        ],
+                        "((mutSpec: Boolean, id: WithSource[IdentifierExpr], pattern: WithSource[Pattern]) => Pattern.Binding(mutSpec, id, pattern))",
+                    ),
+                    rule(
+                        [
+                            nonterm(MutSpec),
+                            nonterm(Identifier).with_location(),
+                        ],
+                        "((mutSpec: Boolean, id: WithSource[IdentifierExpr]) => Pattern.Binding(mutSpec, id, WithLocation(Pattern.Discard, id.location)))",
                     ),
                 ],
             ),
@@ -1071,29 +1078,46 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             ConstructorArgsPattern => ruleset(
-                "Seq[WithSource[Pattern]]",
+                "Seq[PatternArgument]",
                 [
                     rule([], "const(Seq.empty)"),
                     rule(
                         [
-                            nonterm(ConstructorArgPattern).with_location(),
+                            nonterm(ConstructorArgPattern),
                             nonterm(ConstructorArgsPattern),
                         ],
-                        "((h: WithSource[Pattern], t: Seq[WithSource[Pattern]]) => h +: t)",
+                        "((h: PatternArgument, t: Seq[PatternArgument]) => h +: t)",
                     ),
 
                 ],
             ),
             ConstructorArgPattern => ruleset(
-                "Pattern",
+                "PatternArgument",
                 [
                     rule(
                         [ nonterm(PatternPath).with_location() ],
-                        "((path: WithSource[PatternPath]) => Pattern.Constructor(path, Seq.empty))",
+                        "((path: WithSource[PatternPath]) => PatternArgument(FunctionParameterListType.NormalList, WithLocation(Pattern.Constructor(path, Seq.empty), path.location)))",
                     ),
                     rule(
-                        [ nonterm(SimplePattern(ParenAllowedState::NotAllowed)) ],
-                        "identity",
+                        [ nonterm(SimplePattern(ParenAllowedState::NotAllowed)).with_location() ],
+                        "((pattern: WithSource[Pattern]) => PatternArgument(FunctionParameterListType.NormalList, pattern))",
+                    ),
+                    rule(
+                        [
+                            term(SymOpenParen).discard(),
+                            nonterm(Pattern).with_location(),
+                            term(SymCloseParen).discard(),
+                        ],
+                        "((pattern: WithSource[Pattern]) => PatternArgument(FunctionParameterListType.NormalList, pattern))",
+                    ),
+                    rule(
+                        [
+                            term(SymOpenBracket).discard(),
+                            term(KwRequires).discard(),
+                            nonterm(Pattern).with_location(),
+                            term(SymCloseBracket).discard(),
+                        ],
+                        "((pattern: WithSource[Pattern]) => PatternArgument(FunctionParameterListType.InferrableList, pattern))",
                     ),
                 ],
             ),

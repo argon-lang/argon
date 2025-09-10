@@ -372,6 +372,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 }
 
                 const blockEmitter = new BlockEmitter(this, func.signature.parameters.length);
+                
                 blockEmitter.emitBlock(func.implementation.body.block);
 
                 this.addDeclaration({
@@ -456,7 +457,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         const variantsObj: JsonObject = Object.create(null);
         for(const variant of enumDef.variants) {
             variantsObj[this.getExportNameForId(variant.name)] = {
-                argCount: variant.signature.parameters.length,
+                argCount: variant.signature.typeParameters.length + variant.signature.parameters.length,
                 fields: variant.fields.map(field => ({
                     name: this.getExportNameForId(field.name),
                     mutable: field.mutable,

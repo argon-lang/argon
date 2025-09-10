@@ -533,10 +533,11 @@ trait TypeResolver extends UsingContext {
 
           private def createIfBranchVar(condExpr: Expr, value: Boolean)(using state: EmitState): Comp[LocalVar] =
             for
-              id <- UniqueIdentifier.make 
+              id <- UniqueIdentifier.make
+              condExpr2 <- FreshVariableShifter.substitute(TRExprContext)(condExpr)
             yield LocalVar(
               id,
-              varType = Expr.Builtin(Builtin.EqualTo(boolType, condExpr, Expr.BoolLiteral(value))),
+              varType = Expr.Builtin(Builtin.EqualTo(boolType, condExpr2, Expr.BoolLiteral(value))),
               name = None,
               isMutable = false,
               isErased = true,
@@ -713,10 +714,41 @@ trait TypeResolver extends UsingContext {
                   makeHole(param.paramType, state.erased || ErasureMode.fromBoolean(param.isErased), pattern.location)
                     .flatMap { hole =>
                       val v = param.asParameterVar(owner, holes.size)
-                      substituteHolesForArgs(sig.substituteVar(v, hole), prevParams :+ param, holes :+ hole)
+                      substituteHolesForArgs(sig.copy(parameters = tailParams).substituteVar(v, hole), prevParams :+ param, holes :+ hole)
                     }
 
                 case _ => ZIO.succeed((sig.copy(parameters = prevParams), holes))
+              }
+
+            def resolvePatternArgs(args: Seq[ast.PatternArgument], params: Seq[TRSignatureContext.SignatureParameter], accPatterns: Seq[Pattern]): Comp[Seq[Pattern]] =
+              (args, params) match {
+                case (ast.PatternArgument(FunctionParameterListType.NormalList, arg) +: tailArgs, (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.NormalList, _, _, _, _)) +: tailParams) =>
+                  resolvePattern(arg, param.paramType).flatMap { p =>
+                    resolvePatternArgs(tailArgs, tailParams, accPatterns :+ p)
+                  }
+
+                case (ast.PatternArgument(FunctionParameterListType.NormalList, _) +: _, (param @ TRSignatureContext.SignatureParameter(_, _, _, _, _)) +: tailParams) =>
+                  resolvePatternArgs(args, tailParams, accPatterns :+ Pattern.Discard(param.paramType))
+
+                case (ast.PatternArgument(FunctionParameterListType.RequiresList, arg) +: tailArgs, (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, _, _, _, _)) +: tailParams) =>
+                  resolvePattern(arg, param.paramType).flatMap { p =>
+                    resolvePatternArgs(tailArgs, tailParams, accPatterns :+ p)
+                  }
+
+                case (ast.PatternArgument(FunctionParameterListType.InferrableList, arg) +: tailArgs, (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.InferrableList, _, _, _, _)) +: tailParams) =>
+                  resolvePattern(arg, param.paramType).flatMap { p =>
+                    resolvePatternArgs(tailArgs, tailParams, accPatterns :+ p)
+                  }
+
+                case (ast.PatternArgument(FunctionParameterListType.QuoteList, arg) +: tailArgs, (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.QuoteList, _, _, _, _)) +: tailParams) =>
+                  resolvePattern(arg, param.paramType).flatMap { p =>
+                    resolvePatternArgs(tailArgs, tailParams, accPatterns :+ p)
+                  }
+
+                case (_ +: _, _) => ???
+                case (_, _ +: _) => ???
+
+                case (_, _) => ZIO.succeed(accPatterns)
               }
 
             for
@@ -724,11 +756,7 @@ trait TypeResolver extends UsingContext {
               (sig, holes) <- substituteHolesForArgs(TRSignatureContext.signatureFromDefault(sig), Seq(), Seq())
               _ <- checkTypesMatchNoBox(pattern.location)(t, sig.returnType)
 
-              _ <- ZIO.succeed(???).whenDiscard(sig.parameters.size != args.size)
-
-              argPatterns <- ZIO.foreach(args.zip(sig.parameters)) { (argPattern, param) =>
-                resolvePattern(argPattern, param.paramType)
-              }
+              argPatterns <- resolvePatternArgs(args, sig.parameters, Seq())
 
             yield Pattern.EnumVariant(t, v, argPatterns, Seq())
 
@@ -736,6 +764,14 @@ trait TypeResolver extends UsingContext {
         }
 
       case ast.Pattern.Record(path, args, recordFieldPatterns) => ???
+
+      case ast.Pattern.String(ast.Expr.StringLiteral(Seq(ast.StringFragment.Text(s)))) =>
+        ZIO.succeed(Pattern.String(s))
+
+      case ast.Pattern.String(_) => ???
+
+      case ast.Pattern.Int(i) => ZIO.succeed(Pattern.Int(i))
+      case ast.Pattern.Bool(b) => ZIO.succeed(Pattern.Bool(b))
     }
 
   private def resolvePatternPath(p: WithSource[ast.PatternPath])(using state: EmitState): Comp[ArRecord | EnumVariant] =

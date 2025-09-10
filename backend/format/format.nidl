@@ -590,7 +590,16 @@ enum pattern {
 
         @esexpr:(vararg)
         fields: list[record-field-pattern];
-    }
+    },
+    string {
+        s: string;
+    },
+    int {
+        i: int;
+    },
+    bool {
+        b: bool;
+    },
 }
 
 @esexpr:(derive-codec)
