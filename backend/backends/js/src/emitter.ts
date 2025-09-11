@@ -846,12 +846,33 @@ class BlockEmitter extends EmitterBase {
             }
 
             case "if-else":
-                stmts.push({
-                    type: "IfStatement",
-                    test: this.getReg(insn.condition),
-                    consequent: this.emitNestedBlock(insn.whenTrue),
-                    alternate: this.emitNestedBlock(insn.whenFalse),
-                });
+                if(insn.whenFalse.instructions.length === 0) {
+                    stmts.push({
+                        type: "IfStatement",
+                        test: this.getReg(insn.condition),
+                        consequent: this.emitNestedBlock(insn.whenTrue),
+                    });
+                }
+                else if(insn.whenTrue.instructions.length === 0) {
+                    stmts.push({
+                        type: "IfStatement",
+                        test: {
+                            type: "UnaryExpression",
+                            prefix: true,
+                            operator: "!",
+                            argument: this.getReg(insn.condition),
+                        },
+                        consequent: this.emitNestedBlock(insn.whenFalse),
+                    });
+                }
+                else {
+                    stmts.push({
+                        type: "IfStatement",
+                        test: this.getReg(insn.condition),
+                        consequent: this.emitNestedBlock(insn.whenTrue),
+                        alternate: this.emitNestedBlock(insn.whenFalse),
+                    });
+                }
                 break;
 
             case "is-enum-variant":
