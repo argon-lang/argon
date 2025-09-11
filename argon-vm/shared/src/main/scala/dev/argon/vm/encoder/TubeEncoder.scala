@@ -772,6 +772,18 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
         private def expr(e: ArExpr, output: ExprOutput): Comp[output.ResultType] =
           e match {
+
+            case ArExpr.And(a, b) =>
+              intoRegister(e, output) { r =>
+                for
+                  _ <- expr(a, ExprOutput.Register(r))
+                  (block, _) <- nestedBlockNoScope { emitter =>
+                    emitter.expr(b, ExprOutput.Register(r))
+                  }
+                  _ <- emit(Instruction.IfElse(r, block, Block(Seq())))
+                yield ()
+              }
+              
             case ArExpr.BindVariable(v, _) if v.isErased =>
               unitResult(e, output)(ZIO.unit)
             
@@ -1027,6 +1039,17 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                       emit(Instruction.PartiallyAppliedFunction(synId, r, typeArgs, args))
 
 
+                yield ()
+              }
+
+            case ArExpr.Or(a, b) =>
+              intoRegister(e, output) { r =>
+                for
+                  _ <- expr(a, ExprOutput.Register(r))
+                  (block, _) <- nestedBlockNoScope { emitter =>
+                    emitter.expr(b, ExprOutput.Register(r))
+                  }
+                  _ <- emit(Instruction.IfElse(r, Block(Seq()), block))
                 yield ()
               }
 

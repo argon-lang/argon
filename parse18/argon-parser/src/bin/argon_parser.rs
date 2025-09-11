@@ -281,12 +281,14 @@ enum Rule {
     MultiplicativeExpr,
     AdditiveExpr,
     ShiftExpr,
-    AndExpr,
-    XorExpr,
-    OrExpr,
+    BitwiseAndExpr,
+    BitwiseXorExpr,
+    BitwiseOrExpr,
     FunctionTypeExpr,
     RelationalExpr,
     EqualityExpr,
+    LogicalAndExpr,
+    LogicalOrExpr,
     PropConjunctionExpr,
     PropDisjunctionExpr,
     PropEqualityExpr,
@@ -843,35 +845,35 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(ShiftExpr).with_location(), term(OpShiftRight), nonterm(AdditiveExpr).with_location() ], "binaryOp"),
                 ],
             ),
-            AndExpr => ruleset(
+            BitwiseAndExpr => ruleset(
                 "Expr",
                 [
                     rule([ nonterm(ShiftExpr) ], "identity"),
-                    rule([ nonterm(AndExpr).with_location(), term(OpBitAnd), nonterm(ShiftExpr).with_location() ], "binaryOp"),
+                    rule([ nonterm(BitwiseAndExpr).with_location(), term(OpBitAnd), nonterm(ShiftExpr).with_location() ], "binaryOp"),
                 ],
             ),
-            XorExpr => ruleset(
+            BitwiseXorExpr => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(AndExpr) ], "identity"),
-                    rule([ nonterm(XorExpr).with_location(), term(OpBitXor), nonterm(AndExpr).with_location() ], "binaryOp"),
+                    rule([ nonterm(BitwiseAndExpr) ], "identity"),
+                    rule([ nonterm(BitwiseXorExpr).with_location(), term(OpBitXor), nonterm(BitwiseAndExpr).with_location() ], "binaryOp"),
                 ],
             ),
-            OrExpr => ruleset(
+            BitwiseOrExpr => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(XorExpr) ], "identity"),
-                    rule([ nonterm(OrExpr).with_location(), term(OpBitOr), nonterm(XorExpr).with_location() ], "binaryOp"),
+                    rule([ nonterm(BitwiseXorExpr) ], "identity"),
+                    rule([ nonterm(BitwiseOrExpr).with_location(), term(OpBitOr), nonterm(BitwiseXorExpr).with_location() ], "binaryOp"),
                 ],
             ),
             FunctionTypeExpr => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(OrExpr).with_location() ], "((e: WithSource[Expr]) => e.value)"),
+                    rule([ nonterm(BitwiseOrExpr).with_location() ], "((e: WithSource[Expr]) => e.value)"),
                     rule(
                         [
                             term(KwFn).discard(),
-                            nonterm(OrExpr).with_location(),
+                            nonterm(BitwiseOrExpr).with_location(),
                             term(OpArrow).discard(),
                             nonterm(FunctionTypeExpr).with_location(),
                         ],
@@ -879,7 +881,7 @@ impl GrammarFactory for ParserFactory {
                     ),
                     rule(
                         [
-                            nonterm(OrExpr).with_location(),
+                            nonterm(BitwiseOrExpr).with_location(),
                             term(OpArrow).discard(),
                             nonterm(FunctionTypeExpr).with_location(),
                         ],
@@ -905,11 +907,25 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(EqualityExpr).with_location(), term(OpNotEquals), nonterm(RelationalExpr).with_location() ], "binaryOp"),
                 ],
             ),
-            PropConjunctionExpr => ruleset(
+            LogicalAndExpr => ruleset(
                 "Expr",
                 [
                     rule([ nonterm(EqualityExpr) ], "identity"),
-                    rule([ nonterm(PropConjunctionExpr).with_location(), term(OpPropConjunction), nonterm(EqualityExpr).with_location() ], "binaryOp"),
+                    rule([ nonterm(LogicalAndExpr).with_location(), term(OpLogicalAnd), nonterm(EqualityExpr).with_location() ], "binaryOp"),
+                ],
+            ),
+            LogicalOrExpr => ruleset(
+                "Expr",
+                [
+                    rule([ nonterm(LogicalAndExpr) ], "identity"),
+                    rule([ nonterm(LogicalOrExpr).with_location(), term(OpLogicalOr), nonterm(LogicalAndExpr).with_location() ], "binaryOp"),
+                ],
+            ),
+            PropConjunctionExpr => ruleset(
+                "Expr",
+                [
+                    rule([ nonterm(LogicalOrExpr) ], "identity"),
+                    rule([ nonterm(PropConjunctionExpr).with_location(), term(OpPropConjunction), nonterm(LogicalOrExpr).with_location() ], "binaryOp"),
                 ],
             ),
             PropDisjunctionExpr => ruleset(

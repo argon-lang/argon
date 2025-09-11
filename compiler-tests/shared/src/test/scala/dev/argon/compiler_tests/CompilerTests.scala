@@ -271,7 +271,7 @@ object CompilerTests extends ZIOSpecDefault {
     def normalize(s: String): String =
       s.trim().nn.split("\\n").nn.map(_.nn.trim().nn).mkString("\n")
 
-    Assertion.assertion("Output matches") {
+    Assertion.assertion(s"Output matches $expected") {
       case TestResult.Success(actual) =>
         normalize(expected) == normalize(actual)
 

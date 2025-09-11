@@ -505,9 +505,6 @@ enum expr {
         return-type: expr;
         body: expr;
     },
-    not {
-        a: expr;
-    },
     or {
         a: expr;
         b: expr;

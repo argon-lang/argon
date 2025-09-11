@@ -663,11 +663,6 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 body = body,
               )
 
-            case ArExpr.Not(a) =>
-              for
-                a <- expr(a)
-              yield Expr.Not(a)
-
             case ArExpr.Or(a, b) =>
               for
                 a <- expr(a)

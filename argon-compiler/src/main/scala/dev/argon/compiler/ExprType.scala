@@ -26,6 +26,9 @@ trait ExprType {
     e match {
       case Expr.Hole(hole) => ZIO.succeed(getHoleType(hole))
 
+      case Expr.And(_, _) =>
+        ZIO.succeed(boolType)
+
       case Expr.BindVariable(_, _) =>
         ZIO.succeed(Expr.Tuple(Seq()))
 
@@ -87,6 +90,9 @@ trait ExprType {
 
       case Expr.Lambda(v, returnType, _) =>
         ZIO.succeed(Expr.FunctionType(v, returnType))
+
+      case Expr.Or(_, _) =>
+        ZIO.succeed(boolType)
 
       case Expr.Variable(v) =>
         ZIO.succeed(v.varType)

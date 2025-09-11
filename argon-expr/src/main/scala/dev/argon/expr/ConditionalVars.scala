@@ -18,19 +18,19 @@ trait ConditionalVars {
           whenFalse = Set.empty,
         )
 
+      case Expr.Builtin(Builtin.Unary(UnaryBuiltin.BoolNot, a)) =>
+        val av = getConditionalVars(a)
+        ConditionalVars(
+          whenTrue = av.whenFalse,
+          whenFalse = av.whenTrue,
+        )
+
       case Expr.Or(a, b) =>
         val av = getConditionalVars(a)
         val bv = getConditionalVars(b)
         ConditionalVars(
           whenTrue = Set.empty,
           whenFalse = av.whenFalse ++ bv.whenFalse,
-        )
-
-      case Expr.Not(a) =>
-        val av = getConditionalVars(a)
-        ConditionalVars(
-          whenTrue = av.whenFalse,
-          whenFalse = av.whenTrue,
         )
 
       case Expr.Is(_, pattern) =>

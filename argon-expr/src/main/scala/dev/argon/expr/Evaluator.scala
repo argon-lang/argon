@@ -47,9 +47,6 @@ trait Evaluator[R, E] {
       case Expr.Or(_, Expr.BoolLiteral(true)) => ZIO.succeed(Expr.BoolLiteral(true))
       case Expr.Or(Expr.BoolLiteral(false), Expr.BoolLiteral(false)) => ZIO.succeed(Expr.BoolLiteral(false))
       case Expr.Or(_, _) => ZIO.succeed(expr)
-
-      case Expr.Not(Expr.BoolLiteral(b)) => ZIO.succeed(Expr.BoolLiteral(!b))
-      case Expr.Not(_) => ZIO.succeed(expr)
       
       
       case ifElse: Expr.IfElse =>

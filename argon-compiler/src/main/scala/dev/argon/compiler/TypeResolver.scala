@@ -430,6 +430,34 @@ trait TypeResolver extends UsingContext {
 
         }
 
+      case ast.Expr.BinaryOperation(left, ast.BinaryOperator.LogicalOr, right) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+
+          override def infer(using EmitState): Comp[InferredExpr] =
+            for
+              left <- resolveExpr(left).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
+              right <- resolveExpr(right).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
+            yield InferredExpr(
+              Expr.Or(left, right),
+              Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType))
+            )
+        }
+
+      case ast.Expr.BinaryOperation(left, ast.BinaryOperator.LogicalAnd, right) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+
+          override def infer(using EmitState): Comp[InferredExpr] =
+            for
+              left <- resolveExpr(left).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
+              right <- resolveExpr(right).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
+            yield InferredExpr(
+              Expr.And(left, right),
+              Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType))
+            )
+        }
+
       case ast.Expr.BinaryOperation(left, op, right) =>
         println("Unimplemented AST binary operation: " + op)
         ???

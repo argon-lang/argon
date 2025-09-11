@@ -123,7 +123,6 @@ trait ExprContext extends ConditionalVars {
     case IntLiteral(i: BigInt)
     case Is(value: Expr, pattern: Pattern)
     case Lambda(v: LocalVar, returnType: Expr, body: Expr)
-    case Not(a: Expr)
     case Or(a: Expr, b: Expr)
     case RecordType(record: Record, args: Seq[Expr])
     case EnumType(e: Enum, args: Seq[Expr])

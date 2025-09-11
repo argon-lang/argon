@@ -1,0 +1,63 @@
+<ArgonTest>
+
+    <Name>Bool logical operators</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc print_left(value: Bool): Bool do
+            puts "left"
+            value
+        end
+
+        proc print_right(value: Bool): Bool do
+            puts "right"
+            value
+        end
+
+        proc print_bool(value: Bool): () do
+            puts (value.to_s())
+        end
+
+        proc main(): () do
+            print_bool (print_left true || print_right true)
+            print_bool (print_left true || print_right false)
+            print_bool (print_left false || print_right true)
+            print_bool (print_left false || print_right false)
+            print_bool (print_left true && print_right true)
+            print_bool (print_left true && print_right false)
+            print_bool (print_left false && print_right true)
+            print_bool (print_left false && print_right false)
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        left
+        true
+        left
+        true
+        left
+        right
+        true
+        left
+        right
+        false
+        left
+        right
+        true
+        left
+        right
+        false
+        left
+        false
+        left
+        false
+    </ExpectedOutput>
+
+</ArgonTest>

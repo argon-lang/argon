@@ -386,11 +386,6 @@ private[loader] trait LoaderUtils extends UsingContext {
             body = bodyExpr,
           )
 
-        case Expr.Not(a) =>
-          for
-            a <- expr(a)
-          yield ArExpr.Not(a)
-
         case Expr.Or(a, b) =>
           for
             a <- expr(a)
