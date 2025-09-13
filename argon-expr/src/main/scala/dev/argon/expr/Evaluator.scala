@@ -60,6 +60,8 @@ trait Evaluator[R, E] {
           case cond => ZIO.succeed(ifElse.copy(condition = cond))
         }
 
+      case _: Expr.Match => ??? 
+
       case Expr.Hole(hole) =>
         normalizeHole(hole).flatMap { expr2 =>
           if expr2 == expr || fuel.isEmpty then

@@ -24,6 +24,7 @@ private trait FreshVariableShifter {
     given Shifter[Expr.EnumType, Expr.EnumType] = autoShifter
     given Shifter[RecordFieldLiteral, RecordFieldLiteral] = autoShifter
     given Shifter[RecordFieldPattern, RecordFieldPattern] = autoShifter
+    given Shifter[MatchCase, MatchCase] = autoShifter
 
     given Shifter[Builtin, Builtin] = autoShifter
     given Shifter[Hole, Hole] = identityShifter

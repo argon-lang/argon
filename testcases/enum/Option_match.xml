@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Option</Name>
+    <Name>Option (match)</Name>
 
     <InputSource name="index.argon">
         module _
@@ -14,10 +14,11 @@
 
         proc main(): () do
             let o = Option.Some "ABC"
-            if o is Option.Some (val s) then
-                puts s
-            else
-                puts "(empty)"
+            match o
+                case Option.Some (val s) =>
+                    puts s
+                case Option.None =>
+                    puts "(empty)"
             end
         end
 

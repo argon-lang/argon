@@ -107,6 +107,7 @@ object ErasedScanner {
       given Scanner[Expr.EnumType] = autoScanner
       given Scanner[RecordFieldLiteral] = autoScanner
       private given Scanner[RecordFieldPattern] = autoScanner
+      private given Scanner[MatchCase] = autoScanner
 
       private given Scanner[ParameterOwner] = IgnoreScanner[ParameterOwner]
       private given Scanner[Function] = IgnoreScanner[Function]

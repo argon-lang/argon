@@ -10,6 +10,7 @@ import zio.*
 import cats.*
 import cats.implicits.given
 import cats.mtl.syntax.state
+import com.google.common.reflect.TypeResolver
 import zio.interop.catz.core.given
 import zio.stream.ZStream
 
@@ -18,7 +19,7 @@ trait TypeResolver extends UsingContext {
   import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable, ImplicitValue}
 
-  import TRExprContext.{Expr, Pattern, Builtin, LocalVar, Var, Hole, HoleInfo, AnnotatedExpr, RecordFieldLiteral, EffectInfo}
+  import TRExprContext.{Expr, Pattern, Builtin, LocalVar, Var, Hole, HoleInfo, AnnotatedExpr, RecordFieldLiteral, EffectInfo, MatchCase}
   private type Loc = Location[FilePosition]
 
 
@@ -598,6 +599,46 @@ trait TypeResolver extends UsingContext {
             )
         }
 
+      case ast.Expr.Match(value, cases) =>
+        new ExprFactory {
+          override def loc: Loc = expr.location
+
+          override def check(t: Expr)(using EmitState): Comp[Expr] =
+            for
+              patternType <- makeHole(Expr.AnyType(), ErasureMode.TypeAnnotation, loc)
+              e <- resolveExpr(value).check(patternType)
+              cases <- ZIO.foreach(cases)(resolveMatchCase(t, patternType))
+              _ <- ensureExhaustive(patternType, cases)
+            yield Expr.Match(e, cases)
+
+          private def resolveMatchCase(t: Expr, patternType: Expr)(caseExpr: WithSource[ast.MatchCase])(using EmitState): Comp[MatchCase] = {
+            nestedScope { state ?=>
+              for
+                p <- resolvePattern(caseExpr.value.pattern, patternType)
+                _ <- ZIO.foreachDiscard(TRExprContext.getPatternVars(p))(state.scope.addVariable(_, None))
+                body <- resolveExpr(caseExpr.value.body).check(t)
+              yield MatchCase(p, body)
+            }
+          }
+
+          private def ensureExhaustive(t: Expr, cases: Seq[MatchCase])(using state: EmitState): Comp[Unit] = {
+            for
+              currentModel <- state.model.get
+              exCheck = new PatternExhaustiveCheck {
+                override val context: TypeResolver.this.context.type = TypeResolver.this.context
+                override val evaluator: TREvaluator = TREvaluator()
+
+                override def makeHole(param: TRSignatureContext.SignatureParameter): Comp[Expr] =
+                  TypeResolver.this.makeHole(param.paramType, state.erased || ErasureMode.fromBoolean(param.isErased), expr.location)
+
+                override val model: this.context.TRExprContext.Model = currentModel
+              }
+
+              _ <- exCheck.check(t, cases.map(_.pattern))
+            yield ()
+          }
+        }
+
       case ast.Expr.RecordLiteral(rec, fields) =>
         resolveExpr(rec).withRecordFields(
           RecordLiteralInfo(
@@ -736,16 +777,9 @@ trait TypeResolver extends UsingContext {
           case (t: Expr.EnumType, v: EnumVariant) =>
             val owner = TRExprContext.ParameterOwner.EnumVariant(v)
 
-            def substituteHolesForArgs(sig: TRSignatureContext.FunctionSignature, prevParams: Seq[TRSignatureContext.SignatureParameter], holes: Seq[Expr]): Comp[(TRSignatureContext.FunctionSignature, Seq[Expr])] =
-              sig.parameters match {
-                case param +: tailParams =>
-                  makeHole(param.paramType, state.erased || ErasureMode.fromBoolean(param.isErased), pattern.location)
-                    .flatMap { hole =>
-                      val v = param.asParameterVar(owner, holes.size)
-                      substituteHolesForArgs(sig.copy(parameters = tailParams).substituteVar(v, hole), prevParams :+ param, holes :+ hole)
-                    }
-
-                case _ => ZIO.succeed((sig.copy(parameters = prevParams), holes))
+            def substituteHolesForArgs(sig: TRSignatureContext.FunctionSignature): Comp[(TRSignatureContext.FunctionSignature, Seq[Expr])] =
+              sig.substituteHolesForArgs(owner) { param =>
+                makeHole(param.paramType, state.erased || ErasureMode.fromBoolean(param.isErased), pattern.location)
               }
 
             def resolvePatternArgs(args: Seq[ast.PatternArgument], params: Seq[TRSignatureContext.SignatureParameter], accPatterns: Seq[Pattern]): Comp[Seq[Pattern]] =
@@ -754,9 +788,6 @@ trait TypeResolver extends UsingContext {
                   resolvePattern(arg, param.paramType).flatMap { p =>
                     resolvePatternArgs(tailArgs, tailParams, accPatterns :+ p)
                   }
-
-                case (ast.PatternArgument(FunctionParameterListType.NormalList, _) +: _, (param @ TRSignatureContext.SignatureParameter(_, _, _, _, _)) +: tailParams) =>
-                  resolvePatternArgs(args, tailParams, accPatterns :+ Pattern.Discard(param.paramType))
 
                 case (ast.PatternArgument(FunctionParameterListType.RequiresList, arg) +: tailArgs, (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, _, _, _, _)) +: tailParams) =>
                   resolvePattern(arg, param.paramType).flatMap { p =>
@@ -773,15 +804,18 @@ trait TypeResolver extends UsingContext {
                     resolvePatternArgs(tailArgs, tailParams, accPatterns :+ p)
                   }
 
+                case (_, (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList | FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _, _, _, _)) +: tailParams) =>
+                  resolvePatternArgs(args, tailParams, accPatterns :+ Pattern.Discard(param.paramType))
+
                 case (_ +: _, _) => ???
-                case (_, _ +: _) => ???
+                case (_, TRSignatureContext.SignatureParameter(FunctionParameterListType.NormalList, _, _, _, _) +: _) => ???
 
                 case (_, _) => ZIO.succeed(accPatterns)
               }
 
             for
               sig <- v.signature
-              (sig, holes) <- substituteHolesForArgs(TRSignatureContext.signatureFromDefault(sig), Seq(), Seq())
+              (sig, holes) <- substituteHolesForArgs(TRSignatureContext.signatureFromDefault(sig))
               _ <- checkTypesMatchNoBox(pattern.location)(t, sig.returnType)
 
               argPatterns <- resolvePatternArgs(args, sig.parameters, Seq())

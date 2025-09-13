@@ -1,5 +1,7 @@
 package dev.argon.compiler
 
+import cats.Monad
+import cats.implicits.given
 import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.expr.{BuiltinType, ExprContext}
 import dev.argon.util.WithSource
@@ -47,6 +49,22 @@ trait SignatureContext {
 
       impl(0, parameters.iterator.zip(args).toList, e)
     end substituteWithinExprForArgs
+
+    def substituteHolesForArgs[F[_]: Monad](owner: exprContext.ParameterOwner)(makeHole: SignatureParameter => F[Expr]): F[(FunctionSignature, Seq[Expr])] =
+      def substHolesImpl(sig: FunctionSignature, prevParams: Seq[SignatureParameter], holes: Seq[Expr]): F[(FunctionSignature, Seq[Expr])] =
+        sig.parameters match {
+          case param +: tailParams =>
+            makeHole(param)
+              .flatMap { hole =>
+                val v = param.asParameterVar(owner, holes.size)
+                substHolesImpl(sig.copy(parameters = tailParams).substituteVar(v, hole), prevParams :+ param, holes :+ hole)
+              }
+
+          case _ => Monad[F].pure((sig.copy(parameters = prevParams), holes))
+        }
+
+      substHolesImpl(this, Seq(), Seq())
+    end substituteHolesForArgs
   }
   
   final case class SignatureParameter(

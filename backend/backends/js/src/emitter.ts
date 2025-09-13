@@ -1165,6 +1165,17 @@ class BlockEmitter extends EmitterBase {
                 assign(insn.dest, this.getReg(insn.value));
                 break;
 
+            case "unreachable":
+                stmts.push({
+                    type: "ThrowStatement",
+                    argument: {
+                        type: "NewExpression",
+                        callee: this.getArgonRuntimeExport("UnreachableError"),
+                        arguments: [],
+                    }
+                });
+                break;
+
             default:
                 ensureExhaustive(insn);
         }

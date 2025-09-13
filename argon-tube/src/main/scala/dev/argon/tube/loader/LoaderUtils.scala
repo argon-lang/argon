@@ -386,6 +386,17 @@ private[loader] trait LoaderUtils extends UsingContext {
             body = bodyExpr,
           )
 
+        case Expr.Match(value, cases) =>
+          for
+            value <- expr(value)
+            cases <- ZIO.foreach(cases) { matchCase =>
+              for
+                p <- pattern(matchCase.pattern)
+                body <- expr(matchCase.body)
+              yield context.DefaultExprContext.MatchCase(p, body)
+            }
+          yield ArExpr.Match(value, cases)
+
         case Expr.Or(a, b) =>
           for
             a <- expr(a)

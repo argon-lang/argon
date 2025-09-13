@@ -563,6 +563,8 @@ enum instruction {
         type: vm-type;
         value: register-id;
     },
+
+    unreachable,
 }
 
 @esexpr:(derive-codec)

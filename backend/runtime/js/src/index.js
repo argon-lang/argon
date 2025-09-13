@@ -197,5 +197,9 @@ function createEnumVariant(proto, variant) {
     return variantClass;
 }
 
-
+export class UnreachableError extends Error {
+    constructor() {
+        super();
+    }
+}
 

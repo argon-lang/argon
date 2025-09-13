@@ -10,6 +10,7 @@ import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
 import dev.argon.compiler.{ArgonEvaluator, HasContext, SignatureEraser, UsingContext}
 import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin, ValueUtil}
+import dev.argon.vm.VmType.Builtin
 import sourcecode.Text.generate
 
 
@@ -1042,6 +1043,15 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
               }
 
+            case ArExpr.Match(value, cases) =>
+              knownLocation(e, output) { output =>
+                for
+                  valueReg <- expr(value, ExprOutput.AnyRegister)
+                  condReg <- addVar(Builtin(BuiltinType.Bool(), Seq())).commit
+                  _ <- emitCases(condReg, valueReg, output, cases)
+                yield ()
+              }
+
             case ArExpr.Or(a, b) =>
               intoRegister(e, output) { r =>
                 for
@@ -1282,6 +1292,23 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               ZIO.unit
           }
 
+        private def emitCases(condReg: RegisterId, valueReg: RegisterId, output: ExprOutput.KnownLocation, cases: Seq[context.DefaultExprContext.MatchCase]): Comp[Unit] =
+          cases match {
+            case h +: t =>
+              for
+                _ <- emitPattern(condReg, valueReg, h.pattern)
+                (caseBlock, _) <- nestedBlock { emitter => emitter.expr(h.body, output) }
+                (elseBlock, _) <- nestedBlock { emitter =>
+                  emitter.emitCases(condReg, valueReg, output, t)
+                }
+
+                _ <- emit(Instruction.IfElse(condReg, caseBlock, elseBlock))
+              yield ()
+
+            case _ =>
+              emit(Instruction.Unreachable())
+          }
+        
         override protected def fallbackTypeExpr(t: ArExpr): Comp[VmType] =
           expr(t, ExprOutput.AnyRegister).map { r =>
             VmType.OfTypeInfo(r)

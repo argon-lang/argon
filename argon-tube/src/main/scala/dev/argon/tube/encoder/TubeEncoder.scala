@@ -663,6 +663,17 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 body = body,
               )
 
+            case ArExpr.Match(value, cases) =>
+              for
+                value <- expr(value)
+                cases <- ZIO.foreach(cases) { matchCase =>
+                  for
+                    p <- pattern(matchCase.pattern)
+                    body <- expr(matchCase.body)
+                  yield MatchCase(p, body)
+                }
+              yield Expr.Match(value, cases)
+
             case ArExpr.Or(a, b) =>
               for
                 a <- expr(a)

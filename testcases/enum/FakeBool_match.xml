@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Fake bool</Name>
+    <Name>Fake bool (match)</Name>
 
     <InputSource name="index.argon">
         module _
@@ -14,10 +14,11 @@
 
         proc main(): () do
             let b = FakeBool.True
-            if b is FakeBool.True then
-                puts "true"
-            else
-                puts "false"
+            match b
+                case FakeBool.True =>
+                    puts "true"
+                case FakeBool.False =>
+                    puts "false"
             end
         end
 

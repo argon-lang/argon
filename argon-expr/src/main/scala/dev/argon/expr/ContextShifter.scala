@@ -34,6 +34,7 @@ trait ContextShifter[F[_]: Monad] {
     given Shifter[ec1.RecordFieldLiteral, ec2.RecordFieldLiteral] = autoShifter
     given Shifter[ec1.Expr.EnumType, ec2.Expr.EnumType] = autoShifter
     given Shifter[ec1.RecordFieldPattern, ec2.RecordFieldPattern] = autoShifter
+    given Shifter[ec1.MatchCase, ec2.MatchCase] = autoShifter
 
 
     given varShifter: Shifter[ec1.Var, ec2.Var] = autoShifter

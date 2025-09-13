@@ -505,6 +505,10 @@ enum expr {
         return-type: expr;
         body: expr;
     },
+    match {
+        value: expr;
+        cases: list[match-case];
+    },
     or {
         a: expr;
         b: expr;
@@ -597,6 +601,12 @@ enum pattern {
     bool {
         b: bool;
     },
+}
+
+@esexpr:(derive-codec)
+record match-case {
+    pattern: pattern;
+    body: expr;
 }
 
 @esexpr:(derive-codec)

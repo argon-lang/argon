@@ -123,6 +123,7 @@ trait ExprContext extends ConditionalVars {
     case IntLiteral(i: BigInt)
     case Is(value: Expr, pattern: Pattern)
     case Lambda(v: LocalVar, returnType: Expr, body: Expr)
+    case Match(value: Expr, cases: Seq[MatchCase])
     case Or(a: Expr, b: Expr)
     case RecordType(record: Record, args: Seq[Expr])
     case EnumType(e: Enum, args: Seq[Expr])
@@ -150,6 +151,11 @@ trait ExprContext extends ConditionalVars {
     case Bool(b: Boolean)
   }
 
+  final case class MatchCase(
+    pattern: Pattern,
+    body: Expr,
+  )
+
   final case class RecordFieldPattern(
     field: RecordField,
     pattern: Pattern,
@@ -166,7 +172,7 @@ trait ExprContext extends ConditionalVars {
     case Pure, Effectful
   }
 
-  final class Model private(mapping: Map[Hole, Expr]) {
+  final class Model private(val mapping: Map[Hole, Expr]) {
     def resolveHole(hole: Hole): Option[Expr] =
       mapping.get(hole)
 

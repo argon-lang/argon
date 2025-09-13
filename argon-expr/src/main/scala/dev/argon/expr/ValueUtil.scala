@@ -25,6 +25,7 @@ object ValueUtil {
       case Expr.IntLiteral(_) => true
       case Expr.Is(_, _) => false
       case Expr.Lambda(_, _, _) => true
+      case Expr.Match(_, _) => false
       case Expr.Or(_, _) => false
       case Expr.RecordType(_, _) => true
       case Expr.RecordFieldLoad(_, _, _) => false
