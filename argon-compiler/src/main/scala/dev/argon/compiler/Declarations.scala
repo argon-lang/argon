@@ -9,7 +9,7 @@ import zio.*
 import scala.reflect.TypeTest
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import scala.compiletime.deferred
+import scala.compiletime.{deferred, asMatchable}
 
 trait Context extends ScopeContext {
   type Env <: Context.Env0
@@ -25,6 +25,8 @@ trait Context extends ScopeContext {
     override type RecordField = RecordFieldC & HasContext[Context.this.type]
     override type Enum = ArEnumC & HasContext[Context.this.type]
     override type EnumVariant = EnumVariantC & HasContext[Context.this.type]
+    override type Trait = ArTraitC & HasContext[Context.this.type]
+    override type Method = ArMethodC & HasContext[Context.this.type]
 
     override def getRecordFieldName(f: RecordFieldC & HasContext[Context.this.type]): IdentifierExpr = f.name
   }
@@ -63,7 +65,7 @@ trait Context extends ScopeContext {
         recordSig <- r.record.signature
 
         fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
-          exprContext.ParameterOwner.Rec(r.record),
+          exprContext.ExpressionOwner.Rec(r.record),
           r.args,
           exprFromDefault(field.fieldType),
         )
@@ -79,7 +81,7 @@ trait Context extends ScopeContext {
         recordSig <- v.signature
 
         fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
-          exprContext.ParameterOwner.EnumVariant(v),
+          exprContext.ExpressionOwner.EnumVariant(v),
           args,
           exprFromDefault(field.fieldType),
         )
@@ -95,7 +97,7 @@ trait Context extends ScopeContext {
         recordSig <- r.record.signature
 
         fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
-          exprContext.ParameterOwner.Rec(r.record),
+          exprContext.ExpressionOwner.Rec(r.record),
           r.args,
           exprFromDefault(field.fieldType),
         )
@@ -141,6 +143,12 @@ trait Context extends ScopeContext {
       case Expr(e: DefaultExprContext.Expr)
       case Extern(e: ExternFunction)
     }
+
+    enum MethodImplementation {
+      case Abstract
+      case Expr(e: DefaultExprContext.Expr)
+      case Extern(e: ExternMethod)
+    }
   }
 
   val implementations: Implementations
@@ -153,6 +161,7 @@ object Context {
   trait ImplementationExterns {
     type TubeMetadata
     type ExternFunction
+    type ExternMethod
   }
 
   abstract class Of[R <: Env0, E >: Error0 <: Matchable](using EnvironmentTag[R], TypeTest[Any, E]) extends Context {
@@ -180,9 +189,11 @@ trait UsingContext {
   type ArFunc = ArFuncC & HasContext[context.type]
   type ArRecord = ArRecordC & HasContext[context.type]
   type ArEnum = ArEnumC & HasContext[context.type]
+  type ArTrait = ArTraitC & HasContext[context.type]
 
   type RecordField = RecordFieldC & HasContext[context.type]
   type EnumVariant = EnumVariantC & HasContext[context.type]
+  type ArMethod = ArMethodC & HasContext[context.type]
 }
 
 
@@ -237,7 +248,10 @@ trait TubeImporter extends UsingContext {
 sealed trait DeclarationBase {
   self: UsingContext =>
 
+  val id: UniqueIdentifier
   def importSpecifier: Comp[ImportSpecifier]
+
+  def signature: Comp[FunctionSignature]
 }
 
 abstract class ArTubeC extends UsingContext {
@@ -254,51 +268,41 @@ abstract class ArModuleC extends UsingContext {
   def tubeName: TubeName
   def path: ModulePath
 
-  def allExports(reexportingModules: Set[ModuleName]): Comp[Map[Option[IdentifierExpr], Seq[ModuleExport]]]
-  def getExports(reexportingModules: Set[ModuleName])(id: Option[IdentifierExpr]): Comp[Option[Seq[ModuleExport]]]
+  def allExports(reexportingModules: Set[ModuleName]): Comp[Map[IdentifierExpr, Seq[ModuleExport]]]
+  def getExports(reexportingModules: Set[ModuleName])(id: IdentifierExpr): Comp[Option[Seq[ModuleExport]]]
 }
 
 enum ModuleExportC[Ctx <: Context] {
   case Function(f: ArFuncC & HasContext[Ctx])
   case Record(r: ArRecordC & HasContext[Ctx])
   case Enum(e: ArEnumC & HasContext[Ctx])
+  case Trait(t: ArTraitC & HasContext[Ctx])
   case Exported(exp: ModuleExportC[Ctx])
 }
 
 abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqual {
-  val id: UniqueIdentifier
-
   def isInline: Boolean
   def isErased: Boolean
   def isWitness: Boolean
   def effects: context.DefaultExprContext.EffectInfo
 
-  def importSpecifier: Comp[ImportSpecifier]
-
-  def signature: Comp[FunctionSignature]
 
   def implementation: Option[Comp[context.implementations.FunctionImplementation]]
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
-    obj.asInstanceOf[Matchable] match {
+    obj.asMatchable match {
       case other: ArFuncC => id == other.id
       case _ => false
     }
 }
 
 abstract class ArRecordC extends UsingContext with DeclarationBase derives CanEqual {
-  val id: UniqueIdentifier
-
-  def importSpecifier: Comp[ImportSpecifier]
-
-  def signature: Comp[FunctionSignature]
-
   def fields: Comp[Seq[RecordField]]
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
-    obj.asInstanceOf[Matchable] match {
+    obj.asMatchable match {
       case other: ArRecordC => id == other.id
       case _ => false
     }
@@ -317,24 +321,18 @@ abstract class RecordFieldC extends UsingContext derives CanEqual {
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
-    obj.asInstanceOf[Matchable] match {
+    obj.asMatchable match {
       case other: RecordFieldC => id == other.id
       case _ => false
     }
 }
 
 abstract class ArEnumC extends UsingContext with DeclarationBase derives CanEqual {
-  val id: UniqueIdentifier
-
-  def importSpecifier: Comp[ImportSpecifier]
-
-  def signature: Comp[FunctionSignature]
-
   def variants: Comp[Seq[EnumVariant]]
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
-    obj.asInstanceOf[Matchable] match {
+    obj.asMatchable match {
       case other: ArEnumC => id == other.id
       case _ => false
     }
@@ -350,9 +348,57 @@ abstract class EnumVariantC extends UsingContext derives CanEqual {
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
-    obj.asInstanceOf[Matchable] match {
+    obj.asMatchable match {
       case other: EnumVariantC => id == other.id
       case _ => false
     }
+}
+
+abstract class ArTraitC extends UsingContext with DeclarationBase derives CanEqual {
+  def methods: Comp[Seq[ArMethod]]
+
+  override def hashCode(): Int = id.hashCode()
+
+  override def equals(obj: Any): Boolean =
+    obj.asMatchable match {
+      case other: ArTraitC => id == other.id
+      case _ => false
+    }
+}
+
+abstract class ArMethodC extends UsingContext derives CanEqual {
+  val id: UniqueIdentifier
+  val name: IdentifierExpr
+  val owner: MethodOwner[context.type]
+
+  def isInline: Boolean
+  def isErased: Boolean
+  def isWitness: Boolean
+  def effects: context.DefaultExprContext.EffectInfo
+
+  def slot: MethodSlot
+
+  def signature: Comp[FunctionSignature]
+
+  def implementation: Option[Comp[context.implementations.MethodImplementation]]
+
+  override def hashCode(): Int = id.hashCode()
+  override def equals(obj: Any): Boolean =
+    obj.asMatchable match {
+      case other: ArMethodC => id == other.id
+      case _ => false
+    }
+}
+
+enum MethodSlot derives CanEqual {
+  case Abstract
+  case Virtual
+  case Override
+  case Final
+  case FinalOverride
+}
+
+enum MethodOwner[Ctx <: Context] {
+  case ByTrait(t: ArTraitC & HasContext[Ctx])
 }
 

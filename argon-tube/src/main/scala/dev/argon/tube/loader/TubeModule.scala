@@ -9,7 +9,7 @@ import dev.argon.ast.IdentifierExpr
 private[loader] object TubeModule {
   def apply(ctx: Context, elemLoader: ElementLoader & HasContext[ctx.type], tubeMetadata: t.TubeMetadata, mod: t.Module): ctx.Comp[ArModuleC & HasContext[ctx.type]] =
     for
-      groups <- MemoCacheStore.make[ctx.Env, ctx.Error, Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]
+      groups <- MemoCacheStore.make[ctx.Env, ctx.Error, IdentifierExpr, Seq[ModuleExportC[ctx.type]]]
     yield new ArModuleC with LoaderUtils {
       override val context: ctx.type = ctx
       override val elementLoader: elemLoader.type = elemLoader
@@ -20,20 +20,20 @@ private[loader] object TubeModule {
       override def path: ModulePath =
         decodeModulePath(mod.path)
 
-      override def allExports(reexportingModules: Set[ModuleName]): Comp[Map[Option[IdentifierExpr], Seq[ModuleExport]]] =
+      override def allExports(reexportingModules: Set[ModuleName]): Comp[Map[IdentifierExpr, Seq[ModuleExport]]] =
         ZIO.foreach(mod.groups) { group =>
-          val name = group.name.map(decodeIdentifier)
+          val name = decodeIdentifier(group.name)
           for
             items <- getExportsImpl(name, group.exports)
           yield name -> items.toList
         }.map(_.toMap)
 
-      override def getExports(reexportingModules: Set[ModuleName])(id: Option[IdentifierExpr]): Comp[Option[Seq[ModuleExport]]] =
-        ZIO.foreach(mod.groups.find(group => group.name.map(decodeIdentifier) == id)) { group =>
+      override def getExports(reexportingModules: Set[ModuleName])(id: IdentifierExpr): Comp[Option[Seq[ModuleExport]]] =
+        ZIO.foreach(mod.groups.find(group => decodeIdentifier(group.name) == id)) { group =>
           getExportsImpl(id, group.exports)
         }
 
-      private def getExportsImpl(id: Option[IdentifierExpr], groupExports: Seq[t.ModuleExport]): Comp[Seq[ModuleExport]] =
+      private def getExportsImpl(id: IdentifierExpr, groupExports: Seq[t.ModuleExport]): Comp[Seq[ModuleExport]] =
         groups.usingCreate(id) { _ =>
 
           def loadExport(exp: t.ModuleExport): Comp[ModuleExport] =
@@ -52,6 +52,12 @@ private[loader] object TubeModule {
                 for
                   e <- elemLoader.getEnum(enumId)
                 yield ModuleExportC.Enum(e)
+
+              case t.ModuleExport.Trait(traitId, _) =>
+                for
+                  e <- elemLoader.getTrait(traitId)
+                yield ModuleExportC.Trait(e)
+                
 
               case t.ModuleExport.Exported(inner) =>
                 for

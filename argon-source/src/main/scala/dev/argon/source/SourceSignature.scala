@@ -10,7 +10,7 @@ object SourceSignature {
   def parse
   (ctx: Context)
   (scope: ctx.Scopes.Scope)
-  (owner: ctx.TRExprContext.ParameterOwner)
+  (owner: ctx.TRExprContext.ExpressionOwner)
   (parameters: Seq[WithSource[ast.FunctionParameterList]], returnType: WithSource[ast.ReturnTypeSpecifier])
   : ctx.Comp[ctx.DefaultSignatureContext.FunctionSignature] =
     import ctx.Comp
@@ -22,11 +22,14 @@ object SourceSignature {
       override val context: ctx.type = ctx
     }
 
-    val ownerIsErased = owner match
-      case ctx.TRExprContext.ParameterOwner.Func(f) => f.isErased
-      case ctx.TRExprContext.ParameterOwner.Rec(r) => false
-      case ctx.TRExprContext.ParameterOwner.Enum(e) => false
-      case ctx.TRExprContext.ParameterOwner.EnumVariant(e) => false
+    val ownerIsErased = owner match {
+      case ctx.TRExprContext.ExpressionOwner.Func(f) => f.isErased
+      case ctx.TRExprContext.ExpressionOwner.Rec(_) => false
+      case ctx.TRExprContext.ExpressionOwner.Enum(_) => false
+      case ctx.TRExprContext.ExpressionOwner.EnumVariant(_) => false
+      case ctx.TRExprContext.ExpressionOwner.Trait(_) => false
+      case ctx.TRExprContext.ExpressionOwner.Method(_) => false
+    }
 
     def impl(remainingParams: Seq[WithSource[ast.FunctionParameterList]], convParams: Seq[SignatureParameter]): Comp[FunctionSignature] =
       remainingParams match {

@@ -78,7 +78,7 @@ trait ExprType {
         for
           sig <- f.signature
         yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
-          exprContext.ParameterOwner.Func(f),
+          exprContext.ExpressionOwner.Func(f),
           args
         )
 
@@ -101,7 +101,7 @@ trait ExprType {
         for
           sig <- rec.record.signature
         yield sigContext.signatureFromDefault(sig).substituteWithinExprForArgs(
-          exprContext.ParameterOwner.Rec(rec.record),
+          exprContext.ExpressionOwner.Rec(rec.record),
           rec.args,
           sigContext.exprFromDefault(field.fieldType)
         )
@@ -111,14 +111,14 @@ trait ExprType {
         for
           sig <- rec.signature
         yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
-          exprContext.ParameterOwner.Rec(rec),
+          exprContext.ExpressionOwner.Rec(rec),
           args
         )
       case Expr.EnumType(e, args) =>
         for
           sig <- e.signature
         yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
-          exprContext.ParameterOwner.Enum(e),
+          exprContext.ExpressionOwner.Enum(e),
           args
         )
 

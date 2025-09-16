@@ -20,7 +20,9 @@ private[loader] object TubeDeserialized {
       moduleReferences: TMap[BigInt, t.TubeFileEntry.ModuleReference],
       recordFieldReferences: TMap[BigInt, t.TubeFileEntry.RecordFieldReference | t.TubeFileEntry.EnumVariantRecordFieldReference],
       enums: TMap[BigInt, t.EnumDefinition | t.ImportSpecifier],
-      enumVariantReferences: TMap[BigInt, t.TubeFileEntry.EnumVariantReference]
+      enumVariantReferences: TMap[BigInt, t.TubeFileEntry.EnumVariantReference],
+      traits: TMap[BigInt, t.TraitDefinition | t.ImportSpecifier],
+      methods: TMap[BigInt, t.TubeFileEntry.TraitMethodReference],
     )
 
     def createElementLoader(metadata: t.TubeMetadata, state: ElementState): Comp[ElementLoader & HasContext[ctx.type]] =
@@ -35,6 +37,9 @@ private[loader] object TubeDeserialized {
 
         enumCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArEnumC & HasContext[ctx.type]]
         enumVariantCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, EnumVariantC & HasContext[ctx.type]]
+
+        traitCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArTraitC & HasContext[ctx.type]]
+        methodCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArMethodC & HasContext[ctx.type]]
       yield new ElementLoader with LoaderUtils {
         override val context: ctx.type = ctx
         override protected def elementLoader: ElementLoader & HasContext[context.type] = this
@@ -158,13 +163,66 @@ private[loader] object TubeDeserialized {
             yield variants.find(_.name == fieldName).get
           }
 
+        override def getTrait(id: BigInt): Comp[ArTrait] =
+          traitCache.usingCreate(id) { id =>
+            state.traits.get(id)
+              .commit
+              .flatMap {
+                case Some(item) => ZIO.succeed(item)
+                case None => ZIO.fail(TubeFormatException("Invalid trait id " + id))
+              }
+              .flatMap {
+                case importSpec: t.ImportSpecifier =>
+                  getImport(importSpec) {
+                    case ModuleExportC.Trait(t) => t
+                  }
+
+                case traitDef: t.TraitDefinition =>
+                  TubeTrait(ctx, this, traitDef)
+              }
+          }
+
+        override def getMethod(id: BigInt): Comp[ArMethod] =
+          methodCache.usingCreate(id) { id =>
+            state.methods.get(id)
+              .commit
+              .flatMap {
+                case Some(item) => ZIO.succeed(item)
+                case None => ZIO.fail(TubeFormatException("Invalid method id " + id))
+              }
+              .flatMap {
+                case methodRef: t.TubeFileEntry.TraitMethodReference =>
+                  val name = decodeIdentifier(methodRef.name)
+
+                  decodeErasedSignature(methodRef.signature)
+                    .flatMap { erasedSig =>
+                      ZStream.fromZIO(getTrait(methodRef.traitId))
+                        .mapZIO(_.methods)
+                        .flatMap(ZStream.fromIterable(_))
+                        .filter { m => m.name == name }
+                        .filterZIO { m =>
+                          for
+                            sig <- m.signature
+                            sig <- SignatureEraser(context).eraseSignature(sig)
+                          yield sig == erasedSig
+                        }
+                        .runHead
+                    }
+                    .flatMap {
+                      case Some(item) => ZIO.succeed(item)
+                      case None => ZIO.fail(TubeFormatException("Could not find method " + methodRef))
+                    }
+              }
+          }
+
+
         private def getImport[A <: DeclarationBase & HasContext[ctx.type]](importSpec: t.ImportSpecifier)(get: PartialFunction[ModuleExport, A]): Comp[A] =
           importSpec match {
             case importSpec: t.ImportSpecifier.Global =>
               for
                 importSpec2 <- decodeImportSpecifier(importSpec)
                 mod <- getModule(importSpec.moduleId)
-                exps <- mod.getExports(Set.empty)(importSpec.name.map(decodeIdentifier))
+                exps <- mod.getExports(Set.empty)(decodeIdentifier(importSpec.name))
                 exp <- ZStream.fromIterable(exps.toList.flatten)
                   .map(getExportFrom(get))
                   .collectSome
@@ -220,6 +278,8 @@ private[loader] object TubeDeserialized {
           recordFieldReferences <- TMap.empty[BigInt, t.TubeFileEntry.RecordFieldReference | t.TubeFileEntry.EnumVariantRecordFieldReference]
           enums <- TMap.empty[BigInt, t.EnumDefinition | t.ImportSpecifier]
           enumVariantReferences <- TMap.empty[BigInt, t.TubeFileEntry.EnumVariantReference]
+          traits <- TMap.empty[BigInt, t.TraitDefinition | t.ImportSpecifier]
+          methods <- TMap.empty[BigInt, t.TubeFileEntry.TraitMethodReference]
         yield ElementState(
           functions = functions,
           records = records,
@@ -227,6 +287,8 @@ private[loader] object TubeDeserialized {
           recordFieldReferences = recordFieldReferences,
           enums = enums,
           enumVariantReferences = enumVariantReferences,
+          traits = traits,
+          methods = methods,
         )
 
       def iter(state: ElementState): ZChannel[ctx.Env, Nothing, t.TubeFileEntry, Any, ctx.Error, Nothing, ArTubeC & HasContext[ctx.type]] =
@@ -266,6 +328,15 @@ private[loader] object TubeDeserialized {
 
             case recordFieldRef: t.TubeFileEntry.EnumVariantRecordFieldReference =>
               ZChannel.fromZIO(state.recordFieldReferences.put(recordFieldRef.recordFieldId, recordFieldRef).commit) *> iter(state)
+
+            case t.TubeFileEntry.TraitDefinition(traitDef) =>
+              ZChannel.fromZIO(state.traits.put(traitDef.traitId, traitDef).commit) *> iter(state)
+
+            case t.TubeFileEntry.TraitReference(traitId, importSpec) =>
+              ZChannel.fromZIO(state.traits.put(traitId, importSpec).commit) *> iter(state)
+
+            case methodRef: t.TubeFileEntry.TraitMethodReference =>
+              ZChannel.fromZIO(state.methods.put(methodRef.methodId, methodRef).commit) *> iter(state)
               
           },
           empty = ZChannel.fromZIO(createTube(metadata, state)),

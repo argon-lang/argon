@@ -20,6 +20,7 @@ object TubeLoader {
     val implementations: Context.ImplementationExterns {
       type TubeMetadata = (Seq[SupportedPlatform], Map[String, ESExpr])
       type ExternFunction = ExternMap
+      type ExternMethod = ExternMap
     }
   }
 

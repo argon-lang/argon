@@ -33,6 +33,8 @@ fn main() {
     b.add(Regex::str("module"), "TokenType.Token(Token.KW_MODULE)");
     b.add(Regex::str("record"), "TokenType.Token(Token.KW_RECORD)");
     b.add(Regex::str("enum"), "TokenType.Token(Token.KW_ENUM)");
+    b.add(Regex::str("trait"), "TokenType.Token(Token.KW_TRAIT)");
+    b.add(Regex::str("new"), "TokenType.Token(Token.KW_NEW)");
     b.add(Regex::str("true"), "TokenType.Token(Token.KW_TRUE)");
     b.add(Regex::str("false"), "TokenType.Token(Token.KW_FALSE)");
     b.add(Regex::str("as"), "TokenType.Token(Token.KW_AS)");
@@ -73,8 +75,6 @@ fn main() {
     b.add(Regex::str("box"), "TokenType.Token(Token.KW_BOX)");
     b.add(Regex::str("unbox"), "TokenType.Token(Token.KW_UNBOX)");
     b.add(Regex::str("fn"), "TokenType.Token(Token.KW_FN)");
-    // b.add(Regex::str("trait"), "TokenType.Token(Token.KW_TRAIT)");
-    // b.add(Regex::str("object"), "TokenType.Token(Token.KW_OBJECT)");
     // b.add(Regex::str("sealed"), "TokenType.Token(Token.KW_SEALED)");
     b.add(Regex::str("_"), "TokenType.Token(Token.KW_UNDERSCORE)");
 

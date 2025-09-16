@@ -46,6 +46,7 @@ trait ScopeContext {
       case Function(f: ArFuncC & HasContext[self.type])
       case Record(r: ArRecordC & HasContext[self.type])
       case Enum(e: ArEnumC & HasContext[self.type])
+      case Trait(t: ArTraitC & HasContext[self.type])
       case ExtensionMethod(f: ArFuncC & HasContext[self.type], obj: TRExprContext.AnnotatedExpr)
       case RecordField(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
       case RecordFieldUpdate(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
@@ -53,8 +54,7 @@ trait ScopeContext {
 
       def initialArgs: Seq[TRExprContext.AnnotatedExpr] =
         this match {
-          case Function(_) | Record(_) => Seq()
-          case Enum(_) => Seq()
+          case Function(_) | Record(_) | Enum(_) | Trait(_) => Seq()
           case ExtensionMethod(f, obj) => Seq(obj)
           case RecordField(_, _, _) => Seq()
           case RecordFieldUpdate(_, _, _) => Seq()
@@ -66,26 +66,28 @@ trait ScopeContext {
           case Function(f) => f.signature.map(TRSignatureContext.signatureFromDefault)
           case Record(r) => r.signature.map(TRSignatureContext.signatureFromDefault)
           case Enum(r) => r.signature.map(TRSignatureContext.signatureFromDefault)
+          case Trait(t) => t.signature.map(TRSignatureContext.signatureFromDefault)
           case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)
           case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
           case RecordFieldUpdate(r, field, _) => TRSignatureContext.recordFieldUpdateSig(r, field)
           case EnumVariant(v) => v.signature.map(TRSignatureContext.signatureFromDefault)
         }
 
-      def asOwner: Option[TRExprContext.ParameterOwner] =
+      def asOwner: Option[TRExprContext.ExpressionOwner] =
         this match {
-          case Function(f) => Some(TRExprContext.ParameterOwner.Func(f))
-          case Record(r) => Some(TRExprContext.ParameterOwner.Rec(r))
-          case Enum(e) => Some(TRExprContext.ParameterOwner.Enum(e))
-          case ExtensionMethod(f, _) => Some(TRExprContext.ParameterOwner.Func(f))
+          case Function(f) => Some(TRExprContext.ExpressionOwner.Func(f))
+          case Record(r) => Some(TRExprContext.ExpressionOwner.Rec(r))
+          case Enum(e) => Some(TRExprContext.ExpressionOwner.Enum(e))
+          case Trait(t) => Some(TRExprContext.ExpressionOwner.Trait(t))
+          case ExtensionMethod(f, _) => Some(TRExprContext.ExpressionOwner.Func(f))
           case RecordField(_, _, _) => None
           case RecordFieldUpdate(_, field, _) => None
-          case EnumVariant(v) => Some(TRExprContext.ParameterOwner.EnumVariant(v))
+          case EnumVariant(v) => Some(TRExprContext.ExpressionOwner.EnumVariant(v))
         }
 
       def noArgumentMembers(name: IdentifierExpr): Comp[Seq[Overloadable]] =
         this match {
-          case Function(_) | Record(_) => ZIO.succeed(Seq())
+          case Function(_) | Record(_) | Trait(_) => ZIO.succeed(Seq())
           case Enum(e) =>
             e.variants.map { variants =>
               variants
@@ -135,6 +137,7 @@ trait ScopeContext {
         case ModuleExportC.Function(_) => None
         case ModuleExportC.Record(_) => None
         case ModuleExportC.Enum(_) => None
+        case ModuleExportC.Trait(_) => None
         case ModuleExportC.Exported(exp) => toExportedGiven(exp)
       }
 
@@ -148,6 +151,7 @@ trait ScopeContext {
         case ModuleExportC.Function(f) => Overloadable.Function(f)
         case ModuleExportC.Record(r) => Overloadable.Record(r)
         case ModuleExportC.Enum(e) => Overloadable.Enum(e)
+        case ModuleExportC.Trait(t) => Overloadable.Trait(t)
         case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
       }
 
@@ -176,13 +180,12 @@ trait ScopeContext {
 
     final class CurrentModuleScope(parent: GlobalScope, module: ArModuleC & HasContext[self.type]) extends Scope {
       override def lookup(id: IdentifierExpr): Comp[LookupResult] =
-        module.getExports(Set.empty)(Some(id)).flatMap {
+        module.getExports(Set.empty)(id).flatMap {
           case Some(exports) =>
             ZIO.succeed(LookupResult.Overloaded(
               exports.map(moduleExportToOverloadable),
               parent.lookup(id)
             ))
-
 
           case None => parent.lookup(id)
         }
@@ -200,15 +203,17 @@ trait ScopeContext {
       override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
-    final class ParameterScope(owner: TRExprContext.ParameterOwner, parentScope: Scope, sigParams: Seq[DefaultSignatureContext.SignatureParameter]) extends Scope {
+    final class ParameterScope(owner: TRExprContext.ExpressionOwner, parentScope: Scope, sigParams: Seq[DefaultSignatureContext.SignatureParameter]) extends Scope {
 
       private val parameters: Seq[Var] =
         val shifter = DefaultToTRShifter[self.type](self)
         val owner2 = owner match {
-          case TRExprContext.ParameterOwner.Func(f) => DefaultExprContext.ParameterOwner.Func(f)
-          case TRExprContext.ParameterOwner.Rec(r) => DefaultExprContext.ParameterOwner.Rec(r)
-          case TRExprContext.ParameterOwner.Enum(e) => DefaultExprContext.ParameterOwner.Enum(e)
-          case TRExprContext.ParameterOwner.EnumVariant(v) => DefaultExprContext.ParameterOwner.EnumVariant(v)
+          case TRExprContext.ExpressionOwner.Func(f) => DefaultExprContext.ExpressionOwner.Func(f)
+          case TRExprContext.ExpressionOwner.Rec(r) => DefaultExprContext.ExpressionOwner.Rec(r)
+          case TRExprContext.ExpressionOwner.Enum(e) => DefaultExprContext.ExpressionOwner.Enum(e)
+          case TRExprContext.ExpressionOwner.Trait(t) => DefaultExprContext.ExpressionOwner.Trait(t)
+          case TRExprContext.ExpressionOwner.EnumVariant(v) => DefaultExprContext.ExpressionOwner.EnumVariant(v)
+          case TRExprContext.ExpressionOwner.Method(m) => DefaultExprContext.ExpressionOwner.Method(m)
         }
         DefaultSignatureContext.SignatureParameter.getParameterVariables(owner2, sigParams).map(shifter.shiftVar)
       end parameters

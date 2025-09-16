@@ -1,4 +1,4 @@
-import type { EnumInfo, EnumVariantInfo, FunctionInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TubeInfo } from "./program-model.js";
+import type { EnumInfo, EnumVariantInfo, FunctionInfo, MethodInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TraitInfo, TubeInfo } from "./program-model.js";
 import type { TubeHeader, TubeFileEntry, TubeMetadata, ImportSpecifier } from "@argon-lang/js-backend-api/vm";
 import { getModuleId } from "./util.js";
 
@@ -24,6 +24,8 @@ class IrReader {
     readonly recordFieldMap = new Map<bigint, (TubeFileEntry & { $type: "record-field-reference" | "enum-variant-record-field-reference" })>();
     readonly enumMap = new Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>();
     readonly enumVariantMap = new Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>();
+    readonly traitMap = new Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>();
+    readonly methodMap = new Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" })>();
 
 
     build(): ProgramModel {
@@ -53,6 +55,8 @@ class IrReader {
             recordFieldMap: this.recordFieldMap,
             enumMap: this.enumMap,
             enumVariantMap: this.enumVariantMap,
+            traitMap: this.traitMap,
+            methodMap: this.methodMap,
         });
     }
 
@@ -80,6 +84,7 @@ class IrReader {
         let importSpec: ImportSpecifier;
         let exportEntry: ModuleExportEntry;
 
+        // Return early for references and methods.
         switch(entry.$type) {
             case "header":
                 throw new Error("Extra header not allowed in VMIR");
@@ -132,6 +137,20 @@ class IrReader {
             case "enum-variant-record-field-reference":
                 this.recordFieldMap.set(entry.recordFieldId, entry);
                 return;
+
+            case "trait-definition":
+                this.traitMap.set(entry.definition.traitId, entry);
+                importSpec = entry.definition.import;
+                exportEntry = entry;
+                break;
+
+            case "trait-reference":
+                this.traitMap.set(entry.traitId, entry);
+                return;
+
+            case "trait-method-reference":
+                this.methodMap.set(entry.methodId, entry);
+                return;
         }
 
         const moduleId = getModuleId(importSpec);
@@ -169,6 +188,8 @@ type ProgramModelOptions = Pick<ProgramModel, "header" | "metadata" | "modules">
     readonly recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" | "enum-variant-record-field-reference" })>;
     readonly enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
     readonly enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
+    readonly traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
+    readonly methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" })>;
 };
 
 class ProgramModelImpl implements ProgramModel {
@@ -183,6 +204,8 @@ class ProgramModelImpl implements ProgramModel {
         this.#recordFieldMap = options.recordFieldMap;
         this.#enumMap = options.enumMap;
         this.#enumVariantMap = options.enumVariantMap;
+        this.#traitMap = options.traitMap;
+        this.#methodMap = options.methodMap;
     }
 
     readonly header: TubeHeader;
@@ -195,6 +218,8 @@ class ProgramModelImpl implements ProgramModel {
     readonly #recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" | "enum-variant-record-field-reference" })>;
     readonly #enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
     readonly #enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
+    readonly #traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
+    readonly #methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" })>;
 
     getTubeInfo(id: bigint): TubeInfo {
         if(id === 0n) {
@@ -333,6 +358,45 @@ class ProgramModelImpl implements ProgramModel {
             enumId: entry.enumId,
             name: entry.name,
         };
+    }
+
+    getTraitInfo(id: bigint): TraitInfo {
+        const entry = this.#traitMap.get(id);
+        if(entry === undefined) {
+            throw new Error("Invalid trait id");
+        }
+
+        let importSpecifier: ImportSpecifier;
+        if(entry.$type === "trait-definition") {
+            importSpecifier = entry.definition.import;
+        }
+        else {
+            importSpecifier = entry.import;
+        }
+
+        return {
+            importSpecifier,
+        };
+    }
+
+    getMethodInfo(id: bigint): MethodInfo {
+        const entry = this.#methodMap.get(id);
+        if(entry === undefined) {
+            throw new Error("Invalid trait id");
+        }
+
+        switch(entry.$type) {
+            case "trait-method-reference":
+            {
+                const traitInfo = this.getTraitInfo(entry.traitId);
+
+                return {
+                    parentImportSpecifier: traitInfo.importSpecifier,
+                    name: entry.name,
+                    signature: entry.signature,
+                };
+            }
+        }
     }
 }
 

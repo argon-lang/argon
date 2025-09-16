@@ -33,6 +33,7 @@ object ValueUtil {
       case Expr.RecordLiteral(_, _) => true
       case Expr.Sequence(_, _) => false
       case Expr.StringLiteral(_) => true
+      case Expr.TraitType(_, _) => true
       case Expr.Tuple(_) => true
       case Expr.TupleElement(_, _) => false
       case Expr.TypeN(_) => true

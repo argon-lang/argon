@@ -25,6 +25,7 @@ record directory-entry[res] {
 record extern-info {
     value: esexpr;
     allow-function: bool;
+    allow-method: bool;
 }
 
 interface platform-data-loader[e: exception, options] {

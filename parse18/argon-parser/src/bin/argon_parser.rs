@@ -49,6 +49,10 @@ pub enum Token {
     KwRecord,
     #[strum(serialize = "Token.KW_ENUM.type")]
     KwEnum,
+    #[strum(serialize = "Token.KW_TRAIT.type")]
+    KwTrait,
+    #[strum(serialize = "Token.KW_NEW.type")]
+    KwNew,
     #[strum(serialize = "Token.KW_WITH.type")]
     KwWith,
     #[strum(serialize = "Token.KW_TRUE.type")]
@@ -343,6 +347,11 @@ enum Rule {
     EnumBody,
     EnumBodyStmt,
     EnumConstructorVariant,
+    TraitDeclarationStmtRest,
+    TraitBody,
+    TraitBodyStmt,
+    NewTraitObjectBody,
+    NewTraitObjectBodyStmt,
     TypeDeclarationTypeAnnotation,
 
     TubeName,
@@ -435,11 +444,10 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             MethodName => ruleset(
-                "Option[IdentifierExpr]",
+                "IdentifierExpr",
                 [
-                    rule([ term(KwUnderscore) ], "const(None)"),
-                    rule([ nonterm(Identifier) ], "Some"),
-                    rule([ nonterm(Identifier), term(OpAssign).discard() ], "((inner: IdentifierExpr) => Some(IdentifierExpr.Update(inner)))"),
+                    rule([ nonterm(Identifier) ], "identity"),
+                    rule([ nonterm(Identifier), term(OpAssign).discard() ], "IdentifierExpr.Update"),
                 ],
             ),
             
@@ -677,6 +685,16 @@ impl GrammarFactory for ParserFactory {
                             term(KwUnbox).discard(),
                         ],
                         "Expr.Unbox",
+                    ),
+                    rule(
+                        [
+                            nonterm(PostfixExpr(paren_allowed)).with_location(),
+                            term(SymDot).discard(),
+                            term(KwNew).discard(),
+                            nonterm(NewTraitObjectBody),
+                            term(KwEnd).discard(),
+                        ],
+                        "Expr.NewTraitObject"
                     ),
                     rule(
                         [
@@ -996,7 +1014,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(AssertExpr) ], "identity"),
-                    rule([ nonterm(AssignExpr) ], "identity")
+                    rule([ nonterm(AssignExpr) ], "identity"),
                 ],
             ),
             TypeBinding => ruleset(
@@ -1183,7 +1201,16 @@ impl GrammarFactory for ParserFactory {
             VariableDeclarationBinding => ruleset(
                 "(Boolean, Option[IdentifierExpr], Option[WithSource[Expr]])",
                 [
-                    rule([ nonterm(VariableMutSpec), nonterm(IdentifierOptional), nonterm(VariableDeclarationTypeSpec), term(OpEquals).discard() ], "((isMutable: Boolean, id: Option[IdentifierExpr], typeAnnotation: Option[WithSource[Expr]]) => (isMutable, id, typeAnnotation))"),
+                    rule(
+                        [
+                            nonterm(VariableMutSpec),
+                            nonterm(IdentifierOptional),
+                            nonterm(VariableDeclarationTypeSpec),
+                            term(OpEquals).discard(),
+                            nonterm(NewLines).discard(),
+                        ],
+                        "((isMutable: Boolean, id: Option[IdentifierExpr], typeAnnotation: Option[WithSource[Expr]]) => (isMutable, id, typeAnnotation))",
+                    ),
                 ]
             ).lex_mode("LexerMode.SkipNewLines"),
             VariableMutSpec => ruleset(
@@ -1219,7 +1246,7 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule(
                         [
-                            nonterm(IdentifierOptional).with_location(),
+                            nonterm(Identifier).with_location(),
                             term(SymDot).discard(),
                             nonterm(MethodName).with_location(),
                             nonterm(MethodParameters),
@@ -1227,17 +1254,29 @@ impl GrammarFactory for ParserFactory {
                             nonterm(MethodReturnType).with_location(),
                             nonterm(MethodBody),
                         ],
-                        "((instanceName: WithSource[Option[IdentifierExpr]], name: WithSource[Option[IdentifierExpr]], parameters: Seq[WithSource[FunctionParameterList]], returnType: WithSource[ReturnTypeSpecifier], body: Option[FunctionBody]) => (modifiers, purity) => MethodDeclarationStmt(modifiers, purity, instanceName, None, name, parameters, returnType, body))"
+                        "((instanceName: WithSource[IdentifierExpr], name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], returnType: WithSource[ReturnTypeSpecifier], body: Option[FunctionBody]) => (modifiers, purity) => MethodDeclarationStmt(modifiers, purity, instanceName.map(Some.apply), None, name, parameters, returnType, body))"
                     ),
                     rule(
                         [
-                            nonterm(IdentifierOptional).with_location(),
+                            term(KwUnderscore).with_location(),
+                            term(SymDot).discard(),
+                            nonterm(MethodName).with_location(),
+                            nonterm(MethodParameters),
+                            term(SymColon).discard(),
+                            nonterm(MethodReturnType).with_location(),
+                            nonterm(MethodBody),
+                        ],
+                        "((instanceName: WithSource[?], name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], returnType: WithSource[ReturnTypeSpecifier], body: Option[FunctionBody]) => (modifiers, purity) => MethodDeclarationStmt(modifiers, purity, instanceName.map(_ => None), None, name, parameters, returnType, body))"
+                    ),
+                    rule(
+                        [
+                            nonterm(Identifier).with_location(),
                             nonterm(MethodParameters),
                             term(SymColon).discard(),
                             nonterm(MethodReturnType).with_location(),
                             nonterm(FunctionBody),
                         ],
-                        "((name: WithSource[Option[IdentifierExpr]], parameters: Seq[WithSource[FunctionParameterList]], returnType: WithSource[ReturnTypeSpecifier], body: FunctionBody) => (modifiers, purity) => FunctionDeclarationStmt(modifiers, purity, name, parameters, returnType, body))"
+                        "((name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], returnType: WithSource[ReturnTypeSpecifier], body: FunctionBody) => (modifiers, purity) => FunctionDeclarationStmt(modifiers, purity, name, parameters, returnType, body))"
                     ),
                 ],
             ).lex_mode("LexerMode.SkipNewLines"),
@@ -1462,6 +1501,53 @@ impl GrammarFactory for ParserFactory {
                     ),
                 ],
             ),
+            TraitDeclarationStmtRest => ruleset(
+                "Seq[WithSource[Modifier]] => Stmt",
+                [
+                    rule(
+                        [
+                            term(KwTrait).discard(),
+                            nonterm(Identifier).with_location(),
+                            nonterm(MethodParameters),
+                            nonterm(TypeDeclarationTypeAnnotation),
+                            nonterm(StatementSeparator).discard(),
+                            nonterm(TraitBody),
+                            term(KwEnd).discard(),
+                        ],
+                        "((name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], typeAnnotation: Option[WithSource[Expr]], body: Seq[WithSource[TraitBodyStmt]]) => modifiers => TraitDeclarationStmt(modifiers, name, parameters, typeAnnotation, body))"
+                    ),
+                ],
+            ),
+            TraitBody => ruleset(
+                "Seq[WithSource[TraitBodyStmt]]",
+                [
+                    rule([ nonterm(TraitBodyStmt).with_location() ], "((s: WithSource[TraitBodyStmt]) => Seq(s))"),
+                    rule([ nonterm(TraitBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(TraitBody) ], "((h: WithSource[TraitBodyStmt], t: Seq[WithSource[TraitBodyStmt]]) => h +: t)"),
+                    rule([ nonterm(StatementSeparator).discard(), nonterm(TraitBody) ], "identity"),
+                    rule([], "const(Seq.empty)"),
+                ],
+            ),
+            TraitBodyStmt => ruleset(
+                "TraitBodyStmt",
+                [
+                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], methodPurity: Boolean, buildDecl: (Seq[WithSource[Modifier]], Boolean) => TraitBodyStmt) => buildDecl(modifiers, methodPurity))"),
+                ],
+            ),
+            NewTraitObjectBody => ruleset(
+                "Seq[WithSource[NewTraitObjectBodyStmt]]",
+                [
+                    rule([ nonterm(NewTraitObjectBodyStmt).with_location() ], "((s: WithSource[NewTraitObjectBodyStmt]) => Seq(s))"),
+                    rule([ nonterm(NewTraitObjectBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(NewTraitObjectBody) ], "((h: WithSource[NewTraitObjectBodyStmt], t: Seq[WithSource[NewTraitObjectBodyStmt]]) => h +: t)"),
+                    rule([ nonterm(StatementSeparator).discard(), nonterm(NewTraitObjectBody) ], "identity"),
+                    rule([], "const(Seq.empty)"),
+                ],
+            ),
+            NewTraitObjectBodyStmt => ruleset(
+                "NewTraitObjectBodyStmt",
+                [
+                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], methodPurity: Boolean, buildDecl: (Seq[WithSource[Modifier]], Boolean) => NewTraitObjectBodyStmt) => buildDecl(modifiers, methodPurity))"),
+                ],
+            ),
             TypeDeclarationTypeAnnotation => ruleset(
                 "Option[WithSource[Expr]]",
                 [
@@ -1543,6 +1629,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], methodPurity: Boolean, buildDecl: (Seq[WithSource[Modifier]], Boolean) => Stmt) => buildDecl(modifiers, methodPurity))"),
                     rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                     rule([ nonterm(Modifiers), nonterm(EnumDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
+                    rule([ nonterm(Modifiers), nonterm(TraitDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                 ],
             ),
 

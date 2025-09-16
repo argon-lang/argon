@@ -41,11 +41,12 @@ private trait Substitution {
     given Shifter[RecordField, RecordField] = identityShifter
     given Shifter[Enum, Enum] = identityShifter
     given Shifter[EnumVariant, EnumVariant] = identityShifter
+    given Shifter[Trait, Trait] = identityShifter
 
     given Shifter[NullaryBuiltin, NullaryBuiltin] = identityShifter
     given Shifter[UnaryBuiltin, UnaryBuiltin] = identityShifter
     given Shifter[BinaryBuiltin, BinaryBuiltin] = identityShifter
-    given Shifter[ParameterOwner, ParameterOwner] = identityShifter
+    given Shifter[ExpressionOwner, ExpressionOwner] = identityShifter
 
     given Shifter[IdentifierExpr, IdentifierExpr] = identityShifter
     given Shifter[UniqueIdentifier, UniqueIdentifier] = identityShifter

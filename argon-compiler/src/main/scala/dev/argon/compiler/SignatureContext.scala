@@ -29,11 +29,11 @@ trait SignatureContext {
     end substituteVar
 
 
-    def returnTypeForArgs(owner: exprContext.ParameterOwner, args: Seq[Expr]): Expr =
+    def returnTypeForArgs(owner: exprContext.ExpressionOwner, args: Seq[Expr]): Expr =
       substituteWithinExprForArgs(owner, args, returnType)
 
 
-    def substituteWithinExprForArgs(owner: exprContext.ParameterOwner, args: Seq[Expr], e: Expr): Expr =
+    def substituteWithinExprForArgs(owner: exprContext.ExpressionOwner, args: Seq[Expr], e: Expr): Expr =
       def impl(index: Int, remaining: List[(SignatureParameter, Expr)], e: Expr): Expr =
         remaining match {
           case (param, arg) :: next =>
@@ -50,7 +50,7 @@ trait SignatureContext {
       impl(0, parameters.iterator.zip(args).toList, e)
     end substituteWithinExprForArgs
 
-    def substituteHolesForArgs[F[_]: Monad](owner: exprContext.ParameterOwner)(makeHole: SignatureParameter => F[Expr]): F[(FunctionSignature, Seq[Expr])] =
+    def substituteHolesForArgs[F[_]: Monad](owner: exprContext.ExpressionOwner)(makeHole: SignatureParameter => F[Expr]): F[(FunctionSignature, Seq[Expr])] =
       def substHolesImpl(sig: FunctionSignature, prevParams: Seq[SignatureParameter], holes: Seq[Expr]): F[(FunctionSignature, Seq[Expr])] =
         sig.parameters match {
           case param +: tailParams =>
@@ -75,7 +75,7 @@ trait SignatureContext {
     paramType: Expr,
   ) {
     
-    def asParameterVar(owner: exprContext.ParameterOwner, index: Int): exprContext.ParameterVar =
+    def asParameterVar(owner: exprContext.ExpressionOwner, index: Int): exprContext.ParameterVar =
       exprContext.ParameterVar(
         owner,
         parameterIndex = index,
@@ -90,7 +90,7 @@ trait SignatureContext {
   object SignatureParameter {
     import exprContext.ParameterVar
 
-    def getParameterVariables(owner: exprContext.ParameterOwner, parameters: Seq[SignatureParameter]): Seq[ParameterVar] =
+    def getParameterVariables(owner: exprContext.ExpressionOwner, parameters: Seq[SignatureParameter]): Seq[ParameterVar] =
       parameters.zipWithIndex.map { (param, index) =>
         param.asParameterVar(owner, index)
       }

@@ -32,6 +32,8 @@ object TokenCategory {
   case object KW_MODULE extends TokenCategory
   case object KW_RECORD extends TokenCategory
   case object KW_ENUM extends TokenCategory
+  case object KW_TRAIT extends TokenCategory
+  case object KW_NEW extends TokenCategory
   case object KW_WITH extends TokenCategory
   case object KW_TRUE extends TokenCategory
   case object KW_FALSE extends TokenCategory

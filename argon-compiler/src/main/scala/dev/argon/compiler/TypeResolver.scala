@@ -9,8 +9,6 @@ import dev.argon.util.{FilePosition, Location, UniqueIdentifier, WithLocation, W
 import zio.*
 import cats.*
 import cats.implicits.given
-import cats.mtl.syntax.state
-import com.google.common.reflect.TypeResolver
 import zio.interop.catz.core.given
 import zio.stream.ZStream
 
@@ -775,7 +773,7 @@ trait TypeResolver extends UsingContext {
           yield (t, pathType)
         ).flatMap {
           case (t: Expr.EnumType, v: EnumVariant) =>
-            val owner = TRExprContext.ParameterOwner.EnumVariant(v)
+            val owner = TRExprContext.ExpressionOwner.EnumVariant(v)
 
             def substituteHolesForArgs(sig: TRSignatureContext.FunctionSignature): Comp[(TRSignatureContext.FunctionSignature, Seq[Expr])] =
               sig.substituteHolesForArgs(owner) { param =>
@@ -1239,6 +1237,7 @@ trait TypeResolver extends UsingContext {
         case Overloadable.Function(f) => AttemptedOverload.Function(f)
         case Overloadable.Record(r) => AttemptedOverload.Record(r)
         case Overloadable.Enum(e) => AttemptedOverload.Enum(e)
+        case Overloadable.Trait(t) => AttemptedOverload.Trait(t)
         case Overloadable.ExtensionMethod(f, _) => AttemptedOverload.Function(f)
         case Overloadable.RecordField(r, field, _) => AttemptedOverload.RecordField(r.record, field)
         case Overloadable.RecordFieldUpdate(r, field, _) => AttemptedOverload.RecordField(r.record, field)
@@ -1452,11 +1451,36 @@ trait TypeResolver extends UsingContext {
                     override def toString: String = "Enum Variant ExprFactory"
                   }
 
+              def traitOverload(t: ArTrait): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    override def loc: Loc = overloadableLoc
+
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      val e = Expr.TraitType(t, overloadResult.arguments)
+                      for
+                        e <- checkErasure(loc)(e)(false)
+                      yield InferredExpr(
+                        e,
+                        overloadResult.remainingSig.returnType
+                      )
+                    end infer
+
+                    private def recordOverloadFactory: ExprFactory = this
+
+
+                    override def toString: String = "Trait ExprFactory"
+                  }
+
+
 
               val factory0: ExprFactory = selectedOverload match {
                 case Overloadable.Function(f) => functionOverload(f)
                 case Overloadable.Record(r) => recordOverload(r)
                 case Overloadable.Enum(e) => enumOverload(e)
+                case Overloadable.Trait(t) => traitOverload(t)
                 case Overloadable.ExtensionMethod(f, _) => functionOverload(f)
                 case Overloadable.RecordField(r, field, recordValue) => recordFieldOverload(r, field, recordValue)
                 case Overloadable.RecordFieldUpdate(r, field, recordValue) => recordFieldStoreOverload(r, field, recordValue)
@@ -2064,7 +2088,7 @@ trait TypeResolver extends UsingContext {
             def buildCall(sig: TRSignatureContext.FunctionSignature, args: Seq[Expr]): Comp[ir.Assertion] =
               sig.parameters.toList match
                 case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _, _, _, _)) :: tailParams =>
-                  val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
+                  val variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                   for
                     hole <- newVariable
                     holeExpr = Expr.Hole(hole)
@@ -2074,7 +2098,7 @@ trait TypeResolver extends UsingContext {
                   yield assertion
 
                 case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, isErased, _, paramName, paramType)) :: tailParams =>
-                  val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
+                  val variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                   for
                     varId <- UniqueIdentifier.make
                     local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isWitness = false)

@@ -72,6 +72,23 @@ enum tube-file-entry {
         variant-id: nat;
         name: identifier;
     },
+
+    @esexpr:(inline-value)
+    trait-definition {
+        definition: trait-definition;
+    },
+
+    trait-reference {
+        trait-id: nat;
+        import: import-specifier;
+    },
+
+    trait-method-reference {
+        method-id: nat;
+        trait-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
 }
 
 
@@ -114,7 +131,7 @@ record module {
 
 @esexpr:(derive-codec)
 record export-group {
-    name: option[identifier];
+    name: identifier;
 
     @esexpr:(vararg)
     exports: list[module-export];
@@ -135,6 +152,11 @@ enum module-export {
 
     enum {
         enum-id: nat;
+        signature: erased-signature;
+    },
+
+    trait {
+        trait-id: nat;
         signature: erased-signature;
     },
 
@@ -247,12 +269,7 @@ enum builtin-type {
 enum import-specifier {
     global {
         module-id: nat;
-
-        @esexpr: (keyword)
-        @esexpr: (optional)
-        name: optional-field[identifier];
-
-        @esexpr: (keyword)
+        name: identifier;
         sig: erased-signature;
     },
 }
@@ -339,6 +356,7 @@ record function-definition {
 
 @esexpr:(derive-codec)
 enum function-implementation {
+    @esexpr:(inline-value)
     expr {
         body: expr;
     },
@@ -403,6 +421,73 @@ record enum-variant-definition {
     fields: list[record-field-definition];
 }
 
+@esexpr:(derive-codec)
+record trait-definition {
+    trait-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    methods: list[method-definition];
+}
+
+@esexpr:(derive-codec)
+record method-definition {
+    name: identifier;
+    erased-signature: erased-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    inline: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    erased: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    witness: bool;
+
+    @esexpr:(keyword)
+    slot: method-slot;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (pure))
+    effects: effect-info;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    implementation: optional-field[method-implementation];
+}
+
+@esexpr:(derive-codec)
+enum method-slot {
+    abstract,
+    virtual,
+    override,
+    final,
+    final-override,
+}
+
+@esexpr:(derive-codec)
+enum method-implementation {
+    abstract,
+
+    @esexpr:(inline-value)
+    expr {
+        body: expr;
+    },
+
+    @esexpr:(inline-value)
+    extern {
+        externs: extern-map;
+    },
+}
 
 @esexpr:(derive-codec)
 enum expr {
@@ -542,6 +627,10 @@ enum expr {
     },
     string-literal {
         s: string;
+    },
+    @esexpr:(inline-value)
+    trait-type {
+        trait-type: trait-type;
     },
     tuple {
         items: list[expr];
@@ -687,6 +776,14 @@ record record-type {
 }
 
 @esexpr:(derive-codec)
+record trait-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
 record record-field-literal {
     field-id: nat;
     value: expr;
@@ -706,7 +803,7 @@ enum var {
         id: nat;
     },
     parameter-var {
-        owner: parameter-owner;
+        owner: expression-owner;
         parameter-index: int;
         name: option[identifier];
         var-type: expr;
@@ -722,7 +819,7 @@ enum var {
 }
 
 @esexpr:(derive-codec)
-enum parameter-owner {
+enum expression-owner {
     func {
         index: nat;
     },
@@ -732,7 +829,13 @@ enum parameter-owner {
     enum {
         index: nat;
     },
+    trait {
+        index: nat;
+    },
     enum-variant {
+        index: nat;
+    },
+    method {
         index: nat;
     },
 }

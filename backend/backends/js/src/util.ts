@@ -12,10 +12,6 @@ export function urlEncodeIdentifier(s: string): string {
 }
 
 function encodeIdentifierChar(c: string): string {
-    if(c.length == 1) {
-        return "$" + c.charCodeAt(0).toString(16).padStart(2, '0');
-    }
-
     let s = "";
     for(const b of new TextEncoder().encode(c)) {
         s += "$" + b.toString(16).padStart(2, '0');

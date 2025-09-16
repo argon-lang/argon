@@ -109,12 +109,13 @@ object ErasedScanner {
       private given Scanner[RecordFieldPattern] = autoScanner
       private given Scanner[MatchCase] = autoScanner
 
-      private given Scanner[ParameterOwner] = IgnoreScanner[ParameterOwner]
+      private given Scanner[ExpressionOwner] = IgnoreScanner[ExpressionOwner]
       private given Scanner[Function] = IgnoreScanner[Function]
       private given Scanner[Record] = IgnoreScanner[Record]
       private given Scanner[RecordField] = IgnoreScanner[RecordField]
       private given Scanner[Enum] = IgnoreScanner[Enum]
       private given Scanner[EnumVariant] = IgnoreScanner[EnumVariant]
+      private given Scanner[Trait] = IgnoreScanner[Trait]
       private given Scanner[NullaryBuiltin] = IgnoreScanner[NullaryBuiltin]
       private given Scanner[UnaryBuiltin] = IgnoreScanner[UnaryBuiltin]
       private given Scanner[BinaryBuiltin] = IgnoreScanner[BinaryBuiltin]

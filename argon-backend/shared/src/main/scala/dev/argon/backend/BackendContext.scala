@@ -12,8 +12,9 @@ import scala.reflect.TypeTest
 class BackendContext[R <: Env0: EnvironmentTag, E >: Error0 | BackendException | IOException <: Matchable](using TypeTest[Any, E]) extends Context.Of[R, E] {
 
   class BackendContextImpls extends Implementations {
-    type TubeMetadata = (Seq[SupportedPlatform], Map[String, ESExpr])
-    type ExternFunction = ExternMap
+    override type TubeMetadata = (Seq[SupportedPlatform], Map[String, ESExpr])
+    override type ExternFunction = ExternMap
+    override type ExternMethod = ExternMap
   }
 
   override val implementations: BackendContextImpls = BackendContextImpls()

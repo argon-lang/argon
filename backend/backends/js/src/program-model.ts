@@ -1,4 +1,4 @@
-import type { ModulePath, TubeFileEntry, TubeHeader, TubeMetadata, TubeName, ImportSpecifier, Identifier } from "@argon-lang/js-backend-api/vm";
+import type { ModulePath, TubeFileEntry, TubeHeader, TubeMetadata, TubeName, ImportSpecifier, Identifier, ErasedSignature, MethodDefinition } from "@argon-lang/js-backend-api/vm";
 
 export interface ProgramModel {
     readonly header: TubeHeader;
@@ -12,6 +12,8 @@ export interface ProgramModel {
     getRecordFieldInfo(id: bigint): RecordFieldInfo;
     getEnumInfo(id: bigint): EnumInfo;
     getEnumVariantInfo(id: bigint): EnumVariantInfo;
+    getTraitInfo(id: bigint): TraitInfo;
+    getMethodInfo(id: bigint): MethodInfo;
 }
 
 export interface ModuleModel {
@@ -19,7 +21,7 @@ export interface ModuleModel {
     readonly exports: readonly ModuleExportEntry[];
 }
 
-export type ModuleExportEntry = TubeFileEntry & { $type: "function-definition" | "record-definition" | "enum-definition" };
+export type ModuleExportEntry = TubeFileEntry & { $type: "function-definition" | "record-definition" | "enum-definition" | "trait-definition" };
 
 export interface TubeInfo {
     readonly tubeName: TubeName;
@@ -53,4 +55,15 @@ export interface EnumVariantInfo {
     readonly name: Identifier;
 }
 
+export interface TraitInfo {
+    readonly importSpecifier: ImportSpecifier;
+}
+
+export interface MethodInfo {
+    readonly parentImportSpecifier: ImportSpecifier;
+    readonly name: Identifier;
+    readonly signature: ErasedSignature;
+
+    readonly definition?: MethodDefinition | undefined;
+}
 

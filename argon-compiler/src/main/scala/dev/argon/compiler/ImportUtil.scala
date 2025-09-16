@@ -22,7 +22,7 @@ object ImportUtil {
       tubeImporter.getTube(tubeName).flatMap { tube =>
         tube.modules.get(path) match {
           case Some(module) =>
-            module.getExports(reexportingModules)(Some(name.value))
+            module.getExports(reexportingModules)(name.value)
               .map(_.getOrElse(???))
 
           case None =>
@@ -37,11 +37,6 @@ object ImportUtil {
         tube.modules.get(path) match {
           case Some(module) =>
             module.allExports(reexportingModules)
-              .map { exportMap =>
-                exportMap.collect {
-                  case (Some(k), v) => k -> v
-                }
-              }
 
           case None =>
             ErrorLog.logError(CompilerError.UnknownModule(tubeName, path, location))

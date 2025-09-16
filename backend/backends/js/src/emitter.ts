@@ -74,6 +74,12 @@ abstract class EmitterBase {
         return tubePart + "$s" + modulePart + this.getExportNameForImport(importSpec);
     }
 
+    protected getExportNameForIdSig(id: Identifier | undefined, sig: ir.ErasedSignature): string {
+            return this.getExportNameForId(id) +
+                "$a" + sig.params.map(arg => this.getExportNameForType(arg)).join("") +
+                "$r" + this.getExportNameForType(sig.result);
+    }
+
     protected getExportNameForImport(importSpec: ir.ImportSpecifier): string {
         switch(importSpec.$type) {
             case "global":
@@ -342,6 +348,10 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 this.emitEnum(entry.definition);
                 break;
 
+            case "trait-definition":
+                this.emitTrait(entry.definition);
+                break;
+
             default:
                 ensureExhaustive(entry);
         }
@@ -352,44 +362,70 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             throw new Error("Missing function implementation");
         }
 
-        switch(func.implementation.$type) {
+        const impl = this.emitFunctionImpl(func.signature, func.implementation);
+
+        if(impl.type == "FunctionDeclaration") {
+            this.addDeclaration({
+                ...impl,
+                id: {
+                    type: "Identifier",
+                    name: this.getExportNameForImport(func.import),
+                },
+            });
+        }
+        else {
+            this.addDeclaration({
+                type: "VariableDeclaration",
+                kind: "const",
+                declarations: [
+                    {
+                        type: "VariableDeclarator",
+                        id: {
+                            type: "Identifier",
+                            name: this.getExportNameForImport(func.import),
+                        },
+                        init: impl,
+                    }
+                ],
+            });
+        }
+    }
+
+    private emitFunctionImpl(signature: ir.FunctionSignature, impl: ir.FunctionImplementation): ReadonlyDeep<estree.MaybeNamedFunctionDeclaration | estree.Expression> {
+        switch(impl.$type) {
             case "vm-ir":
             {
                 const params: estree.Pattern[] = [];
 
-                for(const i of func.signature.typeParameters.keys()) {
+                for(const i of signature.typeParameters.keys()) {
                     params.push({
                         type: "Identifier",
                         name: `t${i}`,
                     });
                 }
 
-                for(const i of func.signature.parameters.keys()) {
+                for(const i of signature.parameters.keys()) {
                     params.push({
                         type: "Identifier",
                         name: `r${i}`,
                     });
                 }
 
-                const blockEmitter = new BlockEmitter(this, func.signature.parameters.length);
+                const blockEmitter = new BlockEmitter(this, signature.parameters.length);
                 
-                blockEmitter.emitBlock(func.implementation.body.block);
+                blockEmitter.emitBlock(impl.body.block);
 
-                this.addDeclaration({
+                return {
                     type: "FunctionDeclaration",
-                    id: {
-                        type: "Identifier",
-                        name: this.getExportNameForImport(func.import),
-                    },
+                    id: null,
                     params: params,
                     body: blockEmitter.toBlock(),
-                });
-                break;
+                };
             }
                 
             
             case "extern":
-                const externRes = ExternFunction.codec.decode(func.implementation.extern);
+                const externRes = ExternFunction.codec.decode(impl.extern);
                 if(!externRes.success) {
                     throw new Error("Could not decode extern: " + externRes.message + " " + JSON.stringify(externRes.path));
                 }
@@ -397,25 +433,10 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 const extern = externRes.value;
 
                 const funcExpr = ExternFunction.getExprForImports(extern, this);
-
-                this.addDeclaration({
-                    type: "VariableDeclaration",
-                    kind: "const",
-                    declarations: [
-                        {
-                            type: "VariableDeclarator",
-                            id: {
-                                type: "Identifier",
-                                name: this.getExportNameForImport(func.import),
-                            },
-                            init: funcExpr,
-                        }
-                    ],
-                });
-                break;
+                return funcExpr;
 
             default:
-                ensureExhaustive(func.implementation);
+                ensureExhaustive(impl);
         }
     }
 
@@ -489,6 +510,116 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 },
             ],
         });
+    }
+
+    private emitTrait(traitDef: ir.TraitDefinition): void {
+        const name = this.getExportNameForImport(traitDef.import);
+
+        const concreteMethods: ReadonlyDeep<estree.Property>[] = [];
+
+        for(const methodDef of traitDef.methods) {
+            const methodName = this.getExportNameForIdSig(methodDef.name, methodDef.erasedSignature);
+            const useSimpleName = isValidIdName(methodName) && methodName !== "__proto__";
+
+            const methodImpl = this.emitMethodBody(methodDef);
+
+            concreteMethods.push({
+                type: "Property",
+                computed: !useSimpleName,
+                shorthand: false,
+                method: methodImpl !== null,
+                kind: "init",
+                key: useSimpleName ? {
+                    type: "Identifier",
+                    name: methodName,
+                } : {
+                    type: "Literal",
+                    value: methodName,
+                },
+                value: methodImpl === null
+                    ? { type: "Literal", value: null }
+                    : methodImpl,
+            });
+        }
+
+        const traitInfo: ReadonlyDeep<estree.Expression> = {
+            type: "ObjectExpression",
+            properties: [
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "typeParameterCount",
+                    },
+                    value: {
+                        type: "Literal",
+                        value: traitDef.signature.typeParameters.length,
+                    },
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "methods",
+                    },
+                    value: {
+                        type: "ObjectExpression",
+                        properties: concreteMethods,
+                    },
+                }
+            ],
+        };
+
+        
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: {
+                        type: "Identifier",
+                        name,
+                    },
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createTraitType"),
+                        arguments: [
+                            traitInfo,
+                        ],
+                    },
+                },
+            ],
+        });
+    }
+
+    private emitMethodBody(methodDef: ir.MethodDefinition): ReadonlyDeep<estree.Expression> | null {
+        if(methodDef.implementation === undefined) {
+            return null;
+        }
+        
+        const impl = this.emitFunctionImpl(methodDef.signature, methodDef.implementation);
+
+        if(impl.type == "FunctionDeclaration") {
+            return {
+                type: "FunctionExpression",
+                params: impl.params,
+                body: impl.body,
+            };
+        }
+        else {
+            return impl;
+        }
     }
 }
 
@@ -1334,7 +1465,7 @@ class BlockEmitter extends EmitterBase {
     }
 }
 
-function jsonToExpression(expr: JsonValue): ReadonlyDeep<estree.Expression> {
+function jsonToExpression(expr: JsonValue): estree.Expression {
     switch(typeof expr) {
         case "string":
         case "number":
@@ -1358,7 +1489,7 @@ function jsonToExpression(expr: JsonValue): ReadonlyDeep<estree.Expression> {
                 };
             }
             else {
-                const properties: ReadonlyDeep<estree.Property>[] = [];
+                const properties: estree.Property[] = [];
                 for(const key of Object.keys(expr)) {
                     const value = jsonToExpression(expr[key]!);
                     if(key === "__proto__" || !isValidIdName(key)) {

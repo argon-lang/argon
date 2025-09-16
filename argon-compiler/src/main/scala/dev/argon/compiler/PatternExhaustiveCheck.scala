@@ -111,7 +111,7 @@ trait PatternExhaustiveCheck extends UsingContext {
                   ZStream.unwrap(
                     for
                       sig <- variant.signature
-                      owner = exprContext.ParameterOwner.EnumVariant(variant)
+                      owner = exprContext.ExpressionOwner.EnumVariant(variant)
                       (sig, holes) <- signatureContext.signatureFromDefault(sig).substituteHolesForArgs(owner)(makeHole)
                       model <- Ref.make(model)
                       isValid <- Unification.unify[context.Env, context.Error](exprContext)(model, evaluator, context.Config.evaluatorFuel)(t, sig.returnType)

@@ -196,6 +196,7 @@ class JSExternLoader<E> implements backendApi.ExternLoader<E> {
 
         return {
             allowFunction: true,
+            allowMethod: true,
             value: ExternFunction.codec.encode(extern),
         };
     }

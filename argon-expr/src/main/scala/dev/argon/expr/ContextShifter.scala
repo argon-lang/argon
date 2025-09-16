@@ -15,7 +15,9 @@ trait ContextShifter[F[_]: Monad] {
     type Record >: ec1.Record
     type RecordField >: ec1.RecordField
     type Enum >: ec1.Enum
+    type Trait >: ec1.Trait
     type EnumVariant >: ec1.EnumVariant
+    type Method >: ec1.Method
   }
 
 
@@ -39,7 +41,7 @@ trait ContextShifter[F[_]: Monad] {
 
     given varShifter: Shifter[ec1.Var, ec2.Var] = autoShifter
     given Shifter[ec1.LocalVar, ec2.LocalVar] = autoShifter
-    given Shifter[ec1.ParameterOwner, ec2.ParameterOwner] = autoShifter
+    given Shifter[ec1.ExpressionOwner, ec2.ExpressionOwner] = autoShifter
     
     given effectShifter: Shifter[ec1.EffectInfo, ec2.EffectInfo] = autoShifter
 
@@ -47,7 +49,9 @@ trait ContextShifter[F[_]: Monad] {
     given Shifter[ec1.Record, ec2.Record] = identityShifter
     given Shifter[ec1.RecordField, ec2.RecordField] = identityShifter
     given Shifter[ec1.Enum, ec2.Enum] = identityShifter
+    given Shifter[ec1.Trait, ec2.Trait] = identityShifter
     given Shifter[ec1.EnumVariant, ec2.EnumVariant] = identityShifter
+    given Shifter[ec1.Method, ec2.Method] = identityShifter
     
     given Shifter[NullaryBuiltin, NullaryBuiltin] = identityShifter
     given Shifter[UnaryBuiltin, UnaryBuiltin] = identityShifter

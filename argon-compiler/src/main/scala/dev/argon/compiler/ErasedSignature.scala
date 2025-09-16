@@ -17,6 +17,6 @@ enum ErasedSignatureType derives CanEqual {
 final case class ImportSpecifier(
   tube: TubeName,
   module: ModulePath,
-  name: Option[IdentifierExpr],
+  name: IdentifierExpr,
   signature: ErasedSignature,
 ) derives CanEqual

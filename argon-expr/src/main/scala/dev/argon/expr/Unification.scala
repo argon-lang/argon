@@ -33,7 +33,7 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
     private given Comparer[Builtin] = autoComparer
     private given Comparer[LocalVar] = autoComparer
     private given Comparer[Var] = autoComparer
-    private given Comparer[ParameterOwner] = autoComparer
+    private given Comparer[ExpressionOwner] = autoComparer
     private given Comparer[Expr.RecordType] = autoComparer
     private given Comparer[Expr.EnumType] = autoComparer
     private given Comparer[RecordFieldLiteral] = autoComparer
@@ -47,6 +47,8 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
     private given Comparer[RecordField] = EqualComparer[RecordField]
     private given Comparer[Enum] = EqualComparer[Enum]
     private given Comparer[EnumVariant] = EqualComparer[EnumVariant]
+    private given Comparer[Trait] = EqualComparer[Trait]
+    private given Comparer[Method] = EqualComparer[Method]
 
     private given Comparer[UniqueIdentifier] = EqualComparer[UniqueIdentifier]
     private given Comparer[NullaryBuiltin] = EqualComparer[NullaryBuiltin]

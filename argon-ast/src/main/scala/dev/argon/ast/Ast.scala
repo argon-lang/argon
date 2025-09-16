@@ -6,15 +6,17 @@ import dev.argon.util.{WithSource, FilePosition, Location}
 sealed trait Stmt
 sealed trait RecordBodyStmt
 sealed trait EnumBodyStmt
+sealed trait TraitBodyStmt
+sealed trait NewTraitObjectBodyStmt
 
 final case class FunctionDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
   purity: Boolean,
-  name: WithSource[Option[IdentifierExpr]],
+  name: WithSource[IdentifierExpr],
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
   body: FunctionBody,
-) extends Stmt with RecordBodyStmt with EnumBodyStmt
+) extends Stmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
 
 final case class VariableDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
@@ -56,16 +58,24 @@ enum EnumVariant extends EnumBodyStmt {
   case Record(record: RecordDeclarationStmt)
 }
 
+final case class TraitDeclarationStmt(
+  modifiers: Seq[WithSource[Modifier]],
+  name: WithSource[IdentifierExpr],
+  parameters: Seq[WithSource[FunctionParameterList]],
+  returnType: Option[WithSource[Expr]],
+  body: Seq[WithSource[TraitBodyStmt]],
+) extends Stmt
+
 final case class MethodDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
   purity: Boolean,
   instanceName: WithSource[Option[IdentifierExpr]],
   instanceType: Option[WithSource[Expr]],
-  name: WithSource[Option[IdentifierExpr]],
+  name: WithSource[IdentifierExpr],
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
   body: Option[FunctionBody],
-) extends Stmt with RecordBodyStmt with EnumBodyStmt
+) extends Stmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
 
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)
@@ -139,6 +149,7 @@ object Expr:
   final case class IntLiteral(i: BigInt) extends Expr
   final case class Is(value: WithSource[Expr], pattern: WithSource[Pattern]) extends Expr
   final case class Match(value: WithSource[Expr], cases: Seq[WithSource[MatchCase]]) extends Expr
+  final case class NewTraitObject(traitExpr: WithSource[Expr], body: Seq[WithSource[NewTraitObjectBodyStmt]]) extends Expr
   final case class RecordLiteral(recordExpr: WithSource[Expr], fields: WithSource[Seq[WithSource[RecordFieldLiteral]]]) extends Expr
   final case class StringLiteral(parts: Seq[StringFragment]) extends Expr
   final case class Summon(t: WithSource[Expr]) extends Expr

@@ -1,7 +1,7 @@
 package dev.argon.backend
 
 import dev.argon.backend.options.OptionValue
-import dev.argon.compiler.{Context, ExternProvider, HasContext}
+import dev.argon.compiler.{Context, ExternProvider, HasContext, UsingContext}
 import dev.argon.tube.{ExternMap, SupportedPlatform}
 import esexpr.{Dictionary, ESExpr}
 import zio.*
@@ -20,6 +20,7 @@ object BackendExternProvider {
     val implementations: Context.ImplementationExterns {
       type TubeMetadata = (Seq[SupportedPlatform], Map[String, ESExpr])
       type ExternFunction = ExternMap
+      type ExternMethod = ExternMap
     }
   }
 
@@ -52,6 +53,17 @@ object BackendExternProvider {
           .traverse { (backendId, loaderInfo) =>
             OptionT(loaderInfo.externLoader.flatMap(loader => loader.getExtern(name)))
               .filter(_.allowFunction)
+              .map(externInfo => backendId -> externInfo.value)
+          }
+          .map { externs => ExternMap(Dictionary(externs.toMap)) }
+          .value
+
+      override def getExternMethod(name: String): Comp[Option[ExternMap]] =
+        loaderInfos
+          .toSeq
+          .traverse { (backendId, loaderInfo) =>
+            OptionT(loaderInfo.externLoader.flatMap(loader => loader.getExtern(name)))
+              .filter(_.allowMethod)
               .map(externInfo => backendId -> externInfo.value)
           }
           .map { externs => ExternMap(Dictionary(externs.toMap)) }

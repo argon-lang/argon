@@ -72,7 +72,7 @@ private[loader] trait LoaderUtils extends UsingContext {
         yield c.ImportSpecifier(
           tube = module.tubeName,
           module = module.path,
-          name = specifier.name.map(decodeIdentifier),
+          name = decodeIdentifier(specifier.name),
           signature = sig
         )
     }
@@ -167,6 +167,22 @@ private[loader] trait LoaderUtils extends UsingContext {
       }
     yield res
 
+  def decodeExpressionOwner(owner: t.ExpressionOwner): Comp[context.DefaultExprContext.ExpressionOwner] =
+    owner match {
+      case t.ExpressionOwner.Func(id) =>
+        elementLoader.getFunction(id).map(context.DefaultExprContext.ExpressionOwner.Func.apply)
+      case t.ExpressionOwner.Rec(id) =>
+        elementLoader.getRecord(id).map(context.DefaultExprContext.ExpressionOwner.Rec.apply)
+      case t.ExpressionOwner.Enum(id) =>
+        elementLoader.getEnum(id).map(context.DefaultExprContext.ExpressionOwner.Enum.apply)
+      case t.ExpressionOwner.Trait(id) =>
+        elementLoader.getTrait(id).map(context.DefaultExprContext.ExpressionOwner.Trait.apply)
+      case t.ExpressionOwner.EnumVariant(id) =>
+        elementLoader.getEnumVariant(id).map(context.DefaultExprContext.ExpressionOwner.EnumVariant.apply)
+      case t.ExpressionOwner.Method(id) =>
+        elementLoader.getMethod(id).map(context.DefaultExprContext.ExpressionOwner.Method.apply)
+    }
+
   private final class ExprDecoder(
     knownVars: Ref[Map[BigInt, context.DefaultExprContext.LocalVar]]
   ) {
@@ -198,16 +214,7 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case paramVar: t.Var.ParameterVar =>
           for
-            contextOwner <- paramVar.owner match {
-              case t.ParameterOwner.Func(id) =>
-                elementLoader.getFunction(id).map(context.DefaultExprContext.ParameterOwner.Func.apply)
-              case t.ParameterOwner.Rec(id) =>
-                elementLoader.getRecord(id).map(context.DefaultExprContext.ParameterOwner.Rec.apply)
-              case t.ParameterOwner.Enum(id) =>
-                elementLoader.getEnum(id).map(context.DefaultExprContext.ParameterOwner.Enum.apply)
-              case t.ParameterOwner.EnumVariant(id) =>
-                elementLoader.getEnumVariant(id).map(context.DefaultExprContext.ParameterOwner.EnumVariant.apply)
-            }
+            contextOwner <- decodeExpressionOwner(paramVar.owner)
             paramType <- decodeExpr(paramVar.varType)
           yield context.DefaultExprContext.ParameterVar(
             owner = contextOwner,
@@ -436,6 +443,9 @@ private[loader] trait LoaderUtils extends UsingContext {
             result = tailExpr.lastOption.getOrElse(headExpr),
           )
 
+        case Expr.TraitType(traitType) =>
+          decodeTraitType(traitType)
+
         case Expr.Tuple(items) =>
           for
             decodedItems <- ZIO.foreach(items)(expr)
@@ -522,6 +532,15 @@ private[loader] trait LoaderUtils extends UsingContext {
         e <- elementLoader.getEnum(enumType.id)
         args <- ZIO.foreach(enumType.args)(expr)
       yield ArExpr.EnumType(e, args)
+
+    private def decodeTraitType(traitType: t.TraitType): Comp[ArExpr.TraitType] =
+      for
+        trt <- elementLoader.getTrait(traitType.id)
+        decodedArgs <- ZIO.foreach(traitType.args)(expr)
+      yield ArExpr.TraitType(
+        t = trt,
+        args = decodedArgs,
+      )
 
     private def decodeRecordLiteralField(fieldLit: t.RecordFieldLiteral): Comp[context.DefaultExprContext.RecordFieldLiteral] =
       for

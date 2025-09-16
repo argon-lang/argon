@@ -25,7 +25,7 @@ private[source] object SourceEnum {
       override def signature: Comp[FunctionSignature] = sigCache.get(
         scope.toScope.flatMap { scope =>
           val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ParameterOwner.Enum(this))(decl.parameters, rt)
+          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Enum(this))(decl.parameters, rt)
         }
       )
 
@@ -64,7 +64,7 @@ private[source] object SourceEnum {
                         (record.parameters, record.returnType)
                     }
                     
-                    val paramOwner = context.TRExprContext.ParameterOwner.EnumVariant(this)
+                    val paramOwner = context.TRExprContext.ExpressionOwner.EnumVariant(this)
 
                     returnType match {
                       case Some(returnTypeExpr) =>
@@ -79,7 +79,7 @@ private[source] object SourceEnum {
                               returnType = context.DefaultExprContext.Expr.EnumType(
                                 owningEnum,
                                 SignatureParameter.getParameterVariables(
-                                  context.DefaultExprContext.ParameterOwner.EnumVariant(this),
+                                  context.DefaultExprContext.ExpressionOwner.EnumVariant(this),
                                   sig.parameters.take(decl.parameters.size)
                                 )
                                   .map(context.DefaultExprContext.Expr.Variable.apply)
@@ -93,7 +93,7 @@ private[source] object SourceEnum {
                     fieldsCache.get(
                       for
                         sig <- signature
-                        scope2 = context.Scopes.ParameterScope(context.TRExprContext.ParameterOwner.EnumVariant(this), scope, sig.parameters)
+                        scope2 = context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.EnumVariant(this), scope, sig.parameters)
                         
                         body = variantDecl match {
                           case _: EnumVariant.Constructor => Seq.empty

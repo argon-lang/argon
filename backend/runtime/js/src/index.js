@@ -14,6 +14,13 @@ export class FunctionTypeErased {
 
 export const erasedType = {};
 
+export class UnreachableError extends Error {
+    constructor() {
+        super();
+    }
+}
+
+
 function isSameType(a, b) {
     if(a === b) {
         return true;
@@ -197,9 +204,22 @@ function createEnumVariant(proto, variant) {
     return variantClass;
 }
 
-export class UnreachableError extends Error {
-    constructor() {
-        super();
+export function createTraitType(traitInfo) {
+    const traitType = function() {};
+
+    traitType.methods = Object.create(null);
+    for(const [name, methodImpl] of Object.entries(traitInfo.methods)) {
+        const sym = Symbol()
+        traitType.methods[name] = sym;
+        if(methodImpl !== null) {
+            traitType.prototype[sym] = methodImpl;
+        }
     }
+
+    if(traitInfo.typeParameterCount === 0) {
+        traitInfo.specialize = specialize();
+    }
+
+    return traitType;
 }
 

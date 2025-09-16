@@ -6,6 +6,7 @@ enum AttemptedOverload {
   case RecordField(r: ArRecordC, field: RecordFieldC)
   case Enum(e: ArEnumC)
   case EnumVariant(variant: EnumVariantC)
+  case Trait(t: ArTraitC)
 }
 
 final case class AttemptedOverloadWithErrors(

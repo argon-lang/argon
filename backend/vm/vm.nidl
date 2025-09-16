@@ -72,6 +72,23 @@ enum tube-file-entry {
         variant-id: nat;
         name: identifier;
     },
+
+    @esexpr:(inline-value)
+    trait-definition {
+        definition: trait-definition;
+    },
+
+    trait-reference {
+        trait-id: nat;
+        import: import-specifier;
+    },
+
+    trait-method-reference {
+        method-id: nat;
+        trait-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
 }
 
 
@@ -205,12 +222,7 @@ enum import-specifier {
     @esexpr:(constructor "import-global")
     global {
         module-id: nat;
-
-        @esexpr: (keyword)
-        @esexpr: (optional)
-        name: optional-field[identifier];
-
-        @esexpr: (keyword)
+        name: identifier;
         sig: erased-signature;
     },
 
@@ -320,6 +332,43 @@ record enum-variant-definition {
 
     @esexpr:(vararg)
     fields: list[record-field-definition];
+}
+
+@esexpr:(derive-codec)
+record trait-definition {
+    trait-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    methods: list[method-definition];
+}
+
+@esexpr:(derive-codec)
+record method-definition {
+    name: identifier;
+    erased-signature: erased-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    abstract: bool;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    implementation: optional-field[function-implementation];
+}
+
+@esexpr:(derive-codec)
+enum method-owner {
+    by-trait {
+        id: nat;
+    },
+    by-trait-object,
 }
 
 

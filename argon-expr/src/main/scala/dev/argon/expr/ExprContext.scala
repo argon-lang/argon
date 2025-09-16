@@ -37,15 +37,17 @@ trait ExprContext extends ConditionalVars {
       }
   }
   
-  enum ParameterOwner derives CanEqual {
+  enum ExpressionOwner derives CanEqual {
     case Func(f: Function)
     case Rec(r: Record)
     case Enum(e: ExprContext.this.Enum)
+    case Trait(t: ExprContext.this.Trait)
     case EnumVariant(v: ExprContext.this.EnumVariant)
+    case Method(m: ExprContext.this.Method)
   }
   
   final case class ParameterVar(
-    owner: ParameterOwner,
+    owner: ExpressionOwner,
     parameterIndex: Int,
     varType: Expr,
     name: Option[IdentifierExpr],
@@ -81,6 +83,12 @@ trait ExprContext extends ConditionalVars {
 
   type EnumVariant
   given enumVariantCanEqual: CanEqual[EnumVariant, EnumVariant] = deferred
+
+  type Trait
+  given traitCanEqual: CanEqual[Trait, Trait] = deferred
+
+  type Method
+  given methodCanEqual: CanEqual[Method, Method] = deferred
 
   type Hole
   given holeCanEqual: CanEqual[Hole, Hole] = deferred
@@ -132,6 +140,7 @@ trait ExprContext extends ConditionalVars {
     case RecordLiteral(record: Expr.RecordType, fields: Seq[RecordFieldLiteral])
     case Sequence(stmts: Seq[Expr], result: Expr)
     case StringLiteral(s: String)
+    case TraitType(t: Trait, args: Seq[Expr])
     case Tuple(items: Seq[Expr])
     case TupleElement(index: Int, tuple: Expr)
     case TypeN(n: Expr)

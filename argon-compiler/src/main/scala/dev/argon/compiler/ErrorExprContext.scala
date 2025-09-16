@@ -13,4 +13,7 @@ object ErrorExprContext extends ExprContext with ExprContextWithHoles {
 
   override type Enum = ArEnumC
   override type EnumVariant = EnumVariantC
+
+  override type Trait = ArTraitC
+  override type Method = ArMethodC
 }

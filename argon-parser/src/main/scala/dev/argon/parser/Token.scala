@@ -62,6 +62,8 @@ private[parser] object Token {
   case object KW_MODULE extends TokenWithCategory(TokenCategory.KW_MODULE)
   case object KW_RECORD extends TokenWithCategory(TokenCategory.KW_RECORD)
   case object KW_ENUM extends TokenWithCategory(TokenCategory.KW_ENUM)
+  case object KW_TRAIT extends TokenWithCategory(TokenCategory.KW_TRAIT)
+  case object KW_NEW extends TokenWithCategory(TokenCategory.KW_NEW)
   case object KW_WITH extends TokenWithCategory(TokenCategory.KW_WITH)
   case object KW_TRUE extends TokenWithCategory(TokenCategory.KW_TRUE)
   case object KW_FALSE extends TokenWithCategory(TokenCategory.KW_FALSE)

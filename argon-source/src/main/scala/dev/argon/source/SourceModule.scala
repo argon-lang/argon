@@ -17,7 +17,7 @@ private[source] object SourceModule {
   (using TubeImporter & HasContext[ctx.type], ExternProvider & HasContext[ctx.type])
   : ctx.Comp[ArModuleC & HasContext[ctx.type]] =
     for
-      exportMapCell <- MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]]
+      exportMapCell <- MemoCell.make[ctx.Env, ctx.Error, Map[IdentifierExpr, Seq[ModuleExportC[ctx.type]]]]
       moduleDef <- sourceCode.parsed
     yield new ArModuleC {
       override val context: ctx.type = ctx
@@ -26,17 +26,17 @@ private[source] object SourceModule {
       override def tubeName: TubeName = tn
       override def path: ModulePath = ModulePath(moduleDef.modulePath)
 
-      override def allExports(reexportingModules: Set[ModuleName]): Comp[Map[Option[IdentifierExpr], Seq[ModuleExport]]] =
+      override def allExports(reexportingModules: Set[ModuleName]): Comp[Map[IdentifierExpr, Seq[ModuleExport]]] =
         exportMapCell.get(loadExports(reexportingModules))
 
-      override def getExports(reexportingModules: Set[ModuleName])(id: Option[IdentifierExpr]): Comp[Option[Seq[ModuleExport]]] =
+      override def getExports(reexportingModules: Set[ModuleName])(id: IdentifierExpr): Comp[Option[Seq[ModuleExport]]] =
         allExports(reexportingModules).map(_.get(id))
 
-      private def loadExports(reexportingModules: Set[ModuleName]): Comp[Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]] =
+      private def loadExports(reexportingModules: Set[ModuleName]): Comp[Map[IdentifierExpr, Seq[ModuleExportC[ctx.type]]]] =
         if reexportingModules.contains(ModuleName(tubeName, path)) then
           ???
         else
-          ZIO.foldLeft(moduleDef.stmts)((GlobalScopeBuilder.empty(this), Map.empty[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]])) {
+          ZIO.foldLeft(moduleDef.stmts)((GlobalScopeBuilder.empty(this), Map.empty[IdentifierExpr, Seq[ModuleExportC[ctx.type]]])) {
             case ((scope, acc), stmt) =>
               processStmt(reexportingModules)(stmt, scope)
                 .map { (scope, defs) =>
@@ -45,7 +45,7 @@ private[source] object SourceModule {
           }
             .map { (_, acc) => acc }
 
-      private def processStmt(reexportingModules: Set[ModuleName])(stmt: WithSource[ast.Stmt], scope: GlobalScopeBuilder): Comp[(GlobalScopeBuilder, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]])] =
+      private def processStmt(reexportingModules: Set[ModuleName])(stmt: WithSource[ast.Stmt], scope: GlobalScopeBuilder): Comp[(GlobalScopeBuilder, Map[IdentifierExpr, Seq[ModuleExportC[ctx.type]]])] =
         stmt.value match {
           case importStmt: ast.ImportStmt =>
             ZIO.succeed((scope.addImport(WithLocation(importStmt, stmt.location)), Map.empty))
@@ -57,25 +57,29 @@ private[source] object SourceModule {
 
           case recordDecl: ast.RecordDeclarationStmt =>
             for
-              r <- SourceRecord.make(context)(scope, createImportFactory(Some(recordDecl.name.value)))(recordDecl)
-            yield (scope, Map(Some(recordDecl.name.value) -> Seq(ModuleExportC.Record(r))))
+              r <- SourceRecord.make(context)(scope, createImportFactory(recordDecl.name.value))(recordDecl)
+            yield (scope, Map(recordDecl.name.value -> Seq(ModuleExportC.Record(r))))
 
           case enumDecl: ast.EnumDeclarationStmt =>
             for
-              e <- SourceEnum.make(context)(scope, createImportFactory(Some(enumDecl.name.value)))(enumDecl)
-            yield (scope, Map(Some(enumDecl.name.value) -> Seq(ModuleExportC.Enum(e))))
-            
+              e <- SourceEnum.make(context)(scope, createImportFactory(enumDecl.name.value))(enumDecl)
+            yield (scope, Map(enumDecl.name.value -> Seq(ModuleExportC.Enum(e))))
+
+          case traitDecl: ast.TraitDeclarationStmt =>
+            for
+              t <- SourceTrait.make(context)(scope, createImportFactory(traitDecl.name.value))(traitDecl)
+            yield (scope, Map(traitDecl.name.value -> Seq(ModuleExportC.Trait(t))))
             
           case ast.ExportStmt(fromImport) =>
             ImportUtil.getModuleExports(context)(reexportingModules + ModuleName(tubeName, path))(tubeName, path)(fromImport)
-              .map(exports => (scope, exports.map((k, v) => Some(k) -> v.map(ModuleExportC.Exported.apply))))
+              .map(exports => (scope, exports.map((k, v) => k -> v.map(ModuleExportC.Exported.apply))))
 
           case _ =>
             scala.Console.err.println(stmt.value.getClass)
             ???
         }
 
-      private def createImportFactory(name: Option[IdentifierExpr]): ImportFactory =
+      private def createImportFactory(name: IdentifierExpr): ImportFactory =
         new ImportFactory {
           override def getImportSpecifier(sig: ErasedSignature): ImportSpecifier =
             ImportSpecifier(

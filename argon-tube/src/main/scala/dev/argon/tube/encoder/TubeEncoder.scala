@@ -6,7 +6,7 @@ import zio.*
 import zio.stream.*
 import zio.stm.{TMap, ZSTM}
 import dev.argon.ast
-import dev.argon.compiler.{HasContext, SignatureEraser, UsingContext}
+import dev.argon.compiler.{HasContext, MethodOwner, SignatureEraser, UsingContext}
 import esexpr.Dictionary
 
 
@@ -104,7 +104,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           sig <- encodeErasedSignature(specifier.signature)
         yield ImportSpecifier.Global(
           moduleId = moduleId,
-          name = specifier.name.map(encodeIdentifier),
+          name = encodeIdentifier(specifier.name),
           sig = sig
         )
 
@@ -168,7 +168,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 for
                   exps <- ZIO.foreach(items)(emitModuleExport)
                 yield ExportGroup(
-                  name = name.map(encodeIdentifier),
+                  name = encodeIdentifier(name),
                   exports = exps,
                 )
               }
@@ -203,7 +203,15 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               sig <- SignatureEraser(context).eraseSignature(sig)
               sig <- encodeErasedSignature(sig)
             yield dev.argon.tube.ModuleExport.Enum(id, sig)
-            
+
+          case c.ModuleExportC.Trait(t) =>
+            for
+              id <- getTraitId(t)
+              sig <- t.signature
+              sig <- SignatureEraser(context).eraseSignature(sig)
+              sig <- encodeErasedSignature(sig)
+            yield dev.argon.tube.ModuleExport.Trait(id, sig)
+
 
           case c.ModuleExportC.Exported(exp) =>
             for
@@ -383,6 +391,96 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           name = encodeIdentifier(v.name),
         )
 
+      override def emitTrait(t: state.ArTrait, id: BigInt): Comp[TubeFileEntry] =
+        importOrDefine(t, t.importSpecifier)(emitTraitDef(id), emitTraitRef(id))
+
+
+      private def emitTraitDef(id: BigInt)(t: ArTrait): Comp[TubeFileEntry] =
+        for
+          sig <- t.signature
+          sig <- emitFunctionSignature(sig)
+
+          importSpec <- t.importSpecifier
+          importSpec <- encodeImportSpecifier(importSpec)
+
+          methods <- t.methods
+          methods <- ZIO.foreach(methods)(emitMethodDef)
+
+        yield TubeFileEntry.TraitDefinition(
+          TraitDefinition(
+            traitId = id,
+            `import` = importSpec,
+            signature = sig,
+            methods = methods,
+          )
+        )
+
+      private def emitTraitRef(id: BigInt)(specifier: ImportSpecifier): Comp[TubeFileEntry] =
+        ZIO.succeed(TubeFileEntry.TraitReference(
+          traitId = id,
+          `import` = specifier,
+        ))
+
+      override def emitMethod(m: ArMethod, id: BigInt): Comp[TubeFileEntry] =
+        emitMethodRef(id)(m)
+
+      private def emitMethodDef(method: ArMethod): Comp[MethodDefinition] =
+        for
+          sig <- method.signature
+          funcSig <- emitFunctionSignature(sig)
+
+          erasedSig <- SignatureEraser(context).eraseSignature(sig)
+          erasedSig <- encodeErasedSignature(erasedSig)
+
+          impl <- ZIO.foreach(method.implementation) { impl =>
+            impl.flatMap {
+              case _: context.implementations.MethodImplementation.Abstract.type =>
+                ZIO.succeed(MethodImplementation.Abstract())
+              
+              case context.implementations.MethodImplementation.Expr(e) =>
+                for
+                  e <- emitExpr(e)
+                yield MethodImplementation.Expr(e)
+              case context.implementations.MethodImplementation.Extern(name) =>
+                ZIO.succeed(MethodImplementation.Extern(name))
+            }
+          }
+
+        yield MethodDefinition(
+          name = encodeIdentifier(method.name),
+          erasedSignature = erasedSig,
+          `inline` = method.isInline,
+          erased = method.isErased,
+          witness = method.isWitness,
+          slot = method.slot match {
+            case c.MethodSlot.Abstract => MethodSlot.Abstract()
+            case c.MethodSlot.Virtual => MethodSlot.Virtual()
+            case c.MethodSlot.Override => MethodSlot.Override()
+            case c.MethodSlot.Final => MethodSlot.Final()
+            case c.MethodSlot.FinalOverride => MethodSlot.FinalOverride()
+          },
+          effects = encodeEffectInfo(method.effects),
+          signature = funcSig,
+          implementation = impl,
+        )
+
+      private def emitMethodRef(id: BigInt)(m: ArMethod): Comp[TubeFileEntry] = {
+        for
+          traitId <- m.owner match {
+            case MethodOwner.ByTrait(t) => getTraitId(t)
+          }
+          sig <- m.signature
+          sig <- SignatureEraser(context).eraseSignature(sig)
+          sig <- encodeErasedSignature(sig)
+        yield TubeFileEntry.TraitMethodReference(
+          methodId = id,
+          traitId = traitId,
+          name = encodeIdentifier(m.name),
+          signature = sig,
+        )
+      }
+
+
       private def emitFunctionSignature(sig: FunctionSignature): Comp[dev.argon.tube.FunctionSignature] =
         for
           params <- ZIO.foreach(sig.parameters)(emitSignatureParam)
@@ -426,6 +524,40 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           ).expr(e)
         yield res
 
+
+      private def encodeExpressionOwner(owner: context.DefaultExprContext.ExpressionOwner): Comp[ExpressionOwner] =
+        owner match {
+          case context.DefaultExprContext.ExpressionOwner.Func(f) =>
+            for
+              id <- getFunctionId(f)
+            yield ExpressionOwner.Func(id)
+
+          case context.DefaultExprContext.ExpressionOwner.Rec(r) =>
+            for
+              id <- getRecordId(r)
+            yield ExpressionOwner.Rec(id)
+
+          case context.DefaultExprContext.ExpressionOwner.Enum(e) =>
+            for
+              id <- getEnumId(e)
+            yield ExpressionOwner.Enum(id)
+
+          case context.DefaultExprContext.ExpressionOwner.Trait(t) =>
+            for
+              id <- getTraitId(t)
+            yield ExpressionOwner.Trait(id)
+
+          case context.DefaultExprContext.ExpressionOwner.Method(m) =>
+            for
+              id <- getMethodId(m)
+            yield ExpressionOwner.Method(id)
+
+          case context.DefaultExprContext.ExpressionOwner.EnumVariant(v) =>
+            for
+              id <- getEnumVariantId(v)
+            yield ExpressionOwner.EnumVariant(id)
+        }
+
       private final class ExprEmitter(
         knownVars: Ref[Map[context.DefaultExprContext.LocalVar, Int]]
       ) {
@@ -458,27 +590,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case v: context.DefaultExprContext.ParameterVar =>
               for
-                owner <- v.owner match {
-                  case context.DefaultExprContext.ParameterOwner.Func(f) =>
-                    for
-                      id <- getFunctionId(f)
-                    yield ParameterOwner.Func(id)
-
-                  case context.DefaultExprContext.ParameterOwner.Rec(r) =>
-                    for
-                      id <- getRecordId(r)
-                    yield ParameterOwner.Rec(id)
-
-                  case context.DefaultExprContext.ParameterOwner.Enum(e) =>
-                    for
-                      id <- getEnumId(e)
-                    yield ParameterOwner.Enum(id)
-
-                  case context.DefaultExprContext.ParameterOwner.EnumVariant(v) =>
-                    for
-                      id <- getEnumVariantId(v)
-                    yield ParameterOwner.EnumVariant(id)
-                }
+                owner <- encodeExpressionOwner(v.owner)
 
                 varType <- expr(v.varType)
 
@@ -713,6 +825,9 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case ArExpr.StringLiteral(s) =>
               ZIO.succeed(Expr.StringLiteral(s))
 
+            case tt: ArExpr.TraitType =>
+              encodeTraitType(tt).map(Expr.TraitType.apply)
+
             case ArExpr.Tuple(items) =>
               for
                 items <- ZIO.foreach(items)(expr)
@@ -798,6 +913,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             recordId <- getRecordId(rt.record)
             args <- ZIO.foreach(rt.args)(expr)
           yield RecordType(recordId, args)
+
+        private def encodeTraitType(rt: ArExpr.TraitType): Comp[TraitType] =
+          for
+            traitId <- getTraitId(rt.t)
+            args <- ZIO.foreach(rt.args)(expr)
+          yield TraitType(traitId, args)
 
         private def encodeRecordFieldLiteral(field: context.DefaultExprContext.RecordFieldLiteral): Comp[RecordFieldLiteral] =
           for
