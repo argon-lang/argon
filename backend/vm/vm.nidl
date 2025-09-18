@@ -226,8 +226,8 @@ enum import-specifier {
         sig: erased-signature;
     },
 
-    @esexpr:(constructor "import-synthetic-nested")
-    synthetic-nested {
+    @esexpr:(constructor "import-local")
+    local {
         parent: import-specifier;
         index: nat;
     },

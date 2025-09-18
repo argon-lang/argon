@@ -2,14 +2,15 @@ package dev.argon.vm.encoder
 
 import dev.argon.compiler as c
 import dev.argon.tube.loader.TubeFormatException
-import dev.argon.tube.encoder.{SyntheticImport, TubeEncoderBase}
+import dev.argon.tube.encoder.TubeEncoderBase
 import dev.argon.vm.*
 import zio.*
 import zio.stream.*
 import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
 import dev.argon.compiler.{ArgonEvaluator, HasContext, MethodOwner, SignatureEraser, UsingContext}
-import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin, ValueUtil}
+import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, Substitution, UnaryBuiltin, ValueUtil}
+import dev.argon.util.UniqueIdentifier
 import dev.argon.vm.VmType.Builtin
 import sourcecode.Text.generate
 
@@ -18,7 +19,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
   override def createEmitter(state: EncodeState): state.Emitter =
     new state.Emitter {
       import state.*
-      import context.DefaultExprContext.{Expr as ArExpr, Pattern as ArPattern, ExpressionOwner}
+      import context.DefaultExprContext.{Expr as ArExpr, Pattern as ArPattern, ExpressionOwner, Var}
       val ctx: context.type = context
   
       def emitTube: Comp[Unit] =
@@ -102,9 +103,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             Identifier.Update(encodeIdentifier(inner))
         }
 
-      private def encodeImportSpecifier(specifier: c.ImportSpecifier | SyntheticImport): UIO[ImportSpecifier] =
+      private def encodeImportSpecifier(specifier: c.ImportSpecifier): UIO[ImportSpecifier] =
         specifier match {
-          case specifier: c.ImportSpecifier =>
+          case specifier: c.ImportSpecifier.Global =>
             for
               moduleId <- getModuleId(c.ModuleName(specifier.tube, specifier.module))
               sig <- encodeErasedSignature(specifier.signature)
@@ -114,10 +115,11 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               sig = sig
             )
 
-          case specifier: SyntheticImport =>
+          case specifier: c.ImportSpecifier.Local =>
             for
               parent <- encodeImportSpecifier(specifier.parent)
-            yield ImportSpecifier.SyntheticNested(parent, specifier.index)
+              id <- getLocalImportId(specifier)
+            yield ImportSpecifier.Local(parent, id)
         }
 
       private def encodeErasedSignature(sig: c.ErasedSignature): UIO[ErasedSignature] =
@@ -210,7 +212,14 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
       (emitDef: A => Comp[TubeFileEntry], emitRef: ImportSpecifier => Comp[TubeFileEntry])
       : Comp[TubeFileEntry] =
         makeSpecifier.flatMap { specifier =>
-          if specifier.tube == tube.name then
+          def getTubeFromSpecifier(specifier: c.ImportSpecifier): c.TubeName =
+            specifier match {
+              case c.ImportSpecifier.Global(name, _, _, _) => name
+              case c.ImportSpecifier.Local(parent, _) => getTubeFromSpecifier(parent)
+            }
+            
+            
+          if getTubeFromSpecifier(specifier) == tube.name then
             emitDef(value)
           else
             encodeImportSpecifier(specifier).flatMap(emitRef)
@@ -258,7 +267,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           )
         )
 
-      private def emitSyntheticFunctionDef(sig: FunctionSignatureWithMapping, id: BigInt, importSpec: c.ImportSpecifier | SyntheticImport, body: ArExpr): Comp[TubeFileEntry] =
+      private def emitSyntheticFunctionDef(sig: FunctionSignatureWithMapping, id: BigInt, importSpec: c.ImportSpecifier, body: ArExpr): Comp[TubeFileEntry] =
         for
           block <- emitFunctionBody(body, sig, importSpec)
           importSpec <- encodeImportSpecifier(importSpec)
@@ -453,8 +462,14 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   ExpressionOwner.Method(m),
                   sig.parameters
                 )
+                
                 for
-                  importSpec <- getSyntheticMethodImport(m)
+                  parentImportSpec <- m.owner match {
+                    case MethodOwner.ByTrait(t) => t.importSpecifier
+                  }
+                  
+                  importSpec = c.ImportSpecifier.Local(parentImportSpec, m.id)
+                  
                   block <- emitFunctionBody(e, encSig, importSpec)
                   importSpec <- encodeImportSpecifier(importSpec)
                 yield Some(FunctionImplementation.VmIr(block))
@@ -593,7 +608,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         case TypeParam(tp: VmType)
       }
 
-      private def emitFunctionBody(e: ArExpr, funcSig: FunctionSignatureWithMapping, funcImport: c.ImportSpecifier | SyntheticImport): Comp[FunctionBody] =
+      private def emitFunctionBody(e: ArExpr, funcSig: FunctionSignatureWithMapping, funcImport: c.ImportSpecifier): Comp[FunctionBody] =
         for
           varOffset <- TRef.makeCommit(funcSig.sig.parameters.size)
           knownVars <- TMap.fromIterable[context.DefaultExprContext.Var, VariableRealization](
@@ -601,7 +616,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               funcSig.typeParamMapping.map { (param, index) => param -> VariableRealization.TypeParam(VmType.TypeParameter(index)) }
           ).commit
           instructions <- TRef.make(Seq.empty[Instruction]).commit
-          nextSyntheticIndex <- TRef.makeCommit[BigInt](0)
 
           capturedVars = CaptureScanner(context.DefaultExprContext)(e)
 
@@ -725,7 +739,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         knownVars: TMap[context.DefaultExprContext.Var, VariableRealization],
         instructions: TRef[Seq[Instruction]],
         varInstructions: TRef[Seq[Instruction]],
-        parentImportSpecifier: c.ImportSpecifier | SyntheticImport,
+        parentImportSpecifier: c.ImportSpecifier,
         capturedVars: Set[context.DefaultExprContext.Var],
       ) extends TypeEmitterBase {
         private def nestedScope: Comp[ExprEmitter] =
@@ -1069,60 +1083,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case ArExpr.Lambda(param, returnType, body) =>
               import context.DefaultExprContext.Var
 
-              def captureVariables(vars: Seq[Var]): Comp[(Seq[VmType], Seq[Capture], FunctionSignatureWithMapping)] =
-                FunctionSignatureBuilder.make
-                  .tap { sb =>
-                    ZIO.foreachDiscard(vars)(sb.addParameter) *>
-                      sb.addParameter(param)
-                  }
-                  .flatMap { sb =>
-                    for
-                      sig <- sb.finish(returnType)
-                      typeArgs <- Ref.make(Seq.empty[VmType])
-                      args <- Ref.make(Seq.empty[Capture])
-
-                      // Not including param here because itis not a capture
-                      _ <- ZIO.foreachDiscard(sig.argConsumers.zip(vars)) {
-                        case (ArgConsumer.Erased, _) => ZIO.unit
-                        case (ArgConsumer.TypeArg, v) =>
-                          knownVars.get(v).commit.flatMap {
-                            case Some(VariableRealization.TypeParam(tp)) =>
-                              typeArgs.update(_ :+ tp)
-
-                            case _ =>
-                              ZIO.fail(TubeFormatException("Capture type mismatch"))
-                          }
-
-                        case (ArgConsumer.Arg, v) =>
-                          knownVars.get(v).commit.flatMap {
-                            case Some(VariableRealization.Reg(r)) =>
-                              val capture =
-                                if v.isMutable then
-                                  Capture.Mutable(r)
-                                else
-                                  Capture.Value(r)
-
-                              args.update(_ :+ capture)
-
-                            case _ =>
-                              ZIO.fail(TubeFormatException("Capture type mismatch"))
-                          }
-
-                      }
-
-                      typeArgs <- typeArgs.get
-                      args <- args.get
-                    yield (typeArgs, args, sig)
-                  }
-
               intoRegister(e, output) { r =>
                 for
+                  funcId <- UniqueIdentifier.make
+                  synImportSpec: c.ImportSpecifier.Local = c.ImportSpecifier.Local(parentImportSpecifier, funcId)
                   synId <- newSyntheticFunctionId
                   freeVars = FreeVariableScanner(context.DefaultExprContext)(e).toSeq
-                  (typeArgs, args, sig) <- captureVariables(freeVars)
-
-
-                  synImportSpec <- newSyntheticImport(parentImportSpecifier)
+                  (typeArgs, args, sig) <- captureVariables(freeVars)(_.addParameter(param), _.finish(returnType))
 
                   _ <- state.emitEntryBuilder(emitSyntheticFunctionDef(sig, synId, synImportSpec, body))
                   _ <-
@@ -1402,7 +1369,64 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case _ =>
               emit(Instruction.Unreachable())
           }
+          
+        private final case class CaptureSig(
+          typeArgs: Seq[VmType],
+          args: Seq[Capture],
+          sig: FunctionSignatureWithMapping,
+        )
 
+        private def captureVariables(
+          vars: Seq[Var],
+        )(
+          buildRest: FunctionSignatureBuilder => Comp[Unit],
+          finish: FunctionSignatureBuilder => Comp[FunctionSignatureWithMapping],
+        ): Comp[(Seq[VmType], Seq[Capture], FunctionSignatureWithMapping)] =
+          FunctionSignatureBuilder.make
+            .tap { sb =>
+              ZIO.foreachDiscard(vars)(sb.addParameter) *>
+                buildRest(sb)
+            }
+            .flatMap { sb =>
+              for
+                sig <- finish(sb)
+                typeArgs <- Ref.make(Seq.empty[VmType])
+                args <- Ref.make(Seq.empty[Capture])
+
+                // This will drop any consumers after the args
+                _ <- ZIO.foreachDiscard(sig.argConsumers.zip(vars)) {
+                  case (ArgConsumer.Erased, _) => ZIO.unit
+                  case (ArgConsumer.TypeArg, v) =>
+                    knownVars.get(v).commit.flatMap {
+                      case Some(VariableRealization.TypeParam(tp)) =>
+                        typeArgs.update(_ :+ tp)
+
+                      case _ =>
+                        ZIO.fail(TubeFormatException("Capture type mismatch"))
+                    }
+
+                  case (ArgConsumer.Arg, v) =>
+                    knownVars.get(v).commit.flatMap {
+                      case Some(VariableRealization.Reg(r)) =>
+                        val capture =
+                          if v.isMutable then
+                            Capture.Mutable(r)
+                          else
+                            Capture.Value(r)
+
+                        args.update(_ :+ capture)
+
+                      case _ =>
+                        ZIO.fail(TubeFormatException("Capture type mismatch"))
+                    }
+
+                }
+
+                typeArgs <- typeArgs.get
+                args <- args.get
+              yield (typeArgs, args, sig)
+            }
+        
         override protected def fallbackTypeExpr(t: ArExpr): Comp[VmType] =
           expr(t, ExprOutput.AnyRegister).map { r =>
             VmType.OfTypeInfo(r)

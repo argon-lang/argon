@@ -1,13 +1,13 @@
 package dev.argon.tube.loader
 
-import dev.argon.tube as t
+import dev.argon.{tube, tube as t}
 import dev.argon.compiler.*
 import dev.argon.util.{*, given}
 import zio.*
 import zio.stream.*
 import zio.stm.*
 import dev.argon.ast.IdentifierExpr
-import dev.argon.tube.SupportedPlatform
+import dev.argon.tube.{ImportSpecifier, SupportedPlatform}
 import esexpr.ESExpr
 
 private[loader] object TubeDeserialized {
@@ -40,6 +40,10 @@ private[loader] object TubeDeserialized {
 
         traitCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArTraitC & HasContext[ctx.type]]
         methodCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArMethodC & HasContext[ctx.type]]
+
+        localImportIds <- MemoCacheStore.make[ctx.Env, ctx.Error, t.ImportSpecifier.Local, UniqueIdentifier]
+        localImports <- TMap.empty[t.ImportSpecifier.Local, ModuleExportC[ctx.type]].commit
+
       yield new ElementLoader with LoaderUtils {
         override val context: ctx.type = ctx
         override protected def elementLoader: ElementLoader & HasContext[context.type] = this
@@ -230,8 +234,23 @@ private[loader] object TubeDeserialized {
                     exp.importSpecifier.map { _ == importSpec2 }
                   }
                   .runHead
-              yield exp.get
+              yield exp.getOrElse { ??? }
+
+            case importSpec: t.ImportSpecifier.Local =>
+              resolveLocalImport(importSpec)
+                .map { exp =>
+                  get.lift(exp).getOrElse { ??? }
+                }
           }
+
+        override def getLocalImportId(localImport: ImportSpecifier.Local): Comp[UniqueIdentifier] =
+          localImportIds.usingCreate(localImport) { _ => UniqueIdentifier.make }
+
+        override def recordLocalImport(localImport: tube.ImportSpecifier.Local, moduleExport: ModuleExport): Comp[Unit] =
+          localImports.putIfAbsent(localImport, moduleExport).commit
+
+        override def resolveLocalImport(localImport: tube.ImportSpecifier.Local): Comp[ModuleExport] =
+          localImports.get(localImport).commit.map { _.getOrElse { ??? } }
 
         private def getExportFrom[A](get: PartialFunction[ModuleExport, A])(exp: ModuleExport): Option[A] =
           exp match {
@@ -337,7 +356,7 @@ private[loader] object TubeDeserialized {
 
             case methodRef: t.TubeFileEntry.TraitMethodReference =>
               ZChannel.fromZIO(state.methods.put(methodRef.methodId, methodRef).commit) *> iter(state)
-              
+
           },
           empty = ZChannel.fromZIO(createTube(metadata, state)),
         )

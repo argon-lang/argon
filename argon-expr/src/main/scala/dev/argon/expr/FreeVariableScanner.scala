@@ -7,10 +7,10 @@ import dev.argon.util.{*, given}
 import cats.data.State
 
 object FreeVariableScanner {
-  def apply(ec: ExprContext { type Hole = Nothing })(expr: ec.Expr): Set[ec.Var] =
+  def apply(ec: ExprContext { type Hole = Nothing })(expr: ec.Expr): Seq[ec.Var] =
     import ec.*
 
-    final case class ScanState(seenVars: Set[ec.Var], declVars: Set[ec.Var])
+    final case class ScanState(seenVars: Set[ec.Var], freeVars: Seq[ec.Var])
 
     trait VarScanner extends TreeScanner[[A] =>> State[ScanState, A]] {
       def exprScanner: Scanner[Expr]
@@ -22,28 +22,47 @@ object FreeVariableScanner {
 
       override given exprScanner: Scanner[Expr]:
         override def scan(a: Expr): State[ScanState, Unit] =
-          (a match {
+          a match {
             case Expr.BindVariable(v, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars + v))
+              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
+                *> exprBaseScanner.scan(a)
 
             case Expr.Lambda(v, _, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars + v))
+              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
+                *> exprBaseScanner.scan(a)
 
             case Expr.FunctionType(v, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars + v))
+              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
+                *> exprBaseScanner.scan(a)
 
             case Expr.IfElse(whenTrueWitness, whenFalseWitness, _, _, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars ++ whenTrueWitness.toSet[ec.Var] ++ whenFalseWitness.toSet[ec.Var]))
+              State.modify[ScanState](s => s.copy(seenVars = s.seenVars ++ whenTrueWitness.toSet[ec.Var] ++ whenFalseWitness.toSet[ec.Var]))
+                *> exprBaseScanner.scan(a)
 
             case Expr.Variable(v) =>
-              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
+              exprBaseScanner.scan(v.varType) *>
+                State.modify[ScanState] { s =>
+                  if s.seenVars.contains(v) then
+                    s
+                  else
+                    s.copy(seenVars = s.seenVars + v, freeVars = s.freeVars :+ v)
+                }
 
-            case Expr.VariableStore(v, _) =>
-              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
+            case Expr.VariableStore(v, value) =>
+              exprBaseScanner.scan(v.varType) *>
+                State.modify[ScanState] { s =>
+                  if s.seenVars.contains(v) then
+                    s
+                  else
+                    s.copy(seenVars = s.seenVars + v, freeVars = s.freeVars :+ v)
+                } *>
+                exprBaseScanner.scan(value)
 
-            case _ => State.pure[ScanState, Unit](())
-          }) *> autoScanner[Expr].scan(a)
+            case _ => exprBaseScanner.scan(a)
+          }
       end exprScanner
+
+      private val exprBaseScanner: Scanner[Expr] = autoScanner[Expr]
       
       private given Scanner[Pattern] = autoScanner
       
@@ -75,8 +94,8 @@ object FreeVariableScanner {
       private given Scanner[String] = IgnoreScanner[String]
     }
 
-    val res = scanner.exprScanner.scan(expr).runF.value(ScanState(Set.empty, Set.empty)).value._1
+    val res = scanner.exprScanner.scan(expr).runF.value(ScanState(Set.empty, Seq.empty)).value._1
 
-    res.seenVars -- res.declVars
+    res.freeVars
   end apply
 }

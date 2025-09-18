@@ -22,7 +22,6 @@ export function createTestExecutor<E>(): Option<backendApi.TestExecutorFactory<E
 
 class VMTestExecutor<E> extends TestExecutorBase<E> {
     override async run(program: TestProgram, libraries: backendApi.LibraryMap<TestProgram>): PromiseWithError<string, backendApi.TestExecutionException> {
-        console.log("vm run");
         const moduleRes = buildModuleResolution(program, libraries);
         const fileMap = buildFileMap(program, libraries);
         return await runInVm(moduleRes, fileMap);

@@ -69,12 +69,18 @@ private[loader] trait LoaderUtils extends UsingContext {
         for
           module <- elementLoader.getModule(specifier.moduleId)
           sig <- decodeErasedSignature(specifier.sig)
-        yield c.ImportSpecifier(
+        yield c.ImportSpecifier.Global(
           tube = module.tubeName,
           module = module.path,
           name = decodeIdentifier(specifier.name),
           signature = sig
         )
+
+      case specifier: ImportSpecifier.Local =>
+        for
+          parent <- decodeImportSpecifier(specifier.parent)
+          id <- elementLoader.getLocalImportId(specifier)
+        yield c.ImportSpecifier.Local(parent, id)
     }
 
   def decodeErasedSignature(sig: t.ErasedSignature): Comp[c.ErasedSignature] =

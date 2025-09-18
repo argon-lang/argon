@@ -5,10 +5,11 @@ import zio.*
 import zio.stream.*
 import zio.stm.*
 import dev.argon.ast
-import dev.argon.compiler.{HasContext, ImportSpecifier, MethodOwner, SignatureEraser}
+import dev.argon.compiler.{HasContext, ImportSpecifier, MethodOwner, SignatureEraser, UsingContext}
 import dev.argon.tube.{ExternMap, SupportedPlatform}
 import dev.argon.tube.encoder.TubeEncoderBase.EncodeContext
 import dev.argon.tube.loader.TubeFormatException
+import dev.argon.util.UniqueIdentifier
 import esexpr.ESExpr
 
 
@@ -25,7 +26,7 @@ trait TubeEncoderBase[Entry] {
     def assignTubeId(tubeName: c.TubeName, id: BigInt): UIO[Unit]
     def assignModuleId(moduleName: c.ModuleName, id: BigInt): UIO[Unit]
 
-    def newSyntheticImport(parentImport: ImportSpecifier | SyntheticImport): UIO[SyntheticImport]
+    def getLocalImportId(localImport: ImportSpecifier.Local): UIO[BigInt]
 
     def getTubeId(tubeName: c.TubeName): UIO[BigInt]
     def getModuleId(moduleName: c.ModuleName): UIO[BigInt]
@@ -35,10 +36,8 @@ trait TubeEncoderBase[Entry] {
     def getRecordFieldId(field: RecordField): UIO[BigInt]
     def getEnumId(e: ArEnum): UIO[BigInt]
     def getEnumVariantId(v: EnumVariant): UIO[BigInt]
-    def getSyntheticEnumVariantImport(v: EnumVariant): Comp[SyntheticImport]
     def getTraitId(t: ArTrait): UIO[BigInt]
     def getMethodId(m: ArMethod): UIO[BigInt]
-    def getSyntheticMethodImport(m: ArMethod): Comp[SyntheticImport]
     def newSyntheticMethodId: UIO[BigInt]
 
     trait Emitter {
@@ -101,7 +100,7 @@ trait TubeEncoderBase[Entry] {
       for
         entryBuilders <- TQueue.unbounded[context.Comp[Entry]].commit
 
-        syntheticIndexes <- TMap.empty[ImportSpecifier | SyntheticImport, BigInt].commit
+        localImportIds <- TMap.empty[ImportSpecifier, TMap[UniqueIdentifier, BigInt]].commit
 
         tubeIds <- createIdManager[c.TubeName]
         moduleIds <- createIdManager[c.ModuleName]
@@ -110,10 +109,8 @@ trait TubeEncoderBase[Entry] {
         recordFieldIds <- createIdManager[c.RecordFieldC & c.HasContext[context.type]]
         enumIds <- createIdManager[c.ArEnumC & c.HasContext[context.type]]
         enumVariantIds <- createIdManager[c.EnumVariantC & c.HasContext[context.type]]
-        enumVariantImports <- TMap.empty[c.EnumVariantC & c.HasContext[context.type], SyntheticImport].commit
         traitIds <- createIdManager[c.ArTraitC & c.HasContext[context.type]]
         methodIds <- createIdManager[c.ArMethodC & c.HasContext[context.type]]
-        methodImports <- TMap.empty[c.ArMethodC & c.HasContext[context.type], SyntheticImport].commit
 
         encodeState = new EncodeState {
 
@@ -131,37 +128,27 @@ trait TubeEncoderBase[Entry] {
           override def assignModuleId(moduleName: c.ModuleName, id: BigInt): UIO[Unit] =
             moduleIds.assignId(moduleName, id)
 
+          override def getLocalImportId(localImport: ImportSpecifier.Local): UIO[BigInt] =
+            localImportIds.get(localImport.parent)
+              .flatMap {
+                case Some(imp) =>
+                  ZSTM.succeed(imp)
 
-          private def getMemoSyntheticImport[A](a: A)(memo: TMap[A, SyntheticImport])(getParentImport: Comp[ImportSpecifier | SyntheticImport]): Comp[SyntheticImport] =
-            memo.get(a).commit.flatMap {
-              case Some(imp) => ZIO.succeed(imp)
-              case None =>
-                getParentImport
-                  .flatMap(newSyntheticImport)
-                  .tap { imp => memo.put(a, imp).commit }
-            }
-
-          private def getImportForOwner(owner: ExpressionOwner): Comp[ImportSpecifier | SyntheticImport] =
-            owner match {
-              case ExpressionOwner.Func(f) => f.importSpecifier
-              case ExpressionOwner.Rec(r) => r.importSpecifier
-              case ExpressionOwner.Enum(e) => e.importSpecifier
-              case ExpressionOwner.Trait(t) => t.importSpecifier
-              case ExpressionOwner.EnumVariant(v) => getSyntheticEnumVariantImport(v)
-              case ExpressionOwner.Method(m) => getSyntheticMethodImport(m)
-            }
-
-          override def newSyntheticImport(parentImport: ImportSpecifier | SyntheticImport): UIO[SyntheticImport] =
-            (
-              for
-                index <- syntheticIndexes.get(parentImport).map {
-                  case Some(index) => index + 1
-                  case None => 0 : BigInt
-                }
-                _ <- syntheticIndexes.put(parentImport, index)
-              yield SyntheticImport(parentImport, index)
-            ).commit
-
+                case None =>
+                  TMap.empty[UniqueIdentifier, BigInt]
+                    .tap(localImportIds.put(localImport.parent, _))
+              }
+              .flatMap { idMap =>
+                idMap.get(localImport.id)
+                  .flatMap {
+                    case Some(id) => ZSTM.succeed(id)
+                    case None =>
+                      idMap.size
+                        .map(i => i : BigInt)
+                        .tap { size => idMap.put(localImport.id, size) }
+                  }
+              }
+              .commit
 
           override def getTubeId(tubeName: c.TubeName): UIO[BigInt] =
             tubeIds.getIdOrFail(tubeName)
@@ -187,22 +174,11 @@ trait TubeEncoderBase[Entry] {
           override def getEnumVariantId(v: EnumVariant): UIO[BigInt] =
             enumVariantIds.getIdWith(v)(entryBuilders)(emitter.emitEnumVariantInfo)
 
-          override def getSyntheticEnumVariantImport(v: EnumVariant): Comp[SyntheticImport] =
-            getMemoSyntheticImport(v)(enumVariantImports)(
-              v.owningEnum.importSpecifier
-            )
-
           override def getTraitId(t: ArTrait): UIO[BigInt] =
             traitIds.getIdWith(t)(entryBuilders)(emitter.emitTrait)
 
           override def getMethodId(m: ArMethod): UIO[BigInt] =
             methodIds.getIdWith(m)(entryBuilders)(emitter.emitMethod)
-
-          override def getSyntheticMethodImport(m: ArMethod): Comp[SyntheticImport] =
-            getMemoSyntheticImport(m)(methodImports)(m.owner match {
-              case MethodOwner.ByTrait(t) => t.importSpecifier
-            })
-
 
           override def newSyntheticMethodId: UIO[BigInt] =
             methodIds.claimId.commit

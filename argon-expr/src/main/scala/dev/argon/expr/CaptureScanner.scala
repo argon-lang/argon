@@ -62,8 +62,10 @@ object CaptureScanner {
       
     }
 
-    val res = scanner.exprScanner.scan(expr).runF.value(ScanState(Set.empty)).value._1
-
-    res.capturedVars
+    scanner.exprScanner
+      .scan(expr)
+      .runS(ScanState(Set.empty))
+      .value
+      .capturedVars
   end apply
 }

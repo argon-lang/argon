@@ -74,7 +74,7 @@ export function getModuleId(importSpec: ir.ImportSpecifier): bigint {
         case "global":
             return importSpec.moduleId;
 
-        case "synthetic-nested":
+        case "local":
             return getModuleId(importSpec.parent);
     }
 }

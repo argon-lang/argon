@@ -267,10 +267,17 @@ enum builtin-type {
 
 @esexpr:(derive-codec)
 enum import-specifier {
+    @esexpr:(constructor "import-global")
     global {
         module-id: nat;
         name: identifier;
         sig: erased-signature;
+    },
+    
+    @esexpr:(constructor "import-local")
+    local {
+        parent: import-specifier;
+        index: nat;
     },
 }
 

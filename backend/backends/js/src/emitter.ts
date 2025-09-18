@@ -87,7 +87,7 @@ abstract class EmitterBase {
                     "$a" + importSpec.sig.params.map(arg => this.getExportNameForType(arg)).join("") +
                     "$r" + this.getExportNameForType(importSpec.sig.result);
 
-            case "synthetic-nested":
+            case "local":
                 return this.getExportNameForImport(importSpec.parent) + "$k" + importSpec.index;
         }
     }

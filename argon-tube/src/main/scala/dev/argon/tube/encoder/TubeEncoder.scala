@@ -1,11 +1,10 @@
 package dev.argon.tube.encoder
 
-import dev.argon.compiler as c
+import dev.argon.{ast, compiler as c}
 import dev.argon.tube.*
 import zio.*
 import zio.stream.*
 import zio.stm.{TMap, ZSTM}
-import dev.argon.ast
 import dev.argon.compiler.{HasContext, MethodOwner, SignatureEraser, UsingContext}
 import esexpr.Dictionary
 
@@ -99,14 +98,23 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
         }
 
       private def encodeImportSpecifier(specifier: c.ImportSpecifier): UIO[ImportSpecifier] =
-        for
-          moduleId <- getModuleId(c.ModuleName(specifier.tube, specifier.module))
-          sig <- encodeErasedSignature(specifier.signature)
-        yield ImportSpecifier.Global(
-          moduleId = moduleId,
-          name = encodeIdentifier(specifier.name),
-          sig = sig
-        )
+        specifier match {
+          case c.ImportSpecifier.Global(tube, module, name, signature) =>
+            for
+              moduleId <- getModuleId(c.ModuleName(tube, module))
+              sig <- encodeErasedSignature(signature)
+            yield ImportSpecifier.Global(
+              moduleId = moduleId,
+              name = encodeIdentifier(name),
+              sig = sig
+            )
+            
+          case specifier @ c.ImportSpecifier.Local(parent, _) =>
+            for
+              parent <- encodeImportSpecifier(parent)
+              id <- getLocalImportId(specifier)
+            yield ImportSpecifier.Local(parent, id)
+        }
 
       private def encodeErasedSignature(sig: c.ErasedSignature): UIO[ErasedSignature] =
         for
@@ -233,7 +241,14 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
       (emitDef: A => Comp[TubeFileEntry], emitRef: ImportSpecifier => Comp[TubeFileEntry])
       : Comp[TubeFileEntry] =
         makeSpecifier.flatMap { specifier =>
-          if specifier.tube == tube.name then
+          def getTubeFromSpecifier(specifier: c.ImportSpecifier): c.TubeName =
+            specifier match {
+              case c.ImportSpecifier.Global(name, _, _, _) => name
+              case c.ImportSpecifier.Local(parent, _) => getTubeFromSpecifier(parent)
+            }
+          
+          
+          if getTubeFromSpecifier(specifier) == tube.name then
             emitDef(value)
           else
             encodeImportSpecifier(specifier).flatMap(emitRef)
@@ -436,7 +451,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             impl.flatMap {
               case _: context.implementations.MethodImplementation.Abstract.type =>
                 ZIO.succeed(MethodImplementation.Abstract())
-              
+
               case context.implementations.MethodImplementation.Expr(e) =>
                 for
                   e <- emitExpr(e)

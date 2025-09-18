@@ -82,7 +82,7 @@ private[source] object SourceModule {
       private def createImportFactory(name: IdentifierExpr): ImportFactory =
         new ImportFactory {
           override def getImportSpecifier(sig: ErasedSignature): ImportSpecifier =
-            ImportSpecifier(
+            ImportSpecifier.Global(
               tube = tn,
               module = p,
               name = name,

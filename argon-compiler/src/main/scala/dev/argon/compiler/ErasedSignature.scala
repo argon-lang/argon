@@ -2,6 +2,7 @@ package dev.argon.compiler
 
 import dev.argon.expr.BuiltinType
 import dev.argon.ast.IdentifierExpr
+import dev.argon.util.UniqueIdentifier
 
 
 final case class ErasedSignature(params: Seq[ErasedSignatureType], result: ErasedSignatureType) derives CanEqual
@@ -14,9 +15,15 @@ enum ErasedSignatureType derives CanEqual {
   case Erased
 }
 
-final case class ImportSpecifier(
-  tube: TubeName,
-  module: ModulePath,
-  name: IdentifierExpr,
-  signature: ErasedSignature,
-) derives CanEqual
+enum ImportSpecifier derives CanEqual {
+  case Global(
+    tube: TubeName,
+    module: ModulePath,
+    name: IdentifierExpr,
+    signature: ErasedSignature,
+  )
+  case Local(
+    parent: ImportSpecifier,
+    id: UniqueIdentifier,
+  )
+}
