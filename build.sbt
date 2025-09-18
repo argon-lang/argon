@@ -12,11 +12,11 @@ import scala.sys.process.{Process, ProcessLogger}
 ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 
-val graalVersion = "24.2.2"
-val zioVersion = "2.1.20"
+val graalVersion = "25.0.0"
+val zioVersion = "2.1.21"
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.7.2",
+  scalaVersion := "3.7.3",
 )
 
 
@@ -34,7 +34,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.2",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
-    "com.lihaoyi" %%% "sourcecode" % "0.4.2",
+    "com.lihaoyi" %%% "sourcecode" % "0.4.4",
 
     "dev.optics" %%% "monocle-core"  % "3.3.0",
     "dev.optics" %%% "monocle-macro" % "3.3.0",
@@ -68,7 +68,10 @@ lazy val sharedJSNodeSettings = Seq(
     _
       .withModuleKind(ModuleKind.ESModule)
       .withBatchMode(true)
-      .withESFeatures(_.withESVersion(ESVersion.ES2021))
+      .withESFeatures(_
+        .withESVersion(ESVersion.ES2021)
+//        .allowBigIntsForLongs(true)
+      )
   },
 
   fork := false,
@@ -113,7 +116,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
   jsEnv := new NodeJSEnv(nodeEnvConfig),
 
   npmDevDependencies ++= Seq(
-    "@types/node" -> "18.8.1",
+    "@types/node" -> "24.5.2",
   ),
 
   Compile / run := {
@@ -564,7 +567,7 @@ lazy val argon_backend_java_api = project.in(file("backend/api/java"))
     libraryDependencies ++= Seq(
       "org.jetbrains" % "annotations" % "26.0.2",
       "dev.argon.nobleidl" % "nobleidl-java-runtime" % "0.1.0-SNAPSHOT",
-      "dev.argon.esexpr" % "esexpr-java-runtime" % "0.2.1",
+      "dev.argon.esexpr" % "esexpr-java-runtime" % "0.3.1",
       "org.graalvm.polyglot" % "polyglot" % graalVersion,
       "org.graalvm.polyglot" % "js-community" % graalVersion,
     ),

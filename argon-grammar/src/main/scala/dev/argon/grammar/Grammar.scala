@@ -325,14 +325,14 @@ object Grammar {
         new UnionGrammar[TToken, TTokenCategory, TPosition, TLabel, T | U](grammar1, grammar2)
 
       def ++[U, V](grammar2: => Grammar[TToken, TTokenCategory, TPosition, TLabel, U])
-        (implicit combiner: GrammarConcatCombiner[T, U, V])
+        (using combiner: GrammarConcatCombiner[T, U, V])
         : Grammar[TToken, TTokenCategory, TPosition, TLabel, V] =
         ConcatGrammar(grammar1, grammar2)(isCutConcat = false) { (a, b) =>
           WithLocation(combiner.combine(a.value, b.value), Location.merge(a.location, b.location))
         }
 
       def ++![U, V](grammar2: => Grammar[TToken, TTokenCategory, TPosition, TLabel, U])
-        (implicit combiner: GrammarConcatCombiner[T, U, V])
+        (using combiner: GrammarConcatCombiner[T, U, V])
         : Grammar[TToken, TTokenCategory, TPosition, TLabel, V] =
         ConcatGrammar(grammar1, CutGrammar(grammar2))(isCutConcat = true) { (a, b) =>
           WithLocation(combiner.combine(a.value, b.value), Location.merge(a.location, b.location))

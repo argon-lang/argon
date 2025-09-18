@@ -1,3 +1,10 @@
 [workspace]
 resolver = "2"
 members = ["parse18-lexer-gen", "parse18-ll-gen", "argon-parser"]
+
+[workspace.dependencies]
+parse18-lexer-gen = { path = "parse18-lexer-gen" }
+parse18-ll-gen = { path = "parse18-ll-gen" }
+regex-syntax = "0.8.6"
+strum = { version = "0.27.2", features = ["derive"] }
+unicode-general-category = "1.1.0"

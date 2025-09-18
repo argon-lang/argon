@@ -21,7 +21,7 @@ object TokenMatcher {
   final case class Subtype[T, TParsed <: T](tag: TypeTest[T, TParsed]) extends TokenMatcher[T, TParsed] {
 
     override def matchToken(other: T): Option[TParsed] = {
-      implicit val tag2 = tag
+      given TypeTest[T, TParsed] = tag
       other match {
         case value: TParsed => Some(value)
         case _ => None
