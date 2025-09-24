@@ -183,6 +183,8 @@ private[loader] trait LoaderUtils extends UsingContext {
         elementLoader.getEnum(id).map(context.DefaultExprContext.ExpressionOwner.Enum.apply)
       case t.ExpressionOwner.Trait(id) =>
         elementLoader.getTrait(id).map(context.DefaultExprContext.ExpressionOwner.Trait.apply)
+      case t.ExpressionOwner.Instance(id) =>
+        elementLoader.getInstance(id).map(context.DefaultExprContext.ExpressionOwner.Instance.apply)
       case t.ExpressionOwner.EnumVariant(id) =>
         elementLoader.getEnumVariant(id).map(context.DefaultExprContext.ExpressionOwner.EnumVariant.apply)
       case t.ExpressionOwner.Method(id) =>
@@ -382,6 +384,17 @@ private[loader] trait LoaderUtils extends UsingContext {
             whenFalseWitness = falseWitnessVars,
           )
 
+        case Expr.InstanceMethodCall(methodId, instanceType, instance, args) =>
+          for
+            method <- elementLoader.getMethod(methodId)
+            instanceType <- decodeInstanceMethodType(instanceType)
+            instance <- expr(instance)
+            argsExpr <- ZIO.foreach(args)(expr)
+          yield ArExpr.InstanceMethodCall(method, instanceType, instance, argsExpr)
+
+        case Expr.InstanceSingletonType(ist) =>
+          decodeInstanceSingletonType(ist)
+
         case Expr.Is(value, p) =>
           for
             value <- expr(value)
@@ -409,6 +422,12 @@ private[loader] trait LoaderUtils extends UsingContext {
               yield context.DefaultExprContext.MatchCase(p, body)
             }
           yield ArExpr.Match(value, cases)
+
+        case Expr.NewInstance(i, args) =>
+          for
+            inst <- elementLoader.getInstance(i)
+            argsExpr <- ZIO.foreach(args)(expr)
+          yield ArExpr.NewInstance(inst, argsExpr)
 
         case Expr.Or(a, b) =>
           for
@@ -547,6 +566,22 @@ private[loader] trait LoaderUtils extends UsingContext {
         t = trt,
         args = decodedArgs,
       )
+
+    private def decodeInstanceSingletonType(instanceType: t.InstanceSingletonType): Comp[ArExpr.InstanceSingletonType] =
+      for
+        inst <- elementLoader.getInstance(instanceType.id)
+        decodedArgs <- ZIO.foreach(instanceType.args)(expr)
+      yield ArExpr.InstanceSingletonType(
+        i = inst,
+        args = decodedArgs,
+      )
+
+
+    private def decodeInstanceMethodType(instanceType: t.MethodInstanceType): Comp[context.DefaultExprContext.MethodInstanceType] =
+      instanceType match {
+        case t.MethodInstanceType.TraitType(tt) => decodeTraitType(tt)
+        case t.MethodInstanceType.InstanceSingletonType(ist) => decodeInstanceSingletonType(ist)
+      }
 
     private def decodeRecordLiteralField(fieldLit: t.RecordFieldLiteral): Comp[context.DefaultExprContext.RecordFieldLiteral] =
       for

@@ -20,10 +20,12 @@ trait Evaluator[R, E] {
            Expr.Box(_, _) |
            Expr.BoolLiteral(_) | Expr.IntLiteral(_) | Expr.StringLiteral(_) |
            Expr.Builtin(
-          Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)
-        ) |
+             Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)
+           ) |
            Expr.Boxed(_) |
+           Expr.InstanceSingletonType(_, _) |
            Expr.Lambda(_, _, _) |
+           Expr.NewInstance(_, _) |
            Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
            Expr.EnumType(_, _) | Expr.EnumVariantLiteral(_, _, _, _) |
            Expr.TraitType(_, _) |
@@ -114,6 +116,7 @@ trait Evaluator[R, E] {
         }
 
       case Expr.FunctionObjectCall(f, a) => ???
+      case Expr.InstanceMethodCall(_, _, _, _) => ???
 
       case Expr.TupleElement(index, tuple) =>
         normalizeToValue(tuple, fuel).flatMap {

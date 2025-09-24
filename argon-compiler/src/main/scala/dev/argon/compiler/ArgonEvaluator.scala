@@ -20,6 +20,5 @@ object ArgonEvaluator {
         sig
 
       override def normalizeHole(hole: Hole): Comp[Expr] = hole
-
     }
 }

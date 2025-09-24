@@ -51,6 +51,8 @@ pub enum Token {
     KwEnum,
     #[strum(serialize = "Token.KW_TRAIT.type")]
     KwTrait,
+    #[strum(serialize = "Token.KW_INSTANCE.type")]
+    KwInstance,
     #[strum(serialize = "Token.KW_NEW.type")]
     KwNew,
     #[strum(serialize = "Token.KW_WITH.type")]
@@ -77,6 +79,12 @@ pub enum Token {
     KwInternal,
     #[strum(serialize = "Token.KW_ABSTRACT.type")]
     KwAbstract,
+    #[strum(serialize = "Token.KW_FINAL.type")]
+    KwFinal,
+    #[strum(serialize = "Token.KW_VIRTUAL.type")]
+    KwVirtual,
+    #[strum(serialize = "Token.KW_OVERRIDE.type")]
+    KwOverride,
     #[strum(serialize = "Token.KW_IF.type")]
     KwIf,
     #[strum(serialize = "Token.KW_THEN.type")]
@@ -353,6 +361,7 @@ enum Rule {
     NewTraitObjectBody,
     NewTraitObjectBodyStmt,
     TypeDeclarationTypeAnnotation,
+    InstanceDeclarationStmtRest,
 
     TubeName,
     ImportStmt,
@@ -1182,6 +1191,9 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwErased).discard() ], "const(Modifier.Erased)"),
                     rule([ term(KwWitness).discard() ], "const(Modifier.Witness)"),
                     rule([ term(KwInline).discard() ], "const(Modifier.Inline)"),
+                    rule([ term(KwFinal).discard() ], "const(Modifier.Final)"),
+                    rule([ term(KwVirtual).discard() ], "const(Modifier.Virtual)"),
+                    rule([ term(KwOverride).discard() ], "const(Modifier.Override)"),
                 ],
             ),
 
@@ -1555,6 +1567,23 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(SymColon).discard(), nonterm(NewLines).discard(), nonterm(TypeBinding).with_location() ], "Some"),
                 ],
             ),
+            InstanceDeclarationStmtRest => ruleset(
+                "Seq[WithSource[Modifier]] => Stmt",
+                [
+                    rule(
+                        [
+                            term(KwInstance).discard(),
+                            nonterm(Identifier).with_location(),
+                            nonterm(MethodParameters),
+                            nonterm(TypeDeclarationTypeAnnotation),
+                            nonterm(StatementSeparator).discard(),
+                            nonterm(TraitBody),
+                            term(KwEnd).discard(),
+                        ],
+                        "((name: WithSource[IdentifierExpr], parameters: Seq[WithSource[FunctionParameterList]], typeAnnotation: Option[WithSource[Expr]], body: Seq[WithSource[TraitBodyStmt]]) => modifiers => InstanceDeclarationStmt(modifiers, name, parameters, typeAnnotation, body))"
+                    ),
+                ],
+            ),
 
 
             ImportStmt => ruleset(
@@ -1630,6 +1659,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                     rule([ nonterm(Modifiers), nonterm(EnumDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                     rule([ nonterm(Modifiers), nonterm(TraitDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
+                    rule([ nonterm(Modifiers), nonterm(InstanceDeclarationStmtRest) ], "((modifiers: Seq[WithSource[Modifier]], buildDecl: Seq[WithSource[Modifier]] => Stmt) => buildDecl(modifiers))"),
                 ],
             ),
 

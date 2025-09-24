@@ -1148,6 +1148,19 @@ trait TypeResolver extends UsingContext {
             next
           )
 
+        case traitType @ Expr.TraitType(t, args) =>
+          for
+            methods <- t.methods
+
+            methodOverloads = methods
+              .filter { method => method.name == memberName }
+              .map { method => Overloadable.InstanceMethod(method, traitType, e) }
+
+          yield LookupResult.Overloaded(
+            methodOverloads,
+            next
+          )
+
         case _ => next
       }
 
@@ -1238,7 +1251,9 @@ trait TypeResolver extends UsingContext {
         case Overloadable.Record(r) => AttemptedOverload.Record(r)
         case Overloadable.Enum(e) => AttemptedOverload.Enum(e)
         case Overloadable.Trait(t) => AttemptedOverload.Trait(t)
+        case Overloadable.Instance(i) => AttemptedOverload.Instance(i)
         case Overloadable.ExtensionMethod(f, _) => AttemptedOverload.Function(f)
+        case Overloadable.InstanceMethod(m, _, _) => AttemptedOverload.InstanceMethod(m)
         case Overloadable.RecordField(r, field, _) => AttemptedOverload.RecordField(r.record, field)
         case Overloadable.RecordFieldUpdate(r, field, _) => AttemptedOverload.RecordField(r.record, field)
         case Overloadable.EnumVariant(v) => AttemptedOverload.EnumVariant(v)
@@ -1474,6 +1489,48 @@ trait TypeResolver extends UsingContext {
                     override def toString: String = "Trait ExprFactory"
                   }
 
+              def instanceOverload(i: ArInstance): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    override def loc: Loc = overloadableLoc
+
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      val e = Expr.NewInstance(i, overloadResult.arguments)
+                      for
+                        e <- checkErasure(loc)(e)(false)
+                      yield InferredExpr(
+                        e,
+                        overloadResult.remainingSig.returnType
+                      )
+                    end infer
+
+                    private def recordOverloadFactory: ExprFactory = this
+
+
+                    override def toString: String = "Instance ExprFactory"
+                  }
+
+              def instanceMethodOverload(m: ArMethod, instanceType: TRExprContext.MethodInstanceType, obj: Expr): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    override def loc: Loc = overloadableLoc
+
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      for
+                        _ <- checkAllowedEffect(loc)(DefaultToTRShifter[context.type](context).shiftEffectInfo(m.effects))
+                        e = Expr.InstanceMethodCall(m, instanceType, obj, overloadResult.arguments)
+                        e <- checkErasure(loc)(e)(m.isErased)
+                      yield InferredExpr(
+                        e,
+                        overloadResult.remainingSig.returnType
+                      )
+
+                    override def toString: String = "Instance Method ExprFactory"
+                  }
 
 
               val factory0: ExprFactory = selectedOverload match {
@@ -1481,7 +1538,9 @@ trait TypeResolver extends UsingContext {
                 case Overloadable.Record(r) => recordOverload(r)
                 case Overloadable.Enum(e) => enumOverload(e)
                 case Overloadable.Trait(t) => traitOverload(t)
+                case Overloadable.Instance(i) => instanceOverload(i)
                 case Overloadable.ExtensionMethod(f, _) => functionOverload(f)
+                case Overloadable.InstanceMethod(m, instanceType, obj) => instanceMethodOverload(m, instanceType, obj)
                 case Overloadable.RecordField(r, field, recordValue) => recordFieldOverload(r, field, recordValue)
                 case Overloadable.RecordFieldUpdate(r, field, recordValue) => recordFieldStoreOverload(r, field, recordValue)
                 case Overloadable.EnumVariant(v) => enumVariantOverload(v)

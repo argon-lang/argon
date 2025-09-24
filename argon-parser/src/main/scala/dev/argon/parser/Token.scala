@@ -63,6 +63,7 @@ private[parser] object Token {
   case object KW_RECORD extends TokenWithCategory(TokenCategory.KW_RECORD)
   case object KW_ENUM extends TokenWithCategory(TokenCategory.KW_ENUM)
   case object KW_TRAIT extends TokenWithCategory(TokenCategory.KW_TRAIT)
+  case object KW_INSTANCE extends TokenWithCategory(TokenCategory.KW_INSTANCE)
   case object KW_NEW extends TokenWithCategory(TokenCategory.KW_NEW)
   case object KW_WITH extends TokenWithCategory(TokenCategory.KW_WITH)
   case object KW_TRUE extends TokenWithCategory(TokenCategory.KW_TRUE)
@@ -76,6 +77,9 @@ private[parser] object Token {
   case object KW_PROTECTED extends TokenWithCategory(TokenCategory.KW_PROTECTED) with ModifierToken(Modifier.Protected)
   case object KW_PRIVATE extends TokenWithCategory(TokenCategory.KW_PRIVATE) with ModifierToken(Modifier.Private)
   case object KW_INTERNAL extends TokenWithCategory(TokenCategory.KW_INTERNAL) with ModifierToken(Modifier.Internal)
+  case object KW_FINAL extends TokenWithCategory(TokenCategory.KW_FINAL) with ModifierToken(Modifier.Final)
+  case object KW_OVERRIDE extends TokenWithCategory(TokenCategory.KW_OVERRIDE) with ModifierToken(Modifier.Override)
+  case object KW_VIRTUAL extends TokenWithCategory(TokenCategory.KW_VIRTUAL) with ModifierToken(Modifier.Virtual)
 
   case object KW_IF extends TokenWithCategory(TokenCategory.KW_IF)
   case object KW_THEN extends TokenWithCategory(TokenCategory.KW_THEN)

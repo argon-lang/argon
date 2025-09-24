@@ -34,6 +34,7 @@ fn main() {
     b.add(Regex::str("record"), "TokenType.Token(Token.KW_RECORD)");
     b.add(Regex::str("enum"), "TokenType.Token(Token.KW_ENUM)");
     b.add(Regex::str("trait"), "TokenType.Token(Token.KW_TRAIT)");
+    b.add(Regex::str("instance"), "TokenType.Token(Token.KW_INSTANCE)");
     b.add(Regex::str("new"), "TokenType.Token(Token.KW_NEW)");
     b.add(Regex::str("true"), "TokenType.Token(Token.KW_TRUE)");
     b.add(Regex::str("false"), "TokenType.Token(Token.KW_FALSE)");
@@ -45,6 +46,9 @@ fn main() {
     b.add(Regex::str("protected"), "TokenType.Token(Token.KW_PROTECTED)");
     b.add(Regex::str("private"), "TokenType.Token(Token.KW_PRIVATE)");
     b.add(Regex::str("internal"), "TokenType.Token(Token.KW_INTERNAL)");
+    b.add(Regex::str("final"), "TokenType.Token(Token.KW_FINAL)");
+    b.add(Regex::str("override"), "TokenType.Token(Token.KW_OVERRIDE)");
+    b.add(Regex::str("virtual"), "TokenType.Token(Token.KW_VIRTUAL)");
     b.add(Regex::str("if"), "TokenType.Token(Token.KW_IF)");
     b.add(Regex::str("then"), "TokenType.Token(Token.KW_THEN)");
     b.add(Regex::str("else"), "TokenType.Token(Token.KW_ELSE)");

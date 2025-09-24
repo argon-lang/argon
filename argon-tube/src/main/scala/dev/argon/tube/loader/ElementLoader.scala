@@ -14,6 +14,7 @@ private[loader] trait ElementLoader extends UsingContext {
   def getEnumVariant(id: BigInt): Comp[EnumVariant]
   def getTrait(id: BigInt): Comp[ArTrait]
   def getMethod(id: BigInt): Comp[ArMethod]
+  def getInstance(id: BigInt): Comp[ArInstance]
 
   def getLocalImportId(localImport: ImportSpecifier.Local): Comp[UniqueIdentifier]
   def recordLocalImport(localImport: ImportSpecifier.Local, moduleExport: ModuleExport): Comp[Unit]

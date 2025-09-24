@@ -25,9 +25,11 @@ trait TreeScanner[F[_]: Monad] {
     end given
   }
 
-  final class IgnoreScanner[A] extends Scanner[A] {
+  private final class IgnoreScanner[A] extends Scanner[A] {
     override def scan(a: A): F[Unit] = Monad[F].pure(())
   }
+  
+  def ignoreScanner[A]: Scanner[A] = IgnoreScanner[A]
 
   final inline def autoScanner[T <: Matchable](using m: Mirror.Of[T]): Scanner[T] =
     inline m match {

@@ -16,4 +16,6 @@ object ErrorExprContext extends ExprContext with ExprContextWithHoles {
 
   override type Trait = ArTraitC
   override type Method = ArMethodC
+
+  override type Instance = ArInstanceC
 }

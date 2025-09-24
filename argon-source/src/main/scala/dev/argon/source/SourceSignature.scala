@@ -29,6 +29,7 @@ object SourceSignature {
       case ctx.TRExprContext.ExpressionOwner.EnumVariant(_) => false
       case ctx.TRExprContext.ExpressionOwner.Trait(_) => false
       case ctx.TRExprContext.ExpressionOwner.Method(_) => false
+      case ctx.TRExprContext.ExpressionOwner.Instance(_) => false
     }
 
     def impl(remainingParams: Seq[WithSource[ast.FunctionParameterList]], convParams: Seq[SignatureParameter]): Comp[FunctionSignature] =

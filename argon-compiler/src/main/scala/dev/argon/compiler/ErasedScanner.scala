@@ -4,7 +4,7 @@ import cats.*
 import cats.data.OptionT
 import cats.implicits.given
 import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.{BinaryBuiltin, ErasureMode, ExprContext, NullaryBuiltin, UnaryBuiltin}
+import dev.argon.expr.{BinaryBuiltin, ErasureMode, ExprContext, NullaryBuiltin, UnaryBuiltin, ExprScanner}
 import dev.argon.util.{*, given}
 import zio.interop.catz.core.given
 
@@ -22,18 +22,17 @@ object ErasedScanner {
 
     type EraseScan[A] = OptionT[Comp, A]
 
-    trait PureScanner extends TreeScanner[EraseScan] {
-      def exprScanner: Scanner[Expr]
-    }
-
-    val scanner = new PureScanner {
+    final class EraseScanner extends ExprScanner[EraseScan] {
       import StandardScanners.given
+
+      override val exprContext: ec.type = ec
 
       private val concrete: EraseScan[Unit] = OptionT.some(())
       private val erased: EraseScan[Unit] = OptionT.none
+
       private def fromBool(b: Boolean): EraseScan[Unit] = if b then erased else concrete
 
-      override given exprScanner: Scanner[Expr]:
+      override def exprScanner: Scanner[Expr] = new Scanner[Expr] {
         override def scan(a: Expr): EraseScan[Unit] =
           a match {
             case Expr.BindVariable(v, value) if v.isErased => concrete
@@ -64,7 +63,7 @@ object ErasedScanner {
                   }
 
                   if funcArgErased then concrete
-                  else exprAutoScanner.scan(expr)
+                  else EraseScanner.super.exprScanner.scan(expr)
                 }
 
             case Expr.RecordType(r, args) =>
@@ -85,9 +84,9 @@ object ErasedScanner {
 
             case Expr.VariableStore(v, _) if v.isErased => concrete
 
-            case _ => exprAutoScanner.scan(a)
+            case _ => EraseScanner.super.exprScanner.scan(a)
           }
-      end exprScanner
+      }
 
       private def scanArgs(sig: context.DefaultSignatureContext.FunctionSignature, args: Seq[Expr]): EraseScan[Unit] =
         sig.parameters.view.zip(args)
@@ -97,37 +96,10 @@ object ErasedScanner {
           .traverse_(exprScanner.scan)
 
 
-      private val exprAutoScanner: Scanner[Expr] = autoScanner
-
-      private given Scanner[Pattern] = autoScanner      
-      private given Scanner[Builtin] = autoScanner
-      private given Scanner[LocalVar] = autoScanner
-      private given Scanner[Var] = autoScanner
-      given Scanner[Expr.RecordType] = autoScanner
-      given Scanner[Expr.EnumType] = autoScanner
-      given Scanner[RecordFieldLiteral] = autoScanner
-      private given Scanner[RecordFieldPattern] = autoScanner
-      private given Scanner[MatchCase] = autoScanner
-
-      private given Scanner[ExpressionOwner] = IgnoreScanner[ExpressionOwner]
-      private given Scanner[Function] = IgnoreScanner[Function]
-      private given Scanner[Record] = IgnoreScanner[Record]
-      private given Scanner[RecordField] = IgnoreScanner[RecordField]
-      private given Scanner[Enum] = IgnoreScanner[Enum]
-      private given Scanner[EnumVariant] = IgnoreScanner[EnumVariant]
-      private given Scanner[Trait] = IgnoreScanner[Trait]
-      private given Scanner[NullaryBuiltin] = IgnoreScanner[NullaryBuiltin]
-      private given Scanner[UnaryBuiltin] = IgnoreScanner[UnaryBuiltin]
-      private given Scanner[BinaryBuiltin] = IgnoreScanner[BinaryBuiltin]
-
-
-      private given Scanner[UniqueIdentifier] = IgnoreScanner[UniqueIdentifier]
-      private given Scanner[IdentifierExpr] = IgnoreScanner[IdentifierExpr]
-      private given Scanner[Boolean] = IgnoreScanner[Boolean]
-      private given Scanner[BigInt] = IgnoreScanner[BigInt]
-      private given Scanner[Int] = IgnoreScanner[Int]
-      private given Scanner[String] = IgnoreScanner[String]
+      override protected def holeScanner: Scanner[Hole] = summon
     }
+
+    val scanner = EraseScanner()
 
     scanner.exprScanner.scan(expr).isEmpty
   end apply

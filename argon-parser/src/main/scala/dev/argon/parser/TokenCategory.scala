@@ -33,6 +33,7 @@ object TokenCategory {
   case object KW_RECORD extends TokenCategory
   case object KW_ENUM extends TokenCategory
   case object KW_TRAIT extends TokenCategory
+  case object KW_INSTANCE extends TokenCategory
   case object KW_NEW extends TokenCategory
   case object KW_WITH extends TokenCategory
   case object KW_TRUE extends TokenCategory
@@ -46,6 +47,9 @@ object TokenCategory {
   case object KW_PRIVATE extends TokenCategory
   case object KW_INTERNAL extends TokenCategory
   case object KW_ABSTRACT extends TokenCategory
+  case object KW_FINAL extends TokenCategory
+  case object KW_OVERRIDE extends TokenCategory
+  case object KW_VIRTUAL extends TokenCategory
   case object KW_IF extends TokenCategory
   case object KW_THEN extends TokenCategory
   case object KW_ELSE extends TokenCategory

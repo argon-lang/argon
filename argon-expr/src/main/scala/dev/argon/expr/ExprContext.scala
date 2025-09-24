@@ -44,6 +44,7 @@ trait ExprContext extends ConditionalVars {
     case Trait(t: ExprContext.this.Trait)
     case EnumVariant(v: ExprContext.this.EnumVariant)
     case Method(m: ExprContext.this.Method)
+    case Instance(i: ExprContext.this.Instance)
   }
   
   final case class ParameterVar(
@@ -90,6 +91,9 @@ trait ExprContext extends ConditionalVars {
   type Method
   given methodCanEqual: CanEqual[Method, Method] = deferred
 
+  type Instance
+  given instanceCanEqual: CanEqual[Instance, Instance] = deferred
+
   type Hole
   given holeCanEqual: CanEqual[Hole, Hole] = deferred
 
@@ -128,10 +132,13 @@ trait ExprContext extends ConditionalVars {
       trueBody: Expr,
       falseBody: Expr,
     )
+    case InstanceMethodCall(m: Method, instanceType: MethodInstanceType, obj: Expr, args: Seq[Expr])
+    case InstanceSingletonType(i: Instance, args: Seq[Expr])
     case IntLiteral(i: BigInt)
     case Is(value: Expr, pattern: Pattern)
     case Lambda(v: LocalVar, returnType: Expr, body: Expr)
     case Match(value: Expr, cases: Seq[MatchCase])
+    case NewInstance(i: Instance, args: Seq[Expr])
     case Or(a: Expr, b: Expr)
     case RecordType(record: Record, args: Seq[Expr])
     case EnumType(e: Enum, args: Seq[Expr])
@@ -174,6 +181,8 @@ trait ExprContext extends ConditionalVars {
     field: RecordField,
     value: Expr,
   )
+
+  type MethodInstanceType = Expr.TraitType | Expr.InstanceSingletonType
 
   final case class AnnotatedExpr(location: SourceLocation, e: Expr, t: Expr)
 

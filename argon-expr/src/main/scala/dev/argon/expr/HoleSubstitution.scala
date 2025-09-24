@@ -4,62 +4,31 @@ import dev.argon.util.{TreeShifter, UniqueIdentifier}
 import dev.argon.ast.IdentifierExpr
 import cats.*
 
-private trait HoleSubstitution {
-  val exprContext: ExprContext
+private trait HoleSubstitution[EC <: ExprContext](val exprContext: EC) extends ExprShifter[Id] {
   import exprContext.*
 
   protected val holeMapping: Map[Hole, Expr]
 
-  private object ShiftHelper extends TreeShifter[Id] {
-    import StandardShifters.given
+  override final val ec1: exprContext.type = exprContext
+  override final val ec2: exprContext.type = exprContext
 
-    given exprShifter: Shifter[Expr, Expr]:
-      override def shift(a: Expr): Expr =
-        (a match {
-          case Expr.Hole(h) => holeMapping.get(h)
-          case _ => None
-        }).getOrElse(autoShifter[Expr, Expr].shift(a))
-    end exprShifter
+  override protected def exprShifter: Shifter[ec1.Expr, ec2.Expr] = a =>
+    (a match {
+      case Expr.Hole(h) => holeMapping.get(h)
+      case _ => None
+    }).getOrElse(super.exprShifter.shift(a))
 
-    given Shifter[Pattern, Pattern] = autoShifter
-    given Shifter[Expr.RecordType, Expr.RecordType] = autoShifter
-    given Shifter[Expr.EnumType, Expr.EnumType] = autoShifter
-    given Shifter[RecordFieldLiteral, RecordFieldLiteral] = autoShifter
-    given Shifter[RecordFieldPattern, RecordFieldPattern] = autoShifter
-    given Shifter[MatchCase, MatchCase] = autoShifter
-
-    given Shifter[Builtin, Builtin] = autoShifter
-    given Shifter[Hole, Hole] = identityShifter
-
-
-    given Shifter[Var, Var] = autoShifter
-    given Shifter[LocalVar, LocalVar] = autoShifter
-
-    given Shifter[Function, Function] = identityShifter
-    given Shifter[Record, Record] = identityShifter
-    given Shifter[RecordField, RecordField] = identityShifter
-    given Shifter[Enum, Enum] = identityShifter
-    given Shifter[EnumVariant, EnumVariant] = identityShifter
-    given Shifter[Trait, Trait] = identityShifter
-
-    given Shifter[NullaryBuiltin, NullaryBuiltin] = identityShifter
-    given Shifter[UnaryBuiltin, UnaryBuiltin] = identityShifter
-    given Shifter[BinaryBuiltin, BinaryBuiltin] = identityShifter
-    given Shifter[ExpressionOwner, ExpressionOwner] = identityShifter
-
-    given Shifter[IdentifierExpr, IdentifierExpr] = identityShifter
-    given Shifter[UniqueIdentifier, UniqueIdentifier] = identityShifter
-  }
+  override protected def shiftHole(hole: Hole): Expr =
+    Expr.Hole(hole)
 
   final def substitute(e: Expr): Expr =
-    ShiftHelper.exprShifter.shift(e)
+    exprShifter.shift(e)
 
 }
 
 object HoleSubstitution {
   def substitute(ec: ExprContext)(mapping: Map[ec.Hole, ec.Expr])(e: ec.Expr): ec.Expr =
-    new HoleSubstitution {
-      override val exprContext: ec.type = ec
+    new HoleSubstitution[ec.type](ec) {
       override protected val holeMapping: Map[exprContext.Hole, exprContext.Expr] = mapping
     }.substitute(e)
 }

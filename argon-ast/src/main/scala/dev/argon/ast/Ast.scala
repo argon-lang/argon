@@ -77,6 +77,14 @@ final case class MethodDeclarationStmt(
   body: Option[FunctionBody],
 ) extends Stmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
 
+final case class InstanceDeclarationStmt(
+  modifiers: Seq[WithSource[Modifier]],
+  name: WithSource[IdentifierExpr],
+  parameters: Seq[WithSource[FunctionParameterList]],
+  returnType: Option[WithSource[Expr]],
+  body: Seq[WithSource[TraitBodyStmt]],
+) extends Stmt
+
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)
 
@@ -104,6 +112,7 @@ final case class ReturnTypeSpecifier
 enum Modifier derives CanEqual {
   case Public, Protected, Private, Internal
   case Erased, Witness, Inline
+  case Final, Override, Virtual
 }
 
 enum ImportStmt extends Stmt {

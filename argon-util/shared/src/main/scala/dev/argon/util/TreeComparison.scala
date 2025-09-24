@@ -41,6 +41,8 @@ trait TreeComparison {
     override def compare(a: A, b: A): Comparison =
       comparisonFromBoolean(a == b)
   }
+  
+  def equalComparer[A](using CanEqual[A, A]): Comparer[A] = EqualComparer[A]
 
 
   final inline def autoComparer[T <: Matchable](using m: Mirror.Of[T]): Comparer[T] =

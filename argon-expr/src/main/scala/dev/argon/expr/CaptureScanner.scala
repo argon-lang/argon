@@ -13,15 +13,12 @@ object CaptureScanner {
 
     final case class ScanState(capturedVars: Set[ec.Var])
 
-    trait VarScanner extends TreeScanner[[A] =>> State[ScanState, A]] {
-      def exprScanner: Scanner[Expr]
-    }
-
-    val scanner = new VarScanner {
-
+    final class VarScanner extends ExprScanner[[A] =>> State[ScanState, A]] {
       import StandardScanners.given
+      
+      override val exprContext: ec.type = ec
 
-      override given exprScanner: Scanner[Expr]:
+      override def exprScanner: Scanner[Expr] = new Scanner[Expr] {
         override def scan(a: Expr): State[ScanState, Unit] =
           (a match {
             case Expr.Lambda(_, _, _) =>
@@ -29,38 +26,13 @@ object CaptureScanner {
               State.modify[ScanState](s => s.copy(capturedVars = s.capturedVars ++ captured))
 
             case _ => State.pure[ScanState, Unit](())
-          }) *> autoScanner[Expr].scan(a)
-      end exprScanner
+          }) *> VarScanner.super.exprScanner.scan(a)
+      }
 
-      private given Scanner[Pattern] = autoScanner
-      private given Scanner[Builtin] = autoScanner
-      private given Scanner[LocalVar] = autoScanner
-      private given Scanner[Var] = autoScanner
-      given Scanner[Expr.RecordType] = autoScanner
-      given Scanner[Expr.EnumType] = autoScanner
-      given Scanner[RecordFieldLiteral] = autoScanner
-      private given Scanner[RecordFieldPattern] = autoScanner
-      private given Scanner[MatchCase] = autoScanner
-
-      private given Scanner[ExpressionOwner] = IgnoreScanner[ExpressionOwner]
-      private given Scanner[Function] = IgnoreScanner[Function]
-      private given Scanner[Record] = IgnoreScanner[Record]
-      private given Scanner[RecordField] = IgnoreScanner[RecordField]
-      private given Scanner[Enum] = IgnoreScanner[Enum]
-      private given Scanner[EnumVariant] = IgnoreScanner[EnumVariant]
-      private given Scanner[Trait] = IgnoreScanner[Trait]
-      private given Scanner[NullaryBuiltin] = IgnoreScanner[NullaryBuiltin]
-      private given Scanner[UnaryBuiltin] = IgnoreScanner[UnaryBuiltin]
-      private given Scanner[BinaryBuiltin] = IgnoreScanner[BinaryBuiltin]
-
-      private given Scanner[UniqueIdentifier] = IgnoreScanner[UniqueIdentifier]
-      private given Scanner[IdentifierExpr] = IgnoreScanner[IdentifierExpr]
-      private given Scanner[Boolean] = IgnoreScanner[Boolean]
-      private given Scanner[BigInt] = IgnoreScanner[BigInt]
-      private given Scanner[Int] = IgnoreScanner[Int]
-      private given Scanner[String] = IgnoreScanner[String]
-      
+      override protected def holeScanner: Scanner[Nothing] = summon
     }
+    
+    val scanner = VarScanner()
 
     scanner.exprScanner
       .scan(expr)

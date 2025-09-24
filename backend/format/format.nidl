@@ -89,6 +89,16 @@ enum tube-file-entry {
         name: identifier;
         signature: erased-signature;
     },
+
+    @esexpr:(inline-value)
+    instance-definition {
+        definition: instance-definition;
+    },
+
+    instance-reference {
+        instance-id: nat;
+        import: import-specifier;
+    },
 }
 
 
@@ -157,6 +167,11 @@ enum module-export {
 
     trait {
         trait-id: nat;
+        signature: erased-signature;
+    },
+
+    instance {
+        instance-id: nat;
         signature: erased-signature;
     },
 
@@ -273,7 +288,7 @@ enum import-specifier {
         name: identifier;
         sig: erased-signature;
     },
-    
+
     @esexpr:(constructor "import-local")
     local {
         parent: import-specifier;
@@ -473,8 +488,21 @@ record method-definition {
 }
 
 @esexpr:(derive-codec)
+record instance-definition {
+    instance-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    methods: list[method-definition];
+}
+
+@esexpr:(derive-codec)
 enum method-slot {
     abstract,
+    abstract-override,
     virtual,
     override,
     final,
@@ -585,6 +613,18 @@ enum expr {
         @esexpr:(optional)
         when-false-witness: optional-field[local-var];
     },
+    instance-method-call {
+        method-id: nat;
+        instance-type: method-instance-type;
+        instance: expr;
+
+        @esexpr:(vararg)
+        args: list[expr];
+    },
+    @esexpr:(inline-value)
+    instance-singleton-type {
+        instance-singleton-type: instance-singleton-type;
+    },
     int-literal {
         i: int;
     },
@@ -600,6 +640,10 @@ enum expr {
     match {
         value: expr;
         cases: list[match-case];
+    },
+    new-instance {
+        instance-id: nat;
+        args: list[expr];
     },
     or {
         a: expr;
@@ -791,6 +835,27 @@ record trait-type {
 }
 
 @esexpr:(derive-codec)
+record instance-singleton-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
+enum method-instance-type {
+    @esexpr:(inline-value)
+    trait-type {
+        trait-type: trait-type;
+    },
+
+    instance-singleton-type {
+        instance-singleton-type: instance-singleton-type;
+    },
+}
+
+
+@esexpr:(derive-codec)
 record record-field-literal {
     field-id: nat;
     value: expr;
@@ -837,6 +902,9 @@ enum expression-owner {
         index: nat;
     },
     trait {
+        index: nat;
+    },
+    instance {
         index: nat;
     },
     enum-variant {

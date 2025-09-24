@@ -39,6 +39,7 @@ trait TubeEncoderBase[Entry] {
     def getTraitId(t: ArTrait): UIO[BigInt]
     def getMethodId(m: ArMethod): UIO[BigInt]
     def newSyntheticMethodId: UIO[BigInt]
+    def getInstanceId(i: ArInstance): UIO[BigInt]
 
     trait Emitter {
       def emitTube: Comp[Unit]
@@ -51,6 +52,7 @@ trait TubeEncoderBase[Entry] {
       def emitEnumVariantInfo(v: EnumVariant, id: BigInt): Comp[Entry]
       def emitTrait(t: ArTrait, id: BigInt): Comp[Entry]
       def emitMethod(m: ArMethod, id: BigInt): Comp[Entry]
+      def emitInstance(i: ArInstance, id: BigInt): Comp[Entry]
     }
   }
 
@@ -111,6 +113,7 @@ trait TubeEncoderBase[Entry] {
         enumVariantIds <- createIdManager[c.EnumVariantC & c.HasContext[context.type]]
         traitIds <- createIdManager[c.ArTraitC & c.HasContext[context.type]]
         methodIds <- createIdManager[c.ArMethodC & c.HasContext[context.type]]
+        instanceIds <- createIdManager[c.ArInstanceC & c.HasContext[context.type]]
 
         encodeState = new EncodeState {
 
@@ -182,6 +185,9 @@ trait TubeEncoderBase[Entry] {
 
           override def newSyntheticMethodId: UIO[BigInt] =
             methodIds.claimId.commit
+
+          override def getInstanceId(i: ArInstance): UIO[BigInt] =
+            instanceIds.getIdWith(i)(entryBuilders)(emitter.emitInstance)
         }
 
         _ <- encodeState.emitter.emitTube

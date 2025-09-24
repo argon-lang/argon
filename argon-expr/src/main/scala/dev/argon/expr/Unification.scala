@@ -1,6 +1,8 @@
 package dev.argon.expr
 
+import dev.argon
 import dev.argon.ast.IdentifierExpr
+import dev.argon.expr
 import dev.argon.util.{*, given}
 import zio.*
 
@@ -13,9 +15,8 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
   protected val model: Ref[Model]
   protected val evaluator: Evaluator[R, E] { val exprContext: Unification.this.exprContext.type }
 
-  private object Matcher extends TreeComparison {
-    import StandardComparers.given
-
+  private object Matcher extends ExprComparer {
+    override val exprContext: Unification.this.exprContext.type = Unification.this.exprContext
     override type Comparison = ZIO[R, E, Boolean]
 
     override def comparisonFromBoolean(b: Boolean): Comparison =
@@ -27,34 +28,7 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
     override def combineAllComparisons[A](a: Seq[A])(f: A => ZIO[R, E, Boolean]): ZIO[R, E, Boolean] =
       ZIO.forall(a)(f)
 
-
-    private given Comparer[Expr] = unify
-    private given Comparer[Pattern] = autoComparer
-    private given Comparer[Builtin] = autoComparer
-    private given Comparer[LocalVar] = autoComparer
-    private given Comparer[Var] = autoComparer
-    private given Comparer[ExpressionOwner] = autoComparer
-    private given Comparer[Expr.RecordType] = autoComparer
-    private given Comparer[Expr.EnumType] = autoComparer
-    private given Comparer[RecordFieldLiteral] = autoComparer
-    private given Comparer[RecordFieldPattern] = autoComparer
-    private given Comparer[MatchCase] = autoComparer
-
-    // Needed to make autoComparer for Expr happy, even though it will not be used.
-    private given Comparer[Hole] = EqualComparer[Hole]
-    private given Comparer[Function] = EqualComparer[Function]
-    private given Comparer[Record] = EqualComparer[Record]
-    private given Comparer[RecordField] = EqualComparer[RecordField]
-    private given Comparer[Enum] = EqualComparer[Enum]
-    private given Comparer[EnumVariant] = EqualComparer[EnumVariant]
-    private given Comparer[Trait] = EqualComparer[Trait]
-    private given Comparer[Method] = EqualComparer[Method]
-
-    private given Comparer[UniqueIdentifier] = EqualComparer[UniqueIdentifier]
-    private given Comparer[NullaryBuiltin] = EqualComparer[NullaryBuiltin]
-    private given Comparer[UnaryBuiltin] = EqualComparer[UnaryBuiltin]
-    private given Comparer[BinaryBuiltin] = EqualComparer[BinaryBuiltin]
-    private given Comparer[IdentifierExpr] = EqualComparer[IdentifierExpr]
+    override protected def exprComparer: Comparer[Expr] = unify
 
     def unify(a: Expr, b: Expr): ZIO[R, E, Boolean] =
       evaluator.normalizeToValue(a, fuel).flatMap { a =>
@@ -70,7 +44,7 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
                 unify(r1, Substitution.substitute(exprContext)(Map(a2 -> Expr.Variable(a1)))(r2))
 
             case _ =>
-              autoComparer[Expr].compare(a, b)
+              Matcher.super.exprComparer.compare(a, b)
           }
         }
       }

@@ -35,6 +35,7 @@ private[loader] object TubeMethod {
 
       override def slot: MethodSlot = method.slot match {
         case t.MethodSlot.Abstract() => MethodSlot.Abstract
+        case t.MethodSlot.AbstractOverride() => MethodSlot.AbstractOverride
         case t.MethodSlot.Virtual() => MethodSlot.Virtual
         case t.MethodSlot.Override() => MethodSlot.Override
         case t.MethodSlot.Final() => MethodSlot.Final

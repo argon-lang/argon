@@ -69,6 +69,11 @@ private[source] object SourceModule {
             for
               t <- SourceTrait.make(context)(scope, createImportFactory(traitDecl.name.value))(traitDecl)
             yield (scope, Map(traitDecl.name.value -> Seq(ModuleExportC.Trait(t))))
+
+          case instanceDecl: ast.InstanceDeclarationStmt =>
+            for
+              i <- SourceInstance.make(context)(scope, createImportFactory(instanceDecl.name.value))(instanceDecl)
+            yield (scope, Map(instanceDecl.name.value -> Seq(ModuleExportC.Instance(i))))
             
           case ast.ExportStmt(fromImport) =>
             ImportUtil.getModuleExports(context)(reexportingModules + ModuleName(tubeName, path))(tubeName, path)(fromImport)

@@ -57,7 +57,11 @@ private[loader] object TubeModule {
                 for
                   e <- elemLoader.getTrait(traitId)
                 yield ModuleExportC.Trait(e)
-                
+
+              case t.ModuleExport.Instance(instanceId, _) =>
+                for
+                  i <- elemLoader.getInstance(instanceId)
+                yield ModuleExportC.Instance(i)
 
               case t.ModuleExport.Exported(inner) =>
                 for

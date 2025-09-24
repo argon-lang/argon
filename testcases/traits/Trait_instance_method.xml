@@ -14,11 +14,12 @@
                 puts "Hello World"
             end
         end
+
+        instance MyInst: MyTrait
+        end
         
         proc main(): () do
-            let o =
-                MyTrait.new
-                end
+            let o = MyInst
 
             o.say_hello()
         end

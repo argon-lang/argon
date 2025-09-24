@@ -137,6 +137,14 @@ trait ExprType {
           case _ => ???
         }
 
+      case Expr.TraitType(t, args) =>
+        for
+          sig <- t.signature
+        yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
+          exprContext.ExpressionOwner.Trait(t),
+          args
+        )
+
       case Expr.Unbox(t, _) =>
         ZIO.succeed(t)
 

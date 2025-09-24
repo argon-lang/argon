@@ -89,6 +89,16 @@ enum tube-file-entry {
         name: identifier;
         signature: erased-signature;
     },
+
+    @esexpr:(inline-value)
+    instance-definition {
+        definition: instance-definition;
+    },
+
+    instance-reference {
+        instance-id: nat;
+        import: import-specifier;
+    },
 }
 
 
@@ -342,6 +352,9 @@ record trait-definition {
     @esexpr:(keyword)
     signature: function-signature;
 
+    @esexpr:(keyword)
+    vtable: vtable;
+
     @esexpr:(vararg)
     methods: list[method-definition];
 }
@@ -364,6 +377,44 @@ record method-definition {
 }
 
 @esexpr:(derive-codec)
+record vtable {
+    @esexpr:(vararg)
+    entries: list[vtable-entry];
+}
+
+@esexpr:(derive-codec)
+record vtable-entry {
+    slot-method-id: nat;
+    slot-instance-type: vm-type;
+    target: vtable-target;
+}
+
+@esexpr:(derive-codec)
+enum vtable-target {
+    abstract,
+    ambiguous,
+    implementation {
+        method-index: nat;
+    },
+}
+
+
+@esexpr:(derive-codec)
+record instance-definition {
+    instance-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    vtable: vtable;
+
+    @esexpr:(vararg)
+    methods: list[method-definition];
+}
+
+@esexpr:(derive-codec)
 enum method-owner {
     by-trait {
         id: nat;
@@ -376,6 +427,8 @@ enum method-owner {
 enum vm-type {
     builtin {
         b: builtin-type;
+
+        @esexpr:(vararg)
         args: list[vm-type];
     },
     function {
@@ -387,13 +440,24 @@ enum vm-type {
     },
     record {
         record-id: nat;
+
+        @esexpr:(vararg)
         args: list[vm-type];
     },
     enum {
         enum-id: nat;
+
+        @esexpr:(vararg)
+        args: list[vm-type];
+    },
+    trait {
+        trait-id: nat;
+
+        @esexpr:(vararg)
         args: list[vm-type];
     },
     tuple {
+        @esexpr:(vararg)
         elements: list[vm-type];
     },
     type-parameter {
@@ -513,6 +577,21 @@ enum instruction {
         when-false: block;
     },
 
+    instance-method-call {
+        dest: function-result;
+
+        method-id: nat;
+        instance-type: vm-type;
+
+        instance-object: register-id;
+
+        @esexpr:(vararg)
+        type-args: list[vm-type];
+
+        @esexpr:(vararg)
+        args: list[register-id];
+    },
+
     is-enum-variant {
         dest: register-id;
         enum-type: vm-type;
@@ -535,6 +614,15 @@ enum instruction {
     move {
         dest: register-id;
         src: register-id;
+    },
+
+    new-instance {
+        instance-id: nat;
+        dest: register-id;
+        @esexpr:(vararg)
+        type-args: list[vm-type];
+        @esexpr:(vararg)
+        args: list[register-id];
     },
 
     partially-applied-function {

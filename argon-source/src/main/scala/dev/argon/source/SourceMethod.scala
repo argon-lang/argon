@@ -32,9 +32,18 @@ private[source] object SourceMethod {
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
         else context.DefaultExprContext.EffectInfo.Effectful
 
-      override def slot: MethodSlot =
-        if decl.body.isEmpty then MethodSlot.Abstract
+      override val slot: MethodSlot =
+        val isAbstract = decl.body.isEmpty
+        val isFinal = decl.modifiers.exists(_.value == ast.Modifier.Final)
+        val isOverride = decl.modifiers.exists(_.value == ast.Modifier.Override)
+        val isVirtual = decl.modifiers.exists(_.value == ast.Modifier.Virtual)
+        if isAbstract && isOverride then MethodSlot.AbstractOverride
+        else if isAbstract then MethodSlot.Abstract
+        else if isFinal && isOverride then MethodSlot.FinalOverride
+        else if isOverride then MethodSlot.Override
+        else if isVirtual then MethodSlot.Virtual
         else MethodSlot.Final
+      end slot
 
       override def signature: Comp[FunctionSignature] = sigCache.get(
         scope.toScope.flatMap { scope =>

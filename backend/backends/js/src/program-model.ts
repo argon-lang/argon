@@ -14,6 +14,7 @@ export interface ProgramModel {
     getEnumVariantInfo(id: bigint): EnumVariantInfo;
     getTraitInfo(id: bigint): TraitInfo;
     getMethodInfo(id: bigint): MethodInfo;
+    getInstanceInfo(id: bigint): InstanceInfo;
 }
 
 export interface ModuleModel {
@@ -21,7 +22,7 @@ export interface ModuleModel {
     readonly exports: readonly ModuleExportEntry[];
 }
 
-export type ModuleExportEntry = TubeFileEntry & { $type: "function-definition" | "record-definition" | "enum-definition" | "trait-definition" };
+export type ModuleExportEntry = TubeFileEntry & { $type: "function-definition" | "record-definition" | "enum-definition" | "trait-definition" | "instance-definition" };
 
 export interface TubeInfo {
     readonly tubeName: TubeName;
@@ -65,5 +66,9 @@ export interface MethodInfo {
     readonly signature: ErasedSignature;
 
     readonly definition?: MethodDefinition | undefined;
+}
+
+export interface InstanceInfo {
+    readonly importSpecifier: ImportSpecifier;
 }
 

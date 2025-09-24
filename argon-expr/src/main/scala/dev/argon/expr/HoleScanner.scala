@@ -4,51 +4,21 @@ import cats.*
 import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{*, given}
 
-sealed trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
+private[expr] sealed trait HoleScanner extends ExprScanner[[A] =>> Either[Unit, A]] {
   val exprContext: ExprContext
   import exprContext.*
 
   val searchTarget: Hole
 
-  import StandardScanners.given
-
-  private given Scanner[Hole]:
+  override protected def holeScanner: Scanner[Hole] = new Scanner[Hole] {
     override def scan(a: Hole): Either[Unit, Unit] =
       if a == searchTarget then
         Left(())
       else
         Right(())
-  end given
+  }
 
-  given exprScanner: Scanner[Expr] = autoScanner
-  private given Scanner[Pattern] = autoScanner
-  private given Scanner[Builtin] = autoScanner
-  private given Scanner[LocalVar] = autoScanner
-  private given Scanner[Var] = autoScanner
-  given Scanner[Expr.RecordType] = autoScanner
-  given Scanner[Expr.EnumType] = autoScanner
-  given Scanner[RecordFieldLiteral] = autoScanner
-  private given Scanner[RecordFieldPattern] = autoScanner
-  private given Scanner[MatchCase] = autoScanner
-
-  private given Scanner[ExpressionOwner] = IgnoreScanner[ExpressionOwner]
-  private given Scanner[Function] = IgnoreScanner[Function]
-  private given Scanner[Record] = IgnoreScanner[Record]
-  private given Scanner[RecordField] = IgnoreScanner[RecordField]
-  private given Scanner[Enum] = IgnoreScanner[Enum]
-  private given Scanner[EnumVariant] = IgnoreScanner[EnumVariant]
-  private given Scanner[Trait] = IgnoreScanner[Trait]
-  private given Scanner[NullaryBuiltin] = IgnoreScanner[NullaryBuiltin]
-  private given Scanner[UnaryBuiltin] = IgnoreScanner[UnaryBuiltin]
-  private given Scanner[BinaryBuiltin] = IgnoreScanner[BinaryBuiltin]
-
-  private given Scanner[UniqueIdentifier] = IgnoreScanner[UniqueIdentifier]
-  private given Scanner[IdentifierExpr] = IgnoreScanner[IdentifierExpr]
-  private given Scanner[Boolean] = IgnoreScanner[Boolean]
-  private given Scanner[BigInt] = IgnoreScanner[BigInt]
-  private given Scanner[Int] = IgnoreScanner[Int]
-  private given Scanner[String] = IgnoreScanner[String]
-
+  override def exprScanner: Scanner[exprContext.Expr] = super.exprScanner
 }
 
 object HoleScanner {

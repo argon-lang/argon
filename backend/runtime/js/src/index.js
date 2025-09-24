@@ -55,7 +55,7 @@ function specialize(options = {}) {
     const specializations = [];
 
     function getSpecialization(...typeArgs) {
-        const o = this;
+        const o = options.getInstancePrototype ? options.getInstancePrototype(this, typeArgs) : this;
         for(const spec of specializations) {
             if(isSameType(spec.typeArgs, typeArgs)) {
                 return spec.specializedClass;
@@ -68,9 +68,8 @@ function specialize(options = {}) {
         specializedClass.prototype = Object.create(o.prototype);
         specializedClass.typeArgs = typeArgs;
 
-        const customize = options.customize;
-        if(customize) {
-            customize(specializedClass);
+        if(options.customize) {
+            options.customize(specializedClass);
         }
 
         specializations.push({
@@ -82,6 +81,22 @@ function specialize(options = {}) {
     }
     
     return getSpecialization;
+}
+
+function lazyFunctionBuilder(create) {
+    let f = null;
+    return function(...args) {
+        if(f === null) {
+            f = create();
+        }
+
+        if(new.target) {
+            return new f(...args);
+        }
+        else {
+            return f(...args);
+        }
+    }
 }
 
 
@@ -207,19 +222,123 @@ function createEnumVariant(proto, variant) {
 export function createTraitType(traitInfo) {
     const traitType = function() {};
 
-    traitType.methods = Object.create(null);
-    for(const [name, methodImpl] of Object.entries(traitInfo.methods)) {
-        const sym = Symbol()
-        traitType.methods[name] = sym;
-        if(methodImpl !== null) {
-            traitType.prototype[sym] = methodImpl;
-        }
-    }
-
     if(traitInfo.typeParameterCount === 0) {
-        traitInfo.specialize = specialize();
+        traitType.methods = Object.create(null);
+        applyVTable(traitType, traitInfo.methods, traitInfo.vtable);
+    }
+    else {
+        traitInfo.specialize = specialize({
+            customize(c) {
+                c.methods = Object.create(null);
+                applyVTable(c, traitInfo.methods, traitInfo.vtable);
+            },
+        });
     }
 
     return traitType;
 }
+
+
+function abstractMethodImplementation() {
+    throw new Error("Abstract Method Called");
+}
+
+function ambiguousMethodImplementation() {
+    throw new Error("Ambiguous Method Implementation");
+}
+
+
+function applyVTable(c, methods, vtable) {
+    const methodImpls = [];
+
+    for(const [name, methodImpl] of Object.entries(methods)) {
+        const sym = Symbol();
+        c.methods[name] = sym;
+        const method = methodImpl.method;
+        methodImpls.push(method);
+        if(method === null) {
+            c.prototype[sym] = abstractMethodImplementation;
+        }
+        else if(typeof method === "function") {
+            c.prototype[sym] = method;
+        }
+        else {
+            throw new Error("A method must be null (abstract) or a function. Actual: " + typeof(method));
+        }
+    }
+
+    for(const entry of vtable) {
+        let method;
+        switch(entry.target.type) {
+            case "abstract":
+                method = abstractMethodImplementation;
+                break;
+
+            case "ambiguous":
+                method = ambiguousMethodImplementation;
+                break;
+
+            case "implementation":
+                method = methodImpls[entry.target.methodIndex];
+                if(method === null || method === undefined) {
+                    throw new Error("Invalid target method index");
+                }
+
+                break;
+
+            default:
+                throw new Error("Unexpected target type");
+        }
+
+        c[entry.slotMethodSymbol.call(c)] = method;
+    }
+}
+
+export function createInstanceDefinition(instanceInfo) {
+    function createInstanceConstructor(base) {
+        const constructor = function(...args) {
+            if(args.length !== instanceInfo.argCount) {
+                throw new Error(`Invalid arguments count expected ${instanceInfo.argCount}, actual ${args.length}`);
+            }
+
+            for(let i = 0; i < instanceInfo.argCount; ++i) {
+                Object.defineProperty(
+                    this,
+                    `args_${i}`,
+                    {
+                        value: args[i],
+                        writable: false,
+                    },
+                );
+            }
+
+            base.call(this);
+        };
+        
+        constructor.prototype = Object.create(base.prototype);
+
+        return constructor;
+    }
+
+    if(instanceInfo.typeParameterCount === 0) {
+        return lazyFunctionBuilder(() => {
+            const inst = createInstanceConstructor(instanceInfo.baseConstructor());
+            applyVTable(inst, instanceInfo.methods, instanceInfo.vtable);
+            return inst;
+        });
+    }
+    else {
+        const inst = {};
+        inst.specialize = specialize({
+            getInstancePrototype(_inst, typeArgs) {
+                return createInstanceConstructor(instanceInfo.baseConstructor(...typeArgs));
+            },
+            customize(specialized) {
+                applyVTable(specialized, instanceInfo.methods, instanceInfo.vtable);
+            },
+        });
+        return inst;
+    }
+}
+
 

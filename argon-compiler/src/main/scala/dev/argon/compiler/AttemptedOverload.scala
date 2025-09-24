@@ -7,6 +7,8 @@ enum AttemptedOverload {
   case Enum(e: ArEnumC)
   case EnumVariant(variant: EnumVariantC)
   case Trait(t: ArTraitC)
+  case Instance(i: ArInstanceC)
+  case InstanceMethod(m: ArMethodC)
 }
 
 final case class AttemptedOverloadWithErrors(

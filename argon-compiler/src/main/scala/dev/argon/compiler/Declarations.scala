@@ -9,7 +9,7 @@ import zio.*
 import scala.reflect.TypeTest
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import scala.compiletime.{deferred, asMatchable}
+import scala.compiletime.{asMatchable, deferred}
 
 trait Context extends ScopeContext {
   type Env <: Context.Env0
@@ -27,6 +27,7 @@ trait Context extends ScopeContext {
     override type EnumVariant = EnumVariantC & HasContext[Context.this.type]
     override type Trait = ArTraitC & HasContext[Context.this.type]
     override type Method = ArMethodC & HasContext[Context.this.type]
+    override type Instance = ArInstanceC & HasContext[Context.this.type]
 
     override def getRecordFieldName(f: RecordFieldC & HasContext[Context.this.type]): IdentifierExpr = f.name
   }
@@ -190,6 +191,7 @@ trait UsingContext {
   type ArRecord = ArRecordC & HasContext[context.type]
   type ArEnum = ArEnumC & HasContext[context.type]
   type ArTrait = ArTraitC & HasContext[context.type]
+  type ArInstance = ArInstanceC & HasContext[context.type]
 
   type RecordField = RecordFieldC & HasContext[context.type]
   type EnumVariant = EnumVariantC & HasContext[context.type]
@@ -277,6 +279,7 @@ enum ModuleExportC[Ctx <: Context] {
   case Record(r: ArRecordC & HasContext[Ctx])
   case Enum(e: ArEnumC & HasContext[Ctx])
   case Trait(t: ArTraitC & HasContext[Ctx])
+  case Instance(i: ArInstanceC & HasContext[Ctx])
   case Exported(exp: ModuleExportC[Ctx])
 }
 
@@ -392,13 +395,29 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
 
 enum MethodSlot derives CanEqual {
   case Abstract
+  case AbstractOverride
   case Virtual
   case Override
   case Final
   case FinalOverride
 }
 
-enum MethodOwner[Ctx <: Context] {
+enum MethodOwner[Ctx <: Context] derives CanEqual {
   case ByTrait(t: ArTraitC & HasContext[Ctx])
+  case ByInstance(i: ArInstanceC & HasContext[Ctx])
 }
+
+
+abstract class ArInstanceC extends UsingContext with DeclarationBase derives CanEqual {
+  def methods: Comp[Seq[ArMethod]]
+
+  override def hashCode(): Int = id.hashCode()
+
+  override def equals(obj: Any): Boolean =
+    obj.asMatchable match {
+      case other: ArInstanceC => id == other.id
+      case _ => false
+    }
+}
+
 

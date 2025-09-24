@@ -23,6 +23,7 @@ private[loader] object TubeDeserialized {
       enumVariantReferences: TMap[BigInt, t.TubeFileEntry.EnumVariantReference],
       traits: TMap[BigInt, t.TraitDefinition | t.ImportSpecifier],
       methods: TMap[BigInt, t.TubeFileEntry.TraitMethodReference],
+      instances: TMap[BigInt, t.InstanceDefinition | t.ImportSpecifier],
     )
 
     def createElementLoader(metadata: t.TubeMetadata, state: ElementState): Comp[ElementLoader & HasContext[ctx.type]] =
@@ -40,6 +41,8 @@ private[loader] object TubeDeserialized {
 
         traitCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArTraitC & HasContext[ctx.type]]
         methodCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArMethodC & HasContext[ctx.type]]
+
+        instanceCache <- MemoCacheStore.make[ctx.Env, ctx.Error, BigInt, ArInstanceC & HasContext[ctx.type]]
 
         localImportIds <- MemoCacheStore.make[ctx.Env, ctx.Error, t.ImportSpecifier.Local, UniqueIdentifier]
         localImports <- TMap.empty[t.ImportSpecifier.Local, ModuleExportC[ctx.type]].commit
@@ -219,6 +222,25 @@ private[loader] object TubeDeserialized {
               }
           }
 
+        override def getInstance(id: BigInt): Comp[ArInstance] =
+          instanceCache.usingCreate(id) { id =>
+            state.instances.get(id)
+              .commit
+              .flatMap {
+                case Some(item) => ZIO.succeed(item)
+                case None => ZIO.fail(TubeFormatException("Invalid instance id " + id))
+              }
+              .flatMap {
+                case importSpec: t.ImportSpecifier =>
+                  getImport(importSpec) {
+                    case ModuleExportC.Instance(i) => i
+                  }
+
+                case instanceDef: t.InstanceDefinition =>
+                  TubeInstance(ctx, this, instanceDef)
+              }
+          }
+
 
         private def getImport[A <: DeclarationBase & HasContext[ctx.type]](importSpec: t.ImportSpecifier)(get: PartialFunction[ModuleExport, A]): Comp[A] =
           importSpec match {
@@ -299,6 +321,7 @@ private[loader] object TubeDeserialized {
           enumVariantReferences <- TMap.empty[BigInt, t.TubeFileEntry.EnumVariantReference]
           traits <- TMap.empty[BigInt, t.TraitDefinition | t.ImportSpecifier]
           methods <- TMap.empty[BigInt, t.TubeFileEntry.TraitMethodReference]
+          instances <- TMap.empty[BigInt, t.InstanceDefinition | t.ImportSpecifier]
         yield ElementState(
           functions = functions,
           records = records,
@@ -308,6 +331,7 @@ private[loader] object TubeDeserialized {
           enumVariantReferences = enumVariantReferences,
           traits = traits,
           methods = methods,
+          instances = instances,
         )
 
       def iter(state: ElementState): ZChannel[ctx.Env, Nothing, t.TubeFileEntry, Any, ctx.Error, Nothing, ArTubeC & HasContext[ctx.type]] =
@@ -357,6 +381,11 @@ private[loader] object TubeDeserialized {
             case methodRef: t.TubeFileEntry.TraitMethodReference =>
               ZChannel.fromZIO(state.methods.put(methodRef.methodId, methodRef).commit) *> iter(state)
 
+            case t.TubeFileEntry.InstanceDefinition(instanceDef) =>
+              ZChannel.fromZIO(state.instances.put(instanceDef.instanceId, instanceDef).commit) *> iter(state)
+
+            case t.TubeFileEntry.InstanceReference(instanceId, importSpec) =>
+              ZChannel.fromZIO(state.instances.put(instanceId, importSpec).commit) *> iter(state)
           },
           empty = ZChannel.fromZIO(createTube(metadata, state)),
         )

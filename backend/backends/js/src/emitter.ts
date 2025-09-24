@@ -352,6 +352,10 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 this.emitTrait(entry.definition);
                 break;
 
+            case "instance-definition":
+                this.emitInstance(entry.definition);
+                break;
+
             default:
                 ensureExhaustive(entry);
         }
@@ -515,32 +519,8 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
     private emitTrait(traitDef: ir.TraitDefinition): void {
         const name = this.getExportNameForImport(traitDef.import);
 
-        const concreteMethods: ReadonlyDeep<estree.Property>[] = [];
-
-        for(const methodDef of traitDef.methods) {
-            const methodName = this.getExportNameForIdSig(methodDef.name, methodDef.erasedSignature);
-            const useSimpleName = isValidIdName(methodName) && methodName !== "__proto__";
-
-            const methodImpl = this.emitMethodBody(methodDef);
-
-            concreteMethods.push({
-                type: "Property",
-                computed: !useSimpleName,
-                shorthand: false,
-                method: methodImpl !== null,
-                kind: "init",
-                key: useSimpleName ? {
-                    type: "Identifier",
-                    name: methodName,
-                } : {
-                    type: "Literal",
-                    value: methodName,
-                },
-                value: methodImpl === null
-                    ? { type: "Literal", value: null }
-                    : methodImpl,
-            });
-        }
+        const methodFuncs = this.emitMethods(traitDef.methods);
+        const vtable = this.emitVTable(traitDef.vtable);
 
         const traitInfo: ReadonlyDeep<estree.Expression> = {
             type: "ObjectExpression",
@@ -570,15 +550,23 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                         type: "Identifier",
                         name: "methods",
                     },
-                    value: {
-                        type: "ObjectExpression",
-                        properties: concreteMethods,
+                    value: methodFuncs,
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "vtable",
                     },
-                }
+                    value: vtable,
+                },
             ],
         };
 
-        
 
         this.addDeclaration({
             type: "VariableDeclaration",
@@ -603,9 +591,60 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         });
     }
 
-    private emitMethodBody(methodDef: ir.MethodDefinition): ReadonlyDeep<estree.Expression> | null {
+    private emitMethods(methods: readonly ir.MethodDefinition[]): ReadonlyDeep<estree.Expression> {
+        const methodFuncs: ReadonlyDeep<estree.Property>[] = [];
+
+        for(const methodDef of methods) {
+            const methodName = this.getExportNameForIdSig(methodDef.name, methodDef.erasedSignature);
+            const useSimpleName = isValidIdName(methodName) && methodName !== "__proto__";
+
+            const methodImpl = this.emitMethodBody(methodDef);
+
+            methodFuncs.push({
+                type: "Property",
+                computed: !useSimpleName,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: useSimpleName ? {
+                    type: "Identifier",
+                    name: methodName,
+                } : {
+                    type: "Literal",
+                    value: methodName,
+                },
+                value: {
+                    type: "ObjectExpression",
+                    properties: [
+                        {
+                            type: "Property",
+                            computed: false,
+                            shorthand: false,
+                            method: false,
+                            kind: "init",
+                            key: {
+                                type: "Identifier",
+                                name: "method",
+                            },
+                            value: methodImpl,
+                        },
+                    ],
+                },
+            });
+        }
+
+        return {
+            type: "ObjectExpression",
+            properties: methodFuncs,
+        };
+    }
+
+    private emitMethodBody(methodDef: ir.MethodDefinition): ReadonlyDeep<estree.Expression> {
         if(methodDef.implementation === undefined) {
-            return null;
+            return {
+                type: "Literal",
+                value: null,
+            };
         }
         
         const impl = this.emitFunctionImpl(methodDef.signature, methodDef.implementation);
@@ -620,6 +659,222 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         else {
             return impl;
         }
+    }
+
+    private emitVTable(vtable: ir.Vtable): ReadonlyDeep<estree.Expression> {
+        const entries: ReadonlyDeep<estree.Expression>[] = [];
+
+        for(const entry of vtable.entries) {
+            const methodInfo = this.options.program.getMethodInfo(entry.slotMethodId);
+
+            const methodSymbolExpr: ReadonlyDeep<estree.Expression> = {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+                
+                object: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: new BlockEmitter(this, 0).buildTypeInfo(entry.slotInstanceType),
+                    property: {
+                        type: "Identifier",
+                        name: "methods",
+                    },
+                },
+
+                property: {
+                    type: "Identifier",
+                    name: this.getExportNameForIdSig(methodInfo.name, methodInfo.signature),
+                },
+            };
+
+            let methodTarget: JsonValue;
+            switch(entry.target.$type) {
+                case "abstract":
+                    methodTarget = {
+                        type: "abstract",
+                    };
+                    break;
+
+                case "ambiguous":
+                    methodTarget = {
+                        type: "ambiguous",
+                    };
+                    break;
+
+                case "implementation":
+                    methodTarget = {
+                        type: "implementation",
+                        methodIndex: Number(entry.target.methodIndex),
+                    };
+                    break;
+
+                default:
+                    ensureExhaustive(entry.target);
+            }
+
+            entries.push({
+                type: "ObjectExpression",
+                properties: [
+                    {
+                        type: "Property",
+                        computed: false,
+                        shorthand: false,
+                        method: false,
+                        kind: "init",
+                        key: {
+                            type: "Identifier",
+                            name: "slotMethodSymbol",
+                        },
+                        value: {
+                            type: "FunctionExpression",
+                            params: [],
+                            body: {
+                                type: "BlockStatement",
+                                body: [
+                                    {
+                                        type: "ReturnStatement",
+                                        argument: methodSymbolExpr,
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        type: "Property",
+                        computed: false,
+                        shorthand: false,
+                        method: false,
+                        kind: "init",
+                        key: {
+                            type: "Identifier",
+                            name: "target",
+                        },
+                        value: jsonToExpression(methodTarget),
+                    },
+                ],
+            });
+        }
+
+        return {
+            type: "ArrayExpression",
+            elements: entries,
+        };
+    }
+
+    private emitInstance(instanceDef: ir.InstanceDefinition): void {
+        const name = this.getExportNameForImport(instanceDef.import);
+
+        const methodFuncs = this.emitMethods(instanceDef.methods);
+        const vtable = this.emitVTable(instanceDef.vtable);
+
+        const instanceInfo: ReadonlyDeep<estree.Expression> = {
+            type: "ObjectExpression",
+            properties: [
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "typeParameterCount",
+                    },
+                    value: {
+                        type: "Literal",
+                        value: instanceDef.signature.typeParameters.length,
+                    },
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "argCount",
+                    },
+                    value: {
+                        type: "Literal",
+                        value: instanceDef.signature.parameters.length,
+                    },
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "methods",
+                    },
+                    value: methodFuncs,
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "vtable",
+                    },
+                    value: vtable,
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: true,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "baseConstructor",
+                    },
+                    value: {
+                        type: "FunctionExpression",
+                        params: [],
+                        body: {
+                            type: "BlockStatement",
+                            body: [
+                                {
+                                    type: "ReturnStatement",
+                                    argument: new BlockEmitter(this, instanceDef.signature.parameters.length).buildTypeInfo(instanceDef.signature.returnType),
+                                }
+                            ],
+                        },
+                    },
+                },
+            ],
+        };
+
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: {
+                        type: "Identifier",
+                        name,
+                    },
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createInstanceDefinition"),
+                        arguments: [
+                            instanceInfo,
+                        ],
+                    },
+                },
+            ],
+        });
     }
 }
 
@@ -1006,6 +1261,58 @@ class BlockEmitter extends EmitterBase {
                 }
                 break;
 
+            case "instance-method-call":
+            {
+                const methodInfo = this.options.program.getMethodInfo(insn.methodId);
+
+                const methodSymbolExpr: estree.Expression = {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    
+                    object: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.buildTypeInfo(insn.instanceType),
+                        property: {
+                            type: "Identifier",
+                            name: "methods",
+                        },
+                    },
+
+                    property: {
+                        type: "Identifier",
+                        name: this.getExportNameForIdSig(methodInfo.name, methodInfo.signature),
+                    },
+                };
+
+                const args: estree.Expression[] = [];
+                for(const typeArg of insn.typeArgs) {
+                    args.push(this.buildTypeInfo(typeArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: {
+                        type: "MemberExpression",
+                        computed: true,
+                        optional: false,
+                        object: this.getReg(insn.instanceObject),
+                        property: methodSymbolExpr,
+                    },
+                    arguments: args,
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
             case "is-enum-variant":
                 stmts.push({
                     type: "ExpressionStatement",
@@ -1083,6 +1390,30 @@ class BlockEmitter extends EmitterBase {
             case "move":
                 assign(insn.dest, this.getReg(insn.src));
                 break;
+
+            case "new-instance":
+            {
+                const instanceInfo = this.options.program.getInstanceInfo(insn.instanceId);
+                const funcExpr = this.moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+
+                const args: estree.Expression[] = [];
+                for(const typeArg of insn.typeArgs) {
+                    args.push(this.buildTypeInfo(typeArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                const callExpr: estree.Expression = {
+                    type: "NewExpression",
+                    callee: funcExpr,
+                    arguments: args,
+                };
+
+                assign(insn.dest, callExpr);
+                break;
+            }
 
             case "partially-applied-function":
             case "partially-applied-type-function":
@@ -1312,7 +1643,7 @@ class BlockEmitter extends EmitterBase {
         }
     }
 
-    private buildTypeInfo(t: ir.VmType): estree.Expression {
+    buildTypeInfo(t: ir.VmType): estree.Expression {
         switch(t.$type) {
             case "builtin":
                 switch(t.b.$type) {
@@ -1386,6 +1717,30 @@ class BlockEmitter extends EmitterBase {
             case "enum":
             {
                 const rec = this.options.program.getEnumInfo(t.enumId);
+                if(t.args.length === 0) {
+                    return this.moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTypeInfo(arg)),
+                };
+            }
+
+            case "trait":
+            {
+                const rec = this.options.program.getTraitInfo(t.traitId);
                 if(t.args.length === 0) {
                     return this.moduleEmitter.getImportExpr(rec.importSpecifier);
                 }
