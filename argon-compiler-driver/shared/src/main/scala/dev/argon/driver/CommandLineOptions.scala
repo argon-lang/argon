@@ -36,7 +36,7 @@ final case class GenIRCommand(
 ) extends CompilerDriverCommand
 
 final case class CodegenCommand(
-  platform: String,
+  backendFactory: BackendFactory,
   inputFile: PathLike,
   referencedTubes: Seq[PathLike],
   platformOptions: Map[String, CompilerDriverOptions.OptionValue],
@@ -119,7 +119,7 @@ object CompilerDriverOptions {
                 createOptionsFromMetadata(backend.metadata.backend.name)(backend.metadata.options.codegen),
                 createOptionsFromOutputMetadata(backend.metadata.backend.name)(backend.metadata.options.output),
               ).mapN { (input, references, codegenOptions, outputOptions) =>
-                CodegenCommand(backend.metadata.backend.name, input, references, codegenOptions, outputOptions)
+                CodegenCommand(backend, input, references, codegenOptions, outputOptions)
               }
             )
           )

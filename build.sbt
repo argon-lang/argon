@@ -39,32 +39,39 @@ dist := {
 
 distJVM := {
   val distDir = file("dist/argon-jvm")
+  IO.delete(distDir)
 
   val compilerJarDir = distDir / "compiler"
   IO.createDirectory(compilerJarDir)
 
-  val files = (cliJVM / Compile / fullClasspathAsJars)
+  val files = (compiler_launcher / Compile / fullClasspathAsJars)
     .value
     .map { _.data }
-
-  compilerJarDir.listFiles
-    .filter { file =>
-      file.isFile &&
-        file.getName.toUpperCase(Locale.US).endsWith(".jar") &&
-        !files.exists { outFile => outFile.getName == file.getName }
-    }
-    .foreach(IO.delete)
-
-
 
   for (file <- files) {
     IO.copyFile(file, compilerJarDir / file.getName)
   }
 
-  IO.delete(distDir / "backends")
   val _ = distBackendJS.value
   IO.createDirectory(distDir / "backends/js")
   IO.copyDirectory(file("dist/backends/js"), distDir / "backends/js")
+
+  val launcherScript = distDir / "argon"
+  IO.write(
+    launcherScript,
+    s"""#!/bin/bash
+       |DISTDIR="$$(readlink -f "$$(dirname "$$0")")"
+       |COMPDIR="$$DISTDIR/compiler"
+       |java \\
+       |  --class-path "${ files.map(file => "$COMPDIR/" + file.getName).mkString(":") }" \\
+       |  -Ddev.argon.backends="$$DISTDIR/backends" \\
+       |  --illegal-native-access=deny \\
+       |  -Dpolyglotimpl.AttachLibraryFailureAction=ignore \\
+       |  dev.argon.launcher.ArgonLauncher \\
+       |  "$$@"
+       |""".stripMargin
+  )
+  launcherScript.setExecutable(true)
 }
 
 distNode := {
@@ -303,7 +310,13 @@ lazy val compilerOptions = Seq(
 
 lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-util"))
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.util",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -326,36 +339,16 @@ lazy val utilJVM = util.jvm
 lazy val utilJS = util.js
 lazy val utilNode = util.node
 
-
-lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-grammar"))
-  .dependsOn(util)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-grammar",
-  )
-
-lazy val grammarJVM = grammar.jvm
-lazy val grammarJS = grammar.js
-lazy val grammarNode = grammar.node
-
-
 lazy val ast = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-ast"))
   .dependsOn(util)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.ast",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -376,35 +369,17 @@ lazy val astJVM = ast.jvm
 lazy val astJS = ast.js
 lazy val astNode = ast.node
 
-lazy val esexpr_parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("esexpr-parser"))
-  .dependsOn(grammar)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "esexpr-parser",
-  )
-
-lazy val esexpr_parserJVM = esexpr_parser.jvm
-lazy val esexpr_parserJS = esexpr_parser.js
-lazy val esexpr_parserNode = esexpr_parser.node
-
 
 lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-parser"))
-  .dependsOn(ast, grammar)
+  .dependsOn(ast)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.parser",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -423,8 +398,6 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
     Compile / sourceGenerators += Def.task {
       val s = streams.value
       val log = s.log
-
-
 
       val resDir = sourceManaged.value / "parser"
 
@@ -481,7 +454,13 @@ lazy val parserNode = parser.node
 lazy val argon_prover = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-prover"))
   .dependsOn(util)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.prover",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -504,9 +483,15 @@ lazy val argon_proverNode = argon_prover.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
-  .dependsOn(util, esexpr_parser)
+  .dependsOn(util)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.io",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -528,35 +513,16 @@ lazy val argon_ioJS = argon_io.js
 lazy val argon_ioNode = argon_io.node
 
 
-// lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-options"))
-//   .dependsOn(util, argon_io)
-//   .jvmConfigure(
-//     _.settings(commonJVMSettings)
-//   )
-//   .jsConfigure(
-//     _.enablePlugins(NpmUtil)
-//       .settings(commonBrowserSettings)
-//   )
-//   .nodeConfigure(
-//     _.enablePlugins(NpmUtil)
-//       .settings(commonNodeSettings)
-//   )
-//   .settings(
-//     commonSettings,
-//     compilerOptions,
-
-//     name := "argon-options",
-//   )
-
-// lazy val optionsJVM = options.jvm
-// lazy val optionsJS = options.js
-// lazy val optionsNode = options.node
-
-
 lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-expr"))
   .dependsOn(argon_prover, util, ast)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.expr",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -581,7 +547,13 @@ lazy val argon_exprNode = argon_expr.node
 lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-compiler"))
   .dependsOn(ast, util, argon_expr, argon_io)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.compiler",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -608,8 +580,11 @@ lazy val argon_format = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
   .dependsOn(argon_compiler)
   .jvmConfigure(
     _.settings(
-        commonJVMSettings,
-      )
+      commonJVMSettings,
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.format",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -637,8 +612,12 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
   .dependsOn(argon_format, argon_io, argon_compiler)
   .jvmConfigure(
     _.settings(
-        commonJVMSettings,
-      )
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.tube",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -662,7 +641,13 @@ lazy val argon_tubeNode = argon_tube.node
 lazy val argon_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-source"))
   .dependsOn(argon_compiler, parser)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.source",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -731,6 +716,10 @@ lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossTyp
       .settings(
       commonJVMSettings,
       Compile / generateNobleIdlJavaAdapters := true,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.vm",
+      ),
     )
   )
   .jsConfigure(
@@ -771,6 +760,10 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
   .jvmConfigure(
     _.settings(
       commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.backend",
+      ),
 
       Compile / generateNobleIdlJavaAdapters := true,
 
@@ -862,7 +855,13 @@ lazy val argon_backendNode = argon_backend.node
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-build"))
   .dependsOn(util, argon_compiler, argon_io, parser, argon_vm, argon_source, argon_tube)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      Compile / packageBin / packageOptions += Package.ManifestAttributes(
+        "Automatic-Module-Name" -> "dev.argon.build",
+      ),
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -973,7 +972,7 @@ lazy val compiler_driver_api = project.in(file("argon-compiler-driver-api"))
 
 lazy val compiler_driver = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-compiler-driver"))
   .enablePlugins(BuildInfoPlugin)
-  .dependsOn(util, argon_platform, argon_build, argon_backend)
+  .dependsOn(util, argon_build, argon_backend)
   .jvmConfigure(
     _.dependsOn(compiler_driver_api)
       .settings(commonJVMSettings)
@@ -999,7 +998,7 @@ lazy val compiler_driverJVM = compiler_driver.jvm
 lazy val compiler_driverNode = compiler_driver.node
 
 lazy val compiler_launcher = project.in(file("argon-compiler-launcher"))
-  .dependsOn(argon_backend_java_api, compiler_driver_api)
+  .dependsOn(argon_backend_java_api, compiler_driver_api, compiler_driverJVM)
   .settings(
     commonSettings,
     commonJVMSettings,

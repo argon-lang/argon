@@ -1,6 +1,5 @@
 package dev.argon.parser
 
-import dev.argon.grammar.GrammarError
 import dev.argon.util.{FilePosition, FileSpec, SourceLocation, WithSource}
 
 final case class SyntaxErrorData(fileSpec: FileSpec, syntaxError: SyntaxError)

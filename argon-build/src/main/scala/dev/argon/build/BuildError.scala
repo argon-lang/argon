@@ -2,7 +2,6 @@ package dev.argon.build
 
 import dev.argon.compiler.{TubeName, CompilerError}
 import esexpr.ESExprCodec
-import esexpr.parser.ESExprTextParseException
 import dev.argon.util.*
 
 sealed trait BuildError

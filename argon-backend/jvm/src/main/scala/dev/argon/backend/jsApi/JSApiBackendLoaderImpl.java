@@ -16,7 +16,6 @@ import org.graalvm.polyglot.io.IOAccess;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.util.HashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
@@ -30,7 +29,7 @@ class JSApiBackendLoaderImpl implements AutoCloseable {
     ) {
         this.importPath = importPath;
         this.exportName = exportName;
-        executor = Executors.newSingleThreadExecutor();
+        var executor = Executors.newSingleThreadExecutor();
         var javaExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
         jsExecutor = JSExecutor.fromExecutors(executor, javaExecutor);
@@ -55,16 +54,11 @@ class JSApiBackendLoaderImpl implements AutoCloseable {
 
     private final String importPath;
     private final String exportName;
-    private final Executor executor;
     private final JSExecutor jsExecutor;
     private final Context jsContext;
 
     private final ReentrantLock lock = new ReentrantLock();
     private BackendFactory backendFactory;
-
-    public Executor getExecutor() {
-        return executor;
-    }
 
     public BackendFactory getBackendFactory() {
         lock.lock();

@@ -14,7 +14,6 @@ import dev.argon.compiler_tests.TestCase.ExpectedResult
 import dev.argon.compiler.*
 import cats.data.NonEmptySeq
 import dev.argon.util.async.ZIOErrorUtil
-import esexpr.parser.ESExprTextReader
 import dev.argon.util.{*, given}
 import dev.argon.io.PathUtil
 

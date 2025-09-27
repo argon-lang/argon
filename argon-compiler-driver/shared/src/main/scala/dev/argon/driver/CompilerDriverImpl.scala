@@ -1,10 +1,11 @@
 package dev.argon.driver
 
 import dev.argon.backend.options.OptionValue
-import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider}
+import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider, CodeGenerator}
 import dev.argon.build.{BuildError, Compile, GenerateIR, InvalidTubeName, LogReporter}
 import dev.argon.compiler.{ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
-import dev.argon.io.{DirectoryResource, PathUtil}
+import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource, PathUtil}
+import dev.argon.vm.resource.VmIrResource
 import dev.argon.parser.SyntaxError
 import dev.argon.source.ArgonSourceCodeResource
 import dev.argon.tube.loader.TubeFormatException
@@ -31,19 +32,18 @@ private[driver] object CompilerDriverImpl {
               .as(ExitCode.success)
 
           case Right(StandardCompilerDriverOptions(command)) =>
-            command match {
+            (command match {
               case command: CompileCommand =>
                 runCompile(command)
-                  .as(ExitCode.success)
-                  .provideSomeLayer[BackendProvider](LogReporter.live)
 
               case command: GenIRCommand =>
                 runGenIR(command)
-                  .as(ExitCode.success)
-                  .provideSomeLayer[BackendProvider](LogReporter.live)
-                
-              case command: CodegenCommand => ???
-            }
+
+              case command: CodegenCommand =>
+                runCodegen(command)
+            })
+              .as(ExitCode.success)
+              .provideSomeLayer[BackendProvider](LogReporter.live)
         }
       }
 
@@ -133,6 +133,36 @@ private[driver] object CompilerDriverImpl {
 
     yield ()
   end runGenIR
+  
+  private def runCodegen(options: CodegenCommand): ZIO[ErrorLog & LogReporter, Error, Unit] =
+    ZIO.scoped(
+      for
+        backend <- options.backendFactory.load[Error]
+        codeGenOpts <- backend.codeGenerator.optionParser.parse(realizeBackendOptions(options.platformOptions))
+        output <- (backend.codeGenerator: CodeGenerator[Error, backend.Output] & backend.codeGenerator.type) match {
+          case codeGen: (CodeGenerator.LibraryCodeGenerator[Error, backend.Output] & backend.codeGenerator.type) =>
+            codeGen.codegen(
+              options = codeGenOpts,
+              program = PathUtil.binaryResource(options.inputFile).decode[VmIrResource],
+              libraries = options.referencedTubes.map { refTubePath =>
+                PathUtil.binaryResource(refTubePath)
+                  .decode[VmIrResource]
+              },
+            )
+        }
+
+        outputMap <- backend.codeGenerator.outputProvider.outputs(output)
+
+        _ <- ZIO.foreachParDiscard(options.platformOutputOptions) { (outputName, outputPath) =>
+          ZIO.fromEither(outputMap.get(outputName).toRight { BackendException(s"Invalid output: $outputName") })
+            .flatMap {
+              case FileSystemResource.Of(res) => PathUtil.writeFile(outputPath, res)
+              case res: DirectoryResource[Error, BinaryResource] => PathUtil.writeDir(outputPath, res)
+            }
+        }
+
+      yield ()
+    )
 
   private def realizeBackendOptions(o: Map[String, CompilerDriverOptions.OptionValue]): Map[String, OptionValue[Error]] =
     o.view
