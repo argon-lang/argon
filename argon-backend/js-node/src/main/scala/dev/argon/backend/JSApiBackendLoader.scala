@@ -8,9 +8,9 @@ import zio.*
 import java.io.IOException
 import java.net.URL
 
-object JSApiBackendLoader {
+private[backend] object JSApiBackendLoader {
 
-  def jsBackendToScala[E >: BackendException | IOException, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(backendName: String)(backend: sjs.Backend[ew.EX, Outs]): UIO[Backend[E]] =
+  private def jsBackendToScala[E >: BackendException | IOException, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(backendName: String)(backend: sjs.Backend[ew.EX, Outs]): UIO[Backend[E]] =
     val adapter = scalaApi.Backend.jsAdapter[ew.EX, ew.EX, Outs, Outs](
       JSAdapter.identity,
       JSAdapter.identity,

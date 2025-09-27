@@ -10,5 +10,4 @@ private[js] trait JSBackendFactoryPlatformSpecific {
       classOf[JSBackendFactory.type].getResource("js-backend.js"),
       "backendFactory"
     )
-    
 }

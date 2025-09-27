@@ -19,7 +19,9 @@ export class InvalidPackageConfigurationError extends ModuleResolutionError {}
 
 export class ModuleResolution {
 
-    defaultConditions: string[] = ["import"];
+    protected get defaultConditions(): readonly string[] {
+        return ["import"];
+    }
     
     private packageJsonFiles = new Map<string, ReadonlyDeep<PackageJson>>();
     private sourceFiles = new Map<string, ReadonlyDeep<estree.Program>>();

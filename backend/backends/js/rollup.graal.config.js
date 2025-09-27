@@ -3,7 +3,7 @@ import { nodeResolve } from "@rollup/plugin-node-resolve";
 export default {
     input: "lib/index.js",
     output: {
-        file: "dist/dist.js",
+        file: "dist/dist-graal.js",
         format: "es"
     },
     plugins: [

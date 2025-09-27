@@ -4,7 +4,7 @@ import dev.argon.io.*
 import dev.argon.platform.*
 import dev.argon.util.{*, given}
 import dev.argon.build.{BuildError, Compile}
-import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendFactory, Backends, CodeGenerator}
+import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendFactory, Backends, BackendProvider, CodeGenerator}
 import dev.argon.backend.options.OptionValue
 import esexpr.ESExprException
 import zio.*
@@ -78,7 +78,7 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
       case Some(Command.Compile) =>
         runCompile(options)
           .as(ExitCode.success)
-          .provideSomeLayer[Environment](LogReporter.live)
+          .provideSomeLayer[Environment](LogReporter.live ++ BackendProvider.liveFromFactories(Backends.allBackendFactories))
         
       case Some(Command.GenerateIR) =>
         runGenIR(options)
@@ -107,7 +107,7 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
         end match
     end match
 
-  private def runCompile(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
+  private def runCompile(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped(
       for
         tubeNameDec <- ZIO.fromOption(options.tubeName.flatMap(TubeName.decode)).mapError(_ => InvalidTubeName(options.tubeName.get))

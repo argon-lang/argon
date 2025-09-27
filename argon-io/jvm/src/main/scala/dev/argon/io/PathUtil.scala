@@ -12,6 +12,11 @@ object PathUtil {
     ZIO.attemptBlockingIO {
       Files.exists(path)
     }
+    
+  def isDirectory(path: Path): IO[IOException, Boolean] =
+    ZIO.attemptBlockingIO {
+      Files.isDirectory(path)
+    }
 
   def dirname(path: Path): UIO[Path] =
     ZIO.succeed {
@@ -20,7 +25,7 @@ object PathUtil {
         .get
         .nn
     }
-
+  
   def listDirectory(path: Path): Stream[IOException, Path] =
     ZStream.fromJavaStream(Files.list(path).nn)
       .refineToOrDie[IOException]

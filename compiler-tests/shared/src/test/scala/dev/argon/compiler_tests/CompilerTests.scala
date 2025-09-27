@@ -21,7 +21,7 @@ import dev.argon.io.PathUtil
 import java.io.StringWriter
 import java.io.PrintWriter
 import dev.argon.io.*
-import dev.argon.backend.{Backend, BackendContext, BackendExternProvider, BackendFactory, Backends, CodeGenerator, TestExecutor}
+import dev.argon.backend.{Backend, BackendContext, BackendExternProvider, BackendFactory, BackendProvider, Backends, CodeGenerator, TestExecutor}
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.ArgonSourceCodeResource
@@ -261,7 +261,7 @@ object CompilerTests extends ZIOSpecDefault {
         }
 
       yield result
-    ).provideSomeLayer[Env & ArgonLibraryProvider](LogReporter.live)
+    ).provideSomeLayer[Env & ArgonLibraryProvider](LogReporter.live ++ BackendProvider.liveFromFactories(Backends.allBackendFactories))
   end toVmIr
 
 

@@ -15,12 +15,14 @@ object JSBackendFactory extends BackendFactory with JSBackendFactoryPlatformSpec
         codegen = Map(
           "externs" -> BackendOption(
             `type` = OptionType.BinaryResource,
+            description = "JS files that export functions used as externs",
             occurrence = OptionOccurrence.Many,
           ),
         ),
         output = Map(
           "modules" -> BackendOptionOutput(
             `type` = OutputType.DirectoryResource,
+            description = "Output directory for generated modules",
           ),
         ),
       ),

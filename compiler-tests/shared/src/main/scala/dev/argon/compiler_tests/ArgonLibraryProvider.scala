@@ -10,11 +10,11 @@ import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.vm
 import dev.argon.compiler.*
 import dev.argon.source.ArgonSourceCodeResource
-import dev.argon.build.{LogReporter, Compile}
+import dev.argon.build.{Compile, LogReporter}
 import dev.argon.io.PathLike
 import dev.argon.build.GenerateIR
 import dev.argon.vm.resource.VmIrResource
-import dev.argon.backend.{Backend, BackendContext, BackendExternProvider}
+import dev.argon.backend.{Backend, BackendContext, BackendExternProvider, BackendProvider, Backends}
 
 trait ArgonLibraryProvider {
   def getLibrary(tubeName: TubeName): ESExprDecodedBinaryStreamResource[TestError, t.TubeFileEntry]
@@ -115,7 +115,7 @@ object ArgonLibraryProvider {
 
               buildOutput <- compile.compile()
             yield buildOutput.tube.decoded ++ ZStream.fromZIO(ZIO.serviceWithZIO[LogReporter](_.failOnErrors)).drain
-          }.provideLayer(LogReporter.live)
+          }.provideLayer(LogReporter.live ++ BackendProvider.liveFromFactories(Backends.allBackendFactories))
 
 
 

@@ -214,18 +214,17 @@ object TubeName {
     TubeName(NonEmptySeq(head, tail))
 
   def decode(s: String): Option[TubeName] =
-    if s.isEmpty() then
+    if s.isEmpty then
       None
     else
-      for
-        parts <- NonEmptySeq.fromSeq(
-          s.split("\\.").nn
-            .iterator
-            .map(part => URLDecoder.decode(part, StandardCharsets.UTF_8).nn)
-            .toSeq
-        )
-      yield TubeName(parts)
-      
+      NonEmptySeq.fromSeq(
+        s.split("\\.").nn
+          .iterator
+          .map(part => URLDecoder.decode(part, StandardCharsets.UTF_8).nn)
+          .toSeq
+      )
+        .filter(_.forall(_.nonEmpty))
+        .map(TubeName.apply)
 }
 
 final case class ModulePath(parts: Seq[String]) derives CanEqual {

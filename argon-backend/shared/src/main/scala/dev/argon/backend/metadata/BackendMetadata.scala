@@ -7,6 +7,18 @@ final case class BackendMetadata(
   options: BackendOptionsSchema = BackendOptionsSchema(),
 ) derives toml.Codec
 
+final case class BackendSchema(
+  backend: BackendBackendMetadata,
+  options: BackendOptionsSchema = BackendOptionsSchema(),
+  loaders: List[BackendLoaderOptions],
+) derives toml.Codec {
+  def toBackendMetadata: BackendMetadata =
+    BackendMetadata(
+      backend = backend,
+      options = options,
+    )
+}
+
 final case class BackendBackendMetadata(
   `api-version`: String,
   name: String,
@@ -20,11 +32,13 @@ final case class BackendOptionsSchema(
 
 final case class BackendOption(
   `type`: OptionType,
+  description: String,
   occurrence: OptionOccurrence = OptionOccurrence.Default,
 ) derives toml.Codec
 
 final case class BackendOptionOutput(
   `type`: OutputType,
+  description: String,
 ) derives toml.Codec
 
 
@@ -93,4 +107,40 @@ object OutputType {
       }
   end given
 }
+
+sealed trait BackendLoaderOptions
+
+object BackendLoaderOptions {
+  final case class JSLoaderOptions(
+    `import-path`: String,
+    `export-name`: String,
+  ) extends BackendLoaderOptions derives toml.Codec
+
+  given toml.Codec[BackendLoaderOptions]:
+    override def apply(value: Value, defaults: toml.Codec.Defaults, index: Int): Either[toml.Parse.Error, BackendLoaderOptions] =
+      value match {
+        case Value.Tbl(tbl) =>
+          tbl.get("api") match {
+            case Some(Value.Str(loaderType)) =>
+              val withoutType = Value.Tbl(tbl.removed("api"))
+
+              loaderType match {
+                case "js" => summon[toml.Codec[JSLoaderOptions]].apply(withoutType, defaults, index)
+                case _ => Left((List.empty, s"Unknown loader api: $loaderType"))
+              }
+
+            case Some(loaderType) =>
+              Left((List("api"), s"Expected string, found ${loaderType}"))
+
+            case None =>
+              Left((List.empty, "Expected table with 'api' field"))
+          }
+
+        case _ =>
+          Left((List.empty, s"Expected table, found $value"))
+      }
+  end given
+
+}
+
 

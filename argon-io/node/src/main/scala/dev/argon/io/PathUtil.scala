@@ -67,6 +67,17 @@ object PathUtil {
       .mapError(remapIOErrors)
       .refineToOrDie[IOException]
 
+
+  def isDirectory(path: String): IO[IOException, Boolean] =
+    ZIO.fromPromiseJS(NodeFileSystem.stat(path))
+      .map { stat => stat.isDirectory() }
+      .catchSome {
+        case js.JavaScriptException(ex) if ex.isInstanceOf[js.Error] && isSystemErrorWithCode(ex.asInstanceOf[js.Error], "ENOENT") =>
+          ZIO.succeed(false)
+      }
+      .mapError(remapIOErrors)
+      .refineToOrDie[IOException]
+
   def dirname(path: String): UIO[String] =
     ZIO.succeed {
       NodePath.dirname(path)

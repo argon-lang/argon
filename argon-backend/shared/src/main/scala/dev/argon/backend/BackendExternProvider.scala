@@ -24,7 +24,7 @@ object BackendExternProvider {
     }
   }
 
-  def make(ctx: ProviderContext)(supportedPlatforms: Set[String], tubeOptions: Map[String, Map[String, OptionValue[ctx.Error]]]): ZIO[ctx.Env & Scope, ctx.Error, ExternProvider & HasContext[ctx.type]] =
+  def make(ctx: ProviderContext)(supportedPlatforms: Set[String], tubeOptions: Map[String, Map[String, OptionValue[ctx.Error]]]): ZIO[Scope & ctx.Env & BackendProvider, ctx.Error, ExternProvider & HasContext[ctx.type]] =
     for
       backends <- loadBackends(supportedPlatforms ++ tubeOptions.keySet)
       loaderInfos <- ZIO.foreach(tubeOptions) { (backendId, optValues) =>
@@ -70,13 +70,9 @@ object BackendExternProvider {
           .value
     }
 
-  private def loadBackends[E >: BackendException | IOException](backends: Set[String]): ZIO[Scope, E, Map[String, Backend[E]]] =
+  private def loadBackends[E >: BackendException | IOException](backends: Set[String]): ZIO[Scope & BackendProvider, E, Map[String, Backend[E]]] =
     ZIO.foreach(backends.toSeq) { backendId =>
-      ZIO.fromEither(
-        Backends.allBackendFactories
-          .find(_.metadata.backend.name == backendId)
-          .toRight(new BackendException("Unknown backend: " + backendId))
-      )
+      ZIO.serviceWithZIO[BackendProvider](_.getBackendFactory(backendId))
         .flatMap { factory =>
           factory.load[E]
         }

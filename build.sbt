@@ -3,7 +3,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits.*
 import org.scalajs.linker.interface.ESVersion
 import complete.DefaultParsers.*
-import org.scalajs.ir.Trees.JSUnaryOp.!
+import java.util.Locale
 
 import java.io.File
 import scala.collection.mutable.ArrayBuffer
@@ -18,6 +18,134 @@ val zioVersion = "2.1.21"
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.7.3",
 )
+
+lazy val dist = taskKey[Unit]("Builds the distributions of the compiler")
+lazy val distJVM = taskKey[Unit]("Builds the JVM distribution of the compiler")
+lazy val distNode = taskKey[Unit]("Builds the Node distribution of the compiler")
+lazy val distBackends = taskKey[Unit]("Builds the backend distributions of the compiler")
+lazy val distBackendJS = taskKey[Unit]("Builds the JS backend distribution of the compiler")
+
+dist := {
+  val _1: Unit = distJVM.value
+  val _2: Unit = distNode.value
+}
+
+def jsBackendToml(subPath: String): String =
+  s"""
+     |[backend]
+     |api-version = "0.1.0"
+     |name = "js"
+     |
+     |[[loaders]]
+     |api = "js"
+     |import-path = "$subPath"
+     |export-name = "backendFactory"
+     |
+     |[options.codegen.externs]
+     |type = "binary-resource"
+     |description = "JS files that export functions used as externs"
+     |occurrence = "many"
+     |
+     |[options.output.modules]
+     |type = "directory-resource"
+     |description = "Output directory for generated modules"
+     |
+     |""".stripMargin
+
+distJVM := {
+  val distDir = file("dist/argon-jvm")
+
+  val compilerJarDir = distDir / "compiler"
+  IO.createDirectory(compilerJarDir)
+
+  val files = (cliJVM / Compile / fullClasspathAsJars)
+    .value
+    .map { _.data }
+
+  compilerJarDir.listFiles
+    .filter { file =>
+      file.isFile &&
+        file.getName.toUpperCase(Locale.US).endsWith(".jar") &&
+        !files.exists { outFile => outFile.getName == file.getName }
+    }
+    .foreach(IO.delete)
+
+
+
+  for (file <- files) {
+    IO.copyFile(file, compilerJarDir / file.getName)
+  }
+
+  IO.delete(distDir / "backends")
+  val _ = distBackendJS.value
+  IO.createDirectory(distDir / "backends/js")
+  IO.copyFile(file("dist/backends/js/dist/dist-graal.js"), distDir / "backends/js/js-backend.js")
+  IO.write(distDir / "backends/js/backend.toml", jsBackendToml("./js-backend.js"))
+}
+
+distNode := {
+}
+
+distBackends := {
+  val _: Unit = distBackendJS.value
+}
+
+distBackendJS := {
+  val s = streams.value
+  val log = s.log
+
+  val procLog = new ProcessLogger {
+    override def out(s: => String): Unit = log.out(s)
+    override def err(s: => String): Unit = log.out(s)
+    override def buffer[T](f: => T): T = f
+  }
+
+  def npmInstall(dir: File): Unit = {
+    log.info("Installing npm dependencies in " + dir)
+    val exitCode = Process(Seq("npm", "install"), Some(dir)) ! procLog
+    if(exitCode != 0) {
+      throw new Exception("npm install failed with exit code " + exitCode)
+    }
+  }
+  def npmInstallNoDev(dir: File): Unit = {
+    log.info("Installing npm dependencies (omit dev) in " + dir)
+    val exitCode = Process(Seq("npm", "install", "--omit=dev"), Some(dir)) ! procLog
+    if(exitCode != 0) {
+      throw new Exception("npm install --omit=dev failed with exit code " + exitCode)
+    }
+  }
+  def npmRun(dir: File, command: String): Unit = {
+    log.info("Running npm run build in " + dir)
+    val exitCode = Process(Seq("npm", "run", command), Some(dir)) ! procLog
+    if(exitCode != 0) {
+      throw new Exception(s"npm run $command failed with exit code " + exitCode)
+    }
+  }
+
+  val jsApiDir = file("backend/api/js")
+  val jsBackendDir = file("backend/backends/js")
+
+  npmInstall(jsApiDir)
+  npmRun(jsApiDir, "build")
+  npmInstall(jsBackendDir)
+  npmRun(jsBackendDir, "dist")
+  npmInstallNoDev(jsBackendDir)
+
+
+  val distBackendDir = file("dist/backends/js")
+  IO.delete(distBackendDir)
+
+  log.info("Copying JS backend to " + distBackendDir)
+  IO.copyDirectory(jsBackendDir, distBackendDir)
+
+  log.info("Re-installing packages")
+  npmInstall(jsBackendDir)
+
+  IO.delete(distBackendDir / "src")
+  IO.delete(distBackendDir / "out")
+}
+
+
 
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(
@@ -42,6 +170,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.4.0",
     "org.gnieh" %%% "fs2-data-xml-scala" % "1.12.0",
     "com.indoorvivants" %%% "toml" % "0.3.0",
+    "io.kevinlee" %%% "just-semver-core" % "1.1.1",
 
     "org.typelevel" %%% "cats-core" % "2.13.0",
     "dev.zio" %%% "zio-interop-cats" % "23.1.0.5",
@@ -55,6 +184,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
+    "org.scala-lang" %% "scala3-library" % scalaVersion.value,
     "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
   ),
 
@@ -640,7 +770,7 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
 
         val resDir = resourceManaged.value / "js-backend"
 
-        def setupJS(destFile: File, packageDir: File): Unit = {
+        def setupJS(destFile: File, packageDir: File, distFileName: String): Unit = {
           val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
           if(installExitCode != 0) {
             throw new Exception("npm install failed with exit code " + installExitCode)
@@ -651,7 +781,7 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
             throw new Exception("npm run dist failed with exit code " + distExitCode)
           }
 
-          IO.copyFile(packageDir / "dist/dist.js", destFile)
+          IO.copyFile(packageDir / "dist" / distFileName, destFile)
         }
 
         val backendDestFile = resDir / "dev/argon/backend/backends/js/js-backend.js"
@@ -663,8 +793,8 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
         val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
           log.info("Building JS Backend Distribution")
 
-          setupJS(backendDestFile, jsBackendDir)
-          setupJS(polyfillDestFile, polyfillPackageDir)
+          setupJS(backendDestFile, jsBackendDir, "dist-graal.js")
+          setupJS(polyfillDestFile, polyfillPackageDir, "dist.js")
 
           Set(backendDestFile, polyfillDestFile)
         }
@@ -812,4 +942,55 @@ lazy val compiler_testsJVM = compiler_tests.jvm
 lazy val compiler_testsNode = compiler_tests.node
 
 
+lazy val compiler_driver_api = project.in(file("argon-compiler-driver-api"))
+  .settings(
+    commonSettings,
+    compilerOptions,
 
+    compileOrder := CompileOrder.JavaThenScala,
+
+    semanticdbEnabled := false,
+    autoScalaLibrary := false,
+    crossPaths := false,
+
+    name := "argon-compiler-driver-api",
+  )
+
+lazy val compiler_driver = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-compiler-driver"))
+  .enablePlugins(BuildInfoPlugin)
+  .dependsOn(util, argon_platform, argon_build, argon_backend)
+  .jvmConfigure(
+    _.dependsOn(compiler_driver_api)
+      .settings(commonJVMSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    libraryDependencies += "com.monovore" %% "decline" % "2.5.0",
+
+    buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
+    buildInfoPackage := "dev.argon.driver",
+    buildInfoOptions += BuildInfoOption.PackagePrivate,
+
+    name := "argon-compiler-driver",
+  )
+
+lazy val compiler_driverJVM = compiler_driver.jvm
+lazy val compiler_driverNode = compiler_driver.node
+
+lazy val compiler_launcher = project.in(file("argon-compiler-launcher"))
+  .dependsOn(argon_backend_java_api, compiler_driver_api)
+  .settings(
+    commonSettings,
+    commonJVMSettings,
+    compilerOptions,
+
+    Compile / fork := true,
+
+    name := "argon-compiler-launcher",
+  )
