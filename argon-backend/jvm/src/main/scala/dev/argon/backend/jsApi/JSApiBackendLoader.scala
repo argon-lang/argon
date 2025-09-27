@@ -1,18 +1,16 @@
-package dev.argon.backend
+package dev.argon.backend.jsApi
 
-import dev.argon.backend.api as javaApi
 import dev.argon.backend.api.HostOperations
+import dev.argon.backend.{Backend, BackendException, JavaApiBackendLoader, api as javaApi}
+import dev.argon.nobleidl.runtime.graaljsInterop.*
 import dev.argon.nobleidl.runtime.{ErrorType, FutureWithError, FutureWithoutError}
-import dev.argon.nobleidl.runtime.graaljsInterop.{CallUtil, ErrorChecker, ErrorTypeAdapter, JSAdapter, JSExecutor}
 import dev.argon.util.*
-
-import java.util.concurrent.{Executor as JExecutor, Executors as JExecutors}
 import org.graalvm.polyglot.{HostAccess, Source, Context as JSContext, Value as JSValue}
-
-import java.io.IOException
 import zio.*
 
+import java.io.IOException
 import java.net.URL
+import java.util.concurrent.{Executor as JExecutor, Executors as JExecutors}
 
 private[backend] object JSApiBackendLoader {
 
@@ -35,8 +33,8 @@ private[backend] object JSApiBackendLoader {
 
       jsContext <- ZIO.fromAutoCloseable(ZIO.succeed {
         JSContext.newBuilder("js")
-          .allowHostClassLookup(className => className == "dev.argon.backend.backends.js.GraalJavaScriptExecutor")
-          .allowHostAccess(HostAccess.EXPLICIT)
+          .allowHostClassLookup(_ => true)
+          .allowHostAccess(HostAccess.ALL)
           .allowExperimentalOptions(true)
           .option("js.load", "false")
           .option("js.print", "false")

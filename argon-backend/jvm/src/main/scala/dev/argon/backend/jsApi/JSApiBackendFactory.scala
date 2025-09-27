@@ -1,6 +1,7 @@
-package dev.argon.backend
+package dev.argon.backend.jsApi
 
 import dev.argon.backend.metadata.{BackendLoaderOptions, BackendMetadata}
+import dev.argon.backend.{Backend, BackendException, BackendFactory}
 import zio.{Scope, ZIO}
 
 import java.io.IOException

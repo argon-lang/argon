@@ -1,4 +1,3 @@
-import type * as estree from "estree";
 import type { PackageJson, ReadonlyDeep } from "type-fest";
 
 export interface ESMResolution {
@@ -19,47 +18,38 @@ export class InvalidPackageConfigurationError extends ModuleResolutionError {}
 
 export class ModuleResolution {
 
+    constructor(fs: ReadonlyMap<string, Uint8Array | string>) {
+        const fs2 = new Map<string, Uint8Array | string>();
+        for (let [f, data] of fs) {
+            if(!f.startsWith("/")) {
+                f = "/" + f;
+            }
+            fs2.set(f, data);
+        }
+
+
+        this.#fs = fs2;
+
+        const dirs = new Set<string>();
+        dirs.add("/");
+
+        for(const [f] of fs2) {
+            const parts = f.substring(1).split("/");
+            for(let i = 1; i < parts.length; ++i) {
+                dirs.add("/" + parts.slice(0, i).join("/"))
+            }
+        }
+
+        this.#directories = dirs;
+    }
+
+    readonly #fs: ReadonlyMap<string, Uint8Array | string>;
+    readonly #directories: ReadonlySet<string>;
+
     protected get defaultConditions(): readonly string[] {
         return ["import"];
     }
-    
-    private packageJsonFiles = new Map<string, ReadonlyDeep<PackageJson>>();
-    private sourceFiles = new Map<string, ReadonlyDeep<estree.Program>>();
-    private directories = new Set<string>([ "/" ]);
 
-
-    addSourceFile(path: string, content: ReadonlyDeep<estree.Program>): void {
-        if(!path.startsWith("/")) {
-            path = "/" + path;
-        }
-
-        this.sourceFiles.set(path, content);
-        this.addDirectory(this.getPathParent(path));
-    }
-
-    addPackageJsonFile(path: string, content: ReadonlyDeep<PackageJson>): void {
-        if(!path.startsWith("/")) {
-            path = "/" + path;
-        }
-
-        this.packageJsonFiles.set(path, content);
-        this.addDirectory(this.getPathParent(path));
-    }
-
-    addDirectory(path: string): void {
-        while(path.endsWith("/")) {
-            path = path.substring(0, path.length - 1);
-        }
-
-        if(!path.startsWith("/")) {
-            path = "/" + path;
-        }
-
-        while(path.length > 1) {
-            this.directories.add(path);
-            path = this.getPathParent(path);
-        }
-    }
 
 
     esmResolve(specifier: string, parentURL: URL): ESMResolution {
@@ -93,7 +83,7 @@ export class ModuleResolution {
             throw new UnsupportedDirectoryImport(`Directory cannot be imported: ${resolved}`);
         }
 
-        if(!this.sourceFiles.has(resolved.pathname)) {
+        if(!this.#fs.has(resolved.pathname)) {
             throw new ModuleNotFoundError(`Module not found at ${resolved}`);
         }
 
@@ -193,7 +183,7 @@ export class ModuleResolution {
         return undefined;
     }
 
-    packageExportsResolve(packageURL: URL, subpath: string, exports: {}, conditions: readonly string[]): URL {
+    packageExportsResolve(packageURL: URL, subpath: string, exports: NonNullable<ReadonlyDeep<PackageJson.Exports>>, conditions: readonly string[]): URL {
         let hasDot = false;
         let hasNonDot = false;
         if(typeof exports === "object" && !(exports instanceof Array)) {
@@ -229,7 +219,9 @@ export class ModuleResolution {
             }
         }
         else if(hasDot) {
-            const resolved = this.packageImportsExportsResolve(subpath, exports, packageURL, false, conditions);
+            const exports2 = exports as ReadonlyDeep<PackageJson.ExportConditions>;
+
+            const resolved = this.packageImportsExportsResolve(subpath, exports2, packageURL, false, conditions);
             if(resolved !== null && resolved !== undefined) {
                 return resolved;
             }
@@ -258,7 +250,7 @@ export class ModuleResolution {
         throw new PackageImportNotDefinedError("Import specifier was not defined: " + specifier);
     }
 
-    packageImportsExportsResolve(matchKey: string, matchObj: object, packageURL: URL, isImports: boolean, conditions: readonly string[]): URL | undefined | null {
+    packageImportsExportsResolve(matchKey: string, matchObj: ReadonlyDeep<PackageJson.Exports>, packageURL: URL, isImports: boolean, conditions: readonly string[]): URL | undefined | null {
         if(typeof matchObj !== "object" || matchObj === null) {
             return null;
         }
@@ -441,7 +433,7 @@ export class ModuleResolution {
             }
 
             const pjsonURL = new URL("package.json", scopeURL);
-            if(this.packageJsonFiles.has(pjsonURL.pathname)) {
+            if(this.#fs.has(pjsonURL.pathname)) {
                 return scopeURL;
             }
 
@@ -453,15 +445,19 @@ export class ModuleResolution {
 
     readPackageJson(packageURL: URL): ReadonlyDeep<PackageJson> | null {
         const pjsonURL = new URL("package.json", packageURL);
-        if(!this.packageJsonFiles.has(pjsonURL.pathname)) {
+
+        const pjsonData = this.#fs.get(pjsonURL.pathname);
+        if(pjsonData === undefined) {
             return null;
         }
 
-        return this.packageJsonFiles.get(pjsonURL.pathname)!;
+        const pjsonStr = typeof(pjsonData) === "string" ? pjsonData : new TextDecoder().decode(pjsonData);
+
+        return JSON.parse(pjsonStr);
     }
 
     private hasBadSegment(s: string): boolean {
-        const segments = s.split(/\/|\\/);
+        const segments = s.split(/[\/\\]/);
         return segments.some(seg => {
             seg = decodeURIComponent(seg).toLowerCase();
             return seg === "" || seg === "." || seg === ".." || seg === "node_modules";
@@ -481,17 +477,7 @@ export class ModuleResolution {
             path = path.substring(0, path.length - 1);
         }
 
-        return this.directories.has(path);
-    }
-
-    private getPathParent(path: string): string {
-        const index = path.lastIndexOf("/");
-        if(index > 0) {
-            return path.substring(0, index);
-        }
-        else {
-            return "/";
-        }
+        return this.#directories.has(path);
     }
 
     private isRootUrl(url: URL): boolean {

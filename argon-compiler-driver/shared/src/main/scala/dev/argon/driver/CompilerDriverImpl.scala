@@ -36,8 +36,12 @@ private[driver] object CompilerDriverImpl {
                 runCompile(command)
                   .as(ExitCode.success)
                   .provideSomeLayer[BackendProvider](LogReporter.live)
+
+              case command: GenIRCommand =>
+                runGenIR(command)
+                  .as(ExitCode.success)
+                  .provideSomeLayer[BackendProvider](LogReporter.live)
                 
-              case command: GenIRCommand => ???
               case command: CodegenCommand => ???
             }
         }
@@ -80,7 +84,7 @@ private[driver] object CompilerDriverImpl {
 
         _ <- ZIO.scoped[ErrorLog & LogReporter](
           for
-            buildOutput <- (compile.compile()  : ZIO[zio.Scope & ctx.Env, compile.context.Error, compile.BuildOutput]) : ZIO[zio.Scope & ErrorLog & LogReporter, Error, compile.BuildOutput]
+            buildOutput <- compile.compile()
             _ <- PathUtil.writeFile(options.outputFile, buildOutput.tube)
           yield ()
         )

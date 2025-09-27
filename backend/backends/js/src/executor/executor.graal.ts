@@ -2,7 +2,7 @@ import type * as backendApi from "@argon-lang/js-backend-api";
 import type { Option } from "@argon-lang/esexpr";
 import type { JSBackendOutput, TestProgram } from "../options.js";
 import type { PromiseWithError } from "@argon-lang/noble-idl-core/util";
-import { ModuleResolution } from "./moduleResolution.js";
+import { ModuleResolution } from "@argon-lang/js-module-resolution";
 import { tubePackageName } from "../util.js";
 import type { ReadonlyDeep } from "type-fest";
 import type * as estree from "estree";
@@ -25,11 +25,14 @@ declare const Java: JavaGlobal;
 
 
 interface GraalJavaScriptExecutor {
-    addFile(path: string, contents: string): void;
     executeScript(code: string): void;
     executeModule(code: string): void;
     output(): string;
     close(): void;
+}
+
+interface JavaMap<K, V> {
+    put(k: K, v: V): V | null;
 }
 
 
@@ -37,29 +40,30 @@ class GraalTestExecutor<E> extends TestExecutorBase<E> {
     override async run(program: TestProgram, libraries: backendApi.LibraryMap<TestProgram>): PromiseWithError<string, backendApi.TestExecutionException> {
         const moduleRes = buildModuleResolution(program, libraries);
 
-        const exec: GraalJavaScriptExecutor = new (Java.type("dev.argon.backend.backends.js.GraalJavaScriptExecutor"))();
+        const fileMap: JavaMap<string, string> = new (Java.type("java.util.HashMap"))();
+        buildExecutor(fileMap, moduleRes, program, libraries);
+
+        const exec: GraalJavaScriptExecutor = new (Java.type("dev.argon.backend.jsApi.GraalJavaScriptExecutor"))(fileMap);
         try {
-            buildExecutor(exec, moduleRes, program, libraries);
             exec.executeModule(mainModule.replaceAll(".js\"", ".js.mjs\""));
             return exec.output(); 
         }
         finally {
             exec.close();
         }
-
     }
 
 }
 
-function buildExecutor(exec: GraalJavaScriptExecutor, moduleRes: ModuleResolution, program: TestProgram, libraries: backendApi.LibraryMap<TestProgram>): void {
+function buildExecutor(exec: JavaMap<string, string>, moduleRes: ModuleResolution, program: TestProgram, libraries: backendApi.LibraryMap<TestProgram>): void {
 
     function addProgram(prefix: string, program: TestProgram): void {
-        exec.addFile(prefix + "package.json", JSON.stringify(program.packageJson));
+        exec.put(prefix + "package.json", JSON.stringify(program.packageJson));
         for(const mod of program.modules) {
             const path = prefix + mod.path.join("/") + ".mjs";
             const url = new URL(".", "file://" + path);
             const sourceCode = updateImports(moduleRes, url, mod.sourceCode);
-            exec.addFile(path, astring.generate(sourceCode));
+            exec.put(path, astring.generate(sourceCode));
         }
     }
 
@@ -72,7 +76,7 @@ function buildExecutor(exec: GraalJavaScriptExecutor, moduleRes: ModuleResolutio
     for(const [path, content] of runtimePackage()) {
         const suffix = path.endsWith(".js") ? ".mjs" : "";
 
-        exec.addFile("/test/node_modules/@argon-lang/runtime" + path + suffix, content);
+        exec.put("/test/node_modules/@argon-lang/runtime" + path + suffix, content);
     }
 }
 

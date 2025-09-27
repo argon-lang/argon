@@ -1,0 +1,20 @@
+{
+  "name": "@argon-lang/js-module-resolution",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "main": "./lib/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project .",
+    "test": "npm run build && vitest run --root lib"
+  },
+  "devDependencies": {
+    "@types/estree": "^1.0.8",
+    "@types/node": "^24.3.1",
+    "type-fest": "^4.41.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

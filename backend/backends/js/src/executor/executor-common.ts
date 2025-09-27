@@ -2,11 +2,10 @@ import * as backendApi from "@argon-lang/js-backend-api";
 import type { JSBackendOutput, TestProgram, TestProgramModule } from "../options.js";
 import type { PromiseWithError } from "@argon-lang/noble-idl-core/util";
 import { streamToAsyncIterable } from "../stream.js";
-import { ModuleResolution } from "./moduleResolution.js";
+import { ModuleResolution } from "@argon-lang/js-module-resolution";
 import { tubePackageName } from "../util.js";
 import argonRuntimePackage from "./argon-runtime.js";
-import * as acorn from "acorn";
-import type * as estree from "estree";
+import * as astring from "astring";
 
 export abstract class TestExecutorBase<E> implements backendApi.TestExecutor<E, JSBackendOutput<E>, TestProgram> {
     async toTestProgram(program: JSBackendOutput<E>): PromiseWithError<TestProgram, E> {
@@ -33,12 +32,12 @@ export abstract class TestExecutorBase<E> implements backendApi.TestExecutor<E, 
 
 
 export function buildModuleResolution(program: TestProgram, libraries: backendApi.LibraryMap<TestProgram>): ModuleResolution {
-    const moduleRes = new ModuleResolution();
+    const files = new Map<string, string>();
 
     function addProgram(prefix: string, program: TestProgram): void {
-        moduleRes.addPackageJsonFile(prefix + "/package.json", program.packageJson);
+        files.set(prefix + "/package.json", JSON.stringify(program.packageJson));
         for(const mod of program.modules) {
-            moduleRes.addSourceFile(prefix + "/" + mod.path.join("/"), mod.sourceCode);
+            files.set(prefix + "/" + mod.path.join("/"), astring.generate(mod.sourceCode));
         }
     }
 
@@ -49,23 +48,10 @@ export function buildModuleResolution(program: TestProgram, libraries: backendAp
     }
 
     for(const [path, content] of runtimePackage()) {
-        if(path.endsWith("/package.json")) {
-            moduleRes.addPackageJsonFile("/test/node_modules/@argon-lang/runtime" + path, JSON.parse(content));
-        }
-        else if(path.endsWith(".js")) {
-            const program = acorn.parse(content, {
-                ecmaVersion: 2024,
-                sourceType: "module",
-            });
-            moduleRes.addSourceFile("/test/node_modules/@argon-lang/runtime" + path, program as estree.Program);
-        }
-        else {
-            throw new Error("Unexpected file type in runtime.")
-        }
+        files.set("/test/node_modules/@argon-lang/runtime" + path, content);
     }
 
-
-    return moduleRes;
+    return new ModuleResolution(files);
 }
 
 export const mainModule = "import { main$a$t$e$r$t$e } from \"/test/index.js\"; main$a$t$e$r$t$e();";

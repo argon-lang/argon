@@ -1,6 +1,7 @@
 package dev.argon.backend
 
 import dev.argon.backend.metadata.{BackendLoaderOptions, BackendSchema}
+import dev.argon.backend.jsApi.JSApiBackendFactory
 
 import java.nio.file.Path
 

@@ -3,7 +3,7 @@ import type { Option } from "@argon-lang/esexpr";
 import type { JSBackendOutput, TestProgram } from "../options.js";
 import { buildModuleResolution, mainModule, runtimePackage, TestExecutorBase } from "./executor-common.js";
 import type { PromiseWithError } from "@argon-lang/noble-idl-core/util";
-import type { ModuleResolution } from "./moduleResolution.js";
+import type { ModuleResolution } from "@argon-lang/js-module-resolution";
 
 import * as astring from "astring";
 import { tubePackageName } from "../util.js";

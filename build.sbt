@@ -9,8 +9,13 @@ import java.io.File
 import scala.collection.mutable.ArrayBuffer
 import scala.sys.process.{Process, ProcessLogger}
 
+
+val JSBackendTag = Tags.Tag("argon-js-backend")
+
+
 ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
+Global / concurrentRestrictions += Tags.limit(JSBackendTag, 1)
 
 val graalVersion = "25.0.0"
 val zioVersion = "2.1.21"
@@ -18,6 +23,8 @@ val zioVersion = "2.1.21"
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.7.3",
 )
+
+
 
 lazy val dist = taskKey[Unit]("Builds the distributions of the compiler")
 lazy val distJVM = taskKey[Unit]("Builds the JVM distribution of the compiler")
@@ -29,28 +36,6 @@ dist := {
   val _1: Unit = distJVM.value
   val _2: Unit = distNode.value
 }
-
-def jsBackendToml(subPath: String): String =
-  s"""
-     |[backend]
-     |api-version = "0.1.0"
-     |name = "js"
-     |
-     |[[loaders]]
-     |api = "js"
-     |import-path = "$subPath"
-     |export-name = "backendFactory"
-     |
-     |[options.codegen.externs]
-     |type = "binary-resource"
-     |description = "JS files that export functions used as externs"
-     |occurrence = "many"
-     |
-     |[options.output.modules]
-     |type = "directory-resource"
-     |description = "Output directory for generated modules"
-     |
-     |""".stripMargin
 
 distJVM := {
   val distDir = file("dist/argon-jvm")
@@ -79,8 +64,7 @@ distJVM := {
   IO.delete(distDir / "backends")
   val _ = distBackendJS.value
   IO.createDirectory(distDir / "backends/js")
-  IO.copyFile(file("dist/backends/js/dist/dist-graal.js"), distDir / "backends/js/js-backend.js")
-  IO.write(distDir / "backends/js/backend.toml", jsBackendToml("./js-backend.js"))
+  IO.copyDirectory(file("dist/backends/js"), distDir / "backends/js")
 }
 
 distNode := {
@@ -90,7 +74,7 @@ distBackends := {
   val _: Unit = distBackendJS.value
 }
 
-distBackendJS := {
+distBackendJS := Def.task {
   val s = streams.value
   val log = s.log
 
@@ -109,16 +93,25 @@ distBackendJS := {
   }
   def npmInstallNoDev(dir: File): Unit = {
     log.info("Installing npm dependencies (omit dev) in " + dir)
-    val exitCode = Process(Seq("npm", "install", "--omit=dev"), Some(dir)) ! procLog
+    val exitCode = Process(Seq("npm", "install", "--omit=dev"), dir) ! procLog
     if(exitCode != 0) {
       throw new Exception("npm install --omit=dev failed with exit code " + exitCode)
     }
   }
   def npmRun(dir: File, command: String): Unit = {
     log.info("Running npm run build in " + dir)
-    val exitCode = Process(Seq("npm", "run", command), Some(dir)) ! procLog
+    val exitCode = Process(Seq("npm", "run", command), dir) ! procLog
     if(exitCode != 0) {
       throw new Exception(s"npm run $command failed with exit code " + exitCode)
+    }
+  }
+  def packageCopy(src: File, dest: File): Unit = {
+    val exitCode = Process(
+      Seq("node", "lib/main.js", src.getAbsolutePath, dest.getAbsolutePath),
+      file("backend/util/js-copy-deploy"),
+    ) ! procLog
+    if(exitCode != 0) {
+      throw new Exception("package copy with exit code " + exitCode)
     }
   }
 
@@ -129,21 +122,38 @@ distBackendJS := {
   npmRun(jsApiDir, "build")
   npmInstall(jsBackendDir)
   npmRun(jsBackendDir, "dist")
-  npmInstallNoDev(jsBackendDir)
-
 
   val distBackendDir = file("dist/backends/js")
   IO.delete(distBackendDir)
 
-  log.info("Copying JS backend to " + distBackendDir)
-  IO.copyDirectory(jsBackendDir, distBackendDir)
+  packageCopy(jsBackendDir, distBackendDir)
 
-  log.info("Re-installing packages")
-  npmInstall(jsBackendDir)
 
-  IO.delete(distBackendDir / "src")
-  IO.delete(distBackendDir / "out")
-}
+
+  IO.write(
+    file("dist/backends/js/backend.toml"),
+    """
+      |[backend]
+      |api-version = "0.1.0"
+      |name = "js"
+      |
+      |[[loaders]]
+      |api = "js"
+      |import-path = "./lib/index.js"
+      |export-name = "backendFactory"
+      |
+      |[options.codegen.externs]
+      |type = "binary-resource"
+      |description = "JS files that export functions used as externs"
+      |occurrence = "many"
+      |
+      |[options.output.modules]
+      |type = "directory-resource"
+      |description = "Output directory for generated modules"
+      |
+      |""".stripMargin,
+  )
+}.tag(JSBackendTag).value
 
 
 
@@ -228,6 +238,7 @@ lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
     "dev.zio" %% "zio-logging" % "2.5.1",
 
     "org.apache.commons" % "commons-compress" % "1.28.0",
+    "org.apache.commons" % "commons-text" % "1.14.0",
 
     "org.graalvm.polyglot" % "polyglot" % graalVersion,
     "org.graalvm.polyglot" % "js-community" % graalVersion,
@@ -787,29 +798,33 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
         val backendDestFile = resDir / "dev/argon/backend/backends/js/js-backend.js"
         val jsBackendDir = file("backend/backends/js")
 
-        val polyfillDestFile = resDir / "dev/argon/backend/polyfill.js"
+        val polyfillDestFile = resDir / "dev/argon/backend/jsApi/polyfill.js"
         val polyfillPackageDir = file("backend/util/graaljs-polyfills")
+
+        val importResDestFile = resDir / "dev/argon/backend/jsApi/import-resolver.js"
+        val importResPackageDir = file("backend/util/graaljs-import-resolver")
 
         val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
           log.info("Building JS Backend Distribution")
 
           setupJS(backendDestFile, jsBackendDir, "dist-graal.js")
           setupJS(polyfillDestFile, polyfillPackageDir, "dist.js")
+          setupJS(importResDestFile, importResPackageDir, "dist.js")
 
-          Set(backendDestFile, polyfillDestFile)
+          Set(backendDestFile, polyfillDestFile, importResDestFile)
         }
 
         val inputFiles = (
           (
             (jsBackendDir / "src" ** "*.ts")
               --- (jsBackendDir / "src/executor/argon-runtime.ts")
-
           ) +++
-            (polyfillPackageDir / "src" ** "*.js")
+            (polyfillPackageDir / "src" ** "*.js") +++
+            (importResPackageDir / "src" ** "*.ts")
         ).get().toSet
 
         f(inputFiles).toSeq
-      }.taskValue,
+      }.tag(JSBackendTag).taskValue,
     )
   )
   .jsConfigure(
