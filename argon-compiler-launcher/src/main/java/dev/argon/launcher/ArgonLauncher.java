@@ -9,7 +9,8 @@ public final class ArgonLauncher {
     
     public static void main(String[] args) {
         var options = new CompilerDriverOptions(args);
-        new CompilerDriver().runCommand(options);
+        int exitCode = new CompilerDriver().runCommand(options);
+        System.exit(exitCode);
     }
     
 }

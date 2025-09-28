@@ -1,15 +1,19 @@
 import { ModuleResolution } from "@argon-lang/js-module-resolution";
 import * as acorn from "acorn";
 import * as astring from "astring";
+import type * as estree from "estree";
 
 export type FileMap = {
     readonly [key: string]: string;
 }
 
 export function resolveImports(entrypoint: string, files: FileMap): FileMap {
-    const processor = new FileProcessor(new Map(Object.entries(files)));
+    const filesMap = new Map(Object.entries(files));
+
+    const processor = new FileProcessor(filesMap);
 
     processor.observeFile(entrypoint);
+    processor.run();
 
     return Object.fromEntries(processor.updatedFiles.entries());
 }
@@ -54,7 +58,8 @@ class FileProcessor {
 
         const jsCode = acorn.parse(jsCodeStr, {
             ecmaVersion: "latest",
-        });
+            sourceType: "module",
+        }) as estree.Program;
 
         for(const stmt of jsCode.body) {
             if(stmt.type !== "ImportDeclaration" && stmt.type !== "ExportNamedDeclaration") {
@@ -74,7 +79,10 @@ class FileProcessor {
 
             const importedFile = resolution.resolved.pathname;
             this.observeFile(importedFile);
-            stmt.source.value = importedFile;
+            stmt.source = {
+                type: "Literal",
+                value: importedFile,
+            };
         }
 
         this.updatedFiles.set(file, astring.generate(jsCode));

@@ -38,10 +38,9 @@ class CompilerDriver extends dev.argon.driver.api.CompilerDriver {
               Runtime.enableLoomBasedExecutor ++
               Runtime.enableLoomBasedBlockingExecutor
           )
-        
       )
         .getOrElse { cause =>
-          throw cause.failureOption
+          val ex = cause.failureOption
             .map {
               case ex: Throwable => ex
               case _ => FiberFailure(cause)
@@ -58,6 +57,9 @@ class CompilerDriver extends dev.argon.driver.api.CompilerDriver {
             .getOrElse {
               FiberFailure(cause)
             }
+          
+          System.err.println(ex)
+          ExitCode.failure
         }
         .code
     }

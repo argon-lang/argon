@@ -80,11 +80,11 @@ final class MemoryFileSystem implements FileSystem {
         return Map.of();
     }
 
-    private String getFullPath(Path path) {
+    static String getFullPath(Path path) {
         var pathSegIterable = new Iterable<String>() {
             @Override
             public @NotNull Iterator<String> iterator() {
-                final var pathIterator = path.iterator();
+                final var pathIterator = path.normalize().iterator();
                 return new Iterator<>() {
                     @Override
                     public boolean hasNext() {

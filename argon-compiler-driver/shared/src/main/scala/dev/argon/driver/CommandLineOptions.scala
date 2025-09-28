@@ -43,6 +43,8 @@ final case class CodegenCommand(
   platformOutputOptions: Map[String, PathLike],
 ) extends CompilerDriverCommand
 
+final case class BackendsCommand() extends CompilerDriverCommand
+
 object CompilerDriverOptions {
   enum OptionValueAtom {
     case String(s: java.lang.String)
@@ -128,11 +130,17 @@ object CompilerDriverOptions {
     )
   }
 
+  private def backendsCommand: Command[BackendsCommand] =
+    Command("backends", "List available backends")(
+      Opts.unit.map(_ => BackendsCommand())
+    )
+  
 
   private def standardOptions(backends: Seq[BackendFactory]): Opts[StandardCompilerDriverOptions] =
     Opts.subcommand(compileCommand(backends))
       .orElse(Opts.subcommand(genirCommand))
       .orElse(Opts.subcommand(codegenCommand(backends)))
+      .orElse(Opts.subcommand(backendsCommand))
       .map(StandardCompilerDriverOptions.apply)
   
   private def combineOptMaps2[K, V](a: Opts[Map[K, V]], b: Opts[Map[K, V]]): Opts[Map[K, V]] =

@@ -12,7 +12,7 @@ import dev.argon.tube.loader.TubeFormatException
 import dev.argon.tube.resource.TubeResourceContext
 
 import java.io.IOException
-import zio.{ExitCode, ZIO}
+import zio.{Console, ExitCode, ZIO}
 
 private[driver] object CompilerDriverImpl {
   type Error = IOException | BackendException | TubeFormatException | SyntaxError | BuildError
@@ -22,31 +22,44 @@ private[driver] object CompilerDriverImpl {
       .flatMap { command =>
         command.parse(args, Map.empty) match {
           case Left(help) if help.errors.nonEmpty =>
-            zio.Console.printLineError(help).as(ExitCode.failure)
+            Console.printLineError(help).as(ExitCode.failure)
 
           case Left(help) =>
-            zio.Console.printLineError(help).as(ExitCode.success)
+            Console.printLineError(help).as(ExitCode.success)
 
           case Right(CompilerDriverVersion()) =>
-            zio.Console.printLine(s"Argon compiler driver version ${BuildInfo.version}")
+            Console.printLine(s"Argon compiler driver version ${BuildInfo.version}")
               .as(ExitCode.success)
 
           case Right(StandardCompilerDriverOptions(command)) =>
-            (command match {
-              case command: CompileCommand =>
-                runCompile(command)
-
-              case command: GenIRCommand =>
-                runGenIR(command)
-
-              case command: CodegenCommand =>
-                runCodegen(command)
-            })
-              .as(ExitCode.success)
-              .provideSomeLayer[BackendProvider](LogReporter.live)
+            runStandardCommand(command)
+//            for
+//              fiber <- runStandardCommand(command).fork
+//              _ <- zio.Clock.sleep(zio.Duration.fromSeconds(15))
+//              fibers <- zio.Fiber.dumpAll
+//              res <- fiber.join
+//            yield res
         }
       }
 
+  private def runStandardCommand(command: CompilerDriverCommand): ZIO[BackendProvider, Error, ExitCode] =
+    (command match {
+      case command: CompileCommand =>
+        runCompile(command)
+
+      case command: GenIRCommand =>
+        runGenIR(command)
+
+      case command: CodegenCommand =>
+        runCodegen(command)
+
+      case command: BackendsCommand =>
+        ZIO.serviceWithZIO[BackendProvider] { bp =>
+          ZIO.foreach(bp.all) { bf => Console.printLine(bf.metadata.backend.name) }
+        }
+    })
+      .as(ExitCode.success)
+      .provideSomeLayer[BackendProvider](LogReporter.live)
 
   private def runCompile(options: CompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped {

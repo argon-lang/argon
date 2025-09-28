@@ -22,6 +22,8 @@ val zioVersion = "2.1.21"
 
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.7.3",
+  Compile / run / baseDirectory := file(".").getAbsoluteFile,
+  Test / baseDirectory := file(".").getAbsoluteFile,
 )
 
 
@@ -149,7 +151,7 @@ distBackendJS := Def.task {
       |import-path = "./lib/index.js"
       |export-name = "backendFactory"
       |
-      |[options.codegen.externs]
+      |[options.tube.externs]
       |type = "binary-resource"
       |description = "JS files that export functions used as externs"
       |occurrence = "many"
@@ -176,7 +178,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
     "dev.argon" %%% "argon-async-util" % "2.1.0",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.2",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3-SNAPSHOT",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "com.lihaoyi" %%% "sourcecode" % "0.4.4",
@@ -192,10 +194,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "org.typelevel" %%% "cats-core" % "2.13.0",
     "dev.zio" %%% "zio-interop-cats" % "23.1.0.5",
   ),
-
-  Compile / run / baseDirectory := file(".").getAbsoluteFile,
-  Test / baseDirectory := file(".").getAbsoluteFile,
-
 )
 
 lazy val sharedJSNodeSettings = Seq(
@@ -774,7 +772,19 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
 
         val resDir = resourceManaged.value / "js-backend"
 
-        def setupJS(destFile: File, packageDir: File, distFileName: String): Unit = {
+        def buildJS(packageDir: File): Unit = {
+          val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
+          if(installExitCode != 0) {
+            throw new Exception("npm install failed with exit code " + installExitCode)
+          }
+
+          val distExitCode = Process(Seq("npm", "run", "build"), Some(packageDir)) ! log
+          if(distExitCode != 0) {
+            throw new Exception("npm run build failed with exit code " + distExitCode)
+          }
+        }
+
+        def distJS(destFile: File, packageDir: File, distFileName: String): Unit = {
           val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
           if(installExitCode != 0) {
             throw new Exception("npm install failed with exit code " + installExitCode)
@@ -800,19 +810,23 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
         val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
           log.info("Building JS Backend Distribution")
 
-          setupJS(backendDestFile, jsBackendDir, "dist-graal.js")
-          setupJS(polyfillDestFile, polyfillPackageDir, "dist.js")
-          setupJS(importResDestFile, importResPackageDir, "dist.js")
+          buildJS(file("backend/api/js"))
+          distJS(backendDestFile, jsBackendDir, "dist-graal.js")
+          distJS(polyfillDestFile, polyfillPackageDir, "dist.js")
+          buildJS(file("backend/util/js-module-resolution"))
+          distJS(importResDestFile, importResPackageDir, "dist.js")
 
           Set(backendDestFile, polyfillDestFile, importResDestFile)
         }
 
         val inputFiles = (
-          (
-            (jsBackendDir / "src" ** "*.ts")
-              --- (jsBackendDir / "src/executor/argon-runtime.ts")
-          ) +++
+          (file("backend/api/src") ** "*.ts") +++
+            (
+              (jsBackendDir / "src" ** "*.ts")
+                --- (jsBackendDir / "src/executor/argon-runtime.ts")
+            ) +++
             (polyfillPackageDir / "src" ** "*.js") +++
+            (file("backend/util/js-module-resolution/src") ** "*.ts") +++
             (importResPackageDir / "src" ** "*.ts")
         ).get().toSet
 
@@ -1000,11 +1014,42 @@ lazy val compiler_driverNode = compiler_driver.node
 lazy val compiler_launcher = project.in(file("argon-compiler-launcher"))
   .dependsOn(argon_backend_java_api, compiler_driver_api, compiler_driverJVM)
   .settings(
-    commonSettings,
-    commonJVMSettings,
+    commonSettingsNoLibs,
+    commonJVMSettingsNoLibs,
     compilerOptions,
+
+    compileOrder := CompileOrder.JavaThenScala,
+
+    semanticdbEnabled := false,
+    autoScalaLibrary := false,
+    crossPaths := false,
 
     Compile / fork := true,
 
     name := "argon-compiler-launcher",
+  )
+
+lazy val test_runner = project.in(file("argon-test-runner"))
+  .settings(
+    commonSettingsNoLibs,
+    commonJVMSettingsNoLibs,
+    compilerOptions,
+
+    compileOrder := CompileOrder.JavaThenScala,
+
+    semanticdbEnabled := false,
+    autoScalaLibrary := false,
+    crossPaths := false,
+
+    Compile / fork := true,
+    Compile / run := (Compile / run).dependsOn(dist),
+
+    libraryDependencies ++= Seq(
+      "com.google.guava" % "guava" % "33.5.0-jre",
+      "commons-io" % "commons-io" % "2.20.0",
+      "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.20.0",
+      "org.jcommander" % "jcommander" % "2.0",
+    ),
+
+    name := "argon-test-runner",
   )

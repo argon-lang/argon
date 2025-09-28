@@ -7,6 +7,7 @@ import org.graalvm.polyglot.proxy.ProxyObject;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -19,7 +20,6 @@ final class ImportResolver {
 
         try(
             var context = Context.newBuilder("js")
-                .allowHostAccess(HostAccess.EXPLICIT)
                 .allowExperimentalOptions(true)
                 .option("js.load", "false")
                 .option("js.print", "false")
@@ -49,7 +49,7 @@ final class ImportResolver {
             var resolver = context.eval(resolverSrc);
             var updatedFiles = resolver.invokeMember(
                 "resolveImports",
-                entrypoint,
+                MemoryFileSystem.getFullPath(Path.of("/backend", entrypoint)),
                 ProxyObject.fromMap(new HashMap<>(files))
             );
             

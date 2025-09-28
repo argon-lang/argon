@@ -42,7 +42,7 @@ private[backend] final class JSApiBackendFactory(
       .forEach { path =>
         val relativePath = dir.relativize(path).toString
         val content = java.nio.file.Files.readString(path)
-        files.put(relativePath, content)
+        files.put("/backend/" + relativePath, content)
       }
 
     files

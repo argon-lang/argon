@@ -8,14 +8,12 @@ import dev.argon.nobleidl.runtime.graaljsInterop.ErrorTypeAdapter;
 import dev.argon.nobleidl.runtime.graaljsInterop.JSAdapter;
 import dev.argon.nobleidl.runtime.graaljsInterop.JSExecutor;
 import org.apache.commons.text.StringEscapeUtils;
-import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.HostAccess;
-import org.graalvm.polyglot.Source;
-import org.graalvm.polyglot.Value;
+import org.graalvm.polyglot.*;
 import org.graalvm.polyglot.io.IOAccess;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Path;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
@@ -69,9 +67,9 @@ class JSApiBackendLoaderImpl implements AutoCloseable {
 
             String entrypointSourceCode =
                 "export { \"" +
-                    StringEscapeUtils.escapeEcmaScript(exportName) +
+                    StringEscapeUtils.escapeJava(exportName) +
                     "\" as factory } from \"" +
-                    StringEscapeUtils.escapeEcmaScript(importPath) +
+                    StringEscapeUtils.escapeJava(MemoryFileSystem.getFullPath(Path.of("/backend", importPath))) +
                     "\";";
 
             var entrypointSource = Source.newBuilder("js", entrypointSourceCode, "entrypoint.js")
