@@ -19,15 +19,13 @@ import java.util.stream.Collectors;
 
 class TestCaseRunner implements Closeable {
 
-    public TestCaseRunner(Path libraryDir, Path argonDistDir, TestExecutor executor) throws IOException {
-        this.libraryDir = libraryDir;
-        this.argonDistDir = argonDistDir;
+    public TestCaseRunner(RunnerContext context, TestExecutor executor) throws IOException {
+        this.context = context;
         this.executor = executor;
         tempDir = Files.createTempDirectory("argon-tests");
     }
 
-    private final Path libraryDir;
-    private final Path argonDistDir;
+	private final RunnerContext context;
     private final TestExecutor executor;
     private final Path tempDir;
 	private boolean keepTempFiles = false;
@@ -56,7 +54,7 @@ class TestCaseRunner implements Closeable {
     }
 
     private Path buildLibraryTubeImpl(LibraryKey library) throws Exception {
-        var libDir = libraryDir.resolve(library.name());
+        var libDir = context.librariesDir().resolve(library.name());
 
         var outputLibDir = tempDir.resolve("lib").resolve(library.platform()).resolve(library.name());
         Files.createDirectories(outputLibDir);
@@ -254,7 +252,7 @@ class TestCaseRunner implements Closeable {
 				libInfos.add(new OutputProgramRunner.LibraryOutputInfo(libraryName, libPath));
 			}
 			
-			var runner = OutputProgramRunner.forPlatform(platform);
+			var runner = OutputProgramRunner.forPlatform(context, platform);
 			output = runner.runProgram(outputDir, libInfos);
 		}
 		
@@ -293,7 +291,7 @@ class TestCaseRunner implements Closeable {
 		var pb = new ProcessBuilder();
 
 		var command = new ArrayList<String>(args.size() + 1);
-		command.add(argonDistDir.resolve("argon").toString());
+		command.add(context.distDir().resolve("argon").toString());
 		command.addAll(args);
 		pb.command(command);
 

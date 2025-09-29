@@ -9,12 +9,18 @@ class TestRunnerArgs {
     
     @Parameter(required = true)
     public List<Path> testCases;
+
+	@Parameter(names = { "--host" })
+	public List<String> hostPlatforms;
     
-    @Parameter(names = { "--platform" }, required = true)
+    @Parameter(names = { "--platform" })
     public List<String> backends;
     
 	@Parameter(names = { "--libraries" }, required = true)
 	public Path librariesDir;
+
+	@Parameter(names = { "--backends" }, required = true)
+	public Path backendsDir;
 	
 	@Parameter(names = { "--dist" }, required = true)
 	public Path distDir;

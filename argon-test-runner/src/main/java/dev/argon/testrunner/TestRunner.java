@@ -7,14 +7,16 @@ import org.apache.commons.io.file.PathUtils;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.StreamSupport;
 
 public class TestRunner {
     
-    public static void main(String[] args) throws IOException, InterruptedException {
+    public static void main(String[] args) throws Exception {
         var testArgs = new TestRunnerArgs();
         JCommander.newBuilder()
             .addObject(testArgs)
@@ -30,6 +32,7 @@ public class TestRunner {
         
         final int maxThreads = Math.min(Runtime.getRuntime().availableProcessors(), 8);
         final var semaphore = new Semaphore(maxThreads);
+	    final AtomicInteger completedTests = new AtomicInteger();
         final AtomicInteger failedTests = new AtomicInteger();
         
         var executor = new TestExecutor();
@@ -41,44 +44,76 @@ public class TestRunner {
             mainThread.interrupt();
         }));
 		
+		var hostPlatforms = List.of("jvm", "js");
+		
+		
+		
 		var platform = "js";
 		
-		try(var testCaseRunner = new TestCaseRunner(testArgs.librariesDir, testArgs.distDir.resolve("argon-jvm"), executor)) {
-			if(testArgs.keepTempFiles) {
-				testCaseRunner.keepTempFiles();
+		var runners = new ArrayList<TestCaseRunner>();
+		var hostTasks = new ArrayList<Future<?>>();
+		try {
+			for(var hostPlatform : hostPlatforms) {
+				var context = new RunnerContext(
+					hostPlatform,
+					platform,
+					testArgs.librariesDir,
+					testArgs.backendsDir,
+					testArgs.distDir.resolve("argon-" + hostPlatform)
+				);
+				var testCaseRunner = new TestCaseRunner(context, executor);
+				runners.add(testCaseRunner);
+
+				if(testArgs.keepTempFiles) {
+					testCaseRunner.keepTempFiles();
+				}
+
+				hostTasks.add(executor.submit(() -> {
+					try {
+						for(var testCase : testCases) {
+							semaphore.acquire();
+							executor.submit(() -> {
+								try {
+									System.out.println("Running test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
+									testCaseRunner.executeTestCase(testCase, platform);
+									System.out.println("Finished test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
+								}
+								catch(Throwable t) {
+									failedTests.incrementAndGet();
+									t.printStackTrace();
+								}
+								finally {
+									completedTests.incrementAndGet();
+									semaphore.release();
+								}
+							});
+						}
+					}
+					catch(InterruptedException _) {}
+				}));
 			}
 			
-			for(var testCase : testCases) {
-				semaphore.acquire();
-				executor.submit(() -> {
-					try {
-						System.out.println("Running test case " + testCase.getTestCase().getName());
-						testCaseRunner.executeTestCase(testCase, platform);
-						System.out.println("Finished test case " + testCase.getTestCase().getName());
-					}
-					catch(Throwable t) {
-						failedTests.incrementAndGet();
-						t.printStackTrace();
-					}
-					finally {
-						semaphore.release();
-					}
-				});
+			for(var task : hostTasks) {
+				task.get();
 			}
-
+			
 			for(int i = 0; i < maxThreads; ++i) {
 				semaphore.acquire();
 			}
 		}
-        
+		finally {
+			for(var runner : runners) {
+				runner.close();
+			}
+		}        
         
         int numFailedTests = failedTests.get();
         if(numFailedTests > 0) {
-            System.out.println("Finished running " + testCases.size() + " test cases (" + numFailedTests + " failed)");
+            System.out.println("Finished running " + completedTests.get() + " test cases (" + numFailedTests + " failed)");
             System.exit(1);
         }
         else {
-            System.out.println("Finished running " + testCases.size() + " test cases");
+            System.out.println("Finished running " + completedTests.get() + " test cases");
         }
     }
     

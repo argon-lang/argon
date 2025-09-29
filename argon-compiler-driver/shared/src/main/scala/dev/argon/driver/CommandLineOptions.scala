@@ -211,7 +211,11 @@ object CompilerDriverOptions {
   def createOptionsFromOutputMetadata(backendName: String)(options: Map[String, BackendOptionOutput]): Opts[Map[String, PathLike]] =
     def createOptionFromMetadata(name: String, optionInfo: BackendOptionOutput): Opts[Map[String, PathLike]] =
       Opts.option[PathLike](s"$backendName-$name", help = optionInfo.description)
-        .map { p => Map(name -> p) }
+        .orNone
+        .map {
+          case Some(p) => Map(name -> p)
+          case None => Map()
+        }
 
 
     combineOptMapsN(

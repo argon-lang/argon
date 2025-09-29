@@ -11,7 +11,6 @@ import dev.argon.util.async.JSPromiseUtil
 import scala.scalajs.js
 import dev.argon.util.async.TypedArrayUtil
 import scala.scalajs.js.JavaScriptException
-import java.nio.file.{AccessDeniedException, NotDirectoryException}
 
 
 object PathUtil {
@@ -37,17 +36,17 @@ object PathUtil {
     }
 
   private def mapErrorByCode(error: js.Error): PartialFunction[String, IOException] = {
-    case "ENOENT" => new FileNotFoundException(error.message)
-    case "EACCES" => new AccessDeniedException(error.message)
+    case "ENOENT" => new IOException(error.message)
+    case "EACCES" => new IOException(error.message)
     case "EISDIR" => new IOException(error.message)
-    case "ENOTDIR" => new NotDirectoryException(error.message)
+    case "ENOTDIR" => new IOException(error.message)
     case "EBUSY" => new IOException(error.message)
     case "EEXIST" => new IOException(error.message)
     case "EMFILE" => new IOException(error.message)
     case "ENOSPC" => new IOException(error.message)
     case "EROFS" => new IOException(error.message)
     case "EINVAL"  => new IOException(error.message)
-    case "EPERM" => new AccessDeniedException(error.message)
+    case "EPERM" => new IOException(error.message)
     case "ETIMEDOUT" => new IOException(error.message)
   }
 

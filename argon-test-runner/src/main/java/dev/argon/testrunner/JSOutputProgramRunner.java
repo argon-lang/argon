@@ -11,8 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 class JSOutputProgramRunner extends OutputProgramRunner {
+	public JSOutputProgramRunner(RunnerContext context) {
+		this.context = context;
+	}
+	
+	private final RunnerContext context;
+	
 	@Override
 	public String runProgram(Path outputDir, List<LibraryOutputInfo> libraryOutputs) throws IOException, InterruptedException, CommandFailureException {
+		var runtimeModuleDir = outputDir.resolve("node_modules/@argon-lang/runtime");
+		Files.createDirectories(runtimeModuleDir);
+		PathUtils.copyDirectory(context.backendsDir().resolve("runtime/js"), runtimeModuleDir);
+		
 		for(var libraryOutput : libraryOutputs) {
 			var libPath = outputDir.resolve("node_modules/@argon-tube", libraryOutput.libraryName());
 			Files.createDirectories(libPath.getParent());

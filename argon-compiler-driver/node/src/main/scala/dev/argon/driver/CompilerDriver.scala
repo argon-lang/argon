@@ -8,6 +8,7 @@ import zio.{Cause, FiberFailure, Runtime, Unsafe}
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
 
+@JSExportTopLevel("compilerDriver")
 object CompilerDriver extends CompilerDriverInterface {
   override def runCommand(options: CompilerDriverJSOptions): js.Promise[Int] =
     given Runtime[Any] = Runtime.default

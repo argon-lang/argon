@@ -77,6 +77,72 @@ distJVM := {
 }
 
 distNode := {
+  val s = streams.value
+  val log = s.log
+
+  val procLog = new ProcessLogger {
+    override def out(s: => String): Unit = log.out(s)
+    override def err(s: => String): Unit = log.out(s)
+    override def buffer[T](f: => T): T = f
+  }
+
+
+  val distDir = file("dist/argon-js")
+  IO.delete(distDir)
+
+  val compilerPackageDir = distDir / "compiler"
+  IO.createDirectory(compilerPackageDir)
+
+
+  def npmInstall(dir: File): Unit = {
+    log.info("Installing npm dependencies in " + dir)
+    val exitCode = Process(Seq("npm", "install"), Some(dir)) ! procLog
+    if(exitCode != 0) {
+      throw new Exception("npm install failed with exit code " + exitCode)
+    }
+  }
+  def npmRun(dir: File, command: String): Unit = {
+    log.info("Running npm run build in " + dir)
+    val exitCode = Process(Seq("npm", "run", command), dir) ! procLog
+    if(exitCode != 0) {
+      throw new Exception(s"npm run $command failed with exit code " + exitCode)
+    }
+  }
+  def packageCopy(src: File, dest: File): Unit = {
+    val exitCode = Process(
+      Seq("node", "lib/main.js", src.getAbsolutePath, dest.getAbsolutePath),
+      file("backend/util/js-copy-deploy"),
+    ) ! procLog
+    if(exitCode != 0) {
+      throw new Exception("package copy with exit code " + exitCode)
+    }
+  }
+
+  val launcherDir = file("argon-compiler-launcher-js")
+
+  npmInstall(launcherDir)
+  npmRun(launcherDir, "build")
+
+  val compilerDriverOutput = (compiler_driverNode / Compile / fullOptJS).value
+  packageCopy(file("argon-compiler-launcher-js"), compilerPackageDir)
+  IO.copyFile(compilerDriverOutput.data, compilerPackageDir / "lib/argon.js")
+
+
+  val _ = distBackends.value
+  IO.copyDirectory(file("dist/backends"), distDir / "backends")
+
+  val launcherScript = distDir / "argon"
+  IO.write(
+    launcherScript,
+    s"""#!/bin/bash
+       |DISTDIR="$$(readlink -f "$$(dirname "$$0")")"
+       |COMPDIR="$$DISTDIR/compiler"
+       |exec node \\
+       |  "$$COMPDIR/lib/index.js" \\
+       |  "$$@"
+       |""".stripMargin
+  )
+  launcherScript.setExecutable(true)
 }
 
 distBackends := {
@@ -98,13 +164,6 @@ distBackendJS := Def.task {
     val exitCode = Process(Seq("npm", "install"), Some(dir)) ! procLog
     if(exitCode != 0) {
       throw new Exception("npm install failed with exit code " + exitCode)
-    }
-  }
-  def npmInstallNoDev(dir: File): Unit = {
-    log.info("Installing npm dependencies (omit dev) in " + dir)
-    val exitCode = Process(Seq("npm", "install", "--omit=dev"), dir) ! procLog
-    if(exitCode != 0) {
-      throw new Exception("npm install --omit=dev failed with exit code " + exitCode)
     }
   }
   def npmRun(dir: File, command: String): Unit = {
@@ -152,7 +211,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
     "dev.argon" %%% "argon-async-util" % "2.1.0",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3-SNAPSHOT",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "com.lihaoyi" %%% "sourcecode" % "0.4.4",
@@ -973,7 +1032,7 @@ lazy val compiler_driver = crossProject(JVMPlatform, NodePlatform).crossType(Cro
     commonSettings,
     compilerOptions,
 
-    libraryDependencies += "com.monovore" %% "decline" % "2.5.0",
+    libraryDependencies += "com.monovore" %%% "decline" % "2.5.0",
 
     buildInfoKeys := Seq[BuildInfoKey](name, version, scalaVersion, sbtVersion),
     buildInfoPackage := "dev.argon.driver",
