@@ -7,9 +7,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReentrantLock;
-import java.util.function.Supplier;
 
-public class TestExecutor {
+class TestExecutor {
     
     private final ReentrantLock lock = new ReentrantLock();
     private final List<Thread> threads = new ArrayList<>();

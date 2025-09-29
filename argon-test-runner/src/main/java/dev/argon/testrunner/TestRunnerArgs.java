@@ -5,7 +5,7 @@ import com.beust.jcommander.Parameter;
 import java.nio.file.Path;
 import java.util.List;
 
-public class TestRunnerArgs {
+class TestRunnerArgs {
     
     @Parameter(required = true)
     public List<Path> testCases;

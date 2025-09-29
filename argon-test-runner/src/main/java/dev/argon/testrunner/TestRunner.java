@@ -28,7 +28,7 @@ public class TestRunner {
         
         System.out.println("Running " + testCases.size() + " test cases");
         
-        final int maxThreads = Runtime.getRuntime().availableProcessors();
+        final int maxThreads = Math.min(Runtime.getRuntime().availableProcessors(), 8);
         final var semaphore = new Semaphore(maxThreads);
         final AtomicInteger failedTests = new AtomicInteger();
         

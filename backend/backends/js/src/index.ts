@@ -68,7 +68,7 @@ class PackageJsonResourceImpl<E> extends StringResourceBase<E> implements Packag
     }
 
     override async asString(): Promise<string> {
-        const packageJson = this.packageJson();
+        const packageJson = await this.packageJson();
         return JSON.stringify(packageJson);
     }
 }
@@ -283,6 +283,7 @@ class JSOutputProvider<E> implements backendOptions.OutputProvider<E, JSBackendO
     async resources(o: JSBackendOutput<E>): Promise<Dict<backendOptions.OutputValue<E>>> {
         return new Map([
             [ "modules", { $type: "directory-resource", res: o.modules } ],
+            [ "package-json", { $type: "binary-resource", res: o.packageJson } ],
         ]);
     }
 }

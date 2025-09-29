@@ -64,7 +64,7 @@ distJVM := {
     s"""#!/bin/bash
        |DISTDIR="$$(readlink -f "$$(dirname "$$0")")"
        |COMPDIR="$$DISTDIR/compiler"
-       |java \\
+       |exec java \\
        |  --class-path "${ files.map(file => "$COMPDIR/" + file.getName).mkString(":") }" \\
        |  -Ddev.argon.backends="$$DISTDIR/backends" \\
        |  --illegal-native-access=deny \\
@@ -130,38 +130,12 @@ distBackendJS := Def.task {
   npmInstall(jsApiDir)
   npmRun(jsApiDir, "build")
   npmInstall(jsBackendDir)
-  npmRun(jsBackendDir, "dist")
+  npmRun(jsBackendDir, "build")
 
   val distBackendDir = file("dist/backends/js")
   IO.delete(distBackendDir)
 
   packageCopy(jsBackendDir, distBackendDir)
-
-
-
-  IO.write(
-    file("dist/backends/js/backend.toml"),
-    """
-      |[backend]
-      |api-version = "0.1.0"
-      |name = "js"
-      |
-      |[[loaders]]
-      |api = "js"
-      |import-path = "./lib/index.js"
-      |export-name = "backendFactory"
-      |
-      |[options.tube.externs]
-      |type = "binary-resource"
-      |description = "JS files that export functions used as externs"
-      |occurrence = "many"
-      |
-      |[options.output.modules]
-      |type = "directory-resource"
-      |description = "Output directory for generated modules"
-      |
-      |""".stripMargin,
-  )
 }.tag(JSBackendTag).value
 
 

@@ -1,0 +1,22 @@
+[backend]
+api-version = "0.1.0"
+name = "js"
+
+[[loaders]]
+api = "js"
+import-path = "./lib/index.js"
+export-name = "backendFactory"
+
+[options.tube.externs]
+type = "binary-resource"
+description = "JS files that export functions used as externs"
+occurrence = "many"
+
+[options.output.modules]
+type = "directory-resource"
+description = "Output directory for generated modules"
+
+[options.output.package-json]
+type = "binary-resource"
+description = "Output file for package.json"
+

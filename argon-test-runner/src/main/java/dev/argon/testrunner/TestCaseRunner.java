@@ -1,7 +1,7 @@
 package dev.argon.testrunner;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.io.file.PathUtils;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -9,13 +9,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
-public class TestCaseRunner implements Closeable {
+class TestCaseRunner implements Closeable {
 
     public TestCaseRunner(Path libraryDir, Path argonDistDir, TestExecutor executor) throws IOException {
         this.libraryDir = libraryDir;
@@ -135,8 +137,6 @@ public class TestCaseRunner implements Closeable {
 		var args = new ArrayList<String>();
 		args.add("codegen");
 		args.add(library.platform());
-		args.add("--name");
-		args.add(library.name());
 		args.add("-i");
 		args.add(outputLibDir.resolve(library.name() + ".arvm").toString());
 		args.addAll(getOutputOptions(library.platform(), outputDir));
@@ -243,17 +243,48 @@ public class TestCaseRunner implements Closeable {
 			
 			execute(args);
 		}
+
+
+		String output;
+		{
+			var libInfos = new ArrayList<OutputProgramRunner.LibraryOutputInfo>();
+			
+			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
+				var libPath = buildLibraryOutput(new LibraryKey(libraryName, platform));
+				libInfos.add(new OutputProgramRunner.LibraryOutputInfo(libraryName, libPath));
+			}
+			
+			var runner = OutputProgramRunner.forPlatform(platform);
+			output = runner.runProgram(outputDir, libInfos);
+		}
 		
+		var expectedOutput = testCase.getTestCase().getExpectedOutput();
+		if(expectedOutput != null) {
+			if(!normalize(expectedOutput).equals(normalize(output))) {
+				throw new Exception("Output does not match\nExpected:\n" + expectedOutput + "\nActual:" + output);
+			}
+			
+			return;
+		}
+		
+		throw new Exception("Expected error did not occur");
+	}
+	
+	private String normalize(String s) {
+		return Arrays.stream(s.trim().split("\\n"))
+			.map(String::trim)
+			.collect(Collectors.joining());
 	}
 	
 
 	private List<String> getOutputOptions(String platform, Path outputDir) throws IOException {
 		return switch(platform) {
-			case "js" -> {
-				var modulesDir = outputDir.resolve("lib");
-				Files.createDirectories(modulesDir);
-				yield List.of("--js-modules", modulesDir.toString());
-			}
+			case "js" -> List.of(
+				"--js-modules",
+				outputDir.toString(),
+				"--js-package-json",
+				outputDir.resolve("package.json").toString()
+			);
 			default -> throw new IllegalArgumentException("Unknown platform: " + platform);
 		};
 	}
@@ -285,7 +316,7 @@ public class TestCaseRunner implements Closeable {
     @Override
     public void close() throws IOException {
 		if(!keepTempFiles) {
-			FileUtils.deleteDirectory(tempDir.toFile());	
+			PathUtils.deleteDirectory(tempDir);	
 		}
     }
 }

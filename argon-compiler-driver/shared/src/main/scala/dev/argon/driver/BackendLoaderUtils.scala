@@ -19,7 +19,7 @@ private[driver] object BackendLoaderUtils {
       .runCollect
   
   def loadBackend(backendDir: PathLike): ZIO[Any, BackendException | IOException, Option[BackendFactory]] =
-    PathUtil.exists(backendDir).flatMap {
+    (PathUtil.exists(backendDir) && PathUtil.exists(PathLike.join(backendDir, "backend.toml"))).flatMap {
       case true => 
         loadBackendSchema(backendDir).flatMap { schema =>
           val backendFactory = BackendLoader.load(backendDir, schema)
