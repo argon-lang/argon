@@ -12,7 +12,6 @@ import type { OptionParser } from "@argon-lang/js-backend-api/options";
 import type { ErrorChecker, PromiseWithError } from "@argon-lang/noble-idl-core/util";
 import * as op from "@argon-lang/js-backend-api/options/parser";
 import type { Dict, String } from "@argon-lang/noble-idl-core";
-import { createTestExecutor } from "#executor";
 import type { JSBackendOptions, JSBackendOutput, JSDataOptions, JSModuleResource, PackageJsonResource } from "./options.js";
 import { asyncIterableToStream, streamToAsyncIterable } from "./stream.js";
 import type { PackageJson, ReadonlyDeep } from "type-fest";
@@ -133,10 +132,6 @@ class JSBackend<E> implements backendApi.Backend<E, JSBackendOutput<E>> {
 
     async codeGenerator(): Promise<backendApi.CodeGeneratorFactory<E, JSBackendOutput<E>>> {
         return new JSCodeGeneratorFactory();
-    }
-    
-    async testExecutor(): Promise<Option<backendApi.TestExecutorFactory<E, JSBackendOutput<E>>>> {
-        return createTestExecutor();
     }
 }
 

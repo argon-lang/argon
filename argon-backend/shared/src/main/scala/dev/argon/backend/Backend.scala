@@ -12,6 +12,5 @@ trait Backend[E >: BackendException | IOException] {
 
   val platformDataLoader: PlatformDataLoader[E]
   val codeGenerator: CodeGenerator[E, Output]
-  def testExecutor: IO[E, Option[TestExecutor[E, Output]]]
 
 }

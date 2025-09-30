@@ -7,8 +7,7 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "codegen": "node package-runtime.js",
-    "build": "npm run codegen && tsc --project .",
+    "build": "tsc --project .",
     "dist": "npm run build && rollup --config rollup.graal.config.js",
     "test": "npm run build && vitest run --root lib"
   },
@@ -17,13 +16,6 @@
     "./backend": "./lib/backend.js",
     "./backend/options": "./lib/backend/options.js",
     "./vm": "./lib/vm.js"
-  },
-  "imports": {
-    "#executor": {
-      "node": "./lib/executor/executor.node.js",
-      "graal": "./lib/executor/executor.graal.js",
-      "default": "./lib/executor/executor.disabled.js"
-    }
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.1",
