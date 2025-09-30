@@ -1,6 +1,7 @@
 package dev.argon.testrunner;
 
 import com.beust.jcommander.JCommander;
+import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import org.apache.commons.io.file.PathUtils;
 
@@ -14,22 +15,41 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.StreamSupport;
 
-public class TestRunner {
-    
+public class TestRunner {	
     public static void main(String[] args) throws Exception {
         var testArgs = new TestRunnerArgs();
-        JCommander.newBuilder()
+		var cmd = JCommander.newBuilder()
+			.programName("argon-test-runner")
             .addObject(testArgs)
-            .build()
-            .parse(args);  
+            .build();
+		
+		try {
+			cmd.parse(args);
+			if(testArgs.help) {
+				cmd.usage();
+				return;
+			}
+		}
+		catch(ParameterException e) {
+			System.err.println("Error: " + e.getMessage());
+			cmd.usage();
+			System.exit(1);
+		}
+		
         
         var testCases = new java.util.ArrayList<GroupedTestCase>();
         for(var path : testArgs.testCases) {
             loadTestCases(path, path, testCases);
         }
+		
+		List<String> hostPlatforms = testArgs.hostPlatforms;
+		List<String> targetPlatforms = testArgs.backends;
         
-        System.out.println("Running " + testCases.size() + " test cases");
-        
+        System.out.println("Loaded " + testCases.size() + " test cases");
+		System.out.println("Running on host platforms: " + hostPlatforms);
+		System.out.println("Running on target platforms: " + targetPlatforms);
+
+		
         final int maxThreads = Math.min(Runtime.getRuntime().availableProcessors(), 8);
         final var semaphore = new Semaphore(maxThreads);
 	    final AtomicInteger completedTests = new AtomicInteger();
@@ -44,53 +64,49 @@ public class TestRunner {
             mainThread.interrupt();
         }));
 		
-		var hostPlatforms = List.of("jvm", "js");
-		
-		
-		
-		var platform = "js";
-		
 		var runners = new ArrayList<TestCaseRunner>();
 		var hostTasks = new ArrayList<Future<?>>();
 		try {
 			for(var hostPlatform : hostPlatforms) {
-				var context = new RunnerContext(
-					hostPlatform,
-					platform,
-					testArgs.librariesDir,
-					testArgs.backendsDir,
-					testArgs.distDir.resolve("argon-" + hostPlatform)
-				);
-				var testCaseRunner = new TestCaseRunner(context, executor);
-				runners.add(testCaseRunner);
+				for(var platform : targetPlatforms) {
+					var context = new RunnerContext(
+						hostPlatform,
+						platform,
+						testArgs.librariesDir,
+						testArgs.backendsDir,
+						testArgs.distDir.resolve("argon-" + hostPlatform)
+					);
+					var testCaseRunner = new TestCaseRunner(context, executor);
+					runners.add(testCaseRunner);
 
-				if(testArgs.keepTempFiles) {
-					testCaseRunner.keepTempFiles();
-				}
-
-				hostTasks.add(executor.submit(() -> {
-					try {
-						for(var testCase : testCases) {
-							semaphore.acquire();
-							executor.submit(() -> {
-								try {
-									System.out.println("Running test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
-									testCaseRunner.executeTestCase(testCase, platform);
-									System.out.println("Finished test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
-								}
-								catch(Throwable t) {
-									failedTests.incrementAndGet();
-									t.printStackTrace();
-								}
-								finally {
-									completedTests.incrementAndGet();
-									semaphore.release();
-								}
-							});
-						}
+					if(testArgs.keepTempFiles) {
+						testCaseRunner.keepTempFiles();
 					}
-					catch(InterruptedException _) {}
-				}));
+
+					hostTasks.add(executor.submit(() -> {
+						try {
+							for(var testCase : testCases) {
+								semaphore.acquire();
+								executor.submit(() -> {
+									try {
+										System.out.println("Running test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
+										testCaseRunner.executeTestCase(testCase, platform);
+										System.out.println("Finished test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
+									}
+									catch(Throwable t) {
+										failedTests.incrementAndGet();
+										t.printStackTrace();
+									}
+									finally {
+										completedTests.incrementAndGet();
+										semaphore.release();
+									}
+								});
+							}
+						}
+						catch(InterruptedException _) {}
+					}));
+				}
 			}
 			
 			for(var task : hostTasks) {

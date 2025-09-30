@@ -36,11 +36,11 @@ class TestCaseRunner implements Closeable {
 	}
 	
 	
-	private final Map<LibraryKey, Future<Path>> libraryTubes = new ConcurrentHashMap<>();
-	private final Map<LibraryKey, Future<Path>> libraryIR = new ConcurrentHashMap<>();
-	private final Map<LibraryKey, Future<Path>> libraryOutput = new ConcurrentHashMap<>();
+	private final Map<String, Future<Path>> libraryTubes = new ConcurrentHashMap<>();
+	private final Map<String, Future<Path>> libraryIR = new ConcurrentHashMap<>();
+	private final Map<String, Future<Path>> libraryOutput = new ConcurrentHashMap<>();
 
-    private Path buildLibraryTube(LibraryKey library) throws Exception {
+    private Path buildLibraryTube(String library) throws Exception {
         try {
             return libraryTubes.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryTubeImpl(lib))).get();
         }
@@ -53,26 +53,26 @@ class TestCaseRunner implements Closeable {
         }
     }
 
-    private Path buildLibraryTubeImpl(LibraryKey library) throws Exception {
-        var libDir = context.librariesDir().resolve(library.name());
+    private Path buildLibraryTubeImpl(String library) throws Exception {
+        var libDir = context.librariesDir().resolve(library);
 
-        var outputLibDir = tempDir.resolve("lib").resolve(library.platform()).resolve(library.name());
+        var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(library);
         Files.createDirectories(outputLibDir);
-        var outputFile = outputLibDir.resolve(library.name() + ".artube");
+        var outputFile = outputLibDir.resolve(library + ".artube");
 
         var args = new ArrayList<String>();
         args.add("compile");
         args.add("--name");
-        args.add(library.name());
+        args.add(library);
         args.add("-i");
         args.add(libDir.resolve("src").toString());
         args.add("-o");
         args.add(outputFile.toString());
 		
 		args.add("--platform");
-		args.add(library.platform());
+		args.add(context.targetPlatform());
 		
-		var options = LibraryPlatformOptions.forLibrary(library, libDir);
+		var options = LibraryPlatformOptions.forLibrary(library, context.targetPlatform(), libDir);
 		args.addAll(options.arguments());
         
         execute(args);
@@ -80,7 +80,7 @@ class TestCaseRunner implements Closeable {
         return outputFile;
     }
 
-	private Path buildLibraryIR(LibraryKey library) throws Exception {
+	private Path buildLibraryIR(String library) throws Exception {
 		try {
 			return libraryIR.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryIRImpl(lib))).get();
 		}
@@ -93,11 +93,11 @@ class TestCaseRunner implements Closeable {
 		}
 	}
 
-	private Path buildLibraryIRImpl(LibraryKey library) throws Exception {
-		var outputLibDir = tempDir.resolve("lib").resolve(library.platform()).resolve(library.name());
+	private Path buildLibraryIRImpl(String library) throws Exception {
+		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(library);
 		Files.createDirectories(outputLibDir);
-		var inputFile = outputLibDir.resolve(library.name() + ".artube");
-		var outputFile = outputLibDir.resolve(library.name() + ".arvm");
+		var inputFile = outputLibDir.resolve(library + ".artube");
+		var outputFile = outputLibDir.resolve(library + ".arvm");
 
 		var args = new ArrayList<String>();
 		args.add("genir");
@@ -107,13 +107,13 @@ class TestCaseRunner implements Closeable {
 		args.add(outputFile.toString());
 
 		args.add("--platform");
-		args.add(library.platform());
+		args.add(context.targetPlatform());
 
 		execute(args);
 
 		return outputFile;
 	}
-	private Path buildLibraryOutput(LibraryKey library) throws Exception {
+	private Path buildLibraryOutput(String library) throws Exception {
 		try {
 			return libraryOutput.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryOutputImpl(lib))).get();
 		}
@@ -126,18 +126,18 @@ class TestCaseRunner implements Closeable {
 		}
 	}
 
-	private Path buildLibraryOutputImpl(LibraryKey library) throws Exception {
-		var outputLibDir = tempDir.resolve("lib").resolve(library.platform()).resolve(library.name());
+	private Path buildLibraryOutputImpl(String library) throws Exception {
+		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(library);
 		Files.createDirectories(outputLibDir);
 		var outputDir = outputLibDir.resolve("output");
 		Files.createDirectories(outputDir);
 
 		var args = new ArrayList<String>();
 		args.add("codegen");
-		args.add(library.platform());
+		args.add(context.targetPlatform());
 		args.add("-i");
-		args.add(outputLibDir.resolve(library.name() + ".arvm").toString());
-		args.addAll(getOutputOptions(library.platform(), outputDir));
+		args.add(outputLibDir.resolve(library + ".arvm").toString());
+		args.addAll(getOutputOptions(context.targetPlatform(), outputDir));
 
 		execute(args);
 
@@ -173,8 +173,7 @@ class TestCaseRunner implements Closeable {
 			args.add(tubeFile.toString());
 
 			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var library = new LibraryKey(libraryName, platform);
-				var libTube = buildLibraryTube(library);
+				var libTube = buildLibraryTube(libraryName);
 				
 				args.add("-r");
 				args.add(libTube.toString());
@@ -206,8 +205,7 @@ class TestCaseRunner implements Closeable {
 			args.add(vmirFile.toString());
 			
 			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var library = new LibraryKey(libraryName, platform);
-				var libTube = buildLibraryTube(library);
+				var libTube = buildLibraryTube(libraryName);
 
 				args.add("-r");
 				args.add(libTube.toString());
@@ -230,8 +228,7 @@ class TestCaseRunner implements Closeable {
 			args.add(vmirFile.toString());
 			
 			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var library = new LibraryKey(libraryName, platform);
-				var libIR = buildLibraryIR(library);
+				var libIR = buildLibraryIR(libraryName);
 
 				args.add("-r");
 				args.add(libIR.toString());
@@ -248,7 +245,7 @@ class TestCaseRunner implements Closeable {
 			var libInfos = new ArrayList<OutputProgramRunner.LibraryOutputInfo>();
 			
 			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var libPath = buildLibraryOutput(new LibraryKey(libraryName, platform));
+				var libPath = buildLibraryOutput(libraryName);
 				libInfos.add(new OutputProgramRunner.LibraryOutputInfo(libraryName, libPath));
 			}
 			
