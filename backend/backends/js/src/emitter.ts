@@ -366,7 +366,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             throw new Error("Missing function implementation");
         }
 
-        const impl = this.emitFunctionImpl(func.signature, func.implementation);
+        const impl = this.emitFunctionImpl(false, func.signature, func.implementation);
 
         if(impl.type == "FunctionDeclaration") {
             this.addDeclaration({
@@ -395,11 +395,13 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
     }
 
-    private emitFunctionImpl(signature: ir.FunctionSignature, impl: ir.FunctionImplementation): ReadonlyDeep<estree.MaybeNamedFunctionDeclaration | estree.Expression> {
+    private emitFunctionImpl(useThis: boolean, signature: ir.FunctionSignature, impl: ir.FunctionImplementation): ReadonlyDeep<estree.MaybeNamedFunctionDeclaration | estree.Expression> {
         switch(impl.$type) {
             case "vm-ir":
             {
                 const params: estree.Pattern[] = [];
+
+                const regOffset = useThis ? 1 : 0;
 
                 for(const i of signature.typeParameters.keys()) {
                     params.push({
@@ -411,13 +413,34 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 for(const i of signature.parameters.keys()) {
                     params.push({
                         type: "Identifier",
-                        name: `r${i}`,
+                        name: `r${regOffset + i}`,
                     });
                 }
 
-                const blockEmitter = new BlockEmitter(this, signature.parameters.length);
+                const blockEmitter = new BlockEmitter(this, signature.parameters.length + regOffset);
                 
                 blockEmitter.emitBlock(impl.body.block);
+
+                const block = blockEmitter.toBlock();
+
+                if(useThis) {
+                    block.body.unshift({
+                        type: "VariableDeclaration",
+                        kind: "const",
+                        declarations: [
+                            {
+                                type: "VariableDeclarator",
+                                id: {
+                                    type: "Identifier",
+                                    name: "r0",
+                                },
+                                init: {
+                                    type: "ThisExpression",
+                                },
+                            },
+                        ],
+                    });
+                }
 
                 return {
                     type: "FunctionDeclaration",
@@ -647,7 +670,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             };
         }
         
-        const impl = this.emitFunctionImpl(methodDef.signature, methodDef.implementation);
+        const impl = this.emitFunctionImpl(true, methodDef.signature, methodDef.implementation);
 
         if(impl.type == "FunctionDeclaration") {
             return {
@@ -1737,6 +1760,20 @@ class BlockEmitter extends EmitterBase {
                     arguments: t.args.map(arg => this.buildTypeInfo(arg)),
                 };
             }
+
+            case "instance-type-parameter":
+                return {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: {
+                        type: "ThisExpression",
+                    },
+                    property: {
+                        type: "Identifier",
+                        name: `args_${t.index}`,
+                    },
+                };
 
             case "trait":
             {

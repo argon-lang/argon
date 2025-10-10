@@ -69,6 +69,16 @@ trait ExprContext extends ConditionalVars {
       }
   }
 
+  final case class InstanceParameterVar(
+    owner: ExpressionOwner,
+    varType: Expr,
+    name: Option[IdentifierExpr],
+  ) extends Var {
+    override def isErased: Boolean = false
+    override def isMutable: Boolean = false
+    override def isWitness: Boolean = false
+  }
+
   type Function <: Matchable
   given functionCanEqual: CanEqual[Function, Function] = deferred
 

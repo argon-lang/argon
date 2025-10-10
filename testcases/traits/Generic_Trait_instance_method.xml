@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>Generic Trait instance method</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait MyTrait[A: type]
+            public def self.identity(a: A): A = a
+        end
+
+        instance MyInst: MyTrait[String]
+        end
+        
+        proc main(): () do
+            let o = MyInst
+
+            puts (o.identity "Hello World")
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

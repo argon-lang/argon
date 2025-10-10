@@ -85,6 +85,14 @@ trait ExprType {
       case Expr.IntLiteral(_) =>
         ZIO.succeed(intType)
 
+      case Expr.InstanceMethodCall(m, instanceType, obj, args) =>
+        for
+          sig <- sigContext.instanceMethodSig(m, instanceType, obj)
+        yield sig.returnTypeForArgs(
+          exprContext.ExpressionOwner.Method(m),
+          args
+        )
+
       case Expr.Is(_, _) =>
         ZIO.succeed(boolType)
 

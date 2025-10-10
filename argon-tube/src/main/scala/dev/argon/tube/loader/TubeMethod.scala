@@ -48,6 +48,11 @@ private[loader] object TubeMethod {
           case EffectInfo.Effectful() => context.DefaultExprContext.EffectInfo.Effectful
         }
 
+      override def instanceParam: Comp[context.DefaultSignatureContext.InstanceParameter] =
+        ZIO.succeed(context.DefaultSignatureContext.InstanceParameter(
+          name = method.instanceParameter.name.map(decodeIdentifier),
+        ))
+
       override def signature: Comp[FunctionSignature] =
         sigCell.get(decodeFunctionSignature(method.signature))
 

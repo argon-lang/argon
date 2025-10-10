@@ -220,6 +220,16 @@ private[loader] trait LoaderUtils extends UsingContext {
             localVar <- ZIO.succeed(kv(index.toInt))
           yield localVar
 
+        case instanceVar: t.Var.InstanceParameterVar =>
+          for
+            contextOwner <- decodeExpressionOwner(instanceVar.owner)
+            paramType <- decodeExpr(instanceVar.varType)
+          yield context.DefaultExprContext.InstanceParameterVar(
+            owner = contextOwner,
+            name = instanceVar.name.map(decodeIdentifier),
+            varType = paramType,
+          )
+
         case paramVar: t.Var.ParameterVar =>
           for
             contextOwner <- decodeExpressionOwner(paramVar.owner)

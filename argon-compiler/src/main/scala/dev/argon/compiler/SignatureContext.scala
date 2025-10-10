@@ -65,6 +65,7 @@ trait SignatureContext {
 
       substHolesImpl(this, Seq(), Seq())
     end substituteHolesForArgs
+    
   }
   
   final case class SignatureParameter(
@@ -100,5 +101,18 @@ trait SignatureContext {
     name: Option[IdentifierExpr],
     paramType: Expr,
   )
-  
+
+
+
+  final case class InstanceParameter(
+    name: Option[IdentifierExpr],
+  ) {
+    def asInstanceVar(owner: exprContext.ExpressionOwner, t: exprContext.Expr): exprContext.InstanceParameterVar =
+      exprContext.InstanceParameterVar(
+        owner,
+        t,
+        name,
+      )
+  }
+
 }

@@ -31,9 +31,17 @@ private[source] object SourceInstance {
 
       override def methods: Comp[Seq[ArMethod]] =
         methodsCache.get(
-          ZIO.foreach(decl.body.collect {case WithLocation(method: ast.MethodDeclarationStmt, loc) => method })(
-            SourceMethod.make(ctx)(scope, MethodOwner.ByInstance(this))
-          )
+          scope.toScope
+            .flatMap { scope =>
+              signature.map { sig =>
+                context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Instance(this), scope, sig.parameters)
+              }
+            }
+            .flatMap { scope2 =>
+              ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, loc) => method })(
+                SourceMethod.make(ctx)(scope2, MethodOwner.ByInstance(this))
+              )
+            }
         )
 
       override def toString(): String =

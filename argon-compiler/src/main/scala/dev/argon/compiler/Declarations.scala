@@ -40,7 +40,13 @@ trait Context extends ScopeContext {
 
   sealed abstract class ArgonSignatureContextBase extends SignatureContext {
     override val exprContext: ArgonExprContext
-    def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr
+    import exprContext.Expr
+    def exprFromDefault(expr: DefaultExprContext.Expr): Expr
+
+    def instanceVarFromDefault(p: DefaultSignatureContext.InstanceParameter): InstanceParameter =
+      InstanceParameter(
+        name = p.name,
+      )
 
     def parameterFromDefault(p: DefaultSignatureContext.SignatureParameter): SignatureParameter =
       SignatureParameter(
@@ -61,7 +67,7 @@ trait Context extends ScopeContext {
         ensuresClauses = sig.ensuresClauses.map(exprFromDefault),
       )
 
-    def recordFieldSig(r: exprContext.Expr.RecordType, field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
+    def recordFieldSig(r: Expr.RecordType, field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
       for
         recordSig <- r.record.signature
 
@@ -77,7 +83,7 @@ trait Context extends ScopeContext {
         ensuresClauses = Seq(),
       )
 
-    def recordFieldSig(v: exprContext.EnumVariant, args: Seq[exprContext.Expr], field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
+    def recordFieldSig(v: exprContext.EnumVariant, args: Seq[Expr], field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
       for
         recordSig <- v.signature
 
@@ -93,7 +99,7 @@ trait Context extends ScopeContext {
         ensuresClauses = Seq(),
       )
 
-    def recordFieldUpdateSig(r: exprContext.Expr.RecordType, field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
+    def recordFieldUpdateSig(r: Expr.RecordType, field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
       for
         recordSig <- r.record.signature
 
@@ -113,9 +119,31 @@ trait Context extends ScopeContext {
             paramType = fieldType,
           )
         ),
-        returnType = exprContext.Expr.Tuple(Seq()),
+        returnType = Expr.Tuple(Seq()),
         ensuresClauses = Seq(),
       )
+      
+    def instanceMethodSig(method: exprContext.Method, instanceType: exprContext.MethodInstanceType, instanceObject: Expr): Comp[FunctionSignature] = {
+      instanceType match {
+        case instanceType: Expr.TraitType =>
+          for
+            methodSig <- method.signature
+            sig = signatureFromDefault(methodSig)
+            ownerSig <- instanceType.t.signature
+            params = signatureFromDefault(ownerSig).parameters
+            args = instanceType.args
+            owner = exprContext.ExpressionOwner.Trait(instanceType.t)
+
+            withInstanceTypeParams = params.zip(args).zipWithIndex.foldLeft(sig) {
+              case (sig, ((param, arg), i)) =>
+                sig.substituteVar(param.asParameterVar(owner, i), arg)
+            }
+            
+          yield withInstanceTypeParams 
+          
+        case instanceType: Expr.InstanceSingletonType => ???
+      }
+    }
   }
 
 
@@ -380,10 +408,31 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
 
   def slot: MethodSlot
 
+  def instanceParam: Comp[context.DefaultSignatureContext.InstanceParameter]
   def signature: Comp[FunctionSignature]
 
   def implementation: Option[Comp[context.implementations.MethodImplementation]]
+  
+  def instanceType: Comp[context.DefaultExprContext.Expr] =
+    owner match {
+      case MethodOwner.ByTrait(t) =>
+        val traitOwner = context.DefaultExprContext.ExpressionOwner.Trait(t)
+        for
+          traitSig <- t.signature
+          args = traitSig
+            .parameters
+            .zipWithIndex
+            .map { (param, i) => context.DefaultExprContext.Expr.Variable(param.asParameterVar(traitOwner, i)) }
+        yield context.DefaultExprContext.Expr.TraitType(t, args)
 
+      case MethodOwner.ByInstance(i) =>
+        val instOwner = context.DefaultExprContext.ExpressionOwner.Instance(i)
+        for
+          instSig <- i.signature
+        yield instSig.returnType
+    }
+  
+  
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
     obj.asMatchable match {

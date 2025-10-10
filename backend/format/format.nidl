@@ -298,6 +298,11 @@ enum import-specifier {
 
 
 @esexpr:(derive-codec)
+record instance-parameter {
+    name: option[identifier];
+}
+
+@esexpr:(derive-codec)
 record function-signature {
     @esexpr:(keyword)
     parameters: list[signature-parameter];
@@ -478,6 +483,9 @@ record method-definition {
     @esexpr:(keyword)
     @esexpr:(default-value (pure))
     effects: effect-info;
+
+    @esexpr:(keyword)
+    instance-parameter: instance-parameter;
 
     @esexpr:(keyword)
     signature: function-signature;
@@ -873,6 +881,11 @@ record enum-type {
 enum var {
     local-var {
         id: nat;
+    },
+    instance-parameter-var {
+        owner: expression-owner;
+        name: option[identifier];
+        var-type: expr;
     },
     parameter-var {
         owner: expression-owner;

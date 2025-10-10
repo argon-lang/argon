@@ -227,7 +227,7 @@ export function createTraitType(traitInfo) {
         applyVTable(traitType, traitInfo.methods, traitInfo.vtable);
     }
     else {
-        traitInfo.specialize = specialize({
+        traitType.specialize = specialize({
             customize(c) {
                 c.methods = Object.create(null);
                 applyVTable(c, traitInfo.methods, traitInfo.vtable);

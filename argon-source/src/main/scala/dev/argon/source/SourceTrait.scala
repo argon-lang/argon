@@ -28,12 +28,23 @@ private[source] object SourceTrait {
           SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Trait(this))(decl.parameters, rt)
         }
       )
+      
+      
 
       override def methods: Comp[Seq[ArMethod]] =
         methodsCache.get(
-          ZIO.foreach(decl.body.collect {case WithLocation(method: ast.MethodDeclarationStmt, loc) => method })(
-            SourceMethod.make(ctx)(scope, MethodOwner.ByTrait(this))
-          )
+          scope.toScope
+            .flatMap { scope =>
+              signature.map { sig =>
+                context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Trait(this), scope, sig.parameters)
+              }
+            }
+            .flatMap { scope2 =>
+              ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, loc) => method })(
+                SourceMethod.make(ctx)(scope2, MethodOwner.ByTrait(this))
+              )
+            }
+          
         )
 
       override def toString(): String =

@@ -450,6 +450,9 @@ enum vm-type {
         @esexpr:(vararg)
         args: list[vm-type];
     },
+    instance-type-parameter {
+        index: nat;
+    },
     trait {
         trait-id: nat;
 

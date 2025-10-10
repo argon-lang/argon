@@ -447,6 +447,8 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
       private def emitMethodDef(method: ArMethod): Comp[MethodDefinition] =
         for
+          instanceParam <- method.instanceParam
+          
           sig <- method.signature
           funcSig <- emitFunctionSignature(sig)
 
@@ -482,6 +484,9 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case c.MethodSlot.FinalOverride => MethodSlot.FinalOverride()
           },
           effects = encodeEffectInfo(method.effects),
+          instanceParameter = InstanceParameter(
+            name = instanceParam.name.map(encodeIdentifier),
+          ),
           signature = funcSig,
           implementation = impl,
         )
@@ -643,6 +648,18 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 kv <- knownVars.get
                 index <- ZIO.succeed(kv(v))
               yield Var.LocalVar(index)
+
+            case v: context.DefaultExprContext.InstanceParameterVar =>
+              for
+                owner <- encodeExpressionOwner(v.owner)
+                varType <- expr(v.varType)
+
+              yield Var.InstanceParameterVar(
+                owner = owner,
+                name = v.name.map(encodeIdentifier),
+                varType = varType,
+              )
+              
 
             case v: context.DefaultExprContext.ParameterVar =>
               for

@@ -72,23 +72,7 @@ trait ScopeContext {
           case Trait(t) => t.signature.map(TRSignatureContext.signatureFromDefault)
           case Instance(i) => i.signature.map(TRSignatureContext.signatureFromDefault)
           case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)
-          case InstanceMethod(m, instanceType: Expr.TraitType, _) =>
-
-            for
-              methodSig <- m.signature
-              sig = TRSignatureContext.signatureFromDefault(methodSig)
-              ownerSig <- instanceType.t.signature
-              params = TRSignatureContext.signatureFromDefault(ownerSig).parameters
-              args = instanceType.args
-              owner = TRExprContext.ExpressionOwner.Trait(instanceType.t)
-
-            yield params.zip(args).zipWithIndex.foldLeft(sig) {
-              case (sig, ((param, arg), i)) =>
-                sig.substituteVar(param.asParameterVar(owner, i), arg)
-            }
-
-          case InstanceMethod(_, _: Expr.InstanceSingletonType, _) => ???
-            
+          case InstanceMethod(m, instanceType, obj) => TRSignatureContext.instanceMethodSig(m, instanceType, obj)
           case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
           case RecordFieldUpdate(r, field, _) => TRSignatureContext.recordFieldUpdateSig(r, field)
           case EnumVariant(v) => v.signature.map(TRSignatureContext.signatureFromDefault)
@@ -229,6 +213,20 @@ trait ScopeContext {
       override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
+    final class InstanceVarScope(parentScope: Scope, instanceVar: TRExprContext.InstanceParameterVar) extends Scope {
+      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+        if instanceVar.name.contains(id) then
+          ZIO.succeed(LookupResult.Variable(instanceVar))
+        else
+          parentScope.lookup(id)
+
+      override def givenAssertions: Comp[Seq[ImplicitValue]] =
+        parentScope.givenAssertions
+
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] =
+        parentScope.knownVarValues
+    }
+
     final class ParameterScope(owner: TRExprContext.ExpressionOwner, parentScope: Scope, sigParams: Seq[DefaultSignatureContext.SignatureParameter]) extends Scope {
 
       private val parameters: Seq[Var] =
@@ -272,7 +270,8 @@ trait ScopeContext {
           parentAssertions <- parentScope.givenAssertions
         yield parentAssertions ++ parameters.view.filter(_.isWitness).map(ImplicitValue.OfVar.apply)
 
-      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] =
+        parentScope.knownVarValues
     }
 
     final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar], variableValues: TMap[Var, TRExprContext.Expr], givenVars: TSet[Var]) extends Scope {

@@ -7,7 +7,7 @@ import dev.argon.util.{*, given}
 import zio.*
 
 private[source] object SourceMethod {
-  def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, methodOwner: MethodOwner[ctx.type])(decl: ast.MethodDeclarationStmt)(using externProvider: ExternProvider & HasContext[ctx.type]): ctx.Comp[ArMethodC & HasContext[ctx.type]] =
+  def make(ctx: Context)(scope: ctx.Scopes.Scope, methodOwner: MethodOwner[ctx.type])(decl: ast.MethodDeclarationStmt)(using externProvider: ExternProvider & HasContext[ctx.type]): ctx.Comp[ArMethodC & HasContext[ctx.type]] =
     for
       funcId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
@@ -45,18 +45,27 @@ private[source] object SourceMethod {
         else MethodSlot.Final
       end slot
 
+      override def instanceParam: Comp[context.DefaultSignatureContext.InstanceParameter] =
+        ZIO.succeed(context.DefaultSignatureContext.InstanceParameter(
+          decl.instanceName.value,
+        ))
+
       override def signature: Comp[FunctionSignature] = sigCache.get(
-        scope.toScope.flatMap { scope =>
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Method(this))(decl.parameters, decl.returnType)
-        }
+        SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Method(this))(decl.parameters, decl.returnType)
       )
 
       override def implementation: Option[Comp[context.implementations.MethodImplementation]] =
         Some(implCache.get(
           for
-            scope <- scope.toScope
             sig <- signature
-            scope2 = context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Method(this), scope, sig.parameters)
+            thisType <- instanceType
+            thisParam <- instanceParam
+            thisVar = context.TRSignatureContext.instanceVarFromDefault(thisParam).asInstanceVar(
+              context.TRExprContext.ExpressionOwner.Method(this),
+              context.TRSignatureContext.exprFromDefault(thisType)
+            )
+            scope2 =  context.Scopes.InstanceVarScope(scope, thisVar)
+            scope3 = context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Method(this), scope2, sig.parameters)
             impl <- decl.body match {
               case None =>
                 ZIO.succeed(context.implementations.MethodImplementation.Abstract)
@@ -80,7 +89,7 @@ private[source] object SourceMethod {
                   override val context: ctx.type = ctx
                 }
 
-                tr.typeCheckExpr(scope2)(expr, sig.returnType, effects, erased = isErased)
+                tr.typeCheckExpr(scope3)(expr, sig.returnType, effects, erased = isErased)
                   .map(context.implementations.MethodImplementation.Expr.apply)
             }
           yield impl
