@@ -210,7 +210,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.argon" %%% "argon-async-util" % "2.1.0",
+    "dev.argon" %%% "argon-async-util" % "2.1.1",
     "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
@@ -248,7 +248,7 @@ lazy val sharedJSNodeSettings = Seq(
       .withBatchMode(true)
       .withESFeatures(_
         .withESVersion(ESVersion.ES2021)
-//        .allowBigIntsForLongs(true)
+        .withAllowBigIntsForLongs(true)
       )
   },
 
@@ -325,6 +325,7 @@ lazy val compilerOptions = Seq(
     "-Ycheck-all-patmat",
     "-Yretain-trees",
     "-Yexplicit-nulls",
+    "-Wsafe-init",
     "-Xmax-inlines", "128",
     "-Wconf:id=E029:e,id=E165:e,id=E190:e,cat=unchecked:e,cat=deprecation:e",
   ),
@@ -1007,7 +1008,7 @@ lazy val test_runner = project.in(file("argon-test-runner"))
       "com.google.guava" % "guava" % "33.5.0-jre",
       "commons-io" % "commons-io" % "2.20.0",
       "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.20.0",
-      "org.jcommander" % "jcommander" % "2.0",
+      "org.jcommander" % "jcommander" % "3.0",
     ),
 
     name := "argon-test-runner",
