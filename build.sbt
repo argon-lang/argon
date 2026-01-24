@@ -17,11 +17,11 @@ ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 Global / concurrentRestrictions += Tags.limit(JSBackendTag, 1)
 
-val graalVersion = "25.0.0"
-val zioVersion = "2.1.21"
+val graalVersion = "25.0.2"
+val zioVersion = "2.1.24"
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.7.3",
+  scalaVersion := "3.8.1",
   Compile / run / baseDirectory := file(".").getAbsoluteFile,
   Test / baseDirectory := file(".").getAbsoluteFile,
 )
@@ -214,18 +214,10 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
-    "com.lihaoyi" %%% "sourcecode" % "0.4.4",
-
-    "dev.optics" %%% "monocle-core"  % "3.3.0",
-    "dev.optics" %%% "monocle-macro" % "3.3.0",
-
-    "org.scala-lang.modules" %%% "scala-xml" % "2.4.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.12.0",
     "com.indoorvivants" %%% "toml" % "0.3.0",
-    "io.kevinlee" %%% "just-semver-core" % "1.1.1",
 
     "org.typelevel" %%% "cats-core" % "2.13.0",
-    "dev.zio" %%% "zio-interop-cats" % "23.1.0.5",
+    "dev.zio" %%% "zio-interop-cats" % "23.1.0.13",
   ),
 )
 
@@ -273,10 +265,10 @@ lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
 
 
   libraryDependencies ++= annotationDependencies ++ Seq(
-    "dev.zio" %% "zio-logging" % "2.5.1",
+    "dev.zio" %% "zio-logging" % "2.5.3",
 
     "org.apache.commons" % "commons-compress" % "1.28.0",
-    "org.apache.commons" % "commons-text" % "1.14.0",
+    "org.apache.commons" % "commons-text" % "1.15.0",
 
     "org.graalvm.polyglot" % "polyglot" % graalVersion,
     "org.graalvm.polyglot" % "js-community" % graalVersion,
@@ -1020,8 +1012,8 @@ lazy val test_runner = project.in(file("argon-test-runner"))
 
     libraryDependencies ++= Seq(
       "com.google.guava" % "guava" % "33.5.0-jre",
-      "commons-io" % "commons-io" % "2.20.0",
-      "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.20.0",
+      "commons-io" % "commons-io" % "2.21.0",
+      "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.21.0",
       "org.jcommander" % "jcommander" % "3.0",
     ),
 
