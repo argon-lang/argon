@@ -46,7 +46,7 @@ distJVM := {
   val compilerJarDir = distDir / "compiler"
   IO.createDirectory(compilerJarDir)
 
-  val files = (compiler_launcher / Compile / fullClasspathAsJars)
+  val files = (compiler_launcher / Runtime / fullClasspathAsJars)
     .value
     .map { _.data }
 
@@ -738,6 +738,20 @@ lazy val argon_backend_java_api = project.in(file("backend/api/java"))
       baseDirectory.value / "../nobleidl",
     ),
   )
+
+lazy val argon_backend_java_api_processors = project.in(file("backend/util/java-processors"))
+  .settings(
+    commonSettingsNoLibs,
+    commonJVMSettingsNoLibs,
+    compilerOptions,
+
+    compileOrder := CompileOrder.JavaThenScala,
+
+    semanticdbEnabled := false,
+    autoScalaLibrary := false,
+    crossPaths := false,
+  )
+
 
 
 lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-vm"))
