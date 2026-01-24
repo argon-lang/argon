@@ -553,7 +553,7 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
             proof <- proverContext.proofAtomicAsExpr(proof)
           yield Some(ResolvedImplicit(proof, model))
 
-        case proverContext.ProofResult.No(_, _) | _: proverContext.ProofResult.Unknown.type => ZIO.none
+        case proverContext.ProofResult.No(_, _) | proverContext.ProofResult.Unknown => ZIO.none
       }
 
     yield result

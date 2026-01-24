@@ -460,7 +460,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
           impl <- ZIO.foreach(m.implementation) { impl =>
             impl.flatMap {
-              case _: context.implementations.MethodImplementation.Abstract.type =>
+              case context.implementations.MethodImplementation.Abstract =>
                 ZIO.none
 
               case context.implementations.MethodImplementation.Expr(e) =>

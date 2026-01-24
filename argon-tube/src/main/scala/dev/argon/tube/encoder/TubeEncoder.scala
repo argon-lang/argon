@@ -457,7 +457,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
           impl <- ZIO.foreach(method.implementation) { impl =>
             impl.flatMap {
-              case _: context.implementations.MethodImplementation.Abstract.type =>
+              case context.implementations.MethodImplementation.Abstract =>
                 ZIO.succeed(MethodImplementation.Abstract())
 
               case context.implementations.MethodImplementation.Expr(e) =>

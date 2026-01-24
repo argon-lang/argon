@@ -685,7 +685,7 @@ trait TypeResolver extends UsingContext {
       case ast.Expr.Tuple(items) =>
         TupleExprFactory(expr.location, items.map(resolveExpr))
 
-      case _: ast.Expr.Type.type =>
+      case ast.Expr.Type =>
         new InferFactory {
           override def loc: Loc = expr.location
 

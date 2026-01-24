@@ -26,7 +26,7 @@ private[parser] object StreamTextReader {
       case cause: Cause.Die => Some(cause)
       case cause: Cause.Interrupt => Some(cause)
       case Cause.Fail(Some(e), trace) => Some(Cause.Fail(e, trace))
-      case Cause.Fail(_: None.type, trace) => None 
+      case Cause.Fail(None, trace) => None
       case Cause.Stackless(cause, stackless) =>
         for
           cause <- sequenceCause(cause)
