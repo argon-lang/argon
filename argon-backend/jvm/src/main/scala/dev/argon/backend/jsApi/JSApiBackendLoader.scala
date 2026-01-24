@@ -54,7 +54,7 @@ private[backend] object JSApiBackendLoader {
           .build()
 
         val module = jsContext.eval(source)
-        module.getMember(exportName).toOption
+        Option(module.getMember(exportName))
       }
         .mapError(ex => BackendException("Error loading backend", ex))
         .onExecutor(executor)

@@ -312,6 +312,7 @@ lazy val compilerOptions = Seq(
     "-language:existentials",
     "-language:implicitConversions",
     "-language:strictEquality",
+    "-language:experimental.strictEqualityPatternMatching",
     "-deprecation",
     "-feature",
     "-Ycheck-all-patmat",
