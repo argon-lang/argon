@@ -91,8 +91,8 @@ trait TreeShifter[F[_]: Monad] {
 
   final class ConsTupleShifter[AH, AT <: Tuple, BH, BT <: Tuple](hShifter: => Shifter[AH, BH], tShifter: Shifter[AT, BT]) extends Shifter[AH *: AT, BH *: BT] {
     override def shift(a: AH *: AT): F[BH *: BT] =
-      val (h *: t) = a
       for
+        (h *: t) = a
         h <- hShifter.shift(h)
         t <- tShifter.shift(t)
       yield h *: t

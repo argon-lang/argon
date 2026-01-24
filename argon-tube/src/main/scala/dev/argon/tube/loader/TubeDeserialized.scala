@@ -126,15 +126,15 @@ private[loader] object TubeDeserialized {
             state.recordFieldReferences.get(id).commit.map { _.get }
               .flatMap {
                 case fieldRef: t.TubeFileEntry.RecordFieldReference =>
-                  val fieldName = decodeIdentifier(fieldRef.name)
                   for
+                    fieldName = decodeIdentifier(fieldRef.name)
                     r <- getRecord(fieldRef.recordId)
                     fields <- r.fields
                   yield fields.find(_.name == fieldName).get
                   
                 case fieldRef: t.TubeFileEntry.EnumVariantRecordFieldReference =>
-                  val fieldName = decodeIdentifier(fieldRef.name)
                   for
+                    fieldName = decodeIdentifier(fieldRef.name)
                     r <- getEnumVariant(fieldRef.variantId)
                     fields <- r.fields
                   yield fields.find(_.name == fieldName).get
@@ -199,26 +199,23 @@ private[loader] object TubeDeserialized {
               }
               .flatMap {
                 case methodRef: t.TubeFileEntry.TraitMethodReference =>
-                  val name = decodeIdentifier(methodRef.name)
+                  for
+                    name = decodeIdentifier(methodRef.name)
 
-                  decodeErasedSignature(methodRef.signature)
-                    .flatMap { erasedSig =>
-                      ZStream.fromZIO(getTrait(methodRef.traitId))
-                        .mapZIO(_.methods)
-                        .flatMap(ZStream.fromIterable(_))
-                        .filter { m => m.name == name }
-                        .filterZIO { m =>
-                          for
-                            sig <- m.signature
-                            sig <- SignatureEraser(context).eraseSignature(sig)
-                          yield sig == erasedSig
-                        }
-                        .runHead
-                    }
-                    .flatMap {
-                      case Some(item) => ZIO.succeed(item)
-                      case None => ZIO.fail(TubeFormatException("Could not find method " + methodRef))
-                    }
+                    erasedSig <- decodeErasedSignature(methodRef.signature)
+                    res <- ZStream.fromZIO(getTrait(methodRef.traitId))
+                      .mapZIO(_.methods)
+                      .flatMap(ZStream.fromIterable(_))
+                      .filter { m => m.name == name }
+                      .filterZIO { m =>
+                        for
+                          sig <- m.signature
+                          sig <- SignatureEraser(context).eraseSignature(sig)
+                        yield sig == erasedSig
+                      }
+                      .runHead
+                    item <- ZIO.fromOption(res).orElseFail(TubeFormatException("Could not find method " + methodRef))
+                  yield item
               }
           }
 

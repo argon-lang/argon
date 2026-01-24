@@ -1052,8 +1052,8 @@ trait TypeResolver extends UsingContext {
             override def loc: Loc = LookupIdFactory.this.loc
 
             override def infer(using EmitState): Comp[InferredExpr] =
-              val e = Expr.TupleElement(index, Expr.Variable(v))
               for
+                e = Expr.TupleElement(index, Expr.Variable(v))
                 e <- checkErasure(loc)(e)(v.isErased)
               yield InferredExpr(
                 e,
@@ -1402,8 +1402,8 @@ trait TypeResolver extends UsingContext {
                   override def loc: Loc = overloadableLoc
 
                   override def infer(using EmitState): Comp[InferredExpr] =
-                    val Seq(arg) = overloadResult.arguments
                     for
+                      Seq(arg) = overloadResult.arguments
                       _ <- ErrorLog.logError(CompilerError.CanNotMutate(loc)).whenDiscard(!field.isMutable)
                       _ <- checkAllowedEffect(loc)(EffectInfo.Effectful)
 
@@ -1474,8 +1474,8 @@ trait TypeResolver extends UsingContext {
                     override def loc: Loc = overloadableLoc
 
                     override def infer(using EmitState): Comp[InferredExpr] =
-                      val e = Expr.TraitType(t, overloadResult.arguments)
                       for
+                        e = Expr.TraitType(t, overloadResult.arguments)
                         e <- checkErasure(loc)(e)(false)
                       yield InferredExpr(
                         e,
@@ -1497,8 +1497,8 @@ trait TypeResolver extends UsingContext {
                     override def loc: Loc = overloadableLoc
 
                     override def infer(using EmitState): Comp[InferredExpr] =
-                      val e = Expr.NewInstance(i, overloadResult.arguments)
                       for
+                        e = Expr.NewInstance(i, overloadResult.arguments)
                         e <- checkErasure(loc)(e)(false)
                       yield InferredExpr(
                         e,
@@ -2095,8 +2095,8 @@ trait TypeResolver extends UsingContext {
       .flatMap(_.fold(ErrorLog.logError(CompilerError.ImplicitNotFound(funcLocation)).as(Expr.Error()))(ZIO.succeed(_)))
 
   private def tryResolveImplicit(t: Expr, funcLocation: SourceLocation)(using state: EmitState): Comp[Option[Expr]] =
-    val ir = ImplicitResolverImpl(funcLocation)
     for
+      ir = ImplicitResolverImpl(funcLocation)
       model <- state.model.get
       givens <- state.scope.givenAssertions
 
@@ -2147,8 +2147,8 @@ trait TypeResolver extends UsingContext {
             def buildCall(sig: TRSignatureContext.FunctionSignature, args: Seq[Expr]): Comp[ir.Assertion] =
               sig.parameters.toList match
                 case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _, _, _, _)) :: tailParams =>
-                  val variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                   for
+                    variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                     hole <- newVariable
                     holeExpr = Expr.Hole(hole)
                     nextSubst = sig.copy(parameters = tailParams).substituteVar(variable, holeExpr)
@@ -2157,8 +2157,8 @@ trait TypeResolver extends UsingContext {
                   yield assertion
 
                 case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, isErased, _, paramName, paramType)) :: tailParams =>
-                  val variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                   for
+                    variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                     varId <- UniqueIdentifier.make
                     local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isWitness = false)
                     loadLocal = Expr.Variable(local)

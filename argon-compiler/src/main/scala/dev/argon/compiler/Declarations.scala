@@ -416,8 +416,8 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
   def instanceType: Comp[context.DefaultExprContext.Expr] =
     owner match {
       case MethodOwner.ByTrait(t) =>
-        val traitOwner = context.DefaultExprContext.ExpressionOwner.Trait(t)
         for
+          traitOwner = context.DefaultExprContext.ExpressionOwner.Trait(t)
           traitSig <- t.signature
           args = traitSig
             .parameters
@@ -426,8 +426,8 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
         yield context.DefaultExprContext.Expr.TraitType(t, args)
 
       case MethodOwner.ByInstance(i) =>
-        val instOwner = context.DefaultExprContext.ExpressionOwner.Instance(i)
         for
+          instOwner = context.DefaultExprContext.ExpressionOwner.Instance(i)
           instSig <- i.signature
         yield instSig.returnType
     }

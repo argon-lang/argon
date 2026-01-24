@@ -31,8 +31,8 @@ private[loader] object TubeEnum {
       override def variants: Comp[Seq[EnumVariant]] =
         variantsCell.get(
           ZIO.foreach(e.variants) { variantDef =>
-            val enumInstance = this
             for
+              enumInstance = this
               variantId <- UniqueIdentifier.make
               sigCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
               fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[RecordFieldC & HasContext[ctx.type]]]

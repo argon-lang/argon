@@ -63,8 +63,8 @@ private[driver] object CompilerDriverImpl {
 
   private def runCompile(options: CompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped {
-      val ctx = BackendContext[ErrorLog & LogReporter, Error]()
       for
+        ctx = BackendContext[ErrorLog & LogReporter, Error]()
 
         given (ExternProvider & HasContext[ctx.type]) <- BackendExternProvider.make(ctx)(
           options.supportedPlatforms,
@@ -109,8 +109,8 @@ private[driver] object CompilerDriverImpl {
     }
 
   private def runGenIR(options: GenIRCommand): ZIO[ErrorLog & LogReporter, Error, Unit] =
-    val ctx = BackendContext[ErrorLog & LogReporter, Error]()
     for
+      ctx = BackendContext[ErrorLog & LogReporter, Error]()
       tubeResContext <- TubeResourceContext.make(ctx)
 
       compile = new GenerateIR {

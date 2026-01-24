@@ -22,8 +22,8 @@ private[loader] object TubeModule {
 
       override def allExports(reexportingModules: Set[ModuleName]): Comp[Map[IdentifierExpr, Seq[ModuleExport]]] =
         ZIO.foreach(mod.groups) { group =>
-          val name = decodeIdentifier(group.name)
           for
+            name = decodeIdentifier(group.name)
             items <- getExportsImpl(name, group.exports)
           yield name -> items.toList
         }.map(_.toMap)
