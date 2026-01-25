@@ -1,0 +1,56 @@
+package argon.driver.command;
+
+import nobleidl.core;
+
+@java:(mapped-to "java.nio.file.Path")
+extern type command-file-path;
+
+enum driver-command {
+    help-command {
+        is-error: bool;
+        arguments: list[string];
+    },
+
+    version-command,
+    list-backends-command,
+
+    compile-command {
+        tube-name: argon.vm.tube-name;
+        input-dir: command-file-path;
+        output-file: command-file-path;
+        referenced-tubes: list[command-file-path];
+        supported-platforms: list[string];
+        platform-options: dict[dict[compiler-driver-option-value]];
+    },
+
+    gen-ir-command {
+        input-file: command-file-path;
+        output-file: command-file-path;
+        referenced-tubes: list[command-file-path];
+        platform: string;
+    },
+
+    codegen-command {
+        backend: string;
+        input-file: command-file-path;
+        referenced-tubes: list[command-file-path];
+        platform-options: dict[compiler-driver-option-value];
+        platform-output-options: dict[command-file-path];
+    },
+}
+
+enum compiler-driver-option-value {
+    single { value: compiler-driver-option-value-atom; },
+    many {
+        first: compiler-driver-option-value-atom;
+        values: list[compiler-driver-option-value-atom];
+    },
+}
+
+enum compiler-driver-option-value-atom {
+    string { s: string; },
+    bool { b: bool; },
+    file { p: command-file-path; },
+    directory { p: command-file-path; },
+}
+

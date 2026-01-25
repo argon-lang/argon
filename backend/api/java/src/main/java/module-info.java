@@ -6,5 +6,6 @@ module dev.argon.backend.api {
 
 	exports dev.argon.backend.api;
 	exports dev.argon.backend.api.options;
+	exports dev.argon.backend.api.metadata;
 	exports dev.argon.vm.api;
 }

@@ -1,0 +1,206 @@
+package dev.argon.driver
+
+import dev.argon.backend.options.OptionValue
+import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider, CodeGenerator}
+import dev.argon.build.{BuildError, Compile, GenerateIR, InvalidTubeName, LogReporter}
+import dev.argon.compiler.{ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
+import dev.argon.driver.scalaApi.command as cmd
+import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource, PathUtil}
+import dev.argon.vm.resource.VmIrResource
+import dev.argon.parser.SyntaxError
+import dev.argon.source.ArgonSourceCodeResource
+import dev.argon.tube.loader.TubeFormatException
+import dev.argon.tube.resource.TubeResourceContext
+import com.monovore.decline.Help
+import esexpr.Dictionary
+
+import java.io.IOException
+import zio.*
+import cats.data.NonEmptySeq
+
+private[driver] object CompilerDriverImpl {
+  type Error = IOException | BackendException | TubeFormatException | SyntaxError | BuildError
+
+  def runCommand(command: cmd.DriverCommand): ZIO[BackendProvider, Error, ExitCode] =
+    command match {
+      case cmd.DriverCommand.HelpCommand(true, arguments) =>
+        ZIO.serviceWith[BackendProvider] { backendProvider => CompilerDriverOptions.command(backendProvider.all.map(_.metadata)) }
+          .flatMap { command =>
+            val help = command.parse(arguments, Map.empty)
+              .swap
+              .getOrElse { Help.fromCommand(command) }
+
+            Console.printLineError(help).as(ExitCode.failure)
+          }
+
+      case cmd.DriverCommand.HelpCommand(false, _) =>
+        ZIO.serviceWith[BackendProvider] { backendProvider => CompilerDriverOptions.command(backendProvider.all.map(_.metadata)) }
+          .flatMap { command =>
+            val help = Help.fromCommand(command)
+            Console.printLineError(help).as(ExitCode.success)
+          }
+
+      case cmd.DriverCommand.VersionCommand() =>
+        Console.printLine(s"Argon compiler driver version ${BuildInfo.version}")
+          .as(ExitCode.success)
+
+      case cmd.DriverCommand.ListBackendsCommand() =>
+        ZIO.serviceWithZIO[BackendProvider] { bp =>
+          ZIO.foreachDiscard(bp.all) { bf => Console.printLine(bf.metadata.backend.name) }
+            .as(ExitCode.success)
+        }
+
+
+      case command: cmd.DriverCommand.CompileCommand =>
+        runCompile(command)
+          .as(ExitCode.success)
+          .provideSomeLayer[BackendProvider](LogReporter.live)
+
+      case command: cmd.DriverCommand.GenIrCommand =>
+        runGenIR(command)
+          .as(ExitCode.success)
+          .provideSomeLayer[BackendProvider](LogReporter.live)
+
+      case command: cmd.DriverCommand.CodegenCommand =>
+        runCodegen(command)
+          .as(ExitCode.success)
+          .provideSomeLayer[BackendProvider](LogReporter.live)
+    }
+
+  private def runCompile(options: cmd.DriverCommand.CompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+    ZIO.scoped {
+      for
+        ctx = BackendContext[ErrorLog & LogReporter, Error]()
+
+        given (ExternProvider & HasContext[ctx.type]) <- BackendExternProvider.make(ctx)(
+          options.supportedPlatforms.toSet,
+          options.platformOptions.dict.view.mapValues(realizeBackendOptions).toMap,
+        )
+
+        tubeResContext <- TubeResourceContext.make(ctx)
+
+        compile: Compile { val context: ctx.type } = new Compile {
+          override val context: ctx.type = ctx
+
+          override val tubeResourceContext: tubeResContext.type =
+            tubeResContext
+
+          import tubeResourceContext.TubeResource
+
+          override def tubeName: TubeName = TubeName(options.tubeName.head, options.tubeName.tail*)
+
+          override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
+            PathUtil.directoryResource(options.inputDir)
+              .filterFiles(_.endsWith(".argon"))
+              .decode[ArgonSourceCodeResource]
+
+          override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+            options.referencedTubes.map { refTubePath =>
+              PathUtil.binaryResource(refTubePath)
+                .decode[tubeResContext.TubeResource]
+            }
+        }
+
+        _ <- ZIO.scoped[ErrorLog & LogReporter](
+          for
+            buildOutput <- compile.compile()
+            _ <- PathUtil.writeFile(options.outputFile, buildOutput.tube)
+          yield ()
+        )
+
+        _ <- ZIO.serviceWithZIO[LogReporter](_.reportLogs)
+        _ <- ZIO.serviceWithZIO[LogReporter](_.failOnErrors)
+
+      yield ()
+    }
+
+  private def runGenIR(options: cmd.DriverCommand.GenIrCommand): ZIO[ErrorLog & LogReporter, Error, Unit] =
+    for
+      ctx = BackendContext[ErrorLog & LogReporter, Error]()
+      tubeResContext <- TubeResourceContext.make(ctx)
+
+      compile = new GenerateIR {
+        override val context: ctx.type = ctx
+
+        override def platformId: String = options.platform
+
+        override val tubeResourceContext: tubeResContext.type =
+          tubeResContext
+
+        import tubeResourceContext.TubeResource
+
+        override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
+          PathUtil.binaryResource(options.inputFile)
+            .decode[tubeResContext.TubeResource]
+
+        override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+          options.referencedTubes.map { refTubePath =>
+            PathUtil.binaryResource(refTubePath)
+              .decode[tubeResContext.TubeResource]
+          }
+      }
+
+      _ <- ZIO.scoped(
+        for
+          buildOutput <- compile.compile()
+          _ <- PathUtil.writeFile(options.outputFile, buildOutput.tube)
+        yield ()
+      )
+
+      _ <- ZIO.serviceWithZIO[LogReporter](_.reportLogs)
+      _ <- ZIO.serviceWithZIO[LogReporter](_.failOnErrors)
+
+    yield ()
+  end runGenIR
+  
+  private def runCodegen(options: cmd.DriverCommand.CodegenCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+    ZIO.scoped(
+      for
+        backendFactory <- ZIO.serviceWithZIO[BackendProvider](_.getBackendFactory(options.backend))
+        backend <- backendFactory.load[Error]
+        codeGenOpts <- backend.codeGenerator.optionParser.parse(realizeBackendOptions(options.platformOptions))
+        output <- (backend.codeGenerator: CodeGenerator[Error, backend.Output] & backend.codeGenerator.type) match {
+          case codeGen: (CodeGenerator.LibraryCodeGenerator[Error, backend.Output] & backend.codeGenerator.type) =>
+            codeGen.codegen(
+              options = codeGenOpts,
+              program = PathUtil.binaryResource(options.inputFile).decode[VmIrResource],
+              libraries = options.referencedTubes.map { refTubePath =>
+                PathUtil.binaryResource(refTubePath)
+                  .decode[VmIrResource]
+              },
+            )
+        }
+
+        outputMap <- backend.codeGenerator.outputProvider.outputs(output)
+
+        _ <- ZIO.foreachParDiscard(options.platformOutputOptions.dict) { (outputName, outputPath) =>
+          ZIO.fromEither(outputMap.get(outputName).toRight { BackendException(s"Invalid output: $outputName") })
+            .flatMap {
+              case FileSystemResource.Of(res) => PathUtil.writeFile(outputPath, res)
+              case res: DirectoryResource[Error, BinaryResource] => PathUtil.writeDir(outputPath, res)
+            }
+        }
+
+      yield ()
+    )
+
+  private def realizeBackendOptions(o: Dictionary[cmd.CompilerDriverOptionValue]): Map[String, OptionValue[Error]] =
+    o.dict.view
+      .mapValues(realizeBackendOptionValue)
+      .toMap
+
+  private def realizeBackendOptionValue(o: cmd.CompilerDriverOptionValue): OptionValue[Error] =
+    def realizeAtom(a: cmd.CompilerDriverOptionValueAtom): OptionValue.Atom[Error] =
+      a match {
+        case cmd.CompilerDriverOptionValueAtom.String(s) => OptionValue.Atom.String(s)
+        case cmd.CompilerDriverOptionValueAtom.Bool(b) => OptionValue.Atom.Bool(b)
+        case cmd.CompilerDriverOptionValueAtom.File(path) => OptionValue.Atom.BinaryResource(PathUtil.binaryResource(path))
+        case cmd.CompilerDriverOptionValueAtom.Directory(path) => OptionValue.Atom.DirectoryResource(PathUtil.directoryResource(path))
+      }
+
+    o match {
+      case cmd.CompilerDriverOptionValue.Single(value) => OptionValue.Single(realizeAtom(value))
+      case cmd.CompilerDriverOptionValue.Many(h, t) => OptionValue.ManyValues(NonEmptySeq(h, t).map(realizeAtom))
+    }
+  end realizeBackendOptionValue
+}

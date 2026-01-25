@@ -1,0 +1,63 @@
+package argon.backend.metadata;
+
+import nobleidl.core;
+
+record backend-metadata {
+    backend: backend-backend-metadata;
+    options: backend-options-schema;
+    loaders: list[backend-loader-options];
+}
+
+record backend-backend-metadata {
+    api-version: string;
+    name: string;
+}
+
+record backend-options-schema {
+    tube: dict[backend-option];
+    codegen: dict[backend-option];
+    output: dict[backend-option-output];
+}
+
+record backend-option {
+    type: option-type;
+    description: string;
+    occurrence: option-occurrence;
+}
+
+record backend-option-output {
+    type: output-type;
+    description: string;
+}
+
+simple enum option-type {
+    string,
+    bool,
+    binary-resource,
+    directory-resource,
+}
+
+simple enum option-occurrence {
+    default,
+    optional,
+    required,
+    many,
+    many-required,
+}
+
+simple enum output-type {
+    binary-resource,
+    directory-resource,
+}
+
+enum backend-loader-options {
+    js {
+        js-options: js-loader-options;
+    },
+}
+
+record js-loader-options {
+    import-path: string;
+    export-name: string;
+}
+

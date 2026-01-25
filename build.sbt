@@ -69,7 +69,7 @@ distJVM := {
        |  -Ddev.argon.backends="$$DISTDIR/backends" \\
        |  --illegal-native-access=deny \\
        |  -Dpolyglotimpl.AttachLibraryFailureAction=ignore \\
-       |  dev.argon.launcher.ArgonLauncher \\
+       |  dev.argon.driver.launcher.ArgonLauncher \\
        |  "$$@"
        |""".stripMargin
   )
@@ -118,13 +118,13 @@ distNode := {
     }
   }
 
-  val launcherDir = file("argon-compiler-launcher-js")
+  val launcherDir = file("launcher/launcher/node")
 
   npmInstall(launcherDir)
   npmRun(launcherDir, "build")
 
   val compilerDriverOutput = (compiler_driverNode / Compile / fullOptJS).value
-  packageCopy(file("argon-compiler-launcher-js"), compilerPackageDir)
+  packageCopy(launcherDir, compilerPackageDir)
   IO.copyFile(compilerDriverOutput.data, compilerPackageDir / "lib/argon.js")
 
 
@@ -249,7 +249,7 @@ lazy val sharedJSNodeSettings = Seq(
 )
 
 lazy val annotationDependencies = Seq(
-  "org.jetbrains" % "annotations" % "26.0.2",
+  "org.jetbrains" % "annotations" % "26.0.2-1",
 )
 
 lazy val commonJVMSettingsNoLibs = Seq(
@@ -465,7 +465,6 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
 
           f(Set(exeFile))
         }
-        .toSeq
     }.taskValue,
 
     name := "argon-parser",
@@ -716,7 +715,7 @@ lazy val argon_backend_java_api = project.in(file("backend/api/java"))
     },
 
     libraryDependencies ++= Seq(
-      "org.jetbrains" % "annotations" % "26.0.2",
+      "org.jetbrains" % "annotations" % "26.0.2-1" % Provided,
       "dev.argon.nobleidl" % "nobleidl-java-runtime" % "0.1.0-SNAPSHOT",
       "dev.argon.esexpr" % "esexpr-java-runtime" % "0.3.1",
       "org.graalvm.polyglot" % "polyglot" % graalVersion,
@@ -805,74 +804,6 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
       ),
 
       Compile / generateNobleIdlJavaAdapters := true,
-
-      Compile / managedResourceDirectories += resourceManaged.value / "js-backend",
-      Compile / resourceGenerators += Def.task {
-        val s = streams.value
-        val log = s.log
-
-        val resDir = resourceManaged.value / "js-backend"
-
-        def buildJS(packageDir: File): Unit = {
-          val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
-          if(installExitCode != 0) {
-            throw new Exception("npm install failed with exit code " + installExitCode)
-          }
-
-          val distExitCode = Process(Seq("npm", "run", "build"), Some(packageDir)) ! log
-          if(distExitCode != 0) {
-            throw new Exception("npm run build failed with exit code " + distExitCode)
-          }
-        }
-
-        def distJS(destFile: File, packageDir: File, distFileName: String): Unit = {
-          val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
-          if(installExitCode != 0) {
-            throw new Exception("npm install failed with exit code " + installExitCode)
-          }
-
-          val distExitCode = Process(Seq("npm", "run", "dist"), Some(packageDir)) ! log
-          if(distExitCode != 0) {
-            throw new Exception("npm run dist failed with exit code " + distExitCode)
-          }
-
-          IO.copyFile(packageDir / "dist" / distFileName, destFile)
-        }
-
-        val backendDestFile = resDir / "dev/argon/backend/backends/js/js-backend.js"
-        val jsBackendDir = file("backend/backends/js")
-
-        val polyfillDestFile = resDir / "dev/argon/backend/jsApi/polyfill.js"
-        val polyfillPackageDir = file("backend/util/graaljs-polyfills")
-
-        val importResDestFile = resDir / "dev/argon/backend/jsApi/import-resolver.js"
-        val importResPackageDir = file("backend/util/graaljs-import-resolver")
-
-        val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
-          log.info("Building JS Backend Distribution")
-
-          buildJS(file("backend/api/js"))
-          distJS(backendDestFile, jsBackendDir, "dist-graal.js")
-          distJS(polyfillDestFile, polyfillPackageDir, "dist.js")
-          buildJS(file("backend/util/js-module-resolution"))
-          distJS(importResDestFile, importResPackageDir, "dist.js")
-
-          Set(backendDestFile, polyfillDestFile, importResDestFile)
-        }
-
-        val inputFiles = (
-          (file("backend/api/src") ** "*.ts") +++
-            (
-              (jsBackendDir / "src" ** "*.ts")
-                --- (jsBackendDir / "src/executor/argon-runtime.ts")
-            ) +++
-            (polyfillPackageDir / "src" ** "*.js") +++
-            (file("backend/util/js-module-resolution/src") ** "*.ts") +++
-            (importResPackageDir / "src" ** "*.ts")
-        ).get().toSet
-
-        f(inputFiles).toSeq
-      }.tag(JSBackendTag).taskValue,
     )
   )
   .jsConfigure(
@@ -937,9 +868,12 @@ lazy val argon_buildJVM = argon_build.jvm
 lazy val argon_buildJS = argon_build.js
 lazy val argon_buildNode = argon_build.node
 
-lazy val compiler_driver_api = project.in(file("argon-compiler-driver-api"))
+lazy val compiler_driver_api = project.in(file("launcher/driver-api/jvm"))
+  .dependsOn(argon_backend_java_api)
+  .enablePlugins(NobleIDLPlugin)
   .settings(
-    commonSettings,
+    commonSettingsNoLibs,
+    commonJVMSettingsNoLibs,
     compilerOptions,
 
     compileOrder := CompileOrder.JavaThenScala,
@@ -948,19 +882,43 @@ lazy val compiler_driver_api = project.in(file("argon-compiler-driver-api"))
     autoScalaLibrary := false,
     crossPaths := false,
 
-    name := "argon-compiler-driver-api",
+    Compile / javacOptions ++= {
+      val modulePath = (Compile / dependencyClasspath).value.map(_.data.getAbsolutePath).mkString(java.io.File.pathSeparator)
+
+      Seq(
+        "--module-path", modulePath,
+      )
+    },
+
+    libraryDependencies ++= annotationDependencies,
+
+    Compile / generateNobleIdlScala := false,
+    Compile / generateNobleIdlJava := true,
+    Compile / generateNobleIdlGraalJsAdapters := true,
+    Compile / nobleIdlSourceDirectories ++= Seq(
+      baseDirectory.value / "../nobleidl",
+    ),
   )
 
-lazy val compiler_driver = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-compiler-driver"))
-  .enablePlugins(BuildInfoPlugin)
+lazy val compiler_driver = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Full).in(file("launcher/driver"))
+  .enablePlugins(BuildInfoPlugin, NobleIDLPlugin)
   .dependsOn(util, argon_build, argon_backend)
   .jvmConfigure(
     _.dependsOn(compiler_driver_api)
-      .settings(commonJVMSettings)
+      .settings(
+        commonJVMSettings,
+
+        Compile / generateNobleIdlJavaAdapters := true,
+      )
   )
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
+      .settings(
+        commonNodeSettings,
+
+        Compile / generateNobleIdlScalaJs := true,
+        Compile / generateNobleIdlJsAdapters := true,
+      )
   )
   .settings(
     commonSettings,
@@ -973,12 +931,17 @@ lazy val compiler_driver = crossProject(JVMPlatform, NodePlatform).crossType(Cro
     buildInfoOptions += BuildInfoOption.PackagePrivate,
 
     name := "argon-compiler-driver",
+
+
+    Compile / nobleIdlSourceDirectories ++= Seq(
+      baseDirectory.value / "../../driver-api/nobleidl",
+    ),
   )
 
 lazy val compiler_driverJVM = compiler_driver.jvm
 lazy val compiler_driverNode = compiler_driver.node
 
-lazy val compiler_launcher = project.in(file("argon-compiler-launcher"))
+lazy val compiler_launcher = project.in(file("launcher/launcher/jvm"))
   .dependsOn(argon_backend_java_api, compiler_driver_api, compiler_driverJVM)
   .settings(
     commonSettingsNoLibs,
@@ -987,6 +950,11 @@ lazy val compiler_launcher = project.in(file("argon-compiler-launcher"))
 
     compileOrder := CompileOrder.JavaThenScala,
 
+    libraryDependencies ++= Seq(
+      "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.0",
+      "com.fasterxml.jackson.dataformat" % "jackson-dataformat-toml" % "2.21.0",
+    ),
+
     semanticdbEnabled := false,
     autoScalaLibrary := false,
     crossPaths := false,
@@ -994,6 +962,66 @@ lazy val compiler_launcher = project.in(file("argon-compiler-launcher"))
     Compile / fork := true,
 
     name := "argon-compiler-launcher",
+
+    Compile / managedResourceDirectories += resourceManaged.value / "js-backend",
+    Compile / resourceGenerators += Def.task {
+      val s = streams.value
+      val log = s.log
+
+      val resDir = resourceManaged.value / "js-backend"
+
+      def buildJS(packageDir: File): Unit = {
+        val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
+        if(installExitCode != 0) {
+          throw new Exception("npm install failed with exit code " + installExitCode)
+        }
+
+        val distExitCode = Process(Seq("npm", "run", "build"), Some(packageDir)) ! log
+        if(distExitCode != 0) {
+          throw new Exception("npm run build failed with exit code " + distExitCode)
+        }
+      }
+
+      def distJS(destFile: File, packageDir: File, distFileName: String): Unit = {
+        val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
+        if(installExitCode != 0) {
+          throw new Exception("npm install failed with exit code " + installExitCode)
+        }
+
+        val distExitCode = Process(Seq("npm", "run", "dist"), Some(packageDir)) ! log
+        if(distExitCode != 0) {
+          throw new Exception("npm run dist failed with exit code " + distExitCode)
+        }
+
+        IO.copyFile(packageDir / "dist" / distFileName, destFile)
+      }
+
+      val polyfillDestFile = resDir / "dev/argon/driver/launcher/backendloaders/jsApi/polyfill.js"
+      val polyfillPackageDir = file("backend/util/graaljs-polyfills")
+
+      val importResDestFile = resDir / "dev/argon/driver/launcher/backendloaders/jsApi/import-resolver.js"
+      val importResPackageDir = file("backend/util/graaljs-import-resolver")
+
+      val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
+        log.info("Building JS Backend Tools")
+
+        buildJS(file("backend/api/js"))
+        distJS(polyfillDestFile, polyfillPackageDir, "dist.js")
+        buildJS(file("backend/util/js-module-resolution"))
+        distJS(importResDestFile, importResPackageDir, "dist.js")
+
+        Set(polyfillDestFile, importResDestFile)
+      }
+
+      val inputFiles = (
+        (file("backend/api/src") ** "*.ts") +++
+          (polyfillPackageDir / "src" ** "*.js") +++
+          (file("backend/util/js-module-resolution/src") ** "*.ts") +++
+          (importResPackageDir / "src" ** "*.ts")
+        ).get().toSet
+
+      f(inputFiles).toSeq
+    }.tag(JSBackendTag).taskValue,
   )
 
 lazy val test_runner = project.in(file("argon-test-runner"))

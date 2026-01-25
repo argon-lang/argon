@@ -1,0 +1,38 @@
+{
+  "name": "@argon-lang/node-driver-api",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "main": "./lib/index.js",
+  "type": "module",
+  "scripts": {
+    "codegen": "cpy --flat ../nobleidl/command.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./command.js": "./lib/command.js"
+  },
+  "devDependencies": {
+    "@argon-lang/noble-idl-compiler-js": "file:../../../../noble-idl/langs/js/backend",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^24.3.0",
+    "cpy-cli": "^6.0.0",
+    "make-dir-cli": "^4.0.0",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@argon-lang/esexpr": "^0.2.1",
+    "@argon-lang/js-backend-api": "file:../../../backend/api/js",
+    "@argon-lang/noble-idl-core": "file:../../../../noble-idl/langs/js/runtime"
+  },
+  "NobleIDL": {
+    "inputFiles": [
+      "src/command.nidl"
+    ],
+    "packageMapping": {
+      "argon.driver.command": "command"
+    }
+  }
+}

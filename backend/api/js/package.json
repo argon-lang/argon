@@ -7,16 +7,16 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "codegen": "cpy --flat ../../vm/vm.nidl src/ && cpy --flat ../nobleidl/backend.nidl src/ && cpy --flat ../nobleidl/options.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
-    "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/",
-    "test": "npm run build && vitest run --root lib"
+    "codegen": "cpy --flat ../../vm/vm.nidl src/ && cpy --flat ../nobleidl/backend.nidl src/ && cpy --flat ../nobleidl/metadata.nidl src/ && cpy --flat ../nobleidl/options.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/"
   },
   "exports": {
     ".": "./lib/index.js",
-    "./factory": "./lib/factory.js",
-    "./options": "./lib/options.js",
-    "./options/parser": "./lib/options/parser.js",
-    "./vm": "./lib/vm.js"
+    "./factory.js": "./lib/factory.js",
+    "./options.js": "./lib/options.js",
+    "./options/parser.js": "./lib/options/parser.js",
+    "./metadata.js": "./lib/metadata.js",
+    "./vm.js": "./lib/vm.js"
   },
   "devDependencies": {
     "@argon-lang/noble-idl-compiler-js": "file:../../../../noble-idl/langs/js/backend",
@@ -25,8 +25,7 @@
     "cpy-cli": "^6.0.0",
     "make-dir-cli": "^4.0.0",
     "rimraf": "^6.0.1",
-    "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "typescript": "^5.9.2"
   },
   "dependencies": {
     "@argon-lang/esexpr": "^0.2.1",
@@ -36,11 +35,13 @@
     "inputFiles": [
       "src/backend.nidl",
       "src/options.nidl",
+      "src/metadata.nidl",
       "src/vm.nidl"
     ],
     "packageMapping": {
       "argon.backend": "",
       "argon.backend.options": "options",
+      "argon.backend.metadata": "metadata",
       "argon.vm": "vm"
     }
   }

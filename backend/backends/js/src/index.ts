@@ -15,7 +15,7 @@ import type { Dict, String } from "@argon-lang/noble-idl-core";
 import type { JSBackendOptions, JSBackendOutput, JSDataOptions, JSModuleResource, PackageJsonResource } from "./options.js";
 import { asyncIterableToStream, streamToAsyncIterable } from "./stream.js";
 import type { PackageJson, ReadonlyDeep } from "type-fest";
-import type { BackendFactory, HostOperations } from "@argon-lang/js-backend-api/factory";
+import type { SimpleBackendFactory, HostOperations } from "@argon-lang/js-backend-api/factory";
 import { ExternFunction, JSTubeMetadata } from "./platform-data.js";
 
 
@@ -283,7 +283,7 @@ class JSOutputProvider<E> implements backendOptions.OutputProvider<E, JSBackendO
     }
 }
 
-export const backendFactory: BackendFactory = {
+export const backendFactory: SimpleBackendFactory = {
     create<E, A>(_errorChecker_e: ErrorChecker<E>, _hostOperations: HostOperations<E>, f: <Output>(backend: backendApi.Backend<E, Output>) => A): A {
         return f(new JSBackend());
     },

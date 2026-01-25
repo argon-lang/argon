@@ -41,7 +41,11 @@ object PathUtil {
 
   def writeFile[E >: IOException](path: Path, resource: BinaryResource[E]): IO[E, Unit] =
     ZIO.logTrace(s"Writing file: $path") *>
-      ZIO.attempt { Files.createDirectories(path.getParent).nn }.refineToOrDie[IOException] *>
+      ZIO.attempt {
+        val parent = path.getParent
+        if parent != null then
+          Files.createDirectories(parent)
+      }.refineToOrDie[IOException] *>
       resource.asBytes.run(ZSink.fromPath(path).foldSink(
         failure = {
           case ex: IOException => ZSink.fail(ex)
@@ -52,7 +56,7 @@ object PathUtil {
 
   def writeDir[E >: IOException](path: Path, resource: DirectoryResource[E, BinaryResource]): IO[E, Unit] =
     ZIO.logTrace(s"Writing directory: $path") *>
-    ZIO.attempt { Files.createDirectories(path).nn }.refineToOrDie[IOException] *>
+    ZIO.attempt { Files.createDirectories(path) }.refineToOrDie[IOException] *>
       resource.contents.foreach {
         case DirectoryEntry(name, fileName, resource) =>
           writeFile(name.foldLeft(path)(_.resolve(_).nn).resolve(fileName).nn, resource)
