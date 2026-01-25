@@ -8,6 +8,6 @@ import scala.scalajs.js.annotation.*
 
 trait CompilerDriver extends js.Object {
   def parseMetadata(metadata: String): BackendMetadata
-  def parseCommandLineArguments(backends: js.Array[BackendMetadata], args: js.Array[String]): DriverCommand
+  def parseCommandLineArguments(backends: js.Array[BackendMetadata], args: js.Array[String]): DriverCommand[String]
   def runCommand(options: CompilerDriverOptions): js.Promise[Int]
 }

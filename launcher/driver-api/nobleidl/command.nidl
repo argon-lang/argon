@@ -2,10 +2,7 @@ package argon.driver.command;
 
 import nobleidl.core;
 
-@java:(mapped-to "java.nio.file.Path")
-extern type command-file-path;
-
-enum driver-command {
+enum driver-command[p] {
     help-command {
         is-error: bool;
         arguments: list[string];
@@ -16,41 +13,41 @@ enum driver-command {
 
     compile-command {
         tube-name: argon.vm.tube-name;
-        input-dir: command-file-path;
-        output-file: command-file-path;
-        referenced-tubes: list[command-file-path];
+        input-dir: p;
+        output-file: p;
+        referenced-tubes: list[p];
         supported-platforms: list[string];
-        platform-options: dict[dict[compiler-driver-option-value]];
+        platform-options: dict[dict[compiler-driver-option-value[p]]];
     },
 
     gen-ir-command {
-        input-file: command-file-path;
-        output-file: command-file-path;
-        referenced-tubes: list[command-file-path];
+        input-file: p;
+        output-file: p;
+        referenced-tubes: list[p];
         platform: string;
     },
 
     codegen-command {
         backend: string;
-        input-file: command-file-path;
-        referenced-tubes: list[command-file-path];
-        platform-options: dict[compiler-driver-option-value];
-        platform-output-options: dict[command-file-path];
+        input-file: p;
+        referenced-tubes: list[p];
+        platform-options: dict[compiler-driver-option-value[p]];
+        platform-output-options: dict[p];
     },
 }
 
-enum compiler-driver-option-value {
-    single { value: compiler-driver-option-value-atom; },
+enum compiler-driver-option-value[p] {
+    single { value: compiler-driver-option-value-atom[p]; },
     many {
-        first: compiler-driver-option-value-atom;
-        values: list[compiler-driver-option-value-atom];
+        first: compiler-driver-option-value-atom[p];
+        values: list[compiler-driver-option-value-atom[p]];
     },
 }
 
-enum compiler-driver-option-value-atom {
+enum compiler-driver-option-value-atom[p] {
     string { s: string; },
     bool { b: bool; },
-    file { p: command-file-path; },
-    directory { p: command-file-path; },
+    file { p: p; },
+    directory { p: p; },
 }
 

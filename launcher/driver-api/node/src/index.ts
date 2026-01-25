@@ -4,11 +4,11 @@ import type {BackendMetadata} from "@argon-lang/js-backend-api/metadata.js";
 
 export interface CompilerDriver {
     parseMetadata(metadata: string): BackendMetadata;
-    parseCommandLineArguments(backends: readonly BackendMetadata[], args: readonly string[]): DriverCommand;
+    parseCommandLineArguments(backends: readonly BackendMetadata[], args: readonly string[]): DriverCommand<string>;
     runCommand(options: CompilerDriverOptions): Promise<number>;
 }
 
 export interface CompilerDriverOptions {
     readonly backendFactories: readonly BackendFactory[];
-    readonly command: DriverCommand;
+    readonly command: DriverCommand<string>;
 }

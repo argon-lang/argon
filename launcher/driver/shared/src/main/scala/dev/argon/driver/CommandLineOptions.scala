@@ -22,26 +22,26 @@ sealed trait CompilerDriverCommand
 
 final case class CompileCommand(
   tubeName: TubeName,
-  inputDir: PathLike,
-  outputFile: PathLike,
-  referencedTubes: Seq[PathLike],
+  inputDir: String,
+  outputFile: String,
+  referencedTubes: Seq[String],
   supportedPlatforms: Set[String],
   platformOptions: Map[String, Map[String, CompilerDriverOptions.OptionValue]],
 ) extends CompilerDriverCommand
 
 final case class GenIRCommand(
-  inputFile: PathLike,
-  outputFile: PathLike,
-  referencedTubes: Seq[PathLike],
+  inputFile: String,
+  outputFile: String,
+  referencedTubes: Seq[String],
   platform: String,
 ) extends CompilerDriverCommand
 
 final case class CodegenCommand(
   backend: String,
-  inputFile: PathLike,
-  referencedTubes: Seq[PathLike],
+  inputFile: String,
+  referencedTubes: Seq[String],
   platformOptions: Map[String, CompilerDriverOptions.OptionValue],
-  platformOutputOptions: Map[String, PathLike],
+  platformOutputOptions: Map[String, String],
 ) extends CompilerDriverCommand
 
 final case class BackendsCommand() extends CompilerDriverCommand
@@ -50,8 +50,8 @@ object CompilerDriverOptions {
   enum OptionValueAtom {
     case String(s: java.lang.String)
     case Bool(b: Boolean)
-    case File(p: PathLike)
-    case Directory(p: PathLike)
+    case File(p: java.lang.String)
+    case Directory(p: java.lang.String)
   }
 
   enum OptionValue {
@@ -76,9 +76,9 @@ object CompilerDriverOptions {
               case None => Validated.invalidNel(s"Invalid tube name: $name")
             }
           },
-        Opts.option[PathLike]("input", short = "i", help = "Input source code directory"),
-        Opts.option[PathLike]("output", short = "o", help = "Output file"),
-        Opts.options[PathLike]("reference", short = "r", help = "Reference a compiled .artube file as a dependency")
+        Opts.option[String]("input", short = "i", help = "Input source code directory"),
+        Opts.option[String]("output", short = "o", help = "Output file"),
+        Opts.options[String]("reference", short = "r", help = "Reference a compiled .artube file as a dependency")
           .orEmpty,
         Opts.options[String]("platform", short = "p", help = "Supported platforms for the tube")
           .orEmpty
@@ -101,9 +101,9 @@ object CompilerDriverOptions {
   private def genirCommand: Command[GenIRCommand] =
     Command("genir", "Generate Argon VM IR from a compiled tube")(
       (
-        Opts.option[PathLike]("input", short = "i", help = "Input tube file"),
-        Opts.option[PathLike]("output", short = "o", help = "Output file"),
-        Opts.options[PathLike]("reference", short = "r", help = "Reference a compiled .artube file as a dependency")
+        Opts.option[String]("input", short = "i", help = "Input tube file"),
+        Opts.option[String]("output", short = "o", help = "Output file"),
+        Opts.options[String]("reference", short = "r", help = "Reference a compiled .artube file as a dependency")
           .orEmpty,
         Opts.option[String]("platform", short = "p", help = "Target platform"),
       ).mapN(GenIRCommand.apply)
@@ -116,8 +116,8 @@ object CompilerDriverOptions {
           Opts.subcommand(
             Command(backend.backend.name, s"Generate code for ${backend.backend.name}")(
               (
-                Opts.option[PathLike]("input", short = "i", help = "Input tube file"),
-                Opts.options[PathLike]("reference", short = "r", help = "Reference a compiled .artube file as a dependency")
+                Opts.option[String]("input", short = "i", help = "Input tube file"),
+                Opts.options[String]("reference", short = "r", help = "Reference a compiled .artube file as a dependency")
                   .orEmpty,
                 createOptionsFromMetadata(backend.backend.name)(backend.options.codegen),
                 createOptionsFromOutputMetadata(backend.backend.name)(backend.options.output),
@@ -194,8 +194,8 @@ object CompilerDriverOptions {
             .orFalse
             .map(b => Map(name -> OptionValue.Single(OptionValueAtom.Bool(b))))
 
-        case OptionType.BinaryResource => createOptionForType[PathLike](OptionValueAtom.File.apply)
-        case OptionType.DirectoryResource => createOptionForType[PathLike](OptionValueAtom.Directory.apply)
+        case OptionType.BinaryResource => createOptionForType[String](OptionValueAtom.File.apply)
+        case OptionType.DirectoryResource => createOptionForType[String](OptionValueAtom.Directory.apply)
       }
     end createOptionFromMetadata
 
@@ -209,9 +209,9 @@ object CompilerDriverOptions {
   end createOptionsFromMetadata
 
 
-  def createOptionsFromOutputMetadata(backendName: String)(options: Map[String, BackendOptionOutput]): Opts[Map[String, PathLike]] =
-    def createOptionFromMetadata(name: String, optionInfo: BackendOptionOutput): Opts[Map[String, PathLike]] =
-      Opts.option[PathLike](s"$backendName-$name", help = optionInfo.description)
+  def createOptionsFromOutputMetadata(backendName: String)(options: Map[String, BackendOptionOutput]): Opts[Map[String, String]] =
+    def createOptionFromMetadata(name: String, optionInfo: BackendOptionOutput): Opts[Map[String, String]] =
+      Opts.option[String](s"$backendName-$name", help = optionInfo.description)
         .orNone
         .map {
           case Some(p) => Map(name -> p)
@@ -228,7 +228,7 @@ object CompilerDriverOptions {
   end createOptionsFromOutputMetadata
 
 
-  def toDriverCommand(arguments: Seq[String], command: Either[Help, CompilerDriverOptions]): cmd.DriverCommand =
+  def toDriverCommand(arguments: Seq[String], command: Either[Help, CompilerDriverOptions]): cmd.DriverCommand[String] =
     command match {
       case Left(help) => cmd.DriverCommand.HelpCommand(
         isError = help.errors.nonEmpty,
@@ -280,7 +280,7 @@ object CompilerDriverOptions {
     
   
 
-  private def convertOptionValue(value: OptionValue): cmd.CompilerDriverOptionValue =
+  private def convertOptionValue(value: OptionValue): cmd.CompilerDriverOptionValue[String] =
     value match {
       case OptionValue.Single(value) => cmd.CompilerDriverOptionValue.Single(convertOptionValueAtom(value))
       case OptionValue.Many(values) =>
@@ -292,7 +292,7 @@ object CompilerDriverOptions {
         )
     }
 
-  private def convertOptionValueAtom(value: OptionValueAtom): cmd.CompilerDriverOptionValueAtom =
+  private def convertOptionValueAtom(value: OptionValueAtom): cmd.CompilerDriverOptionValueAtom[String] =
     value match {
       case OptionValueAtom.String(s) => cmd.CompilerDriverOptionValueAtom.String(s)
       case OptionValueAtom.Bool(b) => cmd.CompilerDriverOptionValueAtom.Bool(b)

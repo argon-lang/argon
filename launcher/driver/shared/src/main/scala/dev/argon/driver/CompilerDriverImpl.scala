@@ -5,7 +5,7 @@ import dev.argon.backend.{BackendContext, BackendException, BackendExternProvide
 import dev.argon.build.{BuildError, Compile, GenerateIR, InvalidTubeName, LogReporter}
 import dev.argon.compiler.{ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
 import dev.argon.driver.scalaApi.command as cmd
-import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource, PathUtil}
+import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource, PathLike, PathUtil}
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.parser.SyntaxError
 import dev.argon.source.ArgonSourceCodeResource
@@ -21,7 +21,7 @@ import cats.data.NonEmptySeq
 private[driver] object CompilerDriverImpl {
   type Error = IOException | BackendException | TubeFormatException | SyntaxError | BuildError
 
-  def runCommand(command: cmd.DriverCommand): ZIO[BackendProvider, Error, ExitCode] =
+  def runCommand(command: cmd.DriverCommand[PathLike]): ZIO[BackendProvider, Error, ExitCode] =
     command match {
       case cmd.DriverCommand.HelpCommand(true, arguments) =>
         ZIO.serviceWith[BackendProvider] { backendProvider => CompilerDriverOptions.command(backendProvider.all.map(_.metadata)) }
@@ -51,23 +51,23 @@ private[driver] object CompilerDriverImpl {
         }
 
 
-      case command: cmd.DriverCommand.CompileCommand =>
+      case command: cmd.DriverCommand.CompileCommand[PathLike] =>
         runCompile(command)
           .as(ExitCode.success)
           .provideSomeLayer[BackendProvider](LogReporter.live)
 
-      case command: cmd.DriverCommand.GenIrCommand =>
+      case command: cmd.DriverCommand.GenIrCommand[PathLike] =>
         runGenIR(command)
           .as(ExitCode.success)
           .provideSomeLayer[BackendProvider](LogReporter.live)
 
-      case command: cmd.DriverCommand.CodegenCommand =>
+      case command: cmd.DriverCommand.CodegenCommand[PathLike] =>
         runCodegen(command)
           .as(ExitCode.success)
           .provideSomeLayer[BackendProvider](LogReporter.live)
     }
 
-  private def runCompile(options: cmd.DriverCommand.CompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+  private def runCompile(options: cmd.DriverCommand.CompileCommand[PathLike]): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped {
       for
         ctx = BackendContext[ErrorLog & LogReporter, Error]()
@@ -114,7 +114,7 @@ private[driver] object CompilerDriverImpl {
       yield ()
     }
 
-  private def runGenIR(options: cmd.DriverCommand.GenIrCommand): ZIO[ErrorLog & LogReporter, Error, Unit] =
+  private def runGenIR(options: cmd.DriverCommand.GenIrCommand[PathLike]): ZIO[ErrorLog & LogReporter, Error, Unit] =
     for
       ctx = BackendContext[ErrorLog & LogReporter, Error]()
       tubeResContext <- TubeResourceContext.make(ctx)
@@ -153,7 +153,7 @@ private[driver] object CompilerDriverImpl {
     yield ()
   end runGenIR
   
-  private def runCodegen(options: cmd.DriverCommand.CodegenCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+  private def runCodegen(options: cmd.DriverCommand.CodegenCommand[PathLike]): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped(
       for
         backendFactory <- ZIO.serviceWithZIO[BackendProvider](_.getBackendFactory(options.backend))
@@ -184,13 +184,13 @@ private[driver] object CompilerDriverImpl {
       yield ()
     )
 
-  private def realizeBackendOptions(o: Dictionary[cmd.CompilerDriverOptionValue]): Map[String, OptionValue[Error]] =
+  private def realizeBackendOptions(o: Dictionary[cmd.CompilerDriverOptionValue[PathLike]]): Map[String, OptionValue[Error]] =
     o.dict.view
       .mapValues(realizeBackendOptionValue)
       .toMap
 
-  private def realizeBackendOptionValue(o: cmd.CompilerDriverOptionValue): OptionValue[Error] =
-    def realizeAtom(a: cmd.CompilerDriverOptionValueAtom): OptionValue.Atom[Error] =
+  private def realizeBackendOptionValue(o: cmd.CompilerDriverOptionValue[PathLike]): OptionValue[Error] =
+    def realizeAtom(a: cmd.CompilerDriverOptionValueAtom[PathLike]): OptionValue.Atom[Error] =
       a match {
         case cmd.CompilerDriverOptionValueAtom.String(s) => OptionValue.Atom.String(s)
         case cmd.CompilerDriverOptionValueAtom.Bool(b) => OptionValue.Atom.Bool(b)

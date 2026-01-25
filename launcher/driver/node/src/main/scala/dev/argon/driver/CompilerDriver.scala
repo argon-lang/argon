@@ -26,7 +26,7 @@ object CompilerDriver extends dsjs.CompilerDriver {
       .toTry
       .get
 
-  override def parseCommandLineArguments(backends: js.Array[sjs.metadata.BackendMetadata], arguments: js.Array[String]): dsjs.command.DriverCommand =
+  override def parseCommandLineArguments(backends: js.Array[sjs.metadata.BackendMetadata], arguments: js.Array[String]): dsjs.command.DriverCommand[String] =
     val args = arguments.toSeq
 
     val parser = CompilerDriverOptions.command(
@@ -39,7 +39,7 @@ object CompilerDriver extends dsjs.CompilerDriver {
     val parsed = parser.parse(args, Map.empty)
     val driverCommand = CompilerDriverOptions.toDriverCommand(args, parsed)
 
-    dScalaApi.command.DriverCommand.jsAdapter().toJS(driverCommand)
+    dScalaApi.command.DriverCommand.jsAdapter(JSAdapter.identity).toJS(driverCommand)
   end parseCommandLineArguments
 
   override def runCommand(options: dsjs.CompilerDriverOptions): js.Promise[Int] =
@@ -63,7 +63,7 @@ object CompilerDriver extends dsjs.CompilerDriver {
 
 
     JSPromiseUtil.runEffectToPromiseRaw(
-      CompilerDriverImpl.runCommand(dScalaApi.command.DriverCommand.jsAdapter().fromJS(options.command))
+      CompilerDriverImpl.runCommand(dScalaApi.command.DriverCommand.jsAdapter(JSAdapter.identity).fromJS(options.command))
         .provideLayer(BackendProvider.liveFromFactories(backendFactories))
         .mapErrorCause[Throwable] { cause =>
           cause.failureOption match {

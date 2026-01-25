@@ -6,7 +6,12 @@ import dev.argon.backend.api.metadata.BackendMetadata;
 import dev.argon.driver.api.BackendMetadataParseException;
 import dev.argon.driver.api.CompilerDriver;
 import dev.argon.driver.api.CompilerDriverOptions;
+import dev.argon.driver.api.command.CompilerDriverOptionValue;
+import dev.argon.driver.api.command.CompilerDriverOptionValueAtom;
+import dev.argon.driver.api.command.DriverCommand;
 import dev.argon.driver.launcher.backendloaders.jsApi.JSBackendFactory;
+import dev.argon.esexpr.KeywordMapping;
+import dev.argon.vm.api.TubeName;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -16,6 +21,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class ArgonLauncher {
     private ArgonLauncher() { }
@@ -29,7 +36,8 @@ public final class ArgonLauncher {
 		try {
 			var backendMetadata = factories.stream().map(BackendFactory::metadata).toList();
 
-			var command = driver.parseCommandLineArguments(backendMetadata, args);
+			var commandStr = driver.parseCommandLineArguments(backendMetadata, args);
+			var command = realizeCommandPath(commandStr);
 
 			var options = new CompilerDriverOptions(
 				factories,
@@ -112,6 +120,103 @@ public final class ArgonLauncher {
 		}
 		
 		return null;
+	}
+	
+	private static DriverCommand<Path> realizeCommandPath(DriverCommand<String> command) {
+		return switch(command) {
+			case DriverCommand.HelpCommand(var isError, var args) ->
+				new DriverCommand.HelpCommand<>(isError, args);
+			
+			case DriverCommand.VersionCommand() ->
+				new DriverCommand.VersionCommand<>();
+			
+			case DriverCommand.ListBackendsCommand() ->
+				new DriverCommand.ListBackendsCommand<>();
+
+			case DriverCommand.CompileCommand<String> compileCommand ->
+				new DriverCommand.CompileCommand<>(
+					compileCommand.tubeName(),
+					Path.of(compileCommand.inputDir()),
+					Path.of(compileCommand.outputFile()),
+					compileCommand.referencedTubes().stream().map(Path::of).toList(),
+					compileCommand.supportedPlatforms(),
+					new KeywordMapping<>(
+						compileCommand.platformOptions()
+							.map()
+							.entrySet()
+							.stream()
+							.collect(Collectors.toUnmodifiableMap(
+								Map.Entry::getKey,
+								entry -> new KeywordMapping<>(
+									entry.getValue()
+										.map()
+										.entrySet()
+										.stream()
+										.collect(Collectors.toUnmodifiableMap(
+											Map.Entry::getKey,
+											entry2 -> realizeOptionValue(entry2.getValue())
+										))
+								)
+							))
+					)
+				);
+
+			case DriverCommand.GenIrCommand<String> genIRCommand ->
+				new DriverCommand.GenIrCommand<>(
+					Path.of(genIRCommand.inputFile()),
+					Path.of(genIRCommand.outputFile()),
+					genIRCommand.referencedTubes().stream().map(Path::of).toList(),
+					genIRCommand.platform()
+				);
+			
+			case DriverCommand.CodegenCommand<String> codegenCommand ->
+				new DriverCommand.CodegenCommand<>(
+					codegenCommand.backend(),
+					Path.of(codegenCommand.inputFile()),
+					codegenCommand.referencedTubes().stream().map(Path::of).toList(),
+					new KeywordMapping<>(
+						codegenCommand.platformOptions()
+							.map()
+							.entrySet()
+							.stream()
+							.collect(Collectors.toUnmodifiableMap(
+								Map.Entry::getKey,
+								entry -> realizeOptionValue(entry.getValue())
+							))
+					),
+					new KeywordMapping<>(
+						codegenCommand.platformOutputOptions()
+							.map()
+							.entrySet()
+							.stream()
+							.collect(Collectors.toUnmodifiableMap(
+								Map.Entry::getKey,
+								entry -> Path.of(entry.getValue())
+							))
+					)
+				);
+		};
+	}
+
+	private static CompilerDriverOptionValue<Path> realizeOptionValue(CompilerDriverOptionValue<String> value) {
+		return switch(value) {
+			case CompilerDriverOptionValue.Many(var head, var tail) ->
+				new CompilerDriverOptionValue.Many<>(
+					ArgonLauncher.realizeOptionValueAtom(head),
+					tail.stream().map(ArgonLauncher::realizeOptionValueAtom).toList()
+				);
+			case CompilerDriverOptionValue.Single(var item) ->
+				new CompilerDriverOptionValue.Single<>(realizeOptionValueAtom(item));
+		};
+	}
+
+	private static CompilerDriverOptionValueAtom<Path> realizeOptionValueAtom(CompilerDriverOptionValueAtom<String> item) {
+		return switch(item) {
+			case CompilerDriverOptionValueAtom.Bool(var b) -> new CompilerDriverOptionValueAtom.Bool<>(b);
+			case CompilerDriverOptionValueAtom.String(var s) -> new CompilerDriverOptionValueAtom.String<>(s);
+			case CompilerDriverOptionValueAtom.Directory(var p) -> new CompilerDriverOptionValueAtom.Directory<>(Path.of(p));
+			case CompilerDriverOptionValueAtom.File(var p) -> new CompilerDriverOptionValueAtom.File<>(Path.of(p));
+		};
 	}
 
 }
