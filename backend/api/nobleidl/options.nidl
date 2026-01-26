@@ -7,7 +7,7 @@ enum option-value-atom[e: exception] {
     string { s: string; },
     bool { b: bool; },
     binary-resource { res: binary-resource[e]; },
-    directory-resource { res: directory-resource[e, binary-resource[e]]; },
+    directory-resource { res: directory-resource[e]; },
 }
 
 enum option-value[e: exception] {
@@ -22,7 +22,7 @@ enum option-value[e: exception] {
 
 enum output-value[e: exception] {
     binary-resource { res: binary-resource[e]; },
-    directory-resource { res: directory-resource[e, binary-resource[e]]; },
+    directory-resource { res: directory-resource[e]; },
 }
 
 interface option-parser[e: exception, options] {

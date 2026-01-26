@@ -1,4 +1,4 @@
-import type { ModulePath, TubeFileEntry, TubeHeader, TubeMetadata, TubeName, ImportSpecifier, Identifier, ErasedSignature, MethodDefinition } from "@argon-lang/js-backend-api/vm";
+import type { ModulePath, TubeFileEntry, TubeHeader, TubeMetadata, TubeName, ImportSpecifier, Identifier, ErasedSignature, MethodDefinition } from "@argon-lang/js-backend-api/vm.js";
 
 export interface ProgramModel {
     readonly header: TubeHeader;

@@ -1,7 +1,9 @@
 package dev.argon.driver
 
 import dev.argon.backend.options.OptionValue
-import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider, CodeGenerator}
+import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider, CodeGenerator, DirectoryResourceWrap, scalaApi as bScalaApi}
+import dev.argon.backend.scalaApi.DirectoryResourceExtensions.*
+import dev.argon.backend.scalaApi.SinkExtensions.*
 import dev.argon.build.{BuildError, Compile, GenerateIR, InvalidTubeName, LogReporter}
 import dev.argon.compiler.{ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
 import dev.argon.driver.scalaApi.command as cmd
@@ -17,11 +19,40 @@ import esexpr.Dictionary
 import java.io.IOException
 import zio.*
 import cats.data.NonEmptySeq
+import dev.argon.util.async.ErrorWrapper
 
 private[driver] object CompilerDriverImpl {
   type Error = IOException | BackendException | TubeFormatException | SyntaxError | BuildError
 
-  def runCommand(command: cmd.DriverCommand[PathLike]): ZIO[BackendProvider, Error, ExitCode] =
+  type LiveDriverCommand = cmd.DriverCommand[
+    bScalaApi.BinaryResource[IOException],
+    bScalaApi.DirectoryResource[IOException],
+    bScalaApi.BinaryResourceSink[IOException],
+    bScalaApi.DirectoryResourceSink[IOException],
+  ]
+
+  type LiveDriverCompileCommand = cmd.DriverCommand.CompileCommand[
+    bScalaApi.BinaryResource[IOException],
+    bScalaApi.DirectoryResource[IOException],
+    bScalaApi.BinaryResourceSink[IOException],
+    bScalaApi.DirectoryResourceSink[IOException],
+  ]
+
+  type LiveDriverGenIRCommand = cmd.DriverCommand.GenIrCommand[
+    bScalaApi.BinaryResource[IOException],
+    bScalaApi.DirectoryResource[IOException],
+    bScalaApi.BinaryResourceSink[IOException],
+    bScalaApi.DirectoryResourceSink[IOException],
+  ]
+
+  type LiveDriverCodegenCommand = cmd.DriverCommand.CodegenCommand[
+    bScalaApi.BinaryResource[IOException],
+    bScalaApi.DirectoryResource[IOException],
+    bScalaApi.BinaryResourceSink[IOException],
+    bScalaApi.DirectoryResourceSink[IOException],
+  ]
+
+  def runCommand(command: LiveDriverCommand): ZIO[BackendProvider, Error, ExitCode] =
     command match {
       case cmd.DriverCommand.HelpCommand(true, arguments) =>
         ZIO.serviceWith[BackendProvider] { backendProvider => CompilerDriverOptions.command(backendProvider.all.map(_.metadata)) }
@@ -51,23 +82,23 @@ private[driver] object CompilerDriverImpl {
         }
 
 
-      case command: cmd.DriverCommand.CompileCommand[PathLike] =>
+      case command: LiveDriverCompileCommand =>
         runCompile(command)
           .as(ExitCode.success)
           .provideSomeLayer[BackendProvider](LogReporter.live)
 
-      case command: cmd.DriverCommand.GenIrCommand[PathLike] =>
+      case command: LiveDriverGenIRCommand =>
         runGenIR(command)
           .as(ExitCode.success)
           .provideSomeLayer[BackendProvider](LogReporter.live)
 
-      case command: cmd.DriverCommand.CodegenCommand[PathLike] =>
+      case command: LiveDriverCodegenCommand =>
         runCodegen(command)
           .as(ExitCode.success)
           .provideSomeLayer[BackendProvider](LogReporter.live)
     }
 
-  private def runCompile(options: cmd.DriverCommand.CompileCommand[PathLike]): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+  private def runCompile[E: ErrorWrapper](options: LiveDriverCompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error | E, Unit] =
     ZIO.scoped {
       for
         ctx = BackendContext[ErrorLog & LogReporter, Error]()
@@ -90,13 +121,13 @@ private[driver] object CompilerDriverImpl {
           override def tubeName: TubeName = TubeName(options.tubeName.head, options.tubeName.tail*)
 
           override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
-            PathUtil.directoryResource(options.inputDir)
+            options.inputDir.toIOResource
               .filterFiles(_.endsWith(".argon"))
               .decode[ArgonSourceCodeResource]
 
           override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
             options.referencedTubes.map { refTubePath =>
-              PathUtil.binaryResource(refTubePath)
+              refTubePath.toIOResource
                 .decode[tubeResContext.TubeResource]
             }
         }
@@ -104,7 +135,7 @@ private[driver] object CompilerDriverImpl {
         _ <- ZIO.scoped[ErrorLog & LogReporter](
           for
             buildOutput <- compile.compile()
-            _ <- PathUtil.writeFile(options.outputFile, buildOutput.tube)
+            _ <- options.outputFile.write(buildOutput.tube)
           yield ()
         )
 
@@ -114,7 +145,7 @@ private[driver] object CompilerDriverImpl {
       yield ()
     }
 
-  private def runGenIR(options: cmd.DriverCommand.GenIrCommand[PathLike]): ZIO[ErrorLog & LogReporter, Error, Unit] =
+  private def runGenIR(options: LiveDriverGenIRCommand): ZIO[ErrorLog & LogReporter, Error, Unit] =
     for
       ctx = BackendContext[ErrorLog & LogReporter, Error]()
       tubeResContext <- TubeResourceContext.make(ctx)
@@ -130,12 +161,12 @@ private[driver] object CompilerDriverImpl {
         import tubeResourceContext.TubeResource
 
         override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
-          PathUtil.binaryResource(options.inputFile)
+          options.inputFile.toIOResource
             .decode[tubeResContext.TubeResource]
 
         override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
           options.referencedTubes.map { refTubePath =>
-            PathUtil.binaryResource(refTubePath)
+            refTubePath.toIOResource
               .decode[tubeResContext.TubeResource]
           }
       }
@@ -143,7 +174,7 @@ private[driver] object CompilerDriverImpl {
       _ <- ZIO.scoped(
         for
           buildOutput <- compile.compile()
-          _ <- PathUtil.writeFile(options.outputFile, buildOutput.tube)
+          _ <- options.outputFile.write(buildOutput.tube)
         yield ()
       )
 
@@ -153,7 +184,7 @@ private[driver] object CompilerDriverImpl {
     yield ()
   end runGenIR
   
-  private def runCodegen(options: cmd.DriverCommand.CodegenCommand[PathLike]): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+  private def runCodegen[E: ErrorWrapper](options: LiveDriverCodegenCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped(
       for
         backendFactory <- ZIO.serviceWithZIO[BackendProvider](_.getBackendFactory(options.backend))
@@ -163,9 +194,9 @@ private[driver] object CompilerDriverImpl {
           case codeGen: (CodeGenerator.LibraryCodeGenerator[Error, backend.Output] & backend.codeGenerator.type) =>
             codeGen.codegen(
               options = codeGenOpts,
-              program = PathUtil.binaryResource(options.inputFile).decode[VmIrResource],
+              program = options.inputFile.toIOResource.decode[VmIrResource],
               libraries = options.referencedTubes.map { refTubePath =>
-                PathUtil.binaryResource(refTubePath)
+                refTubePath.toIOResource
                   .decode[VmIrResource]
               },
             )
@@ -173,29 +204,37 @@ private[driver] object CompilerDriverImpl {
 
         outputMap <- backend.codeGenerator.outputProvider.outputs(output)
 
-        _ <- ZIO.foreachParDiscard(options.platformOutputOptions.dict) { (outputName, outputPath) =>
+        _ <- ZIO.foreachParDiscard(options.platformOutputOptions.dict) { (outputName, outputSink) =>
           ZIO.fromEither(outputMap.get(outputName).toRight { BackendException(s"Invalid output: $outputName") })
             .flatMap {
-              case FileSystemResource.Of(res) => PathUtil.writeFile(outputPath, res)
-              case res: DirectoryResource[Error, BinaryResource] => PathUtil.writeDir(outputPath, res)
+              case FileSystemResource.Of(res) =>
+                outputSink match {
+                  case cmd.CompilerDriverOutput.File(outputSink) => outputSink.write(res)
+                  case _ => ZIO.fail(BackendException(s"Got directory for output $outputName when expecting file"))
+                }
+              case res: DirectoryResource[Error, BinaryResource] =>
+                outputSink match {
+                  case cmd.CompilerDriverOutput.Directory(outputSink) => outputSink.writeAll(res)
+                  case _ => ZIO.fail(BackendException(s"Got directory for output $outputName when expecting file"))
+                }
             }
         }
 
       yield ()
     )
 
-  private def realizeBackendOptions(o: Dictionary[cmd.CompilerDriverOptionValue[PathLike]]): Map[String, OptionValue[Error]] =
+  private def realizeBackendOptions(o: Dictionary[cmd.CompilerDriverOptionValue[bScalaApi.BinaryResource[IOException], bScalaApi.DirectoryResource[IOException]]]): Map[String, OptionValue[Error]] =
     o.dict.view
       .mapValues(realizeBackendOptionValue)
       .toMap
 
-  private def realizeBackendOptionValue(o: cmd.CompilerDriverOptionValue[PathLike]): OptionValue[Error] =
-    def realizeAtom(a: cmd.CompilerDriverOptionValueAtom[PathLike]): OptionValue.Atom[Error] =
+  private def realizeBackendOptionValue(o: cmd.CompilerDriverOptionValue[bScalaApi.BinaryResource[IOException], bScalaApi.DirectoryResource[IOException]]): OptionValue[Error] =
+    def realizeAtom(a: cmd.CompilerDriverOptionValueAtom[bScalaApi.BinaryResource[IOException], bScalaApi.DirectoryResource[IOException]]): OptionValue.Atom[Error] =
       a match {
         case cmd.CompilerDriverOptionValueAtom.String(s) => OptionValue.Atom.String(s)
         case cmd.CompilerDriverOptionValueAtom.Bool(b) => OptionValue.Atom.Bool(b)
-        case cmd.CompilerDriverOptionValueAtom.File(path) => OptionValue.Atom.BinaryResource(PathUtil.binaryResource(path))
-        case cmd.CompilerDriverOptionValueAtom.Directory(path) => OptionValue.Atom.DirectoryResource(PathUtil.directoryResource(path))
+        case cmd.CompilerDriverOptionValueAtom.File(res) => OptionValue.Atom.BinaryResource(res.toIOResource)
+        case cmd.CompilerDriverOptionValueAtom.Directory(res) => OptionValue.Atom.DirectoryResource(res.toIOResource)
       }
 
     o match {
@@ -203,4 +242,5 @@ private[driver] object CompilerDriverImpl {
       case cmd.CompilerDriverOptionValue.Many(h, t) => OptionValue.ManyValues(NonEmptySeq(h, t).map(realizeAtom))
     }
   end realizeBackendOptionValue
+
 }

@@ -1,6 +1,6 @@
 import type { ScopedResource, Stream } from "@argon-lang/js-backend-api";
 
-export async function* streamToAsyncIterable<E, A>(streamFunc: () => Promise<ScopedResource<Stream<E, A>>>): AsyncIterable<A> {
+export async function* streamToAsyncIterable<E, A>(streamFunc: () => Promise<ScopedResource<E, Stream<E, A>>>): AsyncIterable<A> {
     const streamRes = await streamFunc();
     try {
         const stream = await streamRes.get();
@@ -19,7 +19,7 @@ export async function* streamToAsyncIterable<E, A>(streamFunc: () => Promise<Sco
 }
 
 
-export async function asyncIterableToStream<E, A>(iterable: AsyncIterable<A>): Promise<ScopedResource<Stream<E, A>>> {
+export async function asyncIterableToStream<E, A>(iterable: AsyncIterable<A>): Promise<ScopedResource<E, Stream<E, A>>> {
     const iter = iterable[Symbol.asyncIterator]();
 
     let isDone = false;

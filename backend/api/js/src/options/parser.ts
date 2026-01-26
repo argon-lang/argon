@@ -250,9 +250,9 @@ export function binaryResourceOption<E>(): OptionAtomSpec<E, BinaryResource<E>> 
     };
 }
 
-export function directoryResourceOption<E>(): OptionAtomSpec<E, DirectoryResource<E, BinaryResource<E>>> {
+export function directoryResourceOption<E>(): OptionAtomSpec<E, DirectoryResource<E>> {
     return {
-        fromValue(name: string, value: OptionValueAtom<E>): DirectoryResource<E, BinaryResource<E>> {
+        fromValue(name: string, value: OptionValueAtom<E>): DirectoryResource<E> {
             if(value.$type !== "directory-resource") {
                 throw OptionParseFailure.createError(
                     {

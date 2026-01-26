@@ -14,7 +14,7 @@ export interface JSBackendOptions<E> {
 
 export interface JSBackendOutput<E> {
     readonly packageJson: PackageJsonResource<E>;
-    readonly modules: backendApi.DirectoryResource<E, JSModuleResource<E>>;
+    readonly modules: backendApi.DirectoryResource<E>;
 }
 
 export interface JSModuleResource<E> extends backendApi.BinaryResource<E> {

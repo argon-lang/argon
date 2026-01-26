@@ -4,7 +4,7 @@ import cats.data.{NonEmptySeq, Validated}
 import cats.implicits.given
 import cats.kernel.Monoid
 import com.monovore.decline.{Argument, Command, Help, Opts}
-import dev.argon.backend.metadata.{BackendMetadata, BackendOption, BackendOptionOutput, OptionOccurrence, OptionType}
+import dev.argon.backend.metadata.{BackendMetadata, BackendOption, BackendOptionOutput, OptionOccurrence, OptionType, OutputType}
 import dev.argon.compiler.TubeName
 import dev.argon.driver.scalaApi.command as cmd
 import dev.argon.io.PathLike
@@ -41,7 +41,7 @@ final case class CodegenCommand(
   inputFile: String,
   referencedTubes: Seq[String],
   platformOptions: Map[String, CompilerDriverOptions.OptionValue],
-  platformOutputOptions: Map[String, String],
+  platformOutputOptions: Map[String, cmd.CompilerDriverOutput[String, String]],
 ) extends CompilerDriverCommand
 
 final case class BackendsCommand() extends CompilerDriverCommand
@@ -209,12 +209,17 @@ object CompilerDriverOptions {
   end createOptionsFromMetadata
 
 
-  def createOptionsFromOutputMetadata(backendName: String)(options: Map[String, BackendOptionOutput]): Opts[Map[String, String]] =
-    def createOptionFromMetadata(name: String, optionInfo: BackendOptionOutput): Opts[Map[String, String]] =
+  def createOptionsFromOutputMetadata(backendName: String)(options: Map[String, BackendOptionOutput]): Opts[Map[String, cmd.CompilerDriverOutput[String, String]]] =
+    def createOptionFromMetadata(name: String, optionInfo: BackendOptionOutput): Opts[Map[String, cmd.CompilerDriverOutput[String, String]]] =
       Opts.option[String](s"$backendName-$name", help = optionInfo.description)
         .orNone
         .map {
-          case Some(p) => Map(name -> p)
+          case Some(p) =>
+            val value = optionInfo.`type` match {
+              case OutputType.BinaryResource => cmd.CompilerDriverOutput.File(p)
+              case OutputType.DirectoryResource => cmd.CompilerDriverOutput.Directory(p)
+            }
+            Map(name -> value)
           case None => Map()
         }
 
@@ -228,7 +233,7 @@ object CompilerDriverOptions {
   end createOptionsFromOutputMetadata
 
 
-  def toDriverCommand(arguments: Seq[String], command: Either[Help, CompilerDriverOptions]): cmd.DriverCommand[String] =
+  def toDriverCommand(arguments: Seq[String], command: Either[Help, CompilerDriverOptions]): cmd.DriverCommand[String, String, String, String] =
     command match {
       case Left(help) => cmd.DriverCommand.HelpCommand(
         isError = help.errors.nonEmpty,
@@ -274,13 +279,13 @@ object CompilerDriverOptions {
               .mapValues(convertOptionValue)
               .toMap
           ),
-          platformOutputOptions = Dictionary(codegenCommand.platformOutputOptions)
+          platformOutputOptions = Dictionary(codegenCommand.platformOutputOptions),
         )
     }
     
   
 
-  private def convertOptionValue(value: OptionValue): cmd.CompilerDriverOptionValue[String] =
+  private def convertOptionValue(value: OptionValue): cmd.CompilerDriverOptionValue[String, String] =
     value match {
       case OptionValue.Single(value) => cmd.CompilerDriverOptionValue.Single(convertOptionValueAtom(value))
       case OptionValue.Many(values) =>
@@ -292,7 +297,7 @@ object CompilerDriverOptions {
         )
     }
 
-  private def convertOptionValueAtom(value: OptionValueAtom): cmd.CompilerDriverOptionValueAtom[String] =
+  private def convertOptionValueAtom(value: OptionValueAtom): cmd.CompilerDriverOptionValueAtom[String, String] =
     value match {
       case OptionValueAtom.String(s) => cmd.CompilerDriverOptionValueAtom.String(s)
       case OptionValueAtom.Bool(b) => cmd.CompilerDriverOptionValueAtom.Bool(b)

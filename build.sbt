@@ -14,6 +14,7 @@ val JSBackendTag = Tags.Tag("argon-js-backend")
 
 
 ThisBuild / resolvers += Resolver.mavenLocal
+ThisBuild / scalaVersion := "3.8.1"
 Global / semanticdbEnabled := true
 Global / concurrentRestrictions += Tags.limit(JSBackendTag, 1)
 

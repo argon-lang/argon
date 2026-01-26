@@ -13,8 +13,11 @@ import org.jetbrains.annotations.Nullable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 public abstract class BinaryResource<TE> {
 	public BinaryResource() {}
@@ -216,5 +219,61 @@ public abstract class BinaryResource<TE> {
 			).execute(openStreamFunc, resource.fileName().orElse(null), streamPull, streamClose);
 		}
 		
-	} 
+	}
+
+	public static BinaryResource<IOException> ofInputStreamFunction(IOErrorType.TryFunctionIO<InputStream, IOException> create) {
+		return new InputStreamBinaryResourceBase() {
+			@Override
+			protected InputStream createInputStream() throws IOException {
+				return create.run();
+			}
+		};
+	}
+
+	public static BinaryResource<IOException> ofPath(Path path) {
+		return new InputStreamBinaryResourceBase() {
+			@Override
+			public Optional<String> fileName() {
+				return Optional.ofNullable(path.getFileName()).map(Object::toString);
+			}
+
+			@Override
+			protected InputStream createInputStream() throws IOException {
+				return Files.newInputStream(path);
+			}
+		};
+	}
+
+	private static abstract class InputStreamBinaryResourceBase extends BinaryResource<IOException> {
+		protected abstract InputStream createInputStream() throws IOException;
+
+		@Override
+		public Optional<String> fileName() {
+			return Optional.empty();
+		}
+
+		@Override
+		public <EE extends IOException> InputStreamWithError<EE> asInputStream(IOErrorType<IOException, EE> errorType) throws InterruptedIOException, EE {
+			InputStream is;
+			try {
+				is = createInputStream();
+			}
+			catch(IOException e) {
+				try {
+					throw errorType.toThrowable(e);
+				}
+				catch(InterruptedException ex) {
+					InterruptedIOException ioe = new InterruptedIOException(ex.getMessage());
+					ioe.setStackTrace(ex.getStackTrace());
+					throw ioe;
+				}
+			}
+
+			return InputStreamWithError.ofInputStream(is).convertError(
+				IOErrorType.fromClass(IOException.class),
+				Function.identity(),
+				errorType
+			);
+		}
+	}
 }

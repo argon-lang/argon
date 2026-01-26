@@ -168,9 +168,7 @@ private[loader] trait LoaderUtils extends UsingContext {
       knownVars <- Ref.make(Map.empty[BigInt, context.DefaultExprContext.LocalVar])
       res <- ExprDecoder(
         knownVars = knownVars,
-      ).expr(e).onError { err =>
-        ZIO.succeed(println(e))
-      }
+      ).expr(e)
     yield res
 
   def decodeExpressionOwner(owner: t.ExpressionOwner): Comp[context.DefaultExprContext.ExpressionOwner] =

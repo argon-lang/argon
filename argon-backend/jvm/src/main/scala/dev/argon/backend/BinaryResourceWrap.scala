@@ -4,6 +4,7 @@ import dev.argon.backend.scalaApi.WrappingIOException
 import dev.argon.io.BinaryResource
 import dev.argon.nobleidl.runtime.util.{InputStreamWithError, RefiningInputStreamWithError}
 import dev.argon.util.async.ErrorWrapper
+import nobleidl.core.ErrorType
 import zio.*
 import zio.stream.*
 
@@ -15,6 +16,9 @@ private[backend] object BinaryResourceWrap {
   def wrap[E >: IOException](res: BinaryResource[E])(using ew: ErrorWrapper[E], rt: Runtime[Any]): scalaApi.BinaryResource[ew.EX] =
     new scalaApi.BinaryResource[ew.EX] {
       override val fileName: Option[String] = res.fileName
+
+      override protected[backend] def errorType: ErrorType[ew.EX] =
+        ErrorType.fromTypeTest(using ew.exceptionTypeTest)
 
       override def asInputStream: IO[ew.EX, InputStreamWithError[WrappingIOException[ew.EX]]] =
         given ew2: ErrorWrapper[E]:
@@ -64,41 +68,50 @@ private[backend] object BinaryResourceWrap {
       override def fileName: Option[String] = res.fileName
 
       override def asInputStream[E1 >: E](using ew2: ErrorWrapper[E1] {type EX <: IOException}): ZIO[Scope, ew2.EX, InputStreamWithError[ew2.EX]] =
-        ZIO.fromAutoCloseable(
-            res.asInputStream
-              .mapError(ex => ew2.wrap(ew.unwrap(ex)))
-              .map { is =>
-                new InputStreamWithError[ew2.EX] {
-                  override def read(): Int =
-                    try is.read()
-                    catch {
-                      case WrappingIOException(ex: ew2.EX) => throw ex
-                    }
-
-                  override def read(b: Array[Byte]): Int =
-                    try is.read(b)
-                    catch {
-                      case WrappingIOException(ex: ew2.EX) => throw ex
-                    }
-
-                  override def read(b: Array[Byte], off: Int, len: Int): Int =
-                    try is.read(b, off, len)
-                    catch {
-                      case WrappingIOException(ex: ew2.EX) => throw ex
-                    }
-
-                  override def close(): Unit =
-                    try is.close()
-                    catch {
-                      case WrappingIOException(ex: ew2.EX) => throw ex
-                    }
-                }
-              }
+        ZIO.fromAutoCloseable(res.asInputStream)
+          .mapBoth(
+            ex => ew2.wrap(ew.unwrap(ex)),
+            is => is.convertError(
+              new scalaApi.BinaryResource.WrappingIOErrorType[ew.EX](),
+              ex => ew2.wrap(ew.unwrap(ex)),
+              scalaApi.BinaryResource.ioErrorTypeFromWrapper[E1],
+            ),
           )
+        
+//        ZIO.fromAutoCloseable(
+//            res.asInputStream
+//              .mapError(ex => ew2.wrap(ew.unwrap(ex)))
+//              .map { is =>
+//                new InputStreamWithError[ew2.EX] {
+//                  override def read(): Int =
+//                    try is.read()
+//                    catch {
+//                      case WrappingIOException(ex: ew2.EX) => throw ex
+//                    }
+//
+//                  override def read(b: Array[Byte]): Int =
+//                    try is.read(b)
+//                    catch {
+//                      case WrappingIOException(ex: ew2.EX) => throw ex
+//                    }
+//
+//                  override def read(b: Array[Byte], off: Int, len: Int): Int =
+//                    try is.read(b, off, len)
+//                    catch {
+//                      case WrappingIOException(ex: ew2.EX) => throw ex
+//                    }
+//
+//                  override def close(): Unit =
+//                    try is.close()
+//                    catch {
+//                      case WrappingIOException(ex: ew2.EX) => throw ex
+//                    }
+//                }
+//              }
+//          )
 
       override def asBytes: Stream[E, Byte] =
         ErrorWrapper.unwrapStream(res.asBytes)
     }
-
 
 }

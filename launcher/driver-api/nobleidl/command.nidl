@@ -2,7 +2,7 @@ package argon.driver.command;
 
 import nobleidl.core;
 
-enum driver-command[p] {
+enum driver-command[fr, dr, fs, ds] {
     help-command {
         is-error: bool;
         arguments: list[string];
@@ -13,41 +13,45 @@ enum driver-command[p] {
 
     compile-command {
         tube-name: argon.vm.tube-name;
-        input-dir: p;
-        output-file: p;
-        referenced-tubes: list[p];
+        input-dir: dr;
+        output-file: fs;
+        referenced-tubes: list[fr];
         supported-platforms: list[string];
-        platform-options: dict[dict[compiler-driver-option-value[p]]];
+        platform-options: dict[dict[compiler-driver-option-value[fr, dr]]];
     },
 
     gen-ir-command {
-        input-file: p;
-        output-file: p;
-        referenced-tubes: list[p];
+        input-file: fr;
+        output-file: fs;
+        referenced-tubes: list[fr];
         platform: string;
     },
 
     codegen-command {
         backend: string;
-        input-file: p;
-        referenced-tubes: list[p];
-        platform-options: dict[compiler-driver-option-value[p]];
-        platform-output-options: dict[p];
+        input-file: fr;
+        referenced-tubes: list[fr];
+        platform-options: dict[compiler-driver-option-value[fr, dr]];
+        platform-output-options: dict[compiler-driver-output[fs, ds]];
     },
 }
 
-enum compiler-driver-option-value[p] {
-    single { value: compiler-driver-option-value-atom[p]; },
+enum compiler-driver-option-value[fr, dr] {
+    single { value: compiler-driver-option-value-atom[fr, dr]; },
     many {
-        first: compiler-driver-option-value-atom[p];
-        values: list[compiler-driver-option-value-atom[p]];
+        first: compiler-driver-option-value-atom[fr, dr];
+        values: list[compiler-driver-option-value-atom[fr, dr]];
     },
 }
 
-enum compiler-driver-option-value-atom[p] {
+enum compiler-driver-option-value-atom[fr, dr] {
     string { s: string; },
     bool { b: bool; },
-    file { p: p; },
-    directory { p: p; },
+    file { f: fr; },
+    directory { dir: dr; },
 }
 
+enum compiler-driver-output[fs, ds] {
+    file { f: fs; },
+    directory { dir: ds; },
+}

@@ -18,7 +18,7 @@ async function copy(src: string, dest: string, subpath: string, ignorePredicate:
         await fs.mkdir(dest, {recursive: true});
         const entries = await fs.readdir(src);
 
-        for(const entry of entries) {
+        for await(const entry of entries) {
             await copy(path.join(src, entry), path.join(dest, entry), path.join(subpath, entry), ignorePredicate);
         }
     }

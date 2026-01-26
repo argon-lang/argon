@@ -35,7 +35,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             referencedTubes = orderedTubes.map(encodeTubeName),
             modules = modules,
           )
-        
+
         emitEntryBuilder(ZIO.succeed(TubeFileEntry.Header(header))) *>
           ZIO.foreachDiscard(orderedTubes.zipWithIndex) { (name, tubeIndex) =>
               assignTubeId(name, tubeIndex + 1)
@@ -242,7 +242,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           tubeId = tubeId,
           path = encodeModulePath(moduleName.path),
         )
-          
+
       private def importOrDefine[A]
       (value: A, makeSpecifier: Comp[c.ImportSpecifier])
       (emitDef: A => Comp[TubeFileEntry], emitRef: ImportSpecifier => Comp[TubeFileEntry])

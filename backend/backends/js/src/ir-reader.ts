@@ -1,5 +1,5 @@
 import type { EnumInfo, EnumVariantInfo, FunctionInfo, InstanceInfo, MethodInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TraitInfo, TubeInfo } from "./program-model.js";
-import type { TubeHeader, TubeFileEntry, TubeMetadata, ImportSpecifier } from "@argon-lang/js-backend-api/vm";
+import type { TubeHeader, TubeFileEntry, TubeMetadata, ImportSpecifier } from "@argon-lang/js-backend-api/vm.js";
 import { getModuleId } from "./util.js";
 
 export interface ElementLookup {

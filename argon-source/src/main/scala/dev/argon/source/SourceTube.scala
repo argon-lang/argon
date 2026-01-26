@@ -47,7 +47,7 @@ object SourceTube {
   private def getSourceCode
   (context: Context)
   (resource: DirectoryResource[context.Error, ArgonSourceCodeResource])
-  : ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])] =
+  : ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])] = {
     resource.contents.flatMap {
       case DirectoryEntry(dirs, fileName, resource) if fileName.toUpperCase(Locale.ROOT).nn.endsWith(".ARGON") =>
         val nameNoExt = fileName.substring(0, fileName.length - 6).nn
@@ -66,6 +66,7 @@ object SourceTube {
 
       case _ => ZStream.empty
     }
+  }
 
   private def buildModuleMap
   (context: Context { type Error >: SourceError })

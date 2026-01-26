@@ -7,6 +7,7 @@ import dev.argon.io.{chunkToUint8Array, uint8ArrayToChunk}
 import nobleidl.core.{ErrorType, JSAdapter}
 import zio.*
 import zio.stream.*
+import dev.argon.io
 
 import scala.reflect.TypeTest
 import scala.scalajs.js
@@ -16,6 +17,15 @@ import scala.scalajs.js.typedarray.Uint8Array
 trait BinaryResource[E] {
   val fileName: Option[String]
   def asBytes: Stream[E, Byte]
+
+  def toIOResource: io.BinaryResource[E] =
+    new io.BinaryResource[E] {
+      override def fileName: Option[String] =
+        BinaryResource.this.fileName
+        
+      override def asBytes: Stream[E, Byte] =
+        BinaryResource.this.asBytes
+    }
 }
 
 object BinaryResource {

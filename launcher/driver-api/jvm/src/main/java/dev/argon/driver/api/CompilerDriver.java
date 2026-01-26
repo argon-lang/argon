@@ -7,6 +7,6 @@ import java.util.List;
 
 public interface CompilerDriver {
 	BackendMetadata parseMetadata(String metadata) throws BackendMetadataParseException;
-	DriverCommand<String> parseCommandLineArguments(List<BackendMetadata> backends, String[] args);
+	DriverCommand<String, String, String, String> parseCommandLineArguments(List<BackendMetadata> backends, String[] args);
     int runCommand(CompilerDriverOptions options) throws Throwable;
 }

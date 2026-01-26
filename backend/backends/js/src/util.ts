@@ -1,4 +1,4 @@
-import type * as ir from "@argon-lang/js-backend-api/vm";
+import type * as ir from "@argon-lang/js-backend-api/vm.js";
 
 export function ensureExhaustive(x: never): never {
     throw new Error("Expected exhaustive check, but found unexpected case: " + x);

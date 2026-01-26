@@ -7,15 +7,15 @@ import { readIR } from "./ir-reader.js";
 import type { ESExpr, Option } from "@argon-lang/esexpr";
 import { getModuleOutputFileParts, getModulePathExternalUrl, getModulePathUrl, tubePackageName } from "./util.js";
 import * as backendApi from "@argon-lang/js-backend-api";
-import * as backendOptions from "@argon-lang/js-backend-api/options";
-import type { OptionParser } from "@argon-lang/js-backend-api/options";
+import * as backendOptions from "@argon-lang/js-backend-api/options.js";
+import type { OptionParser } from "@argon-lang/js-backend-api/options.js";
 import type { ErrorChecker, PromiseWithError } from "@argon-lang/noble-idl-core/util";
-import * as op from "@argon-lang/js-backend-api/options/parser";
+import * as op from "@argon-lang/js-backend-api/options/parser.js";
 import type { Dict, String } from "@argon-lang/noble-idl-core";
 import type { JSBackendOptions, JSBackendOutput, JSDataOptions, JSModuleResource, PackageJsonResource } from "./options.js";
 import { asyncIterableToStream, streamToAsyncIterable } from "./stream.js";
 import type { PackageJson, ReadonlyDeep } from "type-fest";
-import type { SimpleBackendFactory, HostOperations } from "@argon-lang/js-backend-api/factory";
+import type { SimpleBackendFactory, HostOperations } from "@argon-lang/js-backend-api/factory.js";
 import { ExternFunction, JSTubeMetadata } from "./platform-data.js";
 
 
@@ -83,7 +83,7 @@ async function loadEmitOptions<E>(input: CodegenInput<E>): Promise<EmitOptions> 
     };
 }
 
-async function* emitModules<E>(options: EmitOptions): AsyncIterable<backendApi.DirectoryEntry<JSModuleResource<E>>> {
+async function* emitModules<E>(options: EmitOptions): AsyncIterable<ModuleDirectoryEntry<E>> {
     for(const outputModule of emitTube(options)) {
         const outputFileParts = getModuleOutputFileParts(outputModule.modulePath);
 
@@ -153,7 +153,7 @@ class JSPlatformDataLoader<E> implements backendApi.PlatformDataLoader<E, JSData
         return JSTubeMetadata.codec.encode(metadata);
     }
 
-    async externLoader(options: JSDataOptions<E>): PromiseWithError<backendApi.ScopedResource<backendApi.ExternLoader<E>>, E> {
+    async externLoader(options: JSDataOptions<E>): Promise<backendApi.ScopedResource<E, backendApi.ExternLoader<E>>> {
         const externLoader = new ExternLoader();
         
         for(const extern of options.externs) {
@@ -230,6 +230,14 @@ class JSCodeGenerator<E> implements backendApi.LibraryCodeGenerator<E, JSBackend
     }
 }
 
+type ModuleDirectoryEntry<E> = backendApi.DirectoryEntry<E> & {
+    readonly resource: JSModuleResource<E>;
+};
+
+type ModuleDirectoryResource<E> = backendApi.DirectoryResource<E> & {
+    contents(): Promise<backendApi.ScopedResource<E, backendApi.Stream<E, ModuleDirectoryEntry<E>>>>;
+};
+
 class JSBackendOutputImpl<E> implements JSBackendOutput<E> {
     constructor(options: JSBackendOptions<E>, program: backendApi.VmIrTube<E>, _libraries: readonly backendApi.VmIrTube<E>[]) {
         this.#options = options;
@@ -255,7 +263,7 @@ class JSBackendOutputImpl<E> implements JSBackendOutput<E> {
         return new PackageJsonResourceImpl(() => this.#getEmitOptions());
     }
 
-    get modules(): backendApi.DirectoryResource<E, JSModuleResource<E>> {
+    get modules(): ModuleDirectoryResource<E> {
         const outputImpl = this;
         return {
             async contents() {

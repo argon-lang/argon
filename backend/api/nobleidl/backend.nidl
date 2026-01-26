@@ -10,15 +10,27 @@ interface backend[e: exception, output] {
 @scala:(adapter-needs-zio-runtime)
 extern type binary-resource[e: exception];
 
-interface directory-resource[e: exception, res] {
-    contents(): scoped-resource[stream[e, directory-entry[res]]] throws e;
+interface directory-resource[e: exception] {
+    contents(): scoped-resource[e, stream[e, directory-entry[e]]];
+}
+
+interface sink-error-handler[e1: exception, e2: exception] {
+    apply(ex: e1): e2;
+}
+
+interface binary-resource-sink[e: exception] {
+    sink(): scoped-resource[e, binary-writer[e]];
+}
+
+interface directory-resource-sink[e: exception] {
+    sink(): scoped-resource[e, directory-writer[e]];
 }
 
 
-record directory-entry[res] {
+record directory-entry[e: exception] {
     dirs: list[string];
     file-name: string;
-    resource: res;
+    resource: binary-resource[e];
 }
 
 record extern-info {
@@ -30,7 +42,7 @@ record extern-info {
 interface platform-data-loader[e: exception, options] {
     option-parser(): argon.backend.options.option-parser[e, options];
     get-tube-metadata(options: options): esexpr throws e;
-    extern-loader(options: options): scoped-resource[extern-loader[e]] throws e;
+    extern-loader(options: options): scoped-resource[e, extern-loader[e]];
 }
 
 interface extern-loader[e: exception] {
@@ -71,14 +83,23 @@ interface code-generator-factory-callback[e: exception, output, a] {
 
 
 interface vm-ir-tube[e: exception] {
-    stream(): scoped-resource[stream[e, argon.vm.tube-file-entry]] throws e;
+    stream(): scoped-resource[e, stream[e, argon.vm.tube-file-entry]];
 }
 
-interface scoped-resource[a] {
-    get(): a;
+interface scoped-resource[e: exception, a] {
+    get(): a throws e;
     close(): unit;
 }
 
 interface stream[e: exception, a] {
     next(): list[a] throws e;
 }
+
+interface binary-writer[e: exception] {
+    write(bytes: array8): unit throws e;
+}
+
+interface directory-writer[e: exception] {
+    write(dirs: list[string], file-name: string): scoped-resource[e, binary-writer[e]];
+}
+

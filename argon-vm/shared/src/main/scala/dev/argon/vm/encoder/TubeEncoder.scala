@@ -603,13 +603,10 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             yield {
               val regOffset = if inst.isDefined then 1 else 0
               
-              val kv = instanceTypeParams.view.mapValues(VariableRealization.TypeParam.apply).toMap ++
+              instanceTypeParams.view.mapValues(VariableRealization.TypeParam.apply).toMap ++
                 inst.toList.map { inst => inst -> VariableRealization.Reg(RegisterId(0)) }.toMap ++
                 pvm.map { (param, index) => param -> VariableRealization.Reg(RegisterId(regOffset + index)) } ++
                 tpm.map { (param, index) => param -> VariableRealization.TypeParam(VmType.TypeParameter(index)) }
-              
-              println("build kvs: " + kv)
-              kv
             }
           ).commit
 
@@ -703,12 +700,10 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         case Arg
       }
 
-      private def emitFunctionSignature(paramOwner: ExpressionOwner, sig: FunctionSignature): Comp[FunctionSignatureWithMapping] = {
-        println("emitFunctionSignature: " + paramOwner + " " + sig)
+      private def emitFunctionSignature(paramOwner: ExpressionOwner, sig: FunctionSignature): Comp[FunctionSignatureWithMapping] =
         FunctionSignatureBuilder.make(Map())
           .tap(emitFunctionSignatureParameters(paramOwner, sig))
           .flatMap { sb => sb.finish(sig.returnType) }
-      }
 
       private def methodOwnerInstanceTypeParams(methodOwner: MethodOwner[context.type]): Comp[Map[context.DefaultExprContext.Var, VmType]] =
         (methodOwner match {

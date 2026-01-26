@@ -28,7 +28,7 @@ class CompilerDriver extends JavaCompilerDriver {
       .toTry
       .get
 
-  override def parseCommandLineArguments(backends: java.util.List[javaApi.metadata.BackendMetadata], arguments: Array[String]): JavaDriverCommand[String] =
+  override def parseCommandLineArguments(backends: java.util.List[javaApi.metadata.BackendMetadata], arguments: Array[String]): JavaDriverCommand[String, String, String, String] =
     val args = arguments.toSeq
 
     val parser = CompilerDriverOptions.command(
@@ -42,7 +42,12 @@ class CompilerDriver extends JavaCompilerDriver {
     val parsed = parser.parse(args, Map.empty)
     val driverCommand = CompilerDriverOptions.toDriverCommand(args, parsed) 
 
-    DriverCommand.javaAdapter(JavaAdapter.identity).toJava(driverCommand)
+    DriverCommand.javaAdapter(
+      JavaAdapter.identity,
+      JavaAdapter.identity,
+      JavaAdapter.identity,
+      JavaAdapter.identity,
+    ).toJava(driverCommand)
   end parseCommandLineArguments
 
   override def runCommand(options: dev.argon.driver.api.CompilerDriverOptions): Int =
@@ -130,7 +135,23 @@ class CompilerDriver extends JavaCompilerDriver {
         }
         .toSeq
 
-    CompilerDriverImpl.runCommand(DriverCommand.javaAdapter(JavaAdapter.identity).fromJava(options.getCommand))
+    ZIO.runtime[Any]
+      .flatMap { runtime =>
+        given Runtime[Any] = runtime
+
+        val errorContext = ErrorWrapper.Context[IOException]
+        import errorContext.given
+
+        CompilerDriverImpl.runCommand(
+          DriverCommand.javaAdapter(
+            scalaApi.BinaryResource.javaAdapter(JavaAdapter.identity[IOException]),
+            scalaApi.DirectoryResource.javaAdapter(JavaAdapter.identity[IOException]),
+            scalaApi.BinaryResourceSink.javaAdapter(JavaAdapter.identity[IOException]),
+            scalaApi.DirectoryResourceSink.javaAdapter(JavaAdapter.identity[IOException]),
+          ).fromJava(options.getCommand)
+        )
+      }
+
       .provideLayer(BackendProvider.liveFromFactories(backendFactories))
   end runCommandZIO
 

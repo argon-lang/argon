@@ -82,7 +82,12 @@ trait TubeEncoderBase[Entry] {
         }.commit
 
       def getIdOrFail(value: A): UIO[BigInt] =
-        mapping.get(value).map { id => id.get }.commit
+        mapping.get(value)
+          .flatMap {
+            case Some(value) => ZSTM.succeed(value)
+            case None => ZSTM.die(TubeFormatException(s"Could not find id for $value"))
+          }
+          .commit
 
       def claimId: USTM[BigInt] =
         nextId.getAndUpdate(_ + 1)
@@ -97,6 +102,13 @@ trait TubeEncoderBase[Entry] {
         yield IdManager(nextId, mapping)
       ).commit
 
+    def processBuilderQueue(queue: TQueue[context.Comp[Entry]]): ZStream[context.Env, context.Error, Entry] =
+      ZStream.unwrap(queue.takeAll.commit.map { chunk =>
+        if chunk.isEmpty then
+          ZStream.empty
+        else
+          ZStream.fromChunk(chunk).mapZIO(identity) ++ processBuilderQueue(queue)
+      })
 
     ZStream.unwrap(
       for
@@ -192,17 +204,7 @@ trait TubeEncoderBase[Entry] {
 
         _ <- encodeState.emitter.emitTube
 
-      yield ZStream
-        .repeatZIOChunkOption(
-          entryBuilders.takeAll.commit
-            .flatMap { chunk =>
-              if chunk.isEmpty then
-                ZIO.fail(None)
-              else
-                ZIO.succeed(chunk)
-            }
-        )
-        .mapZIO(identity)
+      yield processBuilderQueue(entryBuilders)
     )
   end encode
 

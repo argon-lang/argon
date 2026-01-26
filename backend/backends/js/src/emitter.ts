@@ -2,8 +2,8 @@ import type { ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel } from ".
 import { encodeTubePathComponent, ensureExhaustive, getModuleId, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
 
 import type * as estree from "estree";
-import type * as ir from "@argon-lang/js-backend-api/vm";
-import { Identifier } from "@argon-lang/js-backend-api/vm";
+import type * as ir from "@argon-lang/js-backend-api/vm.js";
+import { Identifier } from "@argon-lang/js-backend-api/vm.js";
 import type { IterableElement, JsonObject, JsonValue, ReadonlyDeep } from "type-fest";
 import { ExternFunction } from "./platform-data.js";
 import type { ImportHandler } from "./imports.js";

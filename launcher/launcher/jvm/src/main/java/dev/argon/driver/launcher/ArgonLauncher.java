@@ -1,6 +1,6 @@
 package dev.argon.driver.launcher;
 
-import dev.argon.backend.api.BackendFactory;
+import dev.argon.backend.api.*;
 import dev.argon.backend.api.metadata.BackendLoaderOptions;
 import dev.argon.backend.api.metadata.BackendMetadata;
 import dev.argon.driver.api.BackendMetadataParseException;
@@ -8,6 +8,7 @@ import dev.argon.driver.api.CompilerDriver;
 import dev.argon.driver.api.CompilerDriverOptions;
 import dev.argon.driver.api.command.CompilerDriverOptionValue;
 import dev.argon.driver.api.command.CompilerDriverOptionValueAtom;
+import dev.argon.driver.api.command.CompilerDriverOutput;
 import dev.argon.driver.api.command.DriverCommand;
 import dev.argon.driver.launcher.backendloaders.jsApi.JSBackendFactory;
 import dev.argon.esexpr.KeywordMapping;
@@ -122,7 +123,7 @@ public final class ArgonLauncher {
 		return null;
 	}
 	
-	private static DriverCommand<Path> realizeCommandPath(DriverCommand<String> command) {
+	private static DriverCommand<BinaryResource<IOException>, DirectoryResource<IOException>, BinaryResourceSink<IOException>, DirectoryResourceSink<IOException>> realizeCommandPath(DriverCommand<String, String, String, String> command) {
 		return switch(command) {
 			case DriverCommand.HelpCommand(var isError, var args) ->
 				new DriverCommand.HelpCommand<>(isError, args);
@@ -133,12 +134,12 @@ public final class ArgonLauncher {
 			case DriverCommand.ListBackendsCommand() ->
 				new DriverCommand.ListBackendsCommand<>();
 
-			case DriverCommand.CompileCommand<String> compileCommand ->
+			case DriverCommand.CompileCommand<String, String, String, String> compileCommand ->
 				new DriverCommand.CompileCommand<>(
 					compileCommand.tubeName(),
-					Path.of(compileCommand.inputDir()),
-					Path.of(compileCommand.outputFile()),
-					compileCommand.referencedTubes().stream().map(Path::of).toList(),
+					new PathDirectoryResource(Path.of(compileCommand.inputDir())),
+					new PathBinaryResourceSink(Path.of(compileCommand.outputFile())),
+					compileCommand.referencedTubes().stream().<BinaryResource<IOException>>map(p -> new PathBinaryResource(Path.of(p))).toList(),
 					compileCommand.supportedPlatforms(),
 					new KeywordMapping<>(
 						compileCommand.platformOptions()
@@ -161,19 +162,19 @@ public final class ArgonLauncher {
 					)
 				);
 
-			case DriverCommand.GenIrCommand<String> genIRCommand ->
+			case DriverCommand.GenIrCommand<String, String, String, String> genIRCommand ->
 				new DriverCommand.GenIrCommand<>(
-					Path.of(genIRCommand.inputFile()),
-					Path.of(genIRCommand.outputFile()),
-					genIRCommand.referencedTubes().stream().map(Path::of).toList(),
+					new PathBinaryResource(Path.of(genIRCommand.inputFile())),
+					new PathBinaryResourceSink(Path.of(genIRCommand.outputFile())),
+					genIRCommand.referencedTubes().stream().<BinaryResource<IOException>>map(p -> new PathBinaryResource(Path.of(p))).toList(),
 					genIRCommand.platform()
 				);
 			
-			case DriverCommand.CodegenCommand<String> codegenCommand ->
+			case DriverCommand.CodegenCommand<String, String, String, String> codegenCommand ->
 				new DriverCommand.CodegenCommand<>(
 					codegenCommand.backend(),
-					Path.of(codegenCommand.inputFile()),
-					codegenCommand.referencedTubes().stream().map(Path::of).toList(),
+					new PathBinaryResource(Path.of(codegenCommand.inputFile())),
+					codegenCommand.referencedTubes().stream().<BinaryResource<IOException>>map(p -> new PathBinaryResource(Path.of(p))).toList(),
 					new KeywordMapping<>(
 						codegenCommand.platformOptions()
 							.map()
@@ -191,14 +192,14 @@ public final class ArgonLauncher {
 							.stream()
 							.collect(Collectors.toUnmodifiableMap(
 								Map.Entry::getKey,
-								entry -> Path.of(entry.getValue())
+								entry -> realizeOutputValue(entry.getValue())
 							))
 					)
 				);
 		};
 	}
 
-	private static CompilerDriverOptionValue<Path> realizeOptionValue(CompilerDriverOptionValue<String> value) {
+	private static CompilerDriverOptionValue<BinaryResource<IOException>, DirectoryResource<IOException>> realizeOptionValue(CompilerDriverOptionValue<String, String> value) {
 		return switch(value) {
 			case CompilerDriverOptionValue.Many(var head, var tail) ->
 				new CompilerDriverOptionValue.Many<>(
@@ -210,12 +211,22 @@ public final class ArgonLauncher {
 		};
 	}
 
-	private static CompilerDriverOptionValueAtom<Path> realizeOptionValueAtom(CompilerDriverOptionValueAtom<String> item) {
+	private static CompilerDriverOptionValueAtom<BinaryResource<IOException>, DirectoryResource<IOException>> realizeOptionValueAtom(CompilerDriverOptionValueAtom<String, String> item) {
 		return switch(item) {
 			case CompilerDriverOptionValueAtom.Bool(var b) -> new CompilerDriverOptionValueAtom.Bool<>(b);
 			case CompilerDriverOptionValueAtom.String(var s) -> new CompilerDriverOptionValueAtom.String<>(s);
-			case CompilerDriverOptionValueAtom.Directory(var p) -> new CompilerDriverOptionValueAtom.Directory<>(Path.of(p));
-			case CompilerDriverOptionValueAtom.File(var p) -> new CompilerDriverOptionValueAtom.File<>(Path.of(p));
+			case CompilerDriverOptionValueAtom.Directory(var p) -> new CompilerDriverOptionValueAtom.Directory<>(new PathDirectoryResource(Path.of(p)));
+			case CompilerDriverOptionValueAtom.File(var p) -> new CompilerDriverOptionValueAtom.File<>(new PathBinaryResource(Path.of(p)));
+		};
+	}
+	
+	private static CompilerDriverOutput<BinaryResourceSink<IOException>, DirectoryResourceSink<IOException>> realizeOutputValue(CompilerDriverOutput<String, String> output) {
+		return switch(output) {
+			case CompilerDriverOutput.File(var f) ->
+				new CompilerDriverOutput.File<>(new PathBinaryResourceSink(Path.of(f)));
+				
+			case CompilerDriverOutput.Directory(var dir) ->
+				new CompilerDriverOutput.Directory<>(new PathDirectoryResourceSink(Path.of(dir)));
 		};
 	}
 

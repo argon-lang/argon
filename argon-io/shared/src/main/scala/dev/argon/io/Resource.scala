@@ -20,8 +20,6 @@ end Resource
 
 abstract class BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific[E] {
   def asBytes: Stream[E, Byte]
-
-  def byteSize: Option[ZIO[Any, E, BigInt]] = None
 }
 
 object BinaryResource:

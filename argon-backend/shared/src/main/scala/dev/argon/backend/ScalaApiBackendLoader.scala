@@ -1,6 +1,7 @@
 package dev.argon.backend
 
-import dev.argon.backend.scalaApi.ScopedResource
+import dev.argon.backend.scalaApi.{ScopedResource, StreamUtil}
+import dev.argon.backend.scalaApi.ScopedResourceExtensions.*
 import dev.argon.backend.options.{OptionParseFailure, OptionParser, OptionValue, OutputProvider}
 import dev.argon.compiler.TubeName
 import dev.argon.io.{BinaryResource, FileSystemResource}
@@ -56,7 +57,10 @@ object ScalaApiBackendLoader {
             ErrorWrapper.unwrapEffect(apiPlatformDataLoader.getTubeMetadata(options))
 
           override def externLoader(options: TubeOpts): ZIO[Scope, E, ExternLoader[E]] =
-            ErrorWrapper.unwrapEffect(ScopedResourceWrap.unwrap(apiPlatformDataLoader.externLoader(options)))
+            ErrorWrapper.unwrapEffect(
+                apiPlatformDataLoader.externLoader(options)
+                  .flatMap(_.toScopeIO)
+              )
               .map { extLoader =>
                 new ExternLoader[E] {
                   override def getExtern(name: String): IO[E, Option[scalaApi.ExternInfo]] =
@@ -93,21 +97,9 @@ object ScalaApiBackendLoader {
 
   private def vmIrToApi[E >: IOException](res: VmIrResource[E])(using ew: ErrorWrapper[E]): scalaApi.VmIrTube[ew.EX] =
     new scalaApi.VmIrTube[ew.EX] {
-      override def stream(): IO[ew.EX, ScopedResource[scalaApi.Stream[ew.EX, vm.TubeFileEntry]]] =
-        StreamWrap.wrapStream(res.decoded)
-    }
-
-  private def scopedResource[E, A](io: ZIO[Scope, E, A]): IO[E, ScopedResource[A]] =
-    Scope.make.flatMap { scope =>
-      io.provideEnvironment(ZEnvironment(scope))
-        .foldCauseZIO(
-          failure = cause => scope.close(Exit.failCause(cause)) *> ZIO.failCause(cause),
-          success = a => ZIO.succeed(new ScopedResource[A] {
-            override def get(): UIO[A] = ZIO.succeed(a)
-
-            override def close(): UIO[Unit] = scope.close(Exit.unit)
-          })
-        )
+      override def stream(): UIO[ScopedResource[ew.EX, scalaApi.Stream[ew.EX, vm.TubeFileEntry]]] = {
+        StreamUtil.fromZStreamScoped(ErrorWrapper.wrapStream(res.decoded))
+      }
     }
 
   private def unwrapOptionParser[E >: IOException, Options](using ew: ErrorWrapper[E], rt: Runtime[Any])(op: UIO[scalaApi.options.OptionParser[ew.EX, Options]]): OptionParser[E, Options] =
