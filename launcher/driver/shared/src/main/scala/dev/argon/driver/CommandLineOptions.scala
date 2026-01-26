@@ -7,7 +7,6 @@ import com.monovore.decline.{Argument, Command, Help, Opts}
 import dev.argon.backend.metadata.{BackendMetadata, BackendOption, BackendOptionOutput, OptionOccurrence, OptionType, OutputType}
 import dev.argon.compiler.TubeName
 import dev.argon.driver.scalaApi.command as cmd
-import dev.argon.io.PathLike
 import esexpr.Dictionary
 
 sealed trait CompilerDriverOptions

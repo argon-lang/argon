@@ -7,7 +7,7 @@ import dev.argon.backend.scalaApi.SinkExtensions.*
 import dev.argon.build.{BuildError, Compile, GenerateIR, InvalidTubeName, LogReporter}
 import dev.argon.compiler.{ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
 import dev.argon.driver.scalaApi.command as cmd
-import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource, PathLike, PathUtil}
+import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource}
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.parser.SyntaxError
 import dev.argon.source.ArgonSourceCodeResource

@@ -2,7 +2,6 @@ package dev.argon.driver.sjs
 
 import dev.argon.backend.sjs.{BackendFactory, BinaryResource, DirectoryResource, BinaryResourceSink, DirectoryResourceSink}
 import dev.argon.driver.sjs.command.DriverCommand
-import dev.argon.io.PathLike
 
 import scala.scalajs.js
 
