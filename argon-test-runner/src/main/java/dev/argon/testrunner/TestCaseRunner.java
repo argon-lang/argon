@@ -3,12 +3,10 @@ package dev.argon.testrunner;
 import dev.argon.driver.api.command.DriverCommand;
 import dev.argon.esexpr.KeywordMapping;
 import dev.argon.vm.api.TubeName;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.file.PathUtils;
 
 import java.io.Closeable;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -16,20 +14,16 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 class TestCaseRunner implements Closeable {
 
-    public TestCaseRunner(RunnerContext context, TestExecutor executor) throws IOException {
+    public TestCaseRunner(RunnerContext context) throws IOException {
         this.context = context;
-        this.executor = executor;
         tempDir = Files.createTempDirectory("argon-tests");
     }
 
 	private final RunnerContext context;
-    private final TestExecutor executor;
     private final Path tempDir;
 	private boolean keepTempFiles = false;
 
@@ -53,23 +47,45 @@ class TestCaseRunner implements Closeable {
 	public void keepTempFiles() {
 		keepTempFiles = true;
 	}
+
+
+	private interface TryFunction<T> {
+		T apply() throws Exception;
+	}
+
+	private static sealed interface Try<T> {
+		T get() throws Exception;
+
+		record Success<T>(T value) implements Try<T> {
+			@Override
+			public T get() throws Exception {
+				return value;
+			}
+		}
+		record Failure<T>(Exception exception) implements Try<T> {
+			@Override
+			public T get() throws Exception {
+				throw exception;
+			}
+		}
+
+		static <T> Try<T> of(TryFunction<T> f) {
+			try {
+				return new Success<>(f.apply());
+			}
+			catch(Exception e) {
+				return new Failure<>(e);
+			}
+		}
+	}
+
 	
-	
-	private final Map<TubeName, Future<Path>> libraryTubes = new ConcurrentHashMap<>();
-	private final Map<TubeName, Future<Path>> libraryIR = new ConcurrentHashMap<>();
-	private final Map<TubeName, Future<Path>> libraryOutput = new ConcurrentHashMap<>();
+	private final Map<TubeName, Try<Path>> libraryTubes = new ConcurrentHashMap<>();
+	private final Map<TubeName, Try<Path>> libraryIR = new ConcurrentHashMap<>();
+	private final Map<TubeName, Try<Path>> libraryOutput = new ConcurrentHashMap<>();
 
     private Path buildLibraryTube(TubeName library) throws Exception {
-        try {
-            return libraryTubes.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryTubeImpl(lib))).get();
-        }
-        catch(ExecutionException e) {
-            if(e.getCause() instanceof Exception e2) {
-                throw e2;
-            }
-
-            throw e;
-        }
+	    return libraryTubes.computeIfAbsent(library, lib -> Try.of(() -> buildLibraryTubeImpl(lib))).get();
     }
 
     private Path buildLibraryTubeImpl(TubeName library) throws Exception {
@@ -81,7 +97,7 @@ class TestCaseRunner implements Closeable {
         var outputFile = outputLibDir.resolve(libraryName + ".artube");
 		
 		var options = LibraryUtils.platformOptions(library, context.targetPlatform(), libDir);
-		
+
 		var command = new DriverCommand.CompileCommand<String, String, String, String>(
 			library,
 			libDir.resolve("src").toString(),
@@ -97,16 +113,7 @@ class TestCaseRunner implements Closeable {
     }
 
 	private Path buildLibraryIR(TubeName library) throws Exception {
-		try {
-			return libraryIR.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryIRImpl(lib))).get();
-		}
-		catch(ExecutionException e) {
-			if(e.getCause() instanceof Exception e2) {
-				throw e2;
-			}
-
-			throw e;
-		}
+		return libraryIR.computeIfAbsent(library, lib -> Try.of(() -> buildLibraryIRImpl(lib))).get();
 	}
 
 	private Path buildLibraryIRImpl(TubeName library) throws Exception {
@@ -128,16 +135,7 @@ class TestCaseRunner implements Closeable {
 		return outputFile;
 	}
 	private Path buildLibraryOutput(TubeName library) throws Exception {
-		try {
-			return libraryOutput.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryOutputImpl(lib))).get();
-		}
-		catch(ExecutionException e) {
-			if(e.getCause() instanceof Exception e2) {
-				throw e2;
-			}
-
-			throw e;
-		}
+		return libraryOutput.computeIfAbsent(library, lib -> Try.of(() -> buildLibraryOutputImpl(lib))).get();
 	}
 
 	private Path buildLibraryOutputImpl(TubeName library) throws Exception {
@@ -163,7 +161,7 @@ class TestCaseRunner implements Closeable {
 	}
 
 	
-	public void executeTestCase(GroupedTestCase testCase, String platform) throws Exception {
+	public void executeTestCase(GroupedTestCase testCase) throws Exception {
 		var testDir = tempDir.resolve("tests");
 		for(var part : testCase.getGroup()) {
 			testDir = testDir.resolve(part);
@@ -196,7 +194,7 @@ class TestCaseRunner implements Closeable {
 				srcDir.toString(),
 				tubeFile.toString(),
 				libraryRefFiles,
-				List.of(platform),
+				List.of(context.targetPlatform()),
 				new KeywordMapping<>(Map.of())
 			);
 
@@ -219,7 +217,7 @@ class TestCaseRunner implements Closeable {
 				tubeFile.toString(),
 				vmirFile.toString(),
 				libraryRefFiles,
-				platform
+				context.targetPlatform()
 			);
 			
 			execute(command);
@@ -236,11 +234,11 @@ class TestCaseRunner implements Closeable {
 			}
 			
 			var command = new DriverCommand.CodegenCommand<String, String, String, String>(
-				platform,
+				context.targetPlatform(),
 				vmirFile.toString(),
 				libraryIrFiles,
 				new KeywordMapping<>(Map.of()),
-				LibraryUtils.outputOptions(platform, outputDir)
+				LibraryUtils.outputOptions(context.targetPlatform(), outputDir)
 			);
 			
 			execute(command);
@@ -256,7 +254,7 @@ class TestCaseRunner implements Closeable {
 				libInfos.add(new OutputProgramRunner.LibraryOutputInfo(libraryName, libPath));
 			}
 			
-			var runner = OutputProgramRunner.forPlatform(context, platform);
+			var runner = OutputProgramRunner.forPlatform(context);
 			output = runner.runProgram(outputDir, libInfos);
 		}
 		
@@ -280,7 +278,7 @@ class TestCaseRunner implements Closeable {
 	
 	private void execute(DriverCommand<String, String, String, String> command) throws Exception {
 		var output = commandExecutor.execute(command);
-		
+
 		int exitCode = output.exitCode();
 		if(exitCode != 0) {
 			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + command, output.output());

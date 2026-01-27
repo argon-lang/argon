@@ -76,7 +76,7 @@ public class TestRunner {
 						testArgs.backendsDir,
 						testArgs.distDir.resolve("argon-" + hostPlatform)
 					);
-					var testCaseRunner = new TestCaseRunner(context, executor);
+					var testCaseRunner = new TestCaseRunner(context);
 					runners.add(testCaseRunner);
 
 					if(testArgs.keepTempFiles) {
@@ -90,7 +90,7 @@ public class TestRunner {
 								executor.submit(() -> {
 									try {
 										System.out.println("Running test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
-										testCaseRunner.executeTestCase(testCase, platform);
+										testCaseRunner.executeTestCase(testCase);
 										System.out.println("Finished test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
 									}
 									catch(Throwable t) {

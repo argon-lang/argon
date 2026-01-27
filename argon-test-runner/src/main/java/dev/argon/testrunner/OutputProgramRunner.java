@@ -16,10 +16,10 @@ public abstract class OutputProgramRunner {
 	) {
 	}
 	
-	public static OutputProgramRunner forPlatform(RunnerContext context, String platform) {
-		return switch(platform) {
+	public static OutputProgramRunner forPlatform(RunnerContext context) {
+		return switch(context.targetPlatform()) {
 			case "js" -> new JSOutputProgramRunner(context);
-			default -> throw new IllegalArgumentException("Unknown platform: " + platform);
+			default -> throw new IllegalArgumentException("Unknown platform: " + context.targetPlatform());
 		};
 	}
 }
