@@ -1,22 +1,16 @@
 package dev.argon.testrunner;
 
 import com.google.common.collect.ImmutableList;
+import dev.argon.driver.api.command.CompilerDriverOptionValue;
+import dev.argon.driver.api.command.CompilerDriverOptionValueAtom;
+import dev.argon.esexpr.KeywordMapping;
 
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 
-record LibraryPlatformOptions(
-    ImmutableList<String> arguments
-) {
+public final class LibraryPlatformOptions {
+	private LibraryPlatformOptions() {}
 	
-	public static LibraryPlatformOptions forLibrary(String library, String platform, Path libraryDir) {
-		return switch(library) {
-			case "Argon.Core" -> switch(platform) {
-				case "js" -> new LibraryPlatformOptions(ImmutableList.of("--js-externs", libraryDir.resolve("js/externs.js").toString()));
-				default -> throw new IllegalArgumentException("Unknown platform: " + library);
-			};
-			
-			default -> throw new IllegalArgumentException("Unknown library: " + library);
-		};
-	}
 	
 }

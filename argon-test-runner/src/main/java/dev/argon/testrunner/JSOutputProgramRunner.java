@@ -24,7 +24,8 @@ class JSOutputProgramRunner extends OutputProgramRunner {
 		PathUtils.copyDirectory(context.backendsDir().resolve("runtime/js"), runtimeModuleDir);
 		
 		for(var libraryOutput : libraryOutputs) {
-			var libPath = outputDir.resolve("node_modules/@argon-tube", libraryOutput.libraryName());
+			var libName = LibraryUtils.getLibraryName(libraryOutput.libraryName());
+			var libPath = outputDir.resolve("node_modules/@argon-tube", libName);
 			Files.createDirectories(libPath.getParent());
 			PathUtils.copyDirectory(libraryOutput.outputDir(), libPath);
 		}

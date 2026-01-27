@@ -3,6 +3,7 @@ package dev.argon.testrunner;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
+import dev.argon.vm.api.TubeName;
 
 import java.util.List;
 
@@ -59,19 +60,25 @@ public class TestCase {
     }
     
     public List<String> getLibraries() {
-        return libraries;
+		return libraries;
     }
 	
-	public List<String> getLibrariesOrDefault() {
-		return libraries == null ? defaultLibraries() : libraries;
+	public List<TubeName> getLibraryTubeNamesOrDefault() {
+		if(libraries == null) {
+			return defaultLibraries();
+		}
+
+		return libraries.stream().map(LibraryUtils::parseLibraryName).toList();
 	}
 
     public void setLibraries(List<String> libraries) {
         this.libraries = libraries;
     }
 	
-	public static List<String> defaultLibraries() {
-		return List.of("Argon.Core");
+	public static List<TubeName> defaultLibraries() {
+		return List.of(
+			LibraryUtils.LIBRARY_ARGON_CORE
+		);
 	}
     
     @Override

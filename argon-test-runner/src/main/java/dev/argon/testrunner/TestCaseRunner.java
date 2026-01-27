@@ -1,5 +1,8 @@
 package dev.argon.testrunner;
 
+import dev.argon.driver.api.command.DriverCommand;
+import dev.argon.esexpr.KeywordMapping;
+import dev.argon.vm.api.TubeName;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.file.PathUtils;
 
@@ -31,16 +34,32 @@ class TestCaseRunner implements Closeable {
 	private boolean keepTempFiles = false;
 
 	
+	private final DriverCommandExecutor commandExecutor = new DriverCommandExecutorCLI() {
+		@Override
+		protected ProcessBuilder createProcessBuilder(ArgumentBuilder argumentBuilder) {
+			var pb = new ProcessBuilder();
+
+			List<String> command = new ArrayList<>();
+			command.add(context.distDir().resolve("argon").toString());
+			argumentBuilder.build(command);
+			
+			pb.command(command);
+
+			return pb;
+		}
+	};
+	
+	
 	public void keepTempFiles() {
 		keepTempFiles = true;
 	}
 	
 	
-	private final Map<String, Future<Path>> libraryTubes = new ConcurrentHashMap<>();
-	private final Map<String, Future<Path>> libraryIR = new ConcurrentHashMap<>();
-	private final Map<String, Future<Path>> libraryOutput = new ConcurrentHashMap<>();
+	private final Map<TubeName, Future<Path>> libraryTubes = new ConcurrentHashMap<>();
+	private final Map<TubeName, Future<Path>> libraryIR = new ConcurrentHashMap<>();
+	private final Map<TubeName, Future<Path>> libraryOutput = new ConcurrentHashMap<>();
 
-    private Path buildLibraryTube(String library) throws Exception {
+    private Path buildLibraryTube(TubeName library) throws Exception {
         try {
             return libraryTubes.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryTubeImpl(lib))).get();
         }
@@ -53,34 +72,31 @@ class TestCaseRunner implements Closeable {
         }
     }
 
-    private Path buildLibraryTubeImpl(String library) throws Exception {
-        var libDir = context.librariesDir().resolve(library);
+    private Path buildLibraryTubeImpl(TubeName library) throws Exception {
+		var libraryName = LibraryUtils.getLibraryName(library);
+        var libDir = context.librariesDir().resolve(libraryName);
 
-        var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(library);
+        var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(libraryName);
         Files.createDirectories(outputLibDir);
-        var outputFile = outputLibDir.resolve(library + ".artube");
-
-        var args = new ArrayList<String>();
-        args.add("compile");
-        args.add("--name");
-        args.add(library);
-        args.add("-i");
-        args.add(libDir.resolve("src").toString());
-        args.add("-o");
-        args.add(outputFile.toString());
+        var outputFile = outputLibDir.resolve(libraryName + ".artube");
 		
-		args.add("--platform");
-		args.add(context.targetPlatform());
+		var options = LibraryUtils.platformOptions(library, context.targetPlatform(), libDir);
 		
-		var options = LibraryPlatformOptions.forLibrary(library, context.targetPlatform(), libDir);
-		args.addAll(options.arguments());
+		var command = new DriverCommand.CompileCommand<String, String, String, String>(
+			library,
+			libDir.resolve("src").toString(),
+			outputFile.toString(),
+			List.of(),
+			List.of(context.targetPlatform()),
+			options
+		);
         
-        execute(args);
+        execute(command);
         
         return outputFile;
     }
 
-	private Path buildLibraryIR(String library) throws Exception {
+	private Path buildLibraryIR(TubeName library) throws Exception {
 		try {
 			return libraryIR.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryIRImpl(lib))).get();
 		}
@@ -93,27 +109,25 @@ class TestCaseRunner implements Closeable {
 		}
 	}
 
-	private Path buildLibraryIRImpl(String library) throws Exception {
-		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(library);
+	private Path buildLibraryIRImpl(TubeName library) throws Exception {
+		var libraryName = LibraryUtils.getLibraryName(library);
+		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(libraryName);
 		Files.createDirectories(outputLibDir);
-		var inputFile = outputLibDir.resolve(library + ".artube");
-		var outputFile = outputLibDir.resolve(library + ".arvm");
+		var inputFile = outputLibDir.resolve(libraryName + ".artube");
+		var outputFile = outputLibDir.resolve(libraryName + ".arvm");
 
-		var args = new ArrayList<String>();
-		args.add("genir");
-		args.add("-i");
-		args.add(inputFile.toString());
-		args.add("-o");
-		args.add(outputFile.toString());
-
-		args.add("--platform");
-		args.add(context.targetPlatform());
-
-		execute(args);
+		var command = new DriverCommand.GenIrCommand<String, String, String, String>(
+			inputFile.toString(),
+			outputFile.toString(),
+			List.of(),
+			context.targetPlatform()
+		);
+		
+		execute(command);
 
 		return outputFile;
 	}
-	private Path buildLibraryOutput(String library) throws Exception {
+	private Path buildLibraryOutput(TubeName library) throws Exception {
 		try {
 			return libraryOutput.computeIfAbsent(library, lib -> executor.submit(() -> buildLibraryOutputImpl(lib))).get();
 		}
@@ -126,20 +140,24 @@ class TestCaseRunner implements Closeable {
 		}
 	}
 
-	private Path buildLibraryOutputImpl(String library) throws Exception {
-		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(library);
+	private Path buildLibraryOutputImpl(TubeName library) throws Exception {
+		var libraryName = LibraryUtils.getLibraryName(library);
+		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(libraryName);
 		Files.createDirectories(outputLibDir);
 		var outputDir = outputLibDir.resolve("output");
 		Files.createDirectories(outputDir);
 
-		var args = new ArrayList<String>();
-		args.add("codegen");
-		args.add(context.targetPlatform());
-		args.add("-i");
-		args.add(outputLibDir.resolve(library + ".arvm").toString());
-		args.addAll(getOutputOptions(context.targetPlatform(), outputDir));
-
-		execute(args);
+		var command = new DriverCommand.CodegenCommand<String, String, String, String>(
+			context.targetPlatform(),
+			
+			outputLibDir.resolve(libraryName + ".arvm").toString(),
+			List.of(),
+			
+			new KeywordMapping<>(Map.of()),
+			LibraryUtils.outputOptions(context.targetPlatform(), outputDir)
+		);
+		
+		execute(command);
 
 		return outputDir;
 	}
@@ -162,28 +180,28 @@ class TestCaseRunner implements Closeable {
 		
 		var tubeFile = testDir.resolve("Argon.TestCase.artube");
 
-		{
-			var args = new ArrayList<String>();
-			args.add("compile");
-			args.add("--name");
-			args.add("Argon.TestCase");
-			args.add("-i");
-			args.add(srcDir.toString());
-			args.add("-o");
-			args.add(tubeFile.toString());
 
-			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var libTube = buildLibraryTube(libraryName);
-				
-				args.add("-r");
-				args.add(libTube.toString());
-			}
-			
-			args.add("--platform");
-			args.add(platform);
+
+		List<String> libraryRefFiles = new ArrayList<>();
+		for(var libraryName : testCase.getTestCase().getLibraryTubeNamesOrDefault()) {
+			var libTube = buildLibraryTube(libraryName);
+
+			libraryRefFiles.add(libTube.toString());
+		}
+		
+		
+		{
+			var command = new DriverCommand.CompileCommand<String, String, String, String>(
+				new TubeName("Argon", List.of("TestCase")),
+				srcDir.toString(),
+				tubeFile.toString(),
+				libraryRefFiles,
+				List.of(platform),
+				new KeywordMapping<>(Map.of())
+			);
 
 			try {
-				execute(args);
+				execute(command);
 			}
 			catch(CommandFailureException e) {
 				var expectedError = testCase.getTestCase().getExpectedError();
@@ -197,46 +215,35 @@ class TestCaseRunner implements Closeable {
 
 		var vmirFile = testDir.resolve("Argon.TestCase.arvm");
 		{
-			var args = new ArrayList<String>();
-			args.add("genir");
-			args.add("-i");
-			args.add(tubeFile.toString());
-			args.add("-o");
-			args.add(vmirFile.toString());
+			var command = new DriverCommand.GenIrCommand<String, String, String, String>(
+				tubeFile.toString(),
+				vmirFile.toString(),
+				libraryRefFiles,
+				platform
+			);
 			
-			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var libTube = buildLibraryTube(libraryName);
-
-				args.add("-r");
-				args.add(libTube.toString());
-			}
-
-			args.add("--platform");
-			args.add(platform);
-			
-			execute(args);
+			execute(command);
 		}
 		
 		var outputDir = testDir.resolve("output");
 		Files.createDirectories(outputDir);
 
 		{
-			var args = new ArrayList<String>();
-			args.add("codegen");
-			args.add(platform);
-			args.add("-i");
-			args.add(vmirFile.toString());
-			
-			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
-				var libIR = buildLibraryIR(libraryName);
-
-				args.add("-r");
-				args.add(libIR.toString());
+			List<String> libraryIrFiles = new ArrayList<>();
+			for(var libraryName : testCase.getTestCase().getLibraryTubeNamesOrDefault()) {
+				var libTube = buildLibraryIR(libraryName);
+				libraryIrFiles.add(libTube.toString());
 			}
 			
-			args.addAll(getOutputOptions(platform, outputDir));
+			var command = new DriverCommand.CodegenCommand<String, String, String, String>(
+				platform,
+				vmirFile.toString(),
+				libraryIrFiles,
+				new KeywordMapping<>(Map.of()),
+				LibraryUtils.outputOptions(platform, outputDir)
+			);
 			
-			execute(args);
+			execute(command);
 		}
 
 
@@ -244,7 +251,7 @@ class TestCaseRunner implements Closeable {
 		{
 			var libInfos = new ArrayList<OutputProgramRunner.LibraryOutputInfo>();
 			
-			for(var libraryName : testCase.getTestCase().getLibrariesOrDefault()) {
+			for(var libraryName : testCase.getTestCase().getLibraryTubeNamesOrDefault()) {
 				var libPath = buildLibraryOutput(libraryName);
 				libInfos.add(new OutputProgramRunner.LibraryOutputInfo(libraryName, libPath));
 			}
@@ -271,40 +278,12 @@ class TestCaseRunner implements Closeable {
 			.collect(Collectors.joining());
 	}
 	
-
-	private List<String> getOutputOptions(String platform, Path outputDir) throws IOException {
-		return switch(platform) {
-			case "js" -> List.of(
-				"--js-modules",
-				outputDir.toString(),
-				"--js-package-json",
-				outputDir.resolve("package.json").toString()
-			);
-			default -> throw new IllegalArgumentException("Unknown platform: " + platform);
-		};
-	}
-	
-	private void execute(List<String> args) throws Exception {
-		var pb = new ProcessBuilder();
-
-		var command = new ArrayList<String>(args.size() + 1);
-		command.add(context.distDir().resolve("argon").toString());
-		command.addAll(args);
-		pb.command(command);
-
-		pb.redirectErrorStream(true);
-		pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+	private void execute(DriverCommand<String, String, String, String> command) throws Exception {
+		var output = commandExecutor.execute(command);
 		
-		var process = pb.start();
-		
-		String output;
-		try(var reader = process.getInputStream()) {
-			output = IOUtils.toString(reader, StandardCharsets.UTF_8);
-		}
-		
-		int exitCode = process.waitFor();
+		int exitCode = output.exitCode();
 		if(exitCode != 0) {
-			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + command, output);
+			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + command, output.output());
 		}
 	}
 

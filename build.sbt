@@ -1026,6 +1026,7 @@ lazy val compiler_launcher = project.in(file("launcher/launcher/jvm"))
   )
 
 lazy val test_runner = project.in(file("argon-test-runner"))
+  .dependsOn(compiler_driverJVM)
   .settings(
     commonSettingsNoLibs,
     commonJVMSettingsNoLibs,
@@ -1045,6 +1046,7 @@ lazy val test_runner = project.in(file("argon-test-runner"))
       "commons-io" % "commons-io" % "2.21.0",
       "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.21.0",
       "org.jcommander" % "jcommander" % "3.0",
+      "com.github.sbt.junit" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test
     ),
 
     name := "argon-test-runner",
