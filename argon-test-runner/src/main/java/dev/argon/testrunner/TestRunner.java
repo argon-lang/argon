@@ -76,7 +76,23 @@ public class TestRunner {
 						testArgs.backendsDir,
 						testArgs.distDir.resolve("argon-" + hostPlatform.platformId())
 					);
-					var testCaseRunner = new TestCaseRunner(context);
+
+					DriverCommandExecutor commandExecutor = new DriverCommandExecutorCLI() {
+						@Override
+						protected ProcessBuilder createProcessBuilder(ArgumentBuilder argumentBuilder) {
+							var pb = new ProcessBuilder();
+
+							List<String> command = new ArrayList<>();
+							command.add(context.distDir().resolve("argon").toString());
+							argumentBuilder.build(command);
+
+							pb.command(command);
+
+							return pb;
+						}
+					};
+					
+					var testCaseRunner = new TestCaseRunner(context, commandExecutor);
 					runners.add(testCaseRunner);
 
 					if(testArgs.keepTempFiles) {

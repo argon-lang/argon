@@ -18,8 +18,9 @@ import java.util.stream.Collectors;
 
 class TestCaseRunner implements Closeable {
 
-    public TestCaseRunner(RunnerContext context) throws IOException {
+    public TestCaseRunner(RunnerContext context, DriverCommandExecutor commandExecutor) throws IOException {
         this.context = context;
+        this.commandExecutor = commandExecutor;
         tempDir = Files.createTempDirectory("argon-tests");
     }
 
@@ -28,20 +29,7 @@ class TestCaseRunner implements Closeable {
 	private boolean keepTempFiles = false;
 
 	
-	private final DriverCommandExecutor commandExecutor = new DriverCommandExecutorCLI() {
-		@Override
-		protected ProcessBuilder createProcessBuilder(ArgumentBuilder argumentBuilder) {
-			var pb = new ProcessBuilder();
-
-			List<String> command = new ArrayList<>();
-			command.add(context.distDir().resolve("argon").toString());
-			argumentBuilder.build(command);
-			
-			pb.command(command);
-
-			return pb;
-		}
-	};
+	private final DriverCommandExecutor commandExecutor;
 	
 	
 	public void keepTempFiles() {

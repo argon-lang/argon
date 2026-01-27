@@ -1,9 +1,7 @@
 package dev.argon.testrunner.tests;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import dev.argon.testrunner.GroupedTestCase;
-import dev.argon.testrunner.OutputProgramRunner;
-import dev.argon.testrunner.TestCase;
+import dev.argon.testrunner.*;
 import org.apache.commons.io.file.PathUtils;
 
 import java.io.IOException;
@@ -56,7 +54,10 @@ public abstract class CompilerTestBase {
 			}
 
 			var testCase = mapper.readValue(path.toFile(), TestCase.class);
-			testCases.add(new GroupedTestCase(group, PathUtils.getBaseName(path), testCase));
+			var groupedTestCase = new GroupedTestCase(group, PathUtils.getBaseName(path), testCase);
+			if (useTestCase(groupedTestCase)) {
+				testCases.add(groupedTestCase);
+			}
 		}
 	}
 
@@ -65,7 +66,10 @@ public abstract class CompilerTestBase {
 		return true;
 	}
 
+	protected abstract RunnerContext createContext();
 	protected abstract OutputProgramRunner createProgramRunner();
+	protected abstract DriverCommandExecutor createCommandExecutor();
+	
 	
 	
 
