@@ -6,19 +6,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 
-public abstract class OutputProgramRunner {
-	public abstract String runProgram(Path outputDir, List<LibraryOutputInfo> libraryOutputs) throws IOException, InterruptedException, CommandFailureException;
+public interface OutputProgramRunner {
+	String runProgram(Path outputDir, List<LibraryOutputInfo> libraryOutputs) throws IOException, InterruptedException, CommandFailureException;
 	
 	
-	public record LibraryOutputInfo(
+	record LibraryOutputInfo(
 		TubeName libraryName,
 		Path outputDir
 	) {
-	}
-
-	public static OutputProgramRunner forBackend(RunnerContext context) {
-		return switch(context.targetPlatform()) {
-			case JS -> new JSOutputProgramRunner(context);
-		};
 	}
 }

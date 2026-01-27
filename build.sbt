@@ -1042,10 +1042,8 @@ lazy val test_runner = project.in(file("argon-test-runner"))
     Compile / run := (Compile / run).dependsOn(dist),
 
     libraryDependencies ++= Seq(
-      "com.google.guava" % "guava" % "33.5.0-jre",
       "commons-io" % "commons-io" % "2.21.0",
       "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.21.0",
-      "org.jcommander" % "jcommander" % "3.0",
 
       "dev.zio" %%% "zio-test" % zioVersion % Test,
       "dev.zio" %%% "zio-test-sbt" % zioVersion % Test,

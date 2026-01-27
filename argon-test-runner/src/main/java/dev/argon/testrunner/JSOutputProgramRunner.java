@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JSOutputProgramRunner extends OutputProgramRunner {
+public class JSOutputProgramRunner implements OutputProgramRunner {
 	public JSOutputProgramRunner(RunnerContext context) {
 		this.context = context;
 	}
