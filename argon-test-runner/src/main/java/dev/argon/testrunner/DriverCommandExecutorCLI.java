@@ -7,22 +7,29 @@ import dev.argon.driver.api.command.DriverCommand;
 import org.apache.commons.io.IOUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
-public abstract class DriverCommandExecutorCLI implements DriverCommandExecutor {
-	
-	protected interface ArgumentBuilder {
-		void build(List<String> args);
+public final class DriverCommandExecutorCLI implements DriverCommandExecutor {
+	public DriverCommandExecutorCLI(RunnerContext context) {
+		this.context = context;
 	}
 	
+	private final RunnerContext context;
 	
-	protected abstract ProcessBuilder createProcessBuilder(ArgumentBuilder argumentBuilder);
 	
 	@Override
 	public CommandExecutionResult execute(
 		DriverCommand<String, String, String, String> command
 	) throws Exception {
-		var pb = createProcessBuilder(args -> buildArguments(command, args));
+		var pb = new ProcessBuilder();
+
+		List<String> command1 = new ArrayList<>();
+		command1.add(context.distDir().resolve("argon").toString());
+		buildArguments(command, command1);
+
+		pb.command(command1);
+
 		pb.redirectInput(ProcessBuilder.Redirect.PIPE);
 		pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
 		pb.redirectErrorStream(true);

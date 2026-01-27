@@ -12,11 +12,57 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.StreamSupport;
 
-public abstract class CompilerTestBase {
+public abstract class CompilerTestSuiteBase implements CompilerTestSuite {
+
+	private RunnerContext context;
+	private DriverCommandExecutor commandExecutor;
+	private OutputProgramRunner runner;
+	private TestCaseRunner testCaseRunner;
+
+	private RunnerContext getContext() {
+		return context;
+	}
+
+	private synchronized TestCaseRunner getTestCaseRunner() {
+		if(context == null) {
+			context = createContext();
+		}
+		
+		if(commandExecutor == null) {
+			commandExecutor = createCommandExecutor(getContext());
+		}
+		
+		if(runner == null) {
+			runner = createProgramRunner(getContext());
+		}
+		
+		if(testCaseRunner == null) {
+			try {
+				testCaseRunner = new TestCaseRunner(context, commandExecutor, runner);
+			} catch (IOException e) {
+				throw new UncheckedIOException(e);
+			}
+		}
+		return testCaseRunner;
+	}
+	
+	@Override
+	public TestResult runTestCase(GroupedTestCase testCase) throws Exception {
+		return getTestCaseRunner().executeTestCase(testCase);
+	}
+		
+
+	@Override
+	public synchronized void close() throws Exception {
+		if (testCaseRunner != null) {
+			testCaseRunner.close();
+		}
+	}
 
 	private static final Path TEST_CASE_DIR = Path.of("testcases");
 
-	private List<GroupedTestCase> loadTestCases() {
+	@Override
+	public List<GroupedTestCase> loadTestCases() {
 		try {
 			var testCases = new ArrayList<GroupedTestCase>();
 			loadTestCases(TEST_CASE_DIR, TEST_CASE_DIR, testCases);
@@ -61,16 +107,26 @@ public abstract class CompilerTestBase {
 		}
 	}
 
+	private RunnerContext createContext() {
+		var hostPlatform = hostPlatform();
+		return new RunnerContext(
+			hostPlatform,
+			backend(),
+			Path.of("libraries"),
+			Path.of("backend"),
+			Path.of("dist").resolve("argon-" + hostPlatform.platformId())
+		);
+	}
+
+	
+	public String getSuiteName() {
+		return getClass().getSimpleName();
+	}
+	
 	// Allow test suites to select a subset of test cases
 	protected boolean useTestCase(GroupedTestCase testCase) {
 		return true;
 	}
 
-	protected abstract RunnerContext createContext();
-	protected abstract OutputProgramRunner createProgramRunner();
-	protected abstract DriverCommandExecutor createCommandExecutor();
-	
-	
-	
 
 }

@@ -88,7 +88,7 @@ distNode := {
   }
 
 
-  val distDir = file("dist/argon-js")
+  val distDir = file("dist/argon-node")
   IO.delete(distDir)
 
   val compilerPackageDir = distDir / "compiler"
@@ -208,8 +208,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
 
-    "dev.zio" %%% "zio-test" % zioVersion % "test",
-    "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
+    "dev.zio" %%% "zio-test" % zioVersion % Test,
+    "dev.zio" %%% "zio-test-sbt" % zioVersion % Test,
 
     "dev.argon" %%% "argon-async-util" % "2.1.1",
     "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3",
@@ -1046,7 +1046,9 @@ lazy val test_runner = project.in(file("argon-test-runner"))
       "commons-io" % "commons-io" % "2.21.0",
       "com.fasterxml.jackson.dataformat" % "jackson-dataformat-xml" % "2.21.0",
       "org.jcommander" % "jcommander" % "3.0",
-      "com.github.sbt.junit" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test
+
+      "dev.zio" %%% "zio-test" % zioVersion % Test,
+      "dev.zio" %%% "zio-test-sbt" % zioVersion % Test,
     ),
 
     name := "argon-test-runner",

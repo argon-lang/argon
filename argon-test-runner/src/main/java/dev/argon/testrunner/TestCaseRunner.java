@@ -16,11 +16,12 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-class TestCaseRunner implements Closeable {
+public class TestCaseRunner implements Closeable {
 
-    public TestCaseRunner(RunnerContext context, DriverCommandExecutor commandExecutor) throws IOException {
+    public TestCaseRunner(RunnerContext context, DriverCommandExecutor commandExecutor, OutputProgramRunner runner) throws IOException {
         this.context = context;
         this.commandExecutor = commandExecutor;
+        this.runner = runner;
         tempDir = Files.createTempDirectory("argon-tests");
     }
 
@@ -30,6 +31,7 @@ class TestCaseRunner implements Closeable {
 
 	
 	private final DriverCommandExecutor commandExecutor;
+	private final OutputProgramRunner runner;
 	
 	
 	public void keepTempFiles() {
@@ -149,7 +151,7 @@ class TestCaseRunner implements Closeable {
 	}
 
 	
-	public void executeTestCase(GroupedTestCase testCase) throws Exception {
+	public TestResult executeTestCase(GroupedTestCase testCase) throws Exception {
 		var testDir = tempDir.resolve("tests");
 		for(var part : testCase.getGroup()) {
 			testDir = testDir.resolve(part);
@@ -190,12 +192,7 @@ class TestCaseRunner implements Closeable {
 				execute(command);
 			}
 			catch(CommandFailureException e) {
-				var expectedError = testCase.getTestCase().getExpectedError();
-				if(expectedError != null && e.getCompilerOutput().contains(expectedError)) {
-					return;
-				}
-				
-				throw e;
+				return new TestResult.CompileError(e.getCompilerOutput());
 			}
 		}
 
@@ -242,20 +239,18 @@ class TestCaseRunner implements Closeable {
 				libInfos.add(new OutputProgramRunner.LibraryOutputInfo(libraryName, libPath));
 			}
 			
-			var runner = OutputProgramRunner.forPlatform(context);
 			output = runner.runProgram(outputDir, libInfos);
 		}
 		
-		var expectedOutput = testCase.getTestCase().getExpectedOutput();
-		if(expectedOutput != null) {
-			if(!normalize(expectedOutput).equals(normalize(output))) {
-				throw new Exception("Output does not match\nExpected:\n" + expectedOutput + "\nActual:" + output);
-			}
-			
-			return;
+		return new TestResult.Executed(output);
+	}
+	
+	public void assertTestCase(GroupedTestCase testCase) throws Exception {
+		var expected = testCase.getExpectedResult();
+		var result = executeTestCase(testCase);
+		if(!expected.matchedBy(result)) {
+			throw new Exception("Test case did not match expected result\nExpected: " + expected + "\nActual: " + result);
 		}
-		
-		throw new Exception("Expected error did not occur");
 	}
 	
 	private String normalize(String s) {

@@ -2,7 +2,7 @@ package dev.argon.testrunner;
 
 public enum HostPlatform {
 	JVM("jvm"),
-	JS("js"),
+	Node("node"),
 	;
 	
 	HostPlatform(String id) {

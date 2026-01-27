@@ -77,22 +77,11 @@ public class TestRunner {
 						testArgs.distDir.resolve("argon-" + hostPlatform.platformId())
 					);
 
-					DriverCommandExecutor commandExecutor = new DriverCommandExecutorCLI() {
-						@Override
-						protected ProcessBuilder createProcessBuilder(ArgumentBuilder argumentBuilder) {
-							var pb = new ProcessBuilder();
+					DriverCommandExecutor commandExecutor = new DriverCommandExecutorCLI(context);
 
-							List<String> command = new ArrayList<>();
-							command.add(context.distDir().resolve("argon").toString());
-							argumentBuilder.build(command);
-
-							pb.command(command);
-
-							return pb;
-						}
-					};
+					OutputProgramRunner runner = OutputProgramRunner.forBackend(context);
 					
-					var testCaseRunner = new TestCaseRunner(context, commandExecutor);
+					var testCaseRunner = new TestCaseRunner(context, commandExecutor, runner);
 					runners.add(testCaseRunner);
 
 					if(testArgs.keepTempFiles) {
@@ -106,7 +95,7 @@ public class TestRunner {
 								executor.submit(() -> {
 									try {
 										System.out.println("Running test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
-										testCaseRunner.executeTestCase(testCase);
+										testCaseRunner.assertTestCase(testCase);
 										System.out.println("Finished test case (host: " + hostPlatform + ", target: " + platform + ") " + testCase.getTestCase().getName());
 									}
 									catch(Throwable t) {
@@ -182,5 +171,5 @@ public class TestRunner {
             testCases.add(new GroupedTestCase(group, PathUtils.getBaseName(path), testCase));
         }
     }
-    
+
 }

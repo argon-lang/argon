@@ -25,4 +25,20 @@ public class GroupedTestCase {
     public TestCase getTestCase() {
         return testCase;
     }
+	
+	
+	public ExpectedTestResult getExpectedResult() {
+		var expectedError = testCase.getExpectedError();
+		if(expectedError != null) {
+			return new ExpectedTestResult.CompileError(expectedError);
+		}
+		
+		var expectedOutput = testCase.getExpectedOutput();
+		if(expectedOutput == null) {
+			throw new IllegalStateException("Expected output or error must be specified");
+		}
+		
+		return new ExpectedTestResult.Executed(expectedOutput);
+	}
+	
 }

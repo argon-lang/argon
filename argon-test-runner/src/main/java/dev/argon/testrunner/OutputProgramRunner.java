@@ -15,8 +15,8 @@ public abstract class OutputProgramRunner {
 		Path outputDir
 	) {
 	}
-	
-	public static OutputProgramRunner forPlatform(RunnerContext context) {
+
+	public static OutputProgramRunner forBackend(RunnerContext context) {
 		return switch(context.targetPlatform()) {
 			case JS -> new JSOutputProgramRunner(context);
 		};
