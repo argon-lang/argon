@@ -42,8 +42,8 @@ public class TestRunner {
             loadTestCases(path, path, testCases);
         }
 		
-		List<String> hostPlatforms = testArgs.hostPlatforms;
-		List<String> targetPlatforms = testArgs.backends;
+		List<HostPlatform> hostPlatforms = testArgs.hostPlatforms;
+		List<Backend> targetPlatforms = testArgs.backends;
         
         System.out.println("Loaded " + testCases.size() + " test cases");
 		System.out.println("Running on host platforms: " + hostPlatforms);
@@ -74,7 +74,7 @@ public class TestRunner {
 						platform,
 						testArgs.librariesDir,
 						testArgs.backendsDir,
-						testArgs.distDir.resolve("argon-" + hostPlatform)
+						testArgs.distDir.resolve("argon-" + hostPlatform.platformId())
 					);
 					var testCaseRunner = new TestCaseRunner(context);
 					runners.add(testCaseRunner);

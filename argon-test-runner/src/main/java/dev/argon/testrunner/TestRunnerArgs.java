@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Set;
 
 class TestRunnerArgs {
-	public static final List<String> ALL_HOST_PLATFORMS = List.of("jvm", "js");
-	public static final List<String> ALL_BACKENDS = List.of("js");
+	public static final List<HostPlatform> ALL_HOST_PLATFORMS = List.of(HostPlatform.values());
+	public static final List<Backend> ALL_BACKENDS = List.of(Backend.values());
     
 	@Parameter(names = { "-h", "--help" }, help = true)
 	public boolean help = false;
@@ -18,10 +18,10 @@ class TestRunnerArgs {
     public List<Path> testCases;
 
 	@Parameter(names = { "--host" }, validateValueWith = HostValueValidator.class)
-	public List<String> hostPlatforms = ALL_HOST_PLATFORMS;
+	public List<HostPlatform> hostPlatforms = ALL_HOST_PLATFORMS;
     
     @Parameter(names = { "--platform" }, validateValueWith = BackendValueValidator.class)
-    public List<String> backends = ALL_BACKENDS;
+    public List<Backend> backends = ALL_BACKENDS;
     
 	@Parameter(names = { "--libraries" }, required = true)
 	public Path librariesDir;
@@ -35,29 +35,25 @@ class TestRunnerArgs {
 	@Parameter(names = { "--keep" }, description = "Keep temporary files")
 	public boolean keepTempFiles = false;
 
-	public sealed static abstract class PlatformValueValidatorBase implements IValueValidator<List<String>> {
+	public sealed static abstract class PlatformValueValidatorBase<A> implements IValueValidator<List<A>> {
 
-		protected abstract List<String> getPlatforms();
+		protected abstract List<A> getPlatforms();
 		protected abstract String getPlatformMessage();
 
 		@Override
-		public void validate(String name, List<String> value) throws ParameterException {
-			Set<String> platforms = new HashSet<>();
+		public void validate(String name, List<A> value) throws ParameterException {
+			Set<A> platforms = new HashSet<>();
 			for(var platform : value) {
 				if(!platforms.add(platform)) {
 					throw new ParameterException("Duplicate " + getPlatformMessage() + ": " + platform);
-				}
-
-				if(!getPlatforms().contains(platform)) {
-					throw new ParameterException("Unsupported " + getPlatformMessage() + ": " + platform);
 				}
 			}
 		}
 	}
 
-	public final static class HostValueValidator extends PlatformValueValidatorBase {
+	public final static class HostValueValidator extends PlatformValueValidatorBase<HostPlatform> {
 		@Override
-		protected List<String> getPlatforms() {
+		protected List<HostPlatform> getPlatforms() {
 			return ALL_HOST_PLATFORMS;
 		}
 
@@ -67,15 +63,15 @@ class TestRunnerArgs {
 		}
 	}
 
-	public final static class BackendValueValidator extends PlatformValueValidatorBase {
+	public final static class BackendValueValidator extends PlatformValueValidatorBase<Backend> {
 		@Override
-		protected List<String> getPlatforms() {
+		protected List<Backend> getPlatforms() {
 			return ALL_BACKENDS;
 		}
 
 		@Override
 		protected String getPlatformMessage() {
-			return "host platform";
+			return "backend";
 		}
 	}
 }

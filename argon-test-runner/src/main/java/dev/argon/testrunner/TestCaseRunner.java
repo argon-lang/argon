@@ -92,7 +92,7 @@ class TestCaseRunner implements Closeable {
 		var libraryName = LibraryUtils.getLibraryName(library);
         var libDir = context.librariesDir().resolve(libraryName);
 
-        var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(libraryName);
+        var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform().backendId()).resolve(libraryName);
         Files.createDirectories(outputLibDir);
         var outputFile = outputLibDir.resolve(libraryName + ".artube");
 		
@@ -103,7 +103,7 @@ class TestCaseRunner implements Closeable {
 			libDir.resolve("src").toString(),
 			outputFile.toString(),
 			List.of(),
-			List.of(context.targetPlatform()),
+			List.of(context.targetPlatform().backendId()),
 			options
 		);
         
@@ -118,7 +118,7 @@ class TestCaseRunner implements Closeable {
 
 	private Path buildLibraryIRImpl(TubeName library) throws Exception {
 		var libraryName = LibraryUtils.getLibraryName(library);
-		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(libraryName);
+		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform().backendId()).resolve(libraryName);
 		Files.createDirectories(outputLibDir);
 		var inputFile = outputLibDir.resolve(libraryName + ".artube");
 		var outputFile = outputLibDir.resolve(libraryName + ".arvm");
@@ -127,7 +127,7 @@ class TestCaseRunner implements Closeable {
 			inputFile.toString(),
 			outputFile.toString(),
 			List.of(),
-			context.targetPlatform()
+			context.targetPlatform().backendId()
 		);
 		
 		execute(command);
@@ -140,13 +140,13 @@ class TestCaseRunner implements Closeable {
 
 	private Path buildLibraryOutputImpl(TubeName library) throws Exception {
 		var libraryName = LibraryUtils.getLibraryName(library);
-		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform()).resolve(libraryName);
+		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform().backendId()).resolve(libraryName);
 		Files.createDirectories(outputLibDir);
 		var outputDir = outputLibDir.resolve("output");
 		Files.createDirectories(outputDir);
 
 		var command = new DriverCommand.CodegenCommand<String, String, String, String>(
-			context.targetPlatform(),
+			context.targetPlatform().backendId(),
 			
 			outputLibDir.resolve(libraryName + ".arvm").toString(),
 			List.of(),
@@ -194,7 +194,7 @@ class TestCaseRunner implements Closeable {
 				srcDir.toString(),
 				tubeFile.toString(),
 				libraryRefFiles,
-				List.of(context.targetPlatform()),
+				List.of(context.targetPlatform().backendId()),
 				new KeywordMapping<>(Map.of())
 			);
 
@@ -217,7 +217,7 @@ class TestCaseRunner implements Closeable {
 				tubeFile.toString(),
 				vmirFile.toString(),
 				libraryRefFiles,
-				context.targetPlatform()
+				context.targetPlatform().backendId()
 			);
 			
 			execute(command);
@@ -234,7 +234,7 @@ class TestCaseRunner implements Closeable {
 			}
 			
 			var command = new DriverCommand.CodegenCommand<String, String, String, String>(
-				context.targetPlatform(),
+				context.targetPlatform().backendId(),
 				vmirFile.toString(),
 				libraryIrFiles,
 				new KeywordMapping<>(Map.of()),

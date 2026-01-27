@@ -31,37 +31,34 @@ public class LibraryUtils {
 	public static final TubeName LIBRARY_ARGON_CORE = new TubeName("Argon", List.of("Core"));
 	
 
-	public static KeywordMapping<KeywordMapping<CompilerDriverOptionValue<String, String>>> platformOptions(TubeName library, String platform, Path libraryDir) {
+	public static KeywordMapping<KeywordMapping<CompilerDriverOptionValue<String, String>>> platformOptions(TubeName library, Backend platform, Path libraryDir) {
 		Map<String, CompilerDriverOptionValue<String, String>> optionMap;
 		if(library.equals(LIBRARY_ARGON_CORE)) {
 			optionMap = switch(platform) {
-				case "js" -> Map.of(
+				case JS -> Map.of(
 					"externs", new CompilerDriverOptionValue.Many<>(
 						new CompilerDriverOptionValueAtom.File<>(libraryDir.resolve("js/externs.js").toString()),
 						List.of()
 					)
 				);
-				
-				default -> throw new IllegalArgumentException("Unknown platform: " + platform);
 			};
 		}
 		else {
 			throw new IllegalArgumentException("Unknown library: " + library);
 		}
 		
-		return new KeywordMapping<>(Map.of(platform, new KeywordMapping<>(optionMap)));
+		return new KeywordMapping<>(Map.of(platform.backendId(), new KeywordMapping<>(optionMap)));
 	}
 
 
-	public static KeywordMapping<CompilerDriverOutput<String, String>> outputOptions(String platform, Path outputDir) throws IOException {
+	public static KeywordMapping<CompilerDriverOutput<String, String>> outputOptions(Backend platform, Path outputDir) throws IOException {
 		Map<String, CompilerDriverOutput<String, String>> optionMap = switch(platform) {
-			case "js" -> Map.of(
+			case JS -> Map.of(
 				"modules",
 				new CompilerDriverOutput.Directory<>(outputDir.toString()),
 				"package-json",
 				new CompilerDriverOutput.File<>(outputDir.resolve("package.json").toString())
 			);
-			default -> throw new IllegalArgumentException("Unknown platform: " + platform);
 		};
 		
 		return new KeywordMapping<>(optionMap);
