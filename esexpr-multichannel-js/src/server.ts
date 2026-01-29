@@ -75,6 +75,8 @@ class ESXChannelServerImpl implements ESXChannelServer {
                         continue;
                     }
 
+                    console.error("Decoded message from client", messageRes.value);
+
                     const message = messageRes.value;
                     switch(message.$type) {
                         case "connect":
@@ -151,6 +153,8 @@ class ESXChannelServerImpl implements ESXChannelServer {
                         await this.#monitor.wait();
                         continue;
                     }
+
+                    console.error("Sending message to client", message);
 
                     const expr = ClientMessage.codec.encode(message);
 

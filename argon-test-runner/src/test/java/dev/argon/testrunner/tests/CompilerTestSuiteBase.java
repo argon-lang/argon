@@ -50,6 +50,10 @@ public abstract class CompilerTestSuiteBase implements CompilerTestSuite {
 
 	@Override
 	public synchronized void close() throws Exception {
+		if(commandExecutor != null) {
+			commandExecutor.close();
+		}
+		
 		if (testCaseRunner != null) {
 			testCaseRunner.close();
 		}

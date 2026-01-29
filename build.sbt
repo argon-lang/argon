@@ -1068,7 +1068,7 @@ lazy val esexpr_multichannel = project.in(file("esexpr-multichannel"))
   )
 
 lazy val test_runner = project.in(file("argon-test-runner"))
-  .dependsOn(compiler_driverJVM, compiler_launcher)
+  .dependsOn(compiler_driverJVM, compiler_launcher, esexpr_multichannel)
   .settings(
     commonSettingsNoLibs,
     commonJVMSettingsNoLibs,

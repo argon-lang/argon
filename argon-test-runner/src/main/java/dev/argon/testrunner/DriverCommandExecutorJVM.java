@@ -26,7 +26,7 @@ public class DriverCommandExecutorJVM implements DriverCommandExecutor {
 	public CommandExecutionResult execute(DriverCommand<String, String, String, String> command) throws Throwable {
 		var bytes = new ByteArrayOutputStream();
 		var outputStream = new PrintStream(bytes, true, StandardCharsets.UTF_8);
-		
+
 		var options = new CompilerDriverOptions(
 			backendFactories,
 			ArgonLauncher.realizeCommandPath(command),
@@ -39,4 +39,7 @@ public class DriverCommandExecutorJVM implements DriverCommandExecutor {
 		
 		return new CommandExecutionResult(exitCode, bytes.toString(StandardCharsets.UTF_8));
 	}
+
+	@Override
+	public void close() throws Exception {}
 }

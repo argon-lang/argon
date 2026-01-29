@@ -19,7 +19,7 @@ public class ESXChannelClientConnection implements AutoCloseable {
 	private final BigInteger id;
 	private State state = State.CONNECTING;
 	private final Queue<ESExpr> pendingMessages = new ArrayDeque<>();
-	
+
 	public synchronized @Nullable ESExpr read() throws InterruptedException {
 		while(true) {
 			ESExpr msg = pendingMessages.poll();
@@ -35,23 +35,23 @@ public class ESXChannelClientConnection implements AutoCloseable {
 			}
 		}
 	}
-	
+
 	public synchronized void write(ESExpr msg) throws InterruptedException, IOException {
 		if(state != State.CONNECTED) {
 			throw new IOException("Not connected");
 		}
-		
+
 		channel.send(new ServerMessage.Message(new Message(id, msg)));
 	}
 
 	synchronized void connect() throws IOException, InterruptedException {
 		channel.send(new ServerMessage.Connect(new Connect(id)));
-		
+
 		while(state == State.CONNECTING) {
 			wait();
 		}
 	}
-	
+
 	synchronized void connectAck() {
 		if(state == State.CONNECTING) {
 			state = State.CONNECTED;

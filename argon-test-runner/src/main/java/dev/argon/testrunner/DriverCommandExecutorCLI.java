@@ -14,16 +14,16 @@ public final class DriverCommandExecutorCLI implements DriverCommandExecutor {
 	public DriverCommandExecutorCLI(RunnerContext context) {
 		this.context = context;
 	}
-	
+
 	private final RunnerContext context;
-	
-	
+
+
 	@Override
 	public CommandExecutionResult execute(
 		DriverCommand<String, String, String, String> command
 	) throws Exception {
 		var pb = new ProcessBuilder();
-		
+
 		var executable = context.distDir().resolve("argon");
 
 		List<String> cmd = new ArrayList<>();
@@ -35,7 +35,7 @@ public final class DriverCommandExecutorCLI implements DriverCommandExecutor {
 		pb.redirectInput(ProcessBuilder.Redirect.PIPE);
 		pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
 		pb.redirectErrorStream(true);
-		
+
 		var process = pb.start();
 
 		process.getOutputStream().close();
@@ -44,6 +44,9 @@ public final class DriverCommandExecutorCLI implements DriverCommandExecutor {
 
 		return new CommandExecutionResult(exitCode, output);
 	}
+
+	@Override
+	public void close() throws Exception {}
 
 	private static void buildArguments(DriverCommand<String, String, String, String> command, List<String> args) {
 		switch(command) {

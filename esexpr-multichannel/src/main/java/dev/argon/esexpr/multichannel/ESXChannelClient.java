@@ -64,6 +64,9 @@ public class ESXChannelClient implements AutoCloseable {
 				if(messageExpr == null) break;
 				
 				ClientMessage message = codec.decode(messageExpr);
+
+				System.err.println("Received message: " + message.getClass().getSimpleName());
+				
 				switch(message) {
 					case ClientMessage.ConnectAck(var connectAck) -> {
 						var conn = getConnection(connectAck.id());
@@ -110,6 +113,7 @@ public class ESXChannelClient implements AutoCloseable {
 	}
 
 	public synchronized void send(ServerMessage message) throws IOException {
+		System.err.println("Sending message: " + message.getClass().getSimpleName());
 		writer.write(serverMessageCodec.encode(message));
 	}
 }
