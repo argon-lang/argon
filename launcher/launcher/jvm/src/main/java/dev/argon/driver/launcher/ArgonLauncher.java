@@ -69,7 +69,7 @@ public final class ArgonLauncher {
 	
 	public static List<BackendFactory> loadBackendFactories(CompilerDriver driver, Path backendsDir) throws IOException {
 		List<BackendFactory> factories = new ArrayList<>();
-		
+
 		try {
 			try(var backendDirStream = Files.list(backendsDir)) {
 				for(Iterator<@NotNull Path> it = backendDirStream.iterator(); it.hasNext(); ) {
@@ -139,6 +139,9 @@ public final class ArgonLauncher {
 			
 			case DriverCommand.ListBackendsCommand() ->
 				new DriverCommand.ListBackendsCommand<>();
+
+			case DriverCommand.Rpc() ->
+				new DriverCommand.Rpc<>();
 
 			case DriverCommand.CompileCommand<String, String, String, String> compileCommand ->
 				new DriverCommand.CompileCommand<>(

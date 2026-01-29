@@ -75,6 +75,10 @@ private[driver] object CompilerDriverImpl {
         Console.printLine(s"Argon compiler driver version ${BuildInfo.version}")
           .as(ExitCode.success)
 
+      case cmd.DriverCommand.Rpc() =>
+        Console.printLineError(s"Argon RPC interface must be implemented by the driver.")
+          .as(ExitCode.failure)
+
       case cmd.DriverCommand.ListBackendsCommand() =>
         ZIO.serviceWithZIO[BackendProvider] { bp =>
           ZIO.foreachDiscard(bp.all) { bf => Console.printLine(bf.metadata.backend.name) }

@@ -2,6 +2,7 @@ package argon.driver.command;
 
 import nobleidl.core;
 
+@esexpr:(derive-codec)
 enum driver-command[fr, dr, fs, ds] {
     help-command {
         is-error: bool;
@@ -10,6 +11,7 @@ enum driver-command[fr, dr, fs, ds] {
 
     version-command,
     list-backends-command,
+    rpc,
 
     compile-command {
         tube-name: argon.vm.tube-name;
@@ -36,6 +38,7 @@ enum driver-command[fr, dr, fs, ds] {
     },
 }
 
+@esexpr:(derive-codec)
 enum compiler-driver-option-value[fr, dr] {
     single { value: compiler-driver-option-value-atom[fr, dr]; },
     many {
@@ -44,14 +47,28 @@ enum compiler-driver-option-value[fr, dr] {
     },
 }
 
+@esexpr:(derive-codec)
 enum compiler-driver-option-value-atom[fr, dr] {
+    @esexpr:(inline-value)
     string { s: string; },
+    @esexpr:(inline-value)
     bool { b: bool; },
     file { f: fr; },
     directory { dir: dr; },
 }
 
+@esexpr:(derive-codec)
 enum compiler-driver-output[fs, ds] {
     file { f: fs; },
     directory { dir: ds; },
+}
+
+@esexpr:(derive-codec)
+enum command-result {
+    output {
+        text: string;
+    },
+    exit {
+        code: i32;
+    },
 }

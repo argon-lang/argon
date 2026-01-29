@@ -44,7 +44,7 @@ public class JSOutputProgramRunner implements OutputProgramRunner {
 		
 		int exitCode = process.waitFor();
 		if(exitCode != 0) {
-			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + new ArrayList<>(pb.command()), output);
+			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + new ArrayList<>(pb.command()) + "\nOutput:\n" + output, output);
 		}
 		
 		return output;

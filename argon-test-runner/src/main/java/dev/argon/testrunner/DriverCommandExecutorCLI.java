@@ -58,6 +58,10 @@ public final class DriverCommandExecutorCLI implements DriverCommandExecutor {
 			case DriverCommand.ListBackendsCommand() -> {
 				args.add("backends");
 			}
+			
+			case DriverCommand.Rpc() -> {
+				args.add("rpc");
+			}
 
 			case DriverCommand.CompileCommand<String, String, String, String> compileCommand -> {
 				args.add("compile");

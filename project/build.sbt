@@ -1,5 +1,7 @@
 val circeVersion = "0.14.15"
 
+ThisBuild / resolvers += Resolver.mavenLocal
+
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
   "io.circe" %% "circe-generic" % circeVersion,

@@ -150,6 +150,9 @@ object CompilerDriver extends dsjs.CompilerDriver {
         case DriverCommand.ListBackendsCommand() =>
           DriverCommand.ListBackendsCommand()
 
+        case DriverCommand.Rpc() =>
+          DriverCommand.Rpc()
+
         case DriverCommand.CompileCommand(tubeName, inputDir, outputFile, referencedTubes, supportedPlatforms, platformOptions) =>
           DriverCommand.CompileCommand(
             tubeName,

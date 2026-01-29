@@ -119,6 +119,11 @@ Global / distNode := {
     }
   }
 
+
+  val multichannelDir = file("esexpr-multichannel-js")
+  npmInstall(multichannelDir)
+  npmRun(multichannelDir, "build")
+
   val launcherDir = file("launcher/launcher/node")
 
   npmInstall(launcherDir)
@@ -212,7 +217,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test-sbt" % zioVersion % Test,
 
     "dev.argon" %%% "argon-async-util" % "2.1.1",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.3",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.4.0-SNAPSHOT",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "com.indoorvivants" %%% "toml" % "0.3.0",
@@ -231,8 +236,8 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "@argon-lang/esexpr" -> "^0.2.1",
-    "@argon-lang/js-backend-api" -> "file:../../../../backend/api/js",
-    "@argon-lang/compiler-backend-js" -> "file:../../../../backend/backends/js",
+    "@argon-lang/js-backend-api" -> ("file:" +  crossTarget.value.toPath.toAbsolutePath.relativize(file("backend/api/js").toPath.toAbsolutePath).toString.replace(File.separator, "/")),
+    "@argon-lang/compiler-backend-js" -> ("file:" + crossTarget.value.toPath.toAbsolutePath.relativize(file("backend/backends/js").toPath.toAbsolutePath).toString.replace(File.separator, "/")),
   ),
   
   scalaJSLinkerConfig ~= {
@@ -255,16 +260,14 @@ lazy val annotationDependencies = Seq(
 
 lazy val commonJVMSettingsNoLibs = Seq(
   fork := true,
-)
-
-lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
 
   javaOptions ++= Seq(
     "--illegal-native-access=deny",
     "-Dpolyglotimpl.AttachLibraryFailureAction=ignore"
   ),
+)
 
-
+lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
   libraryDependencies ++= annotationDependencies ++ Seq(
     "dev.zio" %% "zio-logging" % "2.5.3",
 
@@ -281,7 +284,6 @@ lazy val commonBrowserSettings = sharedJSNodeSettings
 
 lazy val nodeEnvConfig =
   NodeJSEnv.Config()
-    .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
 
@@ -623,7 +625,7 @@ lazy val argon_format = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
     commonSettings,
     compilerOptions,
 
-    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/format",
+    Compile / nobleIdlSourceDirectories += file("backend/format"),
 
     name := "argon-format",
   )
@@ -727,7 +729,7 @@ lazy val argon_backend_java_api = project.in(file("backend/api/java"))
     Compile / generateNobleIdlJava := true,
     Compile / generateNobleIdlGraalJsAdapters := true,
     Compile / nobleIdlSourceDirectories ++= Seq(
-      baseDirectory.value / "../../vm/",
+      file("backend/vm"),
       baseDirectory.value / "../nobleidl",
     ),
   )
@@ -785,7 +787,7 @@ lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossTyp
 
     name := "argon-vm",
 
-    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/vm/",
+    Compile / nobleIdlSourceDirectories += file("backend/vm/"),
   )
 
 lazy val argon_vmJVM = argon_vm.jvm
@@ -831,7 +833,7 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
 
     name := "argon-backend",
 
-    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/api/nobleidl",
+    Compile / nobleIdlSourceDirectories += file("backend/api/nobleidl"),
   )
 
 lazy val argon_backendJVM = argon_backend.jvm
@@ -1025,6 +1027,46 @@ lazy val compiler_launcher = project.in(file("launcher/launcher/jvm"))
     }.tag(JSBackendTag).taskValue,
   )
 
+lazy val esexpr_multichannel = project.in(file("esexpr-multichannel"))
+  .enablePlugins(NobleIDLPlugin)
+  .settings(
+    commonSettingsNoLibs,
+    commonJVMSettingsNoLibs,
+    compilerOptions,
+
+    compileOrder := CompileOrder.JavaThenScala,
+
+    semanticdbEnabled := false,
+    autoScalaLibrary := false,
+    crossPaths := false,
+
+    Compile / fork := true,
+
+    name := "esexpr-multichannel",
+
+    Compile / javacOptions ++= {
+      val modulePath = (Compile / dependencyClasspath).value.map(_.data.getAbsolutePath).mkString(java.io.File.pathSeparator)
+
+      Seq(
+        "--module-path", modulePath,
+      )
+    },
+
+    libraryDependencies ++= annotationDependencies ++ Seq(
+      "dev.argon.nobleidl" % "nobleidl-java-runtime" % "0.1.0-SNAPSHOT",
+      "dev.argon.esexpr" % "esexpr-java-runtime" % "0.3.1",
+      "org.slf4j" % "slf4j-api" % "2.0.17",
+      "org.slf4j" % "slf4j-simple" % "2.0.17",
+    ),
+
+    Compile / generateNobleIdlScala := false,
+    Compile / generateNobleIdlJava := true,
+
+    Compile / nobleIdlSourceDirectories ++= Seq(
+      file("esxmc")
+    ),
+  )
+
 lazy val test_runner = project.in(file("argon-test-runner"))
   .dependsOn(compiler_driverJVM, compiler_launcher)
   .settings(
@@ -1050,3 +1092,4 @@ lazy val test_runner = project.in(file("argon-test-runner"))
 
     name := "argon-test-runner",
   )
+

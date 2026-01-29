@@ -1,0 +1,70 @@
+package esexpr.multichannel;
+
+import nobleidl.core;
+
+@esexpr:(derive-codec)
+enum server-message {
+    @esexpr:(inline-value)
+    connect {
+        connect: connect;
+    },
+    @esexpr:(inline-value)
+    disconnect {
+        disconnect: disconnect;
+    },
+    @esexpr:(inline-value)
+    disconnect-ack {
+        disconnect-ack: disconnect-ack;
+    },
+    @esexpr:(inline-value)
+    message {
+        message: message;
+    }
+}
+
+@esexpr:(derive-codec)
+enum client-message {
+    @esexpr:(inline-value)
+    connect-ack {
+        connect-ack: connect-ack;
+    },
+    @esexpr:(inline-value)
+    disconnect {
+        disconnect: disconnect;
+    },
+    @esexpr:(inline-value)
+    disconnect-ack {
+        disconnect-ack: disconnect-ack;
+    },
+    @esexpr:(inline-value)
+    message {
+        message: message;
+    }
+}
+
+@esexpr:(derive-codec)
+record connect {
+    id: nat;
+}
+
+@esexpr:(derive-codec)
+record connect-ack {
+    id: nat;
+}
+
+@esexpr:(derive-codec)
+record disconnect {
+    id: nat;
+}
+
+@esexpr:(derive-codec)
+record disconnect-ack {
+    id: nat;
+}
+
+@esexpr:(derive-codec)
+record message {
+    id: nat;
+    data: esexpr;
+}
+

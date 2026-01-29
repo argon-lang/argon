@@ -1,0 +1,38 @@
+{
+  "name": "@argon-lang/esexpr-multichannel",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "main": "./lib/index.js",
+  "type": "module",
+  "scripts": {
+    "codegen": "cpy --flat ../esxmc/esxmc-framing.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./framing.js": "./lib/framing.js"
+  },
+  "devDependencies": {
+    "@argon-lang/noble-idl-compiler-js": "file:../../noble-idl/langs/js/backend",
+    "@types/estree": "^1.0.8",
+    "@types/node": "^24.3.0",
+    "cpy-cli": "^6.0.0",
+    "make-dir-cli": "^4.0.0",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@argon-lang/esexpr": "^0.2.1",
+    "@argon-lang/noble-idl-core": "file:../../noble-idl/langs/js/runtime",
+    "async-mutex": "^0.5.0"
+  },
+  "NobleIDL": {
+    "inputFiles": [
+      "src/esxmc-framing.nidl"
+    ],
+    "packageMapping": {
+      "esexpr.multichannel": "framing"
+    }
+  }
+}

@@ -16,7 +16,9 @@ object CompilerTests extends ZIOSpecDefault {
   )
 
   override def spec: Spec[TestEnvironment & Scope, Any] =
-    suite("Compiler Tests")(testSuiteCreators.map(loadTestSuite)*)
+    suite("Compiler Tests")(
+      testSuiteCreators.map(loadTestSuite)*
+    ) @@ TestAspect.parallelN(java.lang.Runtime.getRuntime.availableProcessors())
 
   private def loadTestSuite(suiteCreator: () => CompilerTestSuiteBase): Spec[TestEnvironment & Scope, Any] =
     Spec.scoped(
