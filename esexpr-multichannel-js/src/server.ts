@@ -59,33 +59,32 @@ class ESXChannelServerImpl implements ESXChannelServer {
         });
     }
 
-    #readLoop(): Promise<void> {
-        return this.#monitor.runExclusive(async () => {
-            try {
-                while(this.#isServing) {
-                    const expr = await this.#reader.tryReadExpr();
-                    if(expr === undefined) {
-                        this.#isServing = false;
-                        break;
-                    }
+    async #readLoop(): Promise<void> {
+        try {
+            while(this.#isServing) {
+                const expr = await this.#reader.tryReadExpr();
+                if(expr === undefined) {
+                    this.#isServing = false;
+                    break;
+                }
 
-                    const messageRes = ServerMessage.codec.decode(expr);
-                    if(!messageRes.success) {
-                        console.error("Failed to decode message from client", messageRes.message);
-                        continue;
-                    }
+                const messageRes = ServerMessage.codec.decode(expr);
+                if(!messageRes.success) {
+                    console.error("Failed to decode message from client", messageRes.message);
+                    continue;
+                }
 
-                    console.error("Decoded message from client", messageRes.value);
+                const message = messageRes.value;
 
-                    const message = messageRes.value;
+                await this.#monitor.runExclusive(async () => {
                     switch(message.$type) {
                         case "connect":
                         {
                             const id = message.connect.id;
                             const oldConnection = this.#connections.get(id);
                             if(oldConnection !== undefined) {
-                                oldConnection.onReusedId();
-                                continue;
+                                void oldConnection.onReusedId();
+                                break;
                             }
 
 
@@ -105,10 +104,10 @@ class ESXChannelServerImpl implements ESXChannelServer {
                             const connection = this.#connections.get(message.disconnect.id);
                             if(connection === undefined) {
                                 console.error("Received disconnect message for unknown connection", message.disconnect.id);
-                                continue;
+                                break;
                             }
 
-                            connection.onDisconnect();
+                            void connection.onDisconnect();
                             break;
                         }
 
@@ -117,10 +116,10 @@ class ESXChannelServerImpl implements ESXChannelServer {
                             const connection = this.#connections.get(message.disconnectAck.id);
                             if(connection === undefined) {
                                 console.error("Received disconnect message for unknown connection", message.disconnectAck.id);
-                                continue;
+                                break;
                             }
 
-                            connection.onDisconnectAck();
+                            void connection.onDisconnectAck();
                             break;
                         }
 
@@ -129,24 +128,25 @@ class ESXChannelServerImpl implements ESXChannelServer {
                             const connection = this.#connections.get(message.message.id);
                             if(connection === undefined) {
                                 console.error("Received message for unknown connection", message.message.id);
-                                continue;
+                                break;
                             }
 
-                            connection.onMessage(message.message.data);
+                            void connection.onMessage(message.message.data);
                         }
                     }
-                }
+                });
             }
-            catch(e) {
-                console.error("Error reading channel input", e);
-            }
-        })
+        }
+        catch(e) {
+            console.error("Error reading channel input", e);
+        }
     }
 
 
     #writeLoop(): Promise<void> {
         return this.#monitor.runExclusive(async () => {
             try {
+                const stringPool = new ArrayStringPool();
                 while(this.#isServing) {
                     const message = this.#writeQueue.shift();
                     if(message === undefined) {
@@ -154,11 +154,9 @@ class ESXChannelServerImpl implements ESXChannelServer {
                         continue;
                     }
 
-                    console.error("Sending message to client", message);
-
                     const expr = ClientMessage.codec.encode(message);
 
-                    for await (const chunk of writeExpr(expr, new ArrayStringPool())) {
+                    for await (const chunk of writeExpr(expr, stringPool)) {
                         await this.#output(chunk);
                     }
                 }

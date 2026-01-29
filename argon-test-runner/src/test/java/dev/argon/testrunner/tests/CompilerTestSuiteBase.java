@@ -53,7 +53,7 @@ public abstract class CompilerTestSuiteBase implements CompilerTestSuite {
 		if(commandExecutor != null) {
 			commandExecutor.close();
 		}
-		
+
 		if (testCaseRunner != null) {
 			testCaseRunner.close();
 		}

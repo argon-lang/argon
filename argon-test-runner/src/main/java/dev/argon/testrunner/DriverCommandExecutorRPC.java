@@ -45,6 +45,7 @@ public final class DriverCommandExecutorRPC implements DriverCommandExecutor {
 
 			pb.redirectInput(ProcessBuilder.Redirect.PIPE);
 			pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+			pb.redirectError(ProcessBuilder.Redirect.INHERIT);
 
 			process = pb.start();
 		}
@@ -68,14 +69,14 @@ public final class DriverCommandExecutorRPC implements DriverCommandExecutor {
 	) throws Exception {		
 		var conn = getConnection();
 		conn.write(driverCommandCodec.encode(command));
-		
-		var responseMessage = conn.read();
-		if(responseMessage == null) {
-			throw new IOException("Connection closed before response");
-		}
 
 		StringBuilder output = new StringBuilder();
 		while(true) {
+			var responseMessage = conn.read();
+			if(responseMessage == null) {
+				throw new IOException("Connection closed before response");
+			}
+			
 			CommandResult response;
 			try {
 				response = CommandResult.codec().decode(responseMessage);

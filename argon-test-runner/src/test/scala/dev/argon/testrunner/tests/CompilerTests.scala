@@ -10,8 +10,9 @@ import scala.jdk.CollectionConverters.*
 object CompilerTests extends ZIOSpecDefault {
 
   private val testSuiteCreators: Seq[() => CompilerTestSuiteBase] = Seq(
-//    JVMCompilerCLITestSuite.apply,
-//    JVMCompilerJSBackendTestSuite.apply,
+    JVMCompilerCLITestSuite.apply,
+    JVMCompilerJSBackendTestSuite.apply,
+    NodeCompilerCLITestSuite.apply,
     NodeCompilerJSBackendTestSuite.apply,
   )
 

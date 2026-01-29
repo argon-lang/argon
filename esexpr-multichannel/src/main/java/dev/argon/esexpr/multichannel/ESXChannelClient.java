@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 public class ESXChannelClient implements AutoCloseable {
 	public ESXChannelClient(InputStream inputStream, OutputStream outputStream) {
 		this.inputStream = inputStream;
+		this.outputStream = outputStream;
 		this.writer = new ESExprBinaryWriter(outputStream);
 		
 		readThread = Thread.startVirtualThread(this::readLoop);
@@ -22,6 +23,7 @@ public class ESXChannelClient implements AutoCloseable {
 	private static final Logger log = LoggerFactory.getLogger(ESXChannelClient.class);
 
 	private final InputStream inputStream;
+	private final OutputStream outputStream;
 	private final Thread readThread;
 	private final ESExprBinaryWriter writer;
 	private final ESExprCodec<ServerMessage> serverMessageCodec = ServerMessage.codec();
@@ -32,10 +34,15 @@ public class ESXChannelClient implements AutoCloseable {
 	
 	
 	
-	public synchronized ESXChannelClientConnection connect() throws IOException, InterruptedException {
-		var id = choseNextId();
-		var conn = new ESXChannelClientConnection(this, id);
-		connections.put(id, conn);
+	public ESXChannelClientConnection connect() throws IOException, InterruptedException {
+		ESXChannelClientConnection conn;
+		synchronized(this)
+		{
+			var id = choseNextId();
+			conn = new ESXChannelClientConnection(this, id);
+			connections.put(id, conn);
+		}
+		
 		conn.connect();
 		return conn;
 	}
@@ -64,8 +71,6 @@ public class ESXChannelClient implements AutoCloseable {
 				if(messageExpr == null) break;
 				
 				ClientMessage message = codec.decode(messageExpr);
-
-				System.err.println("Received message: " + message.getClass().getSimpleName());
 				
 				switch(message) {
 					case ClientMessage.ConnectAck(var connectAck) -> {
@@ -113,7 +118,7 @@ public class ESXChannelClient implements AutoCloseable {
 	}
 
 	public synchronized void send(ServerMessage message) throws IOException {
-		System.err.println("Sending message: " + message.getClass().getSimpleName());
 		writer.write(serverMessageCodec.encode(message));
+		outputStream.flush();
 	}
 }

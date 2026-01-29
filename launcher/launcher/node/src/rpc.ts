@@ -10,12 +10,21 @@ export async function runRPC(): Promise<void> {
     const workerURL = new URL("./rpc.worker.js", import.meta.url);
 
     async function doWrite(data: Uint8Array): Promise<void> {
-        return new Promise((resolve, reject) => {
-            process.stdout.write(data, err => {
-                if (err) reject(err);
-                else resolve();
-            });
+        await new Promise<void>((resolve, reject) => {
+            function writeLoop() {
+                const couldWrite = process.stdout.write(data, err => {
+                    if (err) reject(err);
+                    else resolve();
+                });
+                if(!couldWrite) {
+                    process.nextTick(writeLoop);
+                }
+            }
+            
+            writeLoop();
         });
+
+        process.stdout
     }
     const connectionThreads: Promise<void>[] = [];
     const workers: CompilerWorker[] = [];

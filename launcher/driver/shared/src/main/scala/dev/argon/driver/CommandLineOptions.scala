@@ -45,6 +45,8 @@ final case class CodegenCommand(
 
 final case class BackendsCommand() extends CompilerDriverCommand
 
+final case class RpcCommand() extends CompilerDriverCommand
+
 object CompilerDriverOptions {
   enum OptionValueAtom {
     case String(s: java.lang.String)
@@ -135,12 +137,17 @@ object CompilerDriverOptions {
       Opts.unit.map(_ => BackendsCommand())
     )
   
+  private def rpcCommand: Command[RpcCommand] =
+    Command("rpc", "Start the RPC server", helpFlag = false)(
+      Opts.unit.map(_ => RpcCommand())
+    )
 
   private def standardOptions(backends: Seq[BackendMetadata]): Opts[StandardCompilerDriverOptions] =
     Opts.subcommand(compileCommand(backends))
       .orElse(Opts.subcommand(genirCommand))
       .orElse(Opts.subcommand(codegenCommand(backends)))
       .orElse(Opts.subcommand(backendsCommand))
+      .orElse(Opts.subcommand(rpcCommand))
       .map(StandardCompilerDriverOptions.apply)
   
   private def combineOptMaps2[K, V](a: Opts[Map[K, V]], b: Opts[Map[K, V]]): Opts[Map[K, V]] =
@@ -240,6 +247,7 @@ object CompilerDriverOptions {
       )
       case Right(CompilerDriverVersion()) => cmd.DriverCommand.VersionCommand()
       case Right(StandardCompilerDriverOptions(BackendsCommand())) => cmd.DriverCommand.ListBackendsCommand()
+      case Right(StandardCompilerDriverOptions(RpcCommand())) => cmd.DriverCommand.Rpc()
       case Right(StandardCompilerDriverOptions(compileCommand: CompileCommand)) =>
         cmd.DriverCommand.CompileCommand(
           tubeName = dev.argon.vm.TubeName(compileCommand.tubeName.parts.head, compileCommand.tubeName.parts.tail),

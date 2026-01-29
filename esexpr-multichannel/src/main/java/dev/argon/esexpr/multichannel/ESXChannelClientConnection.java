@@ -79,6 +79,7 @@ public class ESXChannelClientConnection implements AutoCloseable {
 	synchronized void message(@NotNull ESExpr data) {
 		if(state == State.CONNECTED) {
 			pendingMessages.add(data);
+			notifyAll();
 		}
 	}
 

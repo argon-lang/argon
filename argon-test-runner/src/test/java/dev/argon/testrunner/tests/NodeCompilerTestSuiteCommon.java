@@ -1,9 +1,6 @@
 package dev.argon.testrunner.tests;
 
-import dev.argon.testrunner.DriverCommandExecutor;
-import dev.argon.testrunner.DriverCommandExecutorCLI;
-import dev.argon.testrunner.HostPlatform;
-import dev.argon.testrunner.RunnerContext;
+import dev.argon.testrunner.*;
 
 public interface NodeCompilerTestSuiteCommon extends CompilerTestSuite {
 	@Override
@@ -13,7 +10,7 @@ public interface NodeCompilerTestSuiteCommon extends CompilerTestSuite {
 
 	@Override
 	default DriverCommandExecutor createCommandExecutor(RunnerContext context) {
-		return new DriverCommandExecutorCLI(context);
+		return new DriverCommandExecutorRPC(context);
 	}
 	
 	
