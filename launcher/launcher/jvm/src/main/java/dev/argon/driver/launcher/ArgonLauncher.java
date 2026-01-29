@@ -13,6 +13,7 @@ import dev.argon.driver.api.command.DriverCommand;
 import dev.argon.driver.launcher.backendloaders.jsApi.JSBackendFactory;
 import dev.argon.esexpr.KeywordMapping;
 import org.jetbrains.annotations.NotNull;
+import org.jspecify.annotations.NonNull;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -30,16 +31,10 @@ public final class ArgonLauncher {
     
     public static void main(String[] args) throws Throwable {
 		CompilerDriver driver = new dev.argon.driver.CompilerDriver();
-		
-		var backendsDirStr = System.getProperty("dev.argon.backends");
-		if(backendsDirStr == null) {
-			System.err.println("No backend directory specified");
-			System.exit(1);
-		}
-		
-		var backendsDir = Path.of(backendsDirStr);
-		
-		var factories = loadBackendFactories(driver, backendsDir);
+
+	    var backendsDir = getBackendsDir();
+
+	    var factories = loadBackendFactories(driver, backendsDir);
 		int exitCode;
 		try {
 			
@@ -48,15 +43,21 @@ public final class ArgonLauncher {
 			var commandStr = driver.parseCommandLineArguments(backendMetadata, args);
 			var command = realizeCommandPath(commandStr);
 
-			var options = new CompilerDriverOptions(
-				factories,
-				command,
-				System.in,
-				System.out,
-				System.err
-			);
-			
-			exitCode = driver.runCommand(options);
+			if(command instanceof DriverCommand.Rpc) {
+				RPC.run(driver, factories);
+				exitCode = 0;
+			}
+			else {
+				var options = new CompilerDriverOptions(
+					factories,
+					command,
+					System.in,
+					System.out,
+					System.err
+				);
+
+				exitCode = driver.runCommand(options);
+			}
 		}
 		finally {
 			for(var factory : factories) {
@@ -66,7 +67,16 @@ public final class ArgonLauncher {
 		
 	    System.exit(exitCode);
     }
-	
+
+	private static @NonNull Path getBackendsDir() throws Exception {
+		var backendsDir = System.getProperty("dev.argon.backends");
+		if(backendsDir == null) {
+			throw new Exception("No backend directory specified");
+		}
+
+		return Path.of(backendsDir);
+	}
+
 	public static List<BackendFactory> loadBackendFactories(CompilerDriver driver, Path backendsDir) throws IOException {
 		List<BackendFactory> factories = new ArrayList<>();
 

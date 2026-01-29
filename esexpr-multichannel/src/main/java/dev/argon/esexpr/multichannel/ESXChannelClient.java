@@ -4,6 +4,7 @@ import dev.argon.esexpr.*;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.*;
@@ -92,8 +93,21 @@ public class ESXChannelClient implements AutoCloseable {
 				}
 				
 			}
-			catch(IOException | SyntaxException | DecodeException | MessageProcessingException e) {
+			catch(InterruptedIOException e) {
+				break;
+			}
+			catch(IOException e) {
+				if(!Thread.interrupted()) {
+					log.error("Error reading message", e);
+				}
+				break;
+			}
+			catch(SyntaxException e) {
 				log.error("Error reading message", e);
+				break;
+			}
+			catch(DecodeException | MessageProcessingException e) {
+				log.error("Error processing message", e);
 			}
 		}
 	}

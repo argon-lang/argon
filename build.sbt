@@ -945,7 +945,7 @@ lazy val compiler_driverJVM = compiler_driver.jvm
 lazy val compiler_driverNode = compiler_driver.node
 
 lazy val compiler_launcher = project.in(file("launcher/launcher/jvm"))
-  .dependsOn(argon_backend_java_api, compiler_driver_api, compiler_driverJVM)
+  .dependsOn(argon_backend_java_api, compiler_driver_api, compiler_driverJVM, esexpr_multichannel)
   .settings(
     commonSettingsNoLibs,
     commonJVMSettingsNoLibs,
