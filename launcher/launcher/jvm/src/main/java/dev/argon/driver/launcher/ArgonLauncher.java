@@ -12,7 +12,6 @@ import dev.argon.driver.api.command.CompilerDriverOutput;
 import dev.argon.driver.api.command.DriverCommand;
 import dev.argon.driver.launcher.backendloaders.jsApi.JSBackendFactory;
 import dev.argon.esexpr.KeywordMapping;
-import dev.argon.vm.api.TubeName;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -32,9 +31,18 @@ public final class ArgonLauncher {
     public static void main(String[] args) throws Throwable {
 		CompilerDriver driver = new dev.argon.driver.CompilerDriver();
 		
-		var factories = loadBackendFactories(driver);
+		var backendsDirStr = System.getProperty("dev.argon.backends");
+		if(backendsDirStr == null) {
+			System.err.println("No backend directory specified");
+			System.exit(1);
+		}
+		
+		var backendsDir = Path.of(backendsDirStr);
+		
+		var factories = loadBackendFactories(driver, backendsDir);
 		int exitCode;
 		try {
+			
 			var backendMetadata = factories.stream().map(BackendFactory::metadata).toList();
 
 			var commandStr = driver.parseCommandLineArguments(backendMetadata, args);
@@ -42,7 +50,10 @@ public final class ArgonLauncher {
 
 			var options = new CompilerDriverOptions(
 				factories,
-				command
+				command,
+				System.in,
+				System.out,
+				System.err
 			);
 			
 			exitCode = driver.runCommand(options);
@@ -56,16 +67,11 @@ public final class ArgonLauncher {
 	    System.exit(exitCode);
     }
 	
-	private static List<BackendFactory> loadBackendFactories(CompilerDriver driver) throws IOException {
-		var backendsDir = System.getProperty("dev.argon.backends");
-		if(backendsDir == null) {
-			throw new RuntimeException("No backend directory specified");
-		}
-		
+	public static List<BackendFactory> loadBackendFactories(CompilerDriver driver, Path backendsDir) throws IOException {
 		List<BackendFactory> factories = new ArrayList<>();
 		
 		try {
-			try(var backendDirStream = Files.list(Path.of(backendsDir))) {
+			try(var backendDirStream = Files.list(backendsDir)) {
 				for(Iterator<@NotNull Path> it = backendDirStream.iterator(); it.hasNext(); ) {
 					var backendDir = it.next();
 					
@@ -123,7 +129,7 @@ public final class ArgonLauncher {
 		return null;
 	}
 	
-	private static DriverCommand<BinaryResource<IOException>, DirectoryResource<IOException>, BinaryResourceSink<IOException>, DirectoryResourceSink<IOException>> realizeCommandPath(DriverCommand<String, String, String, String> command) {
+	public static DriverCommand<BinaryResource<IOException>, DirectoryResource<IOException>, BinaryResourceSink<IOException>, DirectoryResourceSink<IOException>> realizeCommandPath(DriverCommand<String, String, String, String> command) {
 		return switch(command) {
 			case DriverCommand.HelpCommand(var isError, var args) ->
 				new DriverCommand.HelpCommand<>(isError, args);

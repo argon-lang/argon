@@ -27,34 +27,28 @@ public class TestCaseRunner implements Closeable {
 
 	private final RunnerContext context;
     private final Path tempDir;
-	private boolean keepTempFiles = false;
 
 	
 	private final DriverCommandExecutor commandExecutor;
 	private final OutputProgramRunner runner;
-	
-	
-	public void keepTempFiles() {
-		keepTempFiles = true;
-	}
 
 
 	private interface TryFunction<T> {
-		T apply() throws Exception;
+		T apply() throws Throwable;
 	}
 
 	private static sealed interface Try<T> {
-		T get() throws Exception;
+		T get() throws Throwable;
 
 		record Success<T>(T value) implements Try<T> {
 			@Override
-			public T get() throws Exception {
+			public T get() throws Throwable {
 				return value;
 			}
 		}
-		record Failure<T>(Exception exception) implements Try<T> {
+		record Failure<T>(Throwable exception) implements Try<T> {
 			@Override
-			public T get() throws Exception {
+			public T get() throws Throwable {
 				throw exception;
 			}
 		}
@@ -63,7 +57,7 @@ public class TestCaseRunner implements Closeable {
 			try {
 				return new Success<>(f.apply());
 			}
-			catch(Exception e) {
+			catch(Throwable e) {
 				return new Failure<>(e);
 			}
 		}
@@ -74,11 +68,11 @@ public class TestCaseRunner implements Closeable {
 	private final Map<TubeName, Try<Path>> libraryIR = new ConcurrentHashMap<>();
 	private final Map<TubeName, Try<Path>> libraryOutput = new ConcurrentHashMap<>();
 
-    private Path buildLibraryTube(TubeName library) throws Exception {
+    private Path buildLibraryTube(TubeName library) throws Throwable {
 	    return libraryTubes.computeIfAbsent(library, lib -> Try.of(() -> buildLibraryTubeImpl(lib))).get();
     }
 
-    private Path buildLibraryTubeImpl(TubeName library) throws Exception {
+    private Path buildLibraryTubeImpl(TubeName library) throws Throwable {
 		var libraryName = LibraryUtils.getLibraryName(library);
         var libDir = context.librariesDir().resolve(libraryName);
 
@@ -102,11 +96,11 @@ public class TestCaseRunner implements Closeable {
         return outputFile;
     }
 
-	private Path buildLibraryIR(TubeName library) throws Exception {
+	private Path buildLibraryIR(TubeName library) throws Throwable {
 		return libraryIR.computeIfAbsent(library, lib -> Try.of(() -> buildLibraryIRImpl(lib))).get();
 	}
 
-	private Path buildLibraryIRImpl(TubeName library) throws Exception {
+	private Path buildLibraryIRImpl(TubeName library) throws Throwable {
 		var libraryName = LibraryUtils.getLibraryName(library);
 		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform().backendId()).resolve(libraryName);
 		Files.createDirectories(outputLibDir);
@@ -124,11 +118,11 @@ public class TestCaseRunner implements Closeable {
 
 		return outputFile;
 	}
-	private Path buildLibraryOutput(TubeName library) throws Exception {
+	private Path buildLibraryOutput(TubeName library) throws Throwable {
 		return libraryOutput.computeIfAbsent(library, lib -> Try.of(() -> buildLibraryOutputImpl(lib))).get();
 	}
 
-	private Path buildLibraryOutputImpl(TubeName library) throws Exception {
+	private Path buildLibraryOutputImpl(TubeName library) throws Throwable {
 		var libraryName = LibraryUtils.getLibraryName(library);
 		var outputLibDir = tempDir.resolve("lib").resolve(context.targetPlatform().backendId()).resolve(libraryName);
 		Files.createDirectories(outputLibDir);
@@ -151,7 +145,7 @@ public class TestCaseRunner implements Closeable {
 	}
 
 	
-	public TestResult executeTestCase(GroupedTestCase testCase) throws Exception {
+	public TestResult executeTestCase(GroupedTestCase testCase) throws Throwable {
 		var testDir = tempDir.resolve("tests");
 		for(var part : testCase.getGroup()) {
 			testDir = testDir.resolve(part);
@@ -245,33 +239,17 @@ public class TestCaseRunner implements Closeable {
 		return new TestResult.Executed(output);
 	}
 	
-	public void assertTestCase(GroupedTestCase testCase) throws Exception {
-		var expected = testCase.getExpectedResult();
-		var result = executeTestCase(testCase);
-		if(!expected.matchedBy(result)) {
-			throw new Exception("Test case did not match expected result\nExpected: " + expected + "\nActual: " + result);
-		}
-	}
-	
-	private String normalize(String s) {
-		return Arrays.stream(s.trim().split("\\n"))
-			.map(String::trim)
-			.collect(Collectors.joining());
-	}
-	
-	private void execute(DriverCommand<String, String, String, String> command) throws Exception {
+	private void execute(DriverCommand<String, String, String, String> command) throws Throwable {
 		var output = commandExecutor.execute(command);
 
 		int exitCode = output.exitCode();
 		if(exitCode != 0) {
-			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + command, output.output());
+			throw new CommandFailureException("Command completed with exit code " + exitCode + ": " + command + "\n" + output.output(), output.output());
 		}
 	}
 
     @Override
     public void close() throws IOException {
-		if(!keepTempFiles) {
-			PathUtils.deleteDirectory(tempDir);	
-		}
+	    PathUtils.deleteDirectory(tempDir);
     }
 }

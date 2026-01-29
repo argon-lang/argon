@@ -35,12 +35,12 @@ lazy val distNode = taskKey[Unit]("Builds the Node distribution of the compiler"
 lazy val distBackends = taskKey[Unit]("Builds the backend distributions of the compiler")
 lazy val distBackendJS = taskKey[Unit]("Builds the JS backend distribution of the compiler")
 
-dist := {
+Global / dist := {
   val _1: Unit = distJVM.value
   val _2: Unit = distNode.value
 }
 
-distJVM := {
+Global / distJVM := {
   val distDir = file("dist/argon-jvm")
   IO.delete(distDir)
 
@@ -77,7 +77,7 @@ distJVM := {
   launcherScript.setExecutable(true)
 }
 
-distNode := {
+Global / distNode := {
   val s = streams.value
   val log = s.log
 
@@ -146,11 +146,11 @@ distNode := {
   launcherScript.setExecutable(true)
 }
 
-distBackends := {
+Global / distBackends := {
   val _: Unit = distBackendJS.value
 }
 
-distBackendJS := Def.task {
+Global / distBackendJS := Def.task {
   val s = streams.value
   val log = s.log
 
@@ -1026,7 +1026,7 @@ lazy val compiler_launcher = project.in(file("launcher/launcher/jvm"))
   )
 
 lazy val test_runner = project.in(file("argon-test-runner"))
-  .dependsOn(compiler_driverJVM)
+  .dependsOn(compiler_driverJVM, compiler_launcher)
   .settings(
     commonSettingsNoLibs,
     commonJVMSettingsNoLibs,
@@ -1039,7 +1039,6 @@ lazy val test_runner = project.in(file("argon-test-runner"))
     crossPaths := false,
 
     Compile / fork := true,
-    Compile / run := (Compile / run).dependsOn(dist),
 
     libraryDependencies ++= Seq(
       "commons-io" % "commons-io" % "2.21.0",

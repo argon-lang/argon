@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Function;
 
-public class PathBinaryResource extends BinaryResource<IOException> {
+class PathBinaryResource extends BinaryResource<IOException> {
 	public PathBinaryResource(Path path) {
 		this.path = path;
 	}

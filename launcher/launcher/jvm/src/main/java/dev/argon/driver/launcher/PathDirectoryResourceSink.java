@@ -14,7 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-public class PathDirectoryResourceSink implements DirectoryResourceSink<IOException> {
+class PathDirectoryResourceSink implements DirectoryResourceSink<IOException> {
 	public PathDirectoryResourceSink(Path path) {
 		this.path = path;
 	}

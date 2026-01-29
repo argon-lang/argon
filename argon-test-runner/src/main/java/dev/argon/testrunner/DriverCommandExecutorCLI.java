@@ -23,12 +23,14 @@ public final class DriverCommandExecutorCLI implements DriverCommandExecutor {
 		DriverCommand<String, String, String, String> command
 	) throws Exception {
 		var pb = new ProcessBuilder();
+		
+		var executable = context.distDir().resolve("argon");
 
-		List<String> command1 = new ArrayList<>();
-		command1.add(context.distDir().resolve("argon").toString());
-		buildArguments(command, command1);
+		List<String> cmd = new ArrayList<>();
+		cmd.add(executable.toString());
+		buildArguments(command, cmd);
 
-		pb.command(command1);
+		pb.command(cmd);
 
 		pb.redirectInput(ProcessBuilder.Redirect.PIPE);
 		pb.redirectOutput(ProcessBuilder.Redirect.PIPE);

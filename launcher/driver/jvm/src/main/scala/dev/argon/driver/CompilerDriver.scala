@@ -6,13 +6,13 @@ import zio.*
 import dev.argon.backend.metadata.BackendMetadata
 import dev.argon.backend.api as javaApi
 import dev.argon.backend.scalaApi
-import dev.argon.driver.api.{CompilerDriver as JavaCompilerDriver, BackendMetadataParseException}
+import dev.argon.driver.api.{BackendMetadataParseException, CompilerDriver as JavaCompilerDriver}
 import dev.argon.driver.api.command.DriverCommand as JavaDriverCommand
 import dev.argon.driver.scalaApi.command.DriverCommand
 import zio.logging.*
 import nobleidl.core.{ErrorType, JavaAdapter}
 
-import java.io.IOException
+import java.io.{BufferedReader, IOException, InputStreamReader}
 import java.nio.file.Path
 import scala.jdk.CollectionConverters.*
 import scala.compiletime.asMatchable
@@ -53,13 +53,63 @@ class CompilerDriver extends JavaCompilerDriver {
   override def runCommand(options: dev.argon.driver.api.CompilerDriverOptions): Int =
     Unsafe.unsafely {
       val runtime = Runtime.default
+
+      val logConfig = ConsoleLoggerConfig(
+        format = LogFormat.colored,
+        filter = LogFilter.LogLevelByNameConfig(LogLevel.Trace),
+      )
+
+      val console = new zio.Console {
+        override def print(line: => Any)(using trace: Trace): IO[IOException, Unit] =
+          Unsafe.unsafely {
+            ZIO.attemptBlockingIO(unsafe.print(line))
+          }
+
+        override def printError(line: => Any)(using trace: Trace): IO[IOException, Unit] =
+          Unsafe.unsafely {
+            ZIO.attemptBlockingIO(unsafe.printError(line))
+          }
+
+        override def printLine(line: => Any)(using trace: Trace): IO[IOException, Unit] =
+          Unsafe.unsafely {
+            ZIO.attemptBlockingIO(unsafe.printLine(line))
+          }
+
+        override def printLineError(line: => Any)(using trace: Trace): IO[IOException, Unit] =
+          Unsafe.unsafely {
+            ZIO.attemptBlockingIO(unsafe.printLineError(line))
+          }
+
+        override def readLine(using trace: Trace): IO[IOException, String] =
+          Unsafe.unsafely {
+            ZIO.attemptBlockingIO(unsafe.readLine())
+          }
+
+        override def unsafe: UnsafeAPI = new UnsafeAPI {
+          override def print(line: Any)(using unsafe: Unsafe): Unit =
+            options.getStdout.print(line)
+
+          override def printError(line: Any)(using unsafe: Unsafe): Unit =
+            options.getStderr.print(line)
+
+          override def printLine(line: Any)(using unsafe: Unsafe): Unit =
+            options.getStdout.println(line)
+
+          override def printLineError(line: Any)(using unsafe: Unsafe): Unit =
+            options.getStderr.println(line)
+
+
+          private val reader = new BufferedReader(new InputStreamReader(options.getStdin))
+          override def readLine()(using unsafe: Unsafe): String =
+            reader.readLine()
+        }
+      }
+
       runtime.unsafe.run(
         runCommandZIO(options)
+          .withConsole(console)
           .provideLayer(
-            (Runtime.removeDefaultLoggers >+> consoleLogger(ConsoleLoggerConfig(
-              format = LogFormat.colored,
-              filter = LogFilter.LogLevelByNameConfig(LogLevel.Trace),
-            ))) ++
+            (Runtime.removeDefaultLoggers >+> makePrintStreamLogger(logConfig.format.toLogger, options.getStderr).install) ++
               Runtime.enableLoomBasedExecutor ++
               Runtime.enableLoomBasedBlockingExecutor
           )
@@ -86,7 +136,7 @@ class CompilerDriver extends JavaCompilerDriver {
             FiberFailure(cause)
           }
 
-        ex.printStackTrace()
+        ex.printStackTrace(options.getStderr)
         ExitCode.failure
       }
       .code

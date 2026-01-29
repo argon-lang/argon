@@ -23,7 +23,7 @@ public abstract class CompilerTestSuiteBase implements CompilerTestSuite {
 		return context;
 	}
 
-	private synchronized TestCaseRunner getTestCaseRunner() {
+	private synchronized TestCaseRunner getTestCaseRunner() throws Exception {
 		if(context == null) {
 			context = createContext();
 		}
@@ -37,17 +37,13 @@ public abstract class CompilerTestSuiteBase implements CompilerTestSuite {
 		}
 		
 		if(testCaseRunner == null) {
-			try {
-				testCaseRunner = new TestCaseRunner(context, commandExecutor, runner);
-			} catch (IOException e) {
-				throw new UncheckedIOException(e);
-			}
+			testCaseRunner = new TestCaseRunner(context, commandExecutor, runner);
 		}
 		return testCaseRunner;
 	}
 	
 	@Override
-	public TestResult runTestCase(GroupedTestCase testCase) throws Exception {
+	public TestResult runTestCase(GroupedTestCase testCase) throws Throwable {
 		return getTestCaseRunner().executeTestCase(testCase);
 	}
 		

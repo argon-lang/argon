@@ -12,7 +12,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class PathBinaryResourceSink implements BinaryResourceSink<IOException> {
+class PathBinaryResourceSink implements BinaryResourceSink<IOException> {
 	public PathBinaryResourceSink(Path path) {
 		this.path = path;
 	}

@@ -1,6 +1,6 @@
 package dev.argon.driver.api;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -15,10 +15,17 @@ public final class CompilerDriverOptions {
 			DirectoryResource<IOException>,
 			BinaryResourceSink<IOException>,
 			DirectoryResourceSink<IOException>
-		> command
+		> command,
+		InputStream stdin,
+		PrintStream stdout,
+		PrintStream stderr
     ) {
         this.backendFactories = backendFactories;
         this.command = command;
+		
+	    this.stdin = stdin;
+	    this.stdout = stdout;
+	    this.stderr = stderr;
     }
     
     private final List<BackendFactory> backendFactories;
@@ -28,7 +35,10 @@ public final class CompilerDriverOptions {
 	    BinaryResourceSink<IOException>,
 	    DirectoryResourceSink<IOException>
     > command;
-    
+	private final InputStream stdin;
+	private final PrintStream stdout;
+	private final PrintStream stderr;
+
 	public List<BackendFactory> getBackendFactories() {
 		return backendFactories;
 	}
@@ -41,5 +51,17 @@ public final class CompilerDriverOptions {
     > getCommand() {
         return command;
     }
+	
+	public InputStream getStdin() {
+		return stdin;
+	}
+	
+	public PrintStream getStdout() {
+		return stdout;
+	}
+	
+	public PrintStream getStderr() {
+		return stderr;
+	}
     
 }

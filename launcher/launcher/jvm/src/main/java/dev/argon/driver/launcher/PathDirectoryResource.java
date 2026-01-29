@@ -14,7 +14,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.stream.StreamSupport;
 
-final class PathDirectoryResource implements DirectoryResource<IOException> {
+class PathDirectoryResource implements DirectoryResource<IOException> {
 	public PathDirectoryResource(Path path) {
 		this.path = path;
 	}
