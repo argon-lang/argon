@@ -2,7 +2,8 @@ package dev.argon.source
 
 import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.{Context, TypeResolver}
+import dev.argon.compiler.{Context, ModifierParser, TypeResolver}
+import dev.argon.expr.ErasureMode
 import dev.argon.util.{WithLocation, WithSource}
 import zio.*
 
@@ -23,7 +24,9 @@ object SourceSignature {
     }
 
     val ownerIsErased = owner match {
-      case ctx.TRExprContext.ExpressionOwner.Func(f) => f.isErased
+      case ctx.TRExprContext.ExpressionOwner.Func(f) =>
+        f.erasureMode == ErasureMode.Erased
+        
       case ctx.TRExprContext.ExpressionOwner.Rec(_) => false
       case ctx.TRExprContext.ExpressionOwner.Enum(_) => false
       case ctx.TRExprContext.ExpressionOwner.EnumVariant(_) => false
@@ -35,31 +38,34 @@ object SourceSignature {
     def impl(remainingParams: Seq[WithSource[ast.FunctionParameterList]], convParams: Seq[SignatureParameter]): Comp[FunctionSignature] =
       remainingParams match {
         case head +: tail =>
-          ZIO.foreach(head.value.parameters) { param =>
-            for
-              t <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(param.value.paramType, erased = ownerIsErased || head.value.isErased)
-            yield ParameterBinding(
-              name = Some(param.value.name),
-              paramType = t,
-            )
-          }
-            .flatMap { bindings =>
-              val singleBinding = bindings match {
-                case Seq(binding) if !head.value.hasTrailingComma => Some(binding)
-                case _ => None
-              }
-
-
-              val param = SignatureParameter(
-                listType = head.value.listType,
-                isErased = head.value.isErased,
-                bindings = bindings,
-                name = singleBinding.flatMap(_.name),
-                paramType = singleBinding.fold(Expr.Tuple(bindings.map(_.paramType)))(_.paramType),
+          for
+            mp <- ModifierParser.make(head.value.modifiers, head.location)
+            erasureMode <- mp.parse(ModifierParser.erasureModeWithToken)
+            _ <- mp.done
+            
+            bindings <- ZIO.foreach(head.value.parameters) { param =>
+              for
+                t <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(param.value.paramType, erased = ownerIsErased || erasureMode == ErasureMode.Erased)
+              yield ParameterBinding(
+                name = Some(param.value.name),
+                paramType = t,
               )
-
-              impl(tail, convParams :+ param)
             }
+
+            singleBinding = bindings match {
+              case Seq(binding) if !head.value.hasTrailingComma => Some(binding)
+              case _ => None
+            }
+            param = SignatureParameter(
+              listType = head.value.listType,
+              erasureMode = erasureMode,
+              bindings = bindings,
+              name = singleBinding.flatMap(_.name),
+              paramType = singleBinding.fold(Expr.Tuple(bindings.map(_.paramType)))(_.paramType),
+            )
+            
+            res <- impl(tail, convParams :+ param)
+          yield res
 
         case _ =>
           for

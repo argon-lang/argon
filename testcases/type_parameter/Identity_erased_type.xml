@@ -9,7 +9,7 @@
 
         import Argon.Core::*
 
-        def identity (erased T: type) (value: T): T = value
+        def identity (token T: type) (value: T): T = value
 
         erased inline def erasedString: type = String
 

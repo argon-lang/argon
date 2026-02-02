@@ -30,16 +30,14 @@ object ErasedScanner {
       private val concrete: EraseScan[Unit] = OptionT.some(())
       private val erased: EraseScan[Unit] = OptionT.none
 
-      private def fromBool(b: Boolean): EraseScan[Unit] = if b then erased else concrete
-
       override def exprScanner: Scanner[Expr] = new Scanner[Expr] {
         override def scan(a: Expr): EraseScan[Unit] =
           a match {
-            case Expr.BindVariable(v, value) if v.isErased => concrete
+            case Expr.BindVariable(v, value) if v.erasureMode == ErasureMode.Erased => concrete
 
             case Expr.Boxed(_) => concrete
 
-            case Expr.FunctionCall(f, _) if f.isErased => erased
+            case Expr.FunctionCall(f, _) if f.erasureMode == ErasureMode.Erased => erased
 
             case Expr.FunctionCall(f, args) =>
               OptionT.liftF(f.signature).flatMap { sig =>
@@ -58,8 +56,8 @@ object ErasedScanner {
               )
                 .flatMap { ft =>
                   val funcArgErased = ft match {
-                    case Expr.FunctionType(v, _) => v.isErased
-                    case _ => true
+                    case Expr.FunctionType(v, _) => v.erasureMode == ErasureMode.Erased
+                    case _ => false
                   }
 
                   if funcArgErased then concrete
@@ -71,18 +69,22 @@ object ErasedScanner {
                 scanArgs(sig, args)
               }
 
-            case Expr.RecordFieldLoad(_, field, _) if field.isErased => erased
-            case Expr.RecordFieldStore(_, field, _, _) if field.isErased => concrete
+            case Expr.RecordFieldLoad(_, field, _) if field.erasureMode == ErasureMode.Erased => erased
+            case Expr.RecordFieldStore(_, field, _, _) if field.erasureMode == ErasureMode.Erased => concrete
 
             case Expr.RecordLiteral(record, fields) =>
               scan(record) *> fields.traverse_ { field =>
-                if field.field.isErased then concrete
-                else scan(field.value)
+                field.field.erasureMode match {
+                  case ErasureMode.Erased => concrete
+                  case _ => scan(field.value)
+                } 
               }
 
-            case Expr.Variable(v) => fromBool(v.isErased)
+            case Expr.Variable(v) =>
+              if v.erasureMode == ErasureMode.Erased then erased
+              else concrete
 
-            case Expr.VariableStore(v, _) if v.isErased => concrete
+            case Expr.VariableStore(v, _) if v.erasureMode == ErasureMode.Erased => concrete
 
             case _ => EraseScanner.super.exprScanner.scan(a)
           }
@@ -90,7 +92,7 @@ object ErasedScanner {
 
       private def scanArgs(sig: context.DefaultSignatureContext.FunctionSignature, args: Seq[Expr]): EraseScan[Unit] =
         sig.parameters.view.zip(args)
-          .filter { (param, _) => !param.isErased }
+          .filter { (param, _) => param.erasureMode != ErasureMode.Erased }
           .map { (_, arg) => arg }
           .toSeq
           .traverse_(exprScanner.scan)

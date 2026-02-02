@@ -212,6 +212,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
   libraryDependencies ++= Seq(
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
+    "dev.zio" %%% "zio-prelude" % "1.0.0-RC45",
 
     "dev.zio" %%% "zio-test" % zioVersion % Test,
     "dev.zio" %%% "zio-test-sbt" % zioVersion % Test,

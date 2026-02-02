@@ -1,6 +1,6 @@
 package dev.argon.tube.encoder
 
-import dev.argon.{ast, compiler as c}
+import dev.argon.{ast, compiler as c, expr as e}
 import dev.argon.tube.*
 import zio.*
 import zio.stream.*
@@ -51,6 +51,16 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
       private def encodeModulePath(path: c.ModulePath): ModulePath =
         ModulePath(path.parts)
+
+      private def encodeErasure(mode: e.ErasureMode.Declared): ErasureMode =
+        mode match {
+          case e.ErasureMode.Erased => ErasureMode.Erased()
+          case e.ErasureMode.Concrete => ErasureMode.Concrete()
+          case e.ErasureMode.Token => ErasureMode.Token()
+        }
+
+      private def encodeErasure(mode: e.ErasureMode.DeclaredNonToken): Boolean =
+        mode == e.ErasureMode.Erased
 
       private def encodeIdentifier(id: ast.IdentifierExpr): Identifier =
         id match {
@@ -289,7 +299,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             functionId = id,
             `import` = importSpec,
             `inline` = func.isInline,
-            erased = func.isErased,
+            erasure = encodeErasure(func.erasureMode),
             witness = func.isWitness,
             effects = encodeEffectInfo(func.effects),
             signature = sig,
@@ -473,7 +483,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           name = encodeIdentifier(method.name),
           erasedSignature = erasedSig,
           `inline` = method.isInline,
-          erased = method.isErased,
+          erased = encodeErasure(method.erasureMode),
           witness = method.isWitness,
           slot = method.slot match {
             case c.MethodSlot.Abstract => MethodSlot.Abstract()
@@ -566,7 +576,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case dev.argon.ast.FunctionParameterListType.QuoteList => FunctionParameterListType.QuoteList
             case dev.argon.ast.FunctionParameterListType.RequiresList => FunctionParameterListType.RequiresList
           },
-          erased = param.isErased,
+          erasure = encodeErasure(param.erasureMode),
           bindings = bindings,
           name = param.name.map(encodeIdentifier),
           paramType = t,
@@ -637,7 +647,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             varType = t,
             name = v.name.map(encodeIdentifier),
             mutable = v.isMutable,
-            erased = v.isErased,
+            erased = encodeErasure(v.erasureMode),
             witness = v.isWitness,
           )
 
@@ -672,7 +682,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 parameterIndex = v.parameterIndex,
                 name = v.name.map(encodeIdentifier),
                 varType = varType,
-                erased = v.isErased,
+                erasure = encodeErasure(v.erasureMode),
                 witness = v.isWitness,
               )
           }

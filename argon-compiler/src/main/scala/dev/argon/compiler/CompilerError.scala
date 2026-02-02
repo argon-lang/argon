@@ -3,8 +3,8 @@ package dev.argon.compiler
 import dev.argon.ast.{IdentifierExpr, Modifier}
 import dev.argon.util.{FilePosition, Location}
 import zio.*
-
 import ErrorExprContext.Expr
+import zio.prelude.NonEmptySet
 
 
 enum CompilerError {
@@ -24,7 +24,8 @@ enum CompilerError {
 
   case InvalidModifier(
     loc: Location[FilePosition],
-    modifier: Modifier,
+    modifiers: Set[Modifier],
+    expectedModifiers: NonEmptyChunk[Set[Modifier]],
   )
 
   case DuplicateModifier(
@@ -44,8 +45,16 @@ enum CompilerError {
   case ErasedExpressionNotAllowed(
     loc: Location[FilePosition],
   )
+
+  case TokenExpressionRequired(
+    loc: Location[FilePosition],
+  )
   
   case ErasedMustBePure(
+    loc: Location[FilePosition],
+  )
+
+  case TokenMustBePure(
     loc: Location[FilePosition],
   )
   

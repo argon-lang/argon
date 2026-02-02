@@ -9,7 +9,7 @@
 
         import Argon.Core::*
 
-        def identity (T: type) (value: T): T = value
+        def identity (token T: type) (value: T): T = value
 
         proc main(): () do
 

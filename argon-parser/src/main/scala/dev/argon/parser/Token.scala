@@ -89,6 +89,7 @@ private[parser] object Token {
   case object KW_CASE extends TokenWithCategory(TokenCategory.KW_CASE)
 
   case object KW_ERASED extends TokenWithCategory(TokenCategory.KW_ERASED) with ModifierToken(Modifier.Erased)
+  case object KW_TOKEN extends TokenWithCategory(TokenCategory.KW_TOKEN) with ModifierToken(Modifier.Token)
   case object KW_WITNESS extends TokenWithCategory(TokenCategory.KW_WITNESS) with ModifierToken(Modifier.Witness)
   case object KW_INLINE extends TokenWithCategory(TokenCategory.KW_INLINE) with ModifierToken(Modifier.Inline)
   

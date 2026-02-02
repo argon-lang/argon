@@ -98,7 +98,7 @@ enum FunctionParameterListType derives CanEqual {
 final case class FunctionParameterList
 (
   listType: FunctionParameterListType,
-  isErased: Boolean,
+  modifiers: Seq[WithSource[Modifier.OfParameter]],
   parameters: Seq[WithSource[FunctionParameter]],
   hasTrailingComma: Boolean,
 )
@@ -109,11 +109,33 @@ final case class ReturnTypeSpecifier
   ensuresClauses: Seq[WithSource[Expr]],
 )
 
-enum Modifier derives CanEqual {
-  case Public, Protected, Private, Internal
-  case Erased, Witness, Inline
-  case Final, Override, Virtual
+sealed trait Modifier derives CanEqual
+object Modifier {
+  sealed trait OfRecord extends Modifier
+  sealed trait OfEnum extends Modifier
+  sealed trait OfInstance extends Modifier
+  sealed trait OfMethod extends Modifier
+  sealed trait OfFunction extends Modifier
+  sealed trait OfLocalVariable extends Modifier
+  sealed trait OfParameter extends Modifier
+
+  sealed trait Access extends OfRecord with OfEnum with OfInstance with OfFunction with OfMethod
+  case object Public extends Access
+  case object Internal extends Access
+  case object Protected extends Access
+  case object Private extends Access
+
+  case object Erased extends OfMethod with OfFunction with OfLocalVariable with OfParameter
+  case object Token extends OfFunction with OfParameter
+  case object Witness extends OfMethod with OfFunction with OfLocalVariable
+  case object Inline extends OfMethod with OfFunction
+
+  sealed trait InheritanceMode extends OfMethod
+  case object Final extends InheritanceMode
+  case object Override extends InheritanceMode
+  case object Virtual extends InheritanceMode
 }
+
 
 enum ImportStmt extends Stmt {
   case Absolute(path: ImportPathSegment)

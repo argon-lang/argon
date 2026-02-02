@@ -8,6 +8,7 @@ import zio.*
 import zio.stm.*
 import cats.*
 import cats.implicits.given
+import dev.argon.expr.ErasureMode
 import zio.interop.catz.core.given
 
 trait ScopeContext {
@@ -285,7 +286,7 @@ trait ScopeContext {
               case _ => STM.unit
             }
           ).commit *>
-          givenVars.put(v).commit.whenDiscard(v.isErased)
+          givenVars.put(v).commit.whenDiscard(v.erasureMode == ErasureMode.Erased)
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
         for

@@ -2,7 +2,7 @@ module String
 
 import ::Bool::*
 
-public inline def String: type = __argon_builtin string_type
+public token inline def String: type = __argon_builtin string_type
 
 public inline def operator ++ (a: String) (b: String): String = __argon_builtin string_concat a b
 

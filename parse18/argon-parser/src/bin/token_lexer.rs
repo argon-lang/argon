@@ -63,6 +63,7 @@ fn main() {
     b.add(Regex::str("rescue"), "TokenType.Token(Token.KW_RESCUE)");
     b.add(Regex::str("finally"), "TokenType.Token(Token.KW_FINALLY)");
     b.add(Regex::str("erased"), "TokenType.Token(Token.KW_ERASED)");
+    b.add(Regex::str("token"), "TokenType.Token(Token.KW_TOKEN)");
     b.add(Regex::str("requires"), "TokenType.Token(Token.KW_REQUIRES)");
     b.add(Regex::str("ensures"), "TokenType.Token(Token.KW_ENSURES)");
     b.add(Regex::str("maintains"), "TokenType.Token(Token.KW_MAINTAINS)");

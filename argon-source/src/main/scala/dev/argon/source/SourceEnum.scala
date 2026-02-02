@@ -6,7 +6,8 @@ import dev.argon.compiler.*
 import dev.argon.util.{*, given}
 import zio.*
 
-private[source] object SourceEnum {
+private[source] object 
+SourceEnum {
   def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, importFactory: ImportFactory)(decl: ast.EnumDeclarationStmt): ctx.Comp[ArEnumC & HasContext[ctx.type]] =
     for
       recId <- UniqueIdentifier.make

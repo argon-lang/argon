@@ -1,6 +1,6 @@
 package dev.argon.vm.encoder
 
-import dev.argon.{ast, compiler, compiler as c}
+import dev.argon.{ast, compiler, compiler as c, expr as e}
 import dev.argon.tube.loader.TubeFormatException
 import dev.argon.tube.encoder.TubeEncoderBase
 import dev.argon.vm.*
@@ -8,7 +8,7 @@ import zio.*
 import zio.stream.*
 import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.compiler.{ArgonEvaluator, HasContext, MethodOwner, SignatureEraser, UsingContext, VTableBuilder}
-import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, Substitution, UnaryBuiltin, ValueUtil}
+import dev.argon.expr.{BinaryBuiltin, CaptureScanner, ErasureMode, FreeVariableScanner, NullaryBuiltin, Substitution, UnaryBuiltin, ValueUtil}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.vm.VmType.Builtin
 import sourcecode.Text.generate
@@ -182,7 +182,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
       private def emitModuleExport(exp: ModuleExport): Comp[Unit] =
         exp match {
           case c.ModuleExportC.Function(f) =>
-            getFunctionId(f).unit.whenDiscard(!f.isErased)
+            getFunctionId(f).unit.whenDiscard(f.erasureMode != ErasureMode.Erased)
 
           case c.ModuleExportC.Record(r) =>
             getRecordId(r).unit
@@ -622,40 +622,43 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           
         
         def addParameter(v: context.DefaultExprContext.Var): Comp[Unit] =
-          if v.isErased then
-            argConsumers.update(_ :+ ArgConsumer.Erased).commit
-          else if isTypeType(v.varType) then
-            val tp = dev.argon.vm.SignatureTypeParameter(
-              name = v.name.map(encodeIdentifier),
-            )
+          v.erasureMode match {
+            case ErasureMode.Erased =>
+              argConsumers.update(_ :+ ArgConsumer.Erased).commit
 
-            (
-              for
-                size <- typeParams.modify(tps => (tps.size, tps :+ tp))
-                _ <- typeParamMapping.put(v, size)
-                _ <- argConsumers.update(_ :+ ArgConsumer.TypeArg)
-              yield ()
-            ).commit
-          else
-            def putParam(sigParam: dev.argon.vm.SignatureParameter): USTM[Unit] =
-              for
-                size <- params.modify(params => (params.size, params :+ sigParam))
-                _ <- paramVarMapping.put(v, size)
-                _ <- argConsumers.update(_ :+ ArgConsumer.Arg)
-              yield ()
-
-            for
-              te <- typeEmitter
-
-              t <- te.typeExpr(v.varType)
-              sigParam = dev.argon.vm.SignatureParameter(
+            case ErasureMode.Token =>
+              val tp = dev.argon.vm.SignatureTypeParameter(
                 name = v.name.map(encodeIdentifier),
-                paramType = t,
               )
-              _ <- putParam(sigParam).commit
 
-            yield ()
-          end if
+              (
+                for
+                  size <- typeParams.modify(tps => (tps.size, tps :+ tp))
+                  _ <- typeParamMapping.put(v, size)
+                  _ <- argConsumers.update(_ :+ ArgConsumer.TypeArg)
+                yield ()
+                ).commit
+
+            case ErasureMode.Concrete =>
+              def putParam(sigParam: dev.argon.vm.SignatureParameter): USTM[Unit] =
+                for
+                  size <- params.modify(params => (params.size, params :+ sigParam))
+                  _ <- paramVarMapping.put(v, size)
+                  _ <- argConsumers.update(_ :+ ArgConsumer.Arg)
+                yield ()
+
+              for
+                te <- typeEmitter
+
+                t <- te.typeExpr(v.varType)
+                sigParam = dev.argon.vm.SignatureParameter(
+                  name = v.name.map(encodeIdentifier),
+                  paramType = t,
+                )
+                _ <- putParam(sigParam).commit
+
+              yield ()
+          }
 
         def finish(returnType: ArExpr): Comp[FunctionSignatureWithMapping] =
           for
@@ -807,7 +810,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 }
               )
 
-            case ArExpr.FunctionType(a, r) if a.isErased =>
+            case ArExpr.FunctionType(a, r) if a.erasureMode == ErasureMode.Erased =>
               for
                 r <- typeExpr(r)
               yield VmType.FunctionErased(r)
@@ -843,13 +846,17 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case ArExpr.TypeN(_) =>
               ZIO.succeed(VmType.TypeInfo())
 
-            case ArExpr.Variable(v) if v.isErased =>
-              ZIO.succeed(VmType.Erased())
-
-            case t @ ArExpr.Variable(v) =>
-              getParameterAsType(v).flatMap {
-                case Some(tp) => ZIO.succeed(tp)
-                case None => fallbackTypeExpr(t)
+            case ArExpr.Variable(v) =>
+              v.erasureMode match {
+                case ErasureMode.Erased =>
+                  ZIO.succeed(VmType.Erased())
+                  
+                case _ =>
+                  getParameterAsType(v).flatMap {
+                    case Some(tp) => ZIO.succeed(tp)
+                    case None => fallbackTypeExpr(t)
+                  }
+                  
               }
 
             case t =>
@@ -1026,16 +1033,19 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
               }
               
-            case ArExpr.BindVariable(v, _) if v.isErased =>
-              unitResult(e, output)(ZIO.unit)
-            
             case ArExpr.BindVariable(v, value) =>
-              unitResult(e, output)(
-                for
-                  r <- declareVar(v)
-                  _ <- expr(value, ExprOutput.Register(r))
-                yield ()
-              )
+              v.erasureMode match {
+                case ErasureMode.Erased =>
+                  unitResult(e, output)(ZIO.unit)
+
+                case ErasureMode.Concrete =>
+                  unitResult(e, output)(
+                    for
+                      r <- declareVar(v)
+                      _ <- expr(value, ExprOutput.Register(r))
+                    yield ()
+                  )
+              }
 
             case ArExpr.BoolLiteral(b) =>
               intoRegister(e, output) { r =>
@@ -1167,7 +1177,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case ArExpr.FunctionObjectCall(f, a) =>
               functionResult(e, output) { funcResult =>
                 getExprType(f).flatMap {
-                  case ArExpr.FunctionType(v, r) if v.isErased =>
+                  case ArExpr.FunctionType(v, r) if v.erasureMode == ErasureMode.Erased =>
                     for
                       func <- expr(f, ExprOutput.AnyRegister)
                       _ <- emit(Instruction.FunctionObjectErasedCall(funcResult, func))
@@ -1238,13 +1248,16 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   (typeArgs, args, sig) <- captureVariables(freeVars)(_.addParameter(param), _.finish(returnType))
 
                   _ <- state.emitEntryBuilder(emitSyntheticFunctionDef(sig, synId, synImportSpec, body))
-                  _ <-
-                    if param.isErased then
+                  _ <- param.erasureMode match {
+                    case ErasureMode.Erased =>
                       emit(Instruction.PartiallyAppliedFunctionErased(synId, r, typeArgs, args))
-                    else if isTypeType(param.varType) then
-                      emit(Instruction.PartiallyAppliedTypeFunction(synId, r, typeArgs, args))
-                    else
+
+                    // Token
+//                    emit(Instruction.PartiallyAppliedTypeFunction(synId, r, typeArgs, args))
+
+                    case ErasureMode.Concrete =>
                       emit(Instruction.PartiallyAppliedFunction(synId, r, typeArgs, args))
+                  }
 
 
                 yield ()

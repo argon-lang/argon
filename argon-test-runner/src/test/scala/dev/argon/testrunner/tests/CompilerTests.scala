@@ -1,6 +1,6 @@
 package dev.argon.testrunner.tests
 
-import dev.argon.testrunner.GroupedTestCase
+import dev.argon.testrunner.{GroupedTestCase, TestResult, ExpectedTestResult}
 import zio.*
 import zio.test.*
 import zio.test.Assertion.*
@@ -46,14 +46,18 @@ object CompilerTests extends ZIOSpecDefault {
         }
       }
       .toSeq
-      
+
+  private def matchesExpectedResult(expectedResult: ExpectedTestResult): Assertion[TestResult] =
+    Assertion.assertion("matchesExpectedResult")(actual => expectedResult.matchedBy(actual))
+
   private def createTest(s: CompilerTestSuiteBase)(tc: GroupedTestCase): Spec[TestEnvironment & Scope, Any] =
     test(tc.getBaseName) {
       for
         testResult <- ZIO.attempt(s.runTestCase(tc))
-      yield assertTrue(tc.getExpectedResult.matchedBy(testResult))
+      yield assert(testResult)(matchesExpectedResult(tc.getExpectedResult))
     }
     
     
+  
     
 }

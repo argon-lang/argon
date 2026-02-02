@@ -2,6 +2,7 @@ package dev.argon.tube.loader
 
 import dev.argon.ast.IdentifierExpr
 import dev.argon.compiler.*
+import dev.argon.expr.ErasureMode
 import dev.argon.tube as t
 import dev.argon.tube.EffectInfo
 import dev.argon.util.{*, given}
@@ -29,7 +30,7 @@ private[loader] object TubeMethod {
 
       override def isInline: Boolean = method.inline
 
-      override def isErased: Boolean = method.erased
+      override def erasureMode: ErasureMode.DeclaredNonToken = LoaderUtils.decodeErasure(method.erased)
 
       override def isWitness: Boolean = method.witness
 

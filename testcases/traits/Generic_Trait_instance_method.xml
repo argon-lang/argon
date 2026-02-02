@@ -9,7 +9,7 @@
 
         import Argon.Core::*
         
-        trait MyTrait[A: type]
+        trait MyTrait[token A: type]
             public def self.identity(a: A): A = a
         end
 

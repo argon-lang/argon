@@ -119,6 +119,8 @@ pub enum Token {
     KwFinally,
     #[strum(serialize = "Token.KW_ERASED.type")]
     KwErased,
+    #[strum(serialize = "Token.KW_TOKEN.type")]
+    KwToken,
     #[strum(serialize = "Token.KW_REQUIRES.type")]
     KwRequires,
     #[strum(serialize = "Token.KW_ENSURES.type")]
@@ -338,7 +340,8 @@ enum Rule {
     MethodPurity,
     MethodParameters,
     MethodParameterList,
-    MethodParameterListErasedFlag,
+    MethodParameterListModifiers,
+    MethodParameterListModifier,
     MethodParameterListContents,
     MethodParameterListContents1,
     MethodParameter,
@@ -1189,6 +1192,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwProtected).discard() ], "const(Modifier.Protected)"),
                     rule([ term(KwInternal).discard() ], "const(Modifier.Internal)"),
                     rule([ term(KwErased).discard() ], "const(Modifier.Erased)"),
+                    rule([ term(KwToken).discard() ], "const(Modifier.Token)"),
                     rule([ term(KwWitness).discard() ], "const(Modifier.Witness)"),
                     rule([ term(KwInline).discard() ], "const(Modifier.Inline)"),
                     rule([ term(KwFinal).discard() ], "const(Modifier.Final)"),
@@ -1313,37 +1317,44 @@ impl GrammarFactory for ParserFactory {
                         [
                             term(SymOpenParen).discard(),
                             term(KwRequires).discard(),
-                            nonterm(MethodParameterListErasedFlag),
+                            nonterm(MethodParameterListModifiers),
                             nonterm(MethodParameterListContents),
                             term(SymCloseParen).discard(),
                         ],
-                        "({ case (isErased, (parameters, hasTrailingComma)) => FunctionParameterList(FunctionParameterListType.RequiresList, isErased, parameters, hasTrailingComma) } : (Boolean, (Seq[WithSource[FunctionParameter]], Boolean)) => FunctionParameterList)"
+                        "({ case (modifiers, (parameters, hasTrailingComma)) => FunctionParameterList(FunctionParameterListType.RequiresList, modifiers, parameters, hasTrailingComma) } : (Seq[WithSource[Modifier.OfParameter]], (Seq[WithSource[FunctionParameter]], Boolean)) => FunctionParameterList)"
                     ),
                     rule(
                         [
                             term(SymOpenParen).discard(),
-                            nonterm(MethodParameterListErasedFlag),
+                            nonterm(MethodParameterListModifiers),
                             nonterm(MethodParameterListContents),
                             term(SymCloseParen).discard(),
                         ],
-                        "({ case (isErased, (parameters, hasTrailingComma)) => FunctionParameterList(FunctionParameterListType.NormalList, isErased, parameters, hasTrailingComma) } : (Boolean, (Seq[WithSource[FunctionParameter]], Boolean)) => FunctionParameterList)"
+                        "({ case (modifiers, (parameters, hasTrailingComma)) => FunctionParameterList(FunctionParameterListType.NormalList, modifiers, parameters, hasTrailingComma) } : (Seq[WithSource[Modifier.OfParameter]], (Seq[WithSource[FunctionParameter]], Boolean)) => FunctionParameterList)"
                     ),
                     rule(
                         [
                             term(SymOpenBracket).discard(),
-                            nonterm(MethodParameterListErasedFlag),
+                            nonterm(MethodParameterListModifiers),
                             nonterm(MethodParameterListContents),
                             term(SymCloseBracket).discard(),
                         ],
-                        "({ case (isErased, (parameters, hasTrailingComma)) => FunctionParameterList(FunctionParameterListType.InferrableList, isErased, parameters, hasTrailingComma) } : (Boolean, (Seq[WithSource[FunctionParameter]], Boolean)) => FunctionParameterList)"
+                        "({ case (modifiers, (parameters, hasTrailingComma)) => FunctionParameterList(FunctionParameterListType.InferrableList, modifiers, parameters, hasTrailingComma) } : (Seq[WithSource[Modifier.OfParameter]], (Seq[WithSource[FunctionParameter]], Boolean)) => FunctionParameterList)"
                     ),
                 ],
             ).lex_mode("LexerMode.SkipNewLines"),
-            MethodParameterListErasedFlag => ruleset(
-                "Boolean",
+            MethodParameterListModifiers => ruleset(
+                "Seq[WithSource[Modifier.OfParameter]]",
                 [
-                    rule([], "const(false)"),
-                    rule([ term(KwErased) ], "const(true)"),
+                    rule([], "const(Seq.empty)"),
+                    rule([ nonterm(MethodParameterListModifier).with_location(), nonterm(MethodParameterListModifiers) ], "((h: WithSource[Modifier.OfParameter], t: Seq[WithSource[Modifier.OfParameter]]) => h +: t)")
+                ],
+            ),
+            MethodParameterListModifier => ruleset(
+                "Modifier.OfParameter",
+                [
+                    rule([ term(KwErased) ], "const(Modifier.Erased)"),
+                    rule([ term(KwToken) ], "const(Modifier.Token)"),
                 ],
             ),
             MethodParameterListContents => ruleset(

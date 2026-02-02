@@ -2,6 +2,7 @@ package dev.argon.tube.loader
 
 import dev.argon.tube as t
 import dev.argon.compiler.*
+import dev.argon.expr.ErasureMode
 import dev.argon.tube.EffectInfo
 import dev.argon.util.{*, given}
 import zio.*
@@ -24,7 +25,7 @@ private[loader] object TubeFunction {
 
       override def isInline: Boolean = function.inline
 
-      override def isErased: Boolean = function.erased
+      override def erasureMode: ErasureMode.Declared = LoaderUtils.decodeErasure(function.erasure)
 
       override def isWitness: Boolean = function.witness
 

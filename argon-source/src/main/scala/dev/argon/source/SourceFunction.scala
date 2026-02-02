@@ -2,6 +2,7 @@ package dev.argon.source
 
 import dev.argon.ast
 import dev.argon.compiler.*
+import dev.argon.expr.ErasureMode
 import dev.argon.util.{*, given}
 import zio.*
 
@@ -11,19 +12,24 @@ private[source] object SourceFunction {
       funcId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
       implCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.implementations.FunctionImplementation]
-      
-      erased = decl.modifiers.exists(_.value == ast.Modifier.Erased)
-      
+
+      mp <- ModifierParser.make(decl.modifiers, decl.name.location)
+      _ <- mp.parse(ModifierParser.accessModifierGlobal)
+      inlineFlag <- mp.parse(ModifierParser.isInline)
+      witnessFlag <- mp.parse(ModifierParser.isWitness)
+      erasure <- mp.parse(ModifierParser.erasureModeWithToken)
+      _ <- mp.done
+
       _ <- ErrorLog.logError(CompilerError.ErasedMustBePure(decl.name.location))
-        .whenDiscard(erased && !decl.purity)
+        .whenDiscard(erasure == ErasureMode.Erased && !decl.purity)
       
     yield new ArFuncC {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = funcId
 
-      override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
-      override def isErased: Boolean = erased
-      override def isWitness: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Witness)
+      override def isInline: Boolean = inlineFlag
+      override def erasureMode: ErasureMode.Declared = erasure
+      override def isWitness: Boolean = witnessFlag
 
       override def effects: context.DefaultExprContext.EffectInfo =
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
@@ -67,7 +73,7 @@ private[source] object SourceFunction {
                   override val context: ctx.type = ctx
                 }
 
-                tr.typeCheckExpr(scope2)(expr, sig.returnType, effects, erased = isErased)
+                tr.typeCheckExpr(scope2)(expr, sig.returnType, effects, erasure)
                   .map(context.implementations.FunctionImplementation.Expr.apply)
             }
           yield impl

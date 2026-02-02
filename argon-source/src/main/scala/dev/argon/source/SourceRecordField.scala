@@ -18,7 +18,7 @@ object SourceRecordField {
 
     for
       fieldId <- UniqueIdentifier.make
-      t <- tr.typeCheckExpr(scope)(field.fieldType, sig.returnType, ctx.DefaultExprContext.EffectInfo.Pure, erased = true)
+      t <- tr.typeCheckTypeExprWithKind(scope)(field.fieldType, sig.returnType, erased = false)
     yield new RecordFieldC {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = fieldId

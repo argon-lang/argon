@@ -2,13 +2,15 @@ package dev.argon.tube.loader
 
 import dev.argon.compiler as c
 import dev.argon.tube as t
+import dev.argon.expr as e
 import dev.argon.ast
-import dev.argon.tube.{Identifier, ImportSpecifier, Pattern}
+import dev.argon.tube.{ErasureMode, Identifier, ImportSpecifier, Pattern}
 import cats.data.NonEmptySeq
 import zio.*
 import dev.argon.compiler.{HasContext, UsingContext}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.ast.IdentifierExpr
+import dev.argon.tube.loader.LoaderUtils.*
 
 private[loader] trait LoaderUtils extends UsingContext {
 
@@ -156,7 +158,7 @@ private[loader] trait LoaderUtils extends UsingContext {
         case t.FunctionParameterListType.QuoteList => dev.argon.ast.FunctionParameterListType.QuoteList
         case t.FunctionParameterListType.RequiresList => dev.argon.ast.FunctionParameterListType.RequiresList
       },
-      isErased = param.erased,
+      erasureMode = decodeErasure(param.erasure),
       bindings = bindings,
       name = param.name.map(decodeIdentifier),
       paramType = paramType,
@@ -204,7 +206,7 @@ private[loader] trait LoaderUtils extends UsingContext {
           varType = varType,
           name = v.name.map(decodeIdentifier),
           isMutable = v.mutable,
-          isErased = v.erased,
+          erasureMode = decodeErasure(v.erased),
           isWitness = v.witness,
         )
         _ <- knownVars.update(kv => kv + (v.id -> localVar))
@@ -237,7 +239,7 @@ private[loader] trait LoaderUtils extends UsingContext {
             parameterIndex = paramVar.parameterIndex.toInt,
             name = paramVar.name.map(decodeIdentifier),
             varType = paramType,
-            isErased = paramVar.erased,
+            erasureMode = decodeErasure(paramVar.erasure),
             isWitness = paramVar.witness,
           )
       }
@@ -605,4 +607,18 @@ private[loader] trait LoaderUtils extends UsingContext {
   }
 
     
+}
+
+private[loader] object LoaderUtils {
+
+  def decodeErasure(erasure: t.ErasureMode): e.ErasureMode.Declared =
+    erasure match {
+      case t.ErasureMode.Erased() => e.ErasureMode.Erased
+      case t.ErasureMode.Concrete() => e.ErasureMode.Concrete
+      case t.ErasureMode.Token() => e.ErasureMode.Token
+    }
+
+  def decodeErasure(erasure: Boolean): e.ErasureMode.DeclaredNonToken =
+    if erasure then e.ErasureMode.Erased else e.ErasureMode.Concrete
+
 }

@@ -62,4 +62,5 @@ trait ExprScanner[F[_]: Monad] extends TreeScanner[F] {
   private given Scanner[BigInt] = ignoreScanner
   private given Scanner[Int] = ignoreScanner
   private given Scanner[String] = ignoreScanner
+  private given [E <: ErasureMode] => Scanner[E] = ignoreScanner
 }

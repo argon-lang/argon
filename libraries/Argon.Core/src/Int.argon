@@ -3,7 +3,7 @@ module Int
 import ::Bool::*
 import ::String::*
 
-public inline def Int: type = __argon_builtin int_type
+public token inline def Int: type = __argon_builtin int_type
 
 public inline def unary operator + (a: Int): Int = a
 public inline def unary operator - (a: Int): Int = __argon_builtin int_negate a

@@ -15,7 +15,7 @@ trait ExprContext extends ConditionalVars {
   sealed trait Var {
     def name: Option[IdentifierExpr]
     def varType: Expr
-    def isErased: Boolean
+    def erasureMode: ErasureMode.Declared
     def isMutable: Boolean
     def isWitness: Boolean
   }
@@ -25,7 +25,7 @@ trait ExprContext extends ConditionalVars {
     varType: Expr,
     name: Option[IdentifierExpr],
     isMutable: Boolean,
-    isErased: Boolean,
+    erasureMode: ErasureMode.DeclaredNonToken,
     isWitness: Boolean,
   ) extends Var {
     override def hashCode(): Int = id.hashCode()
@@ -52,7 +52,7 @@ trait ExprContext extends ConditionalVars {
     parameterIndex: Int,
     varType: Expr,
     name: Option[IdentifierExpr],
-    isErased: Boolean,
+    erasureMode: ErasureMode.Declared,
     isWitness: Boolean,
   ) extends Var {
     override def isMutable: Boolean = false
@@ -74,7 +74,7 @@ trait ExprContext extends ConditionalVars {
     varType: Expr,
     name: Option[IdentifierExpr],
   ) extends Var {
-    override def isErased: Boolean = false
+    override def erasureMode: ErasureMode.Concrete.type = ErasureMode.Concrete
     override def isMutable: Boolean = false
     override def isWitness: Boolean = false
   }

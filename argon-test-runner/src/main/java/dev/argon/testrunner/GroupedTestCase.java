@@ -40,5 +40,5 @@ public class GroupedTestCase {
 		
 		return new ExpectedTestResult.Executed(expectedOutput);
 	}
-	
+
 }

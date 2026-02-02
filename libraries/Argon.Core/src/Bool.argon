@@ -2,7 +2,7 @@ module Bool
 
 import ::String::*
 
-public inline def Bool: type = __argon_builtin bool_type
+public token inline def Bool: type = __argon_builtin bool_type
 
 public inline def unary operator ! (a: Bool): Bool = __argon_builtin bool_not a
 

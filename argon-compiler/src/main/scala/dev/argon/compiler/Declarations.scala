@@ -2,7 +2,7 @@ package dev.argon.compiler
 
 import cats.data.NonEmptySeq
 import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.{ExprContext, ExprContextWithHoles, Substitution}
+import dev.argon.expr.{ErasureMode, ExprContext, ExprContextWithHoles, Substitution}
 import dev.argon.util.{FilePosition, Fuel, Location, UniqueIdentifier}
 import zio.*
 
@@ -51,7 +51,7 @@ trait Context extends ScopeContext {
     def parameterFromDefault(p: DefaultSignatureContext.SignatureParameter): SignatureParameter =
       SignatureParameter(
         listType = p.listType,
-        isErased = p.isErased,
+        erasureMode = p.erasureMode,
         bindings = p.bindings.map { binding => ParameterBinding(
           name = binding.name,
           paramType = exprFromDefault(binding.paramType),
@@ -113,7 +113,7 @@ trait Context extends ScopeContext {
         parameters = Seq(
           SignatureParameter(
             listType = dev.argon.ast.FunctionParameterListType.NormalList,
-            isErased = field.isErased,
+            erasureMode = field.erasureMode,
             bindings = Seq(),
             name = None,
             paramType = fieldType,
@@ -312,7 +312,7 @@ enum ModuleExportC[Ctx <: Context] {
 
 abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqual {
   def isInline: Boolean
-  def isErased: Boolean
+  def erasureMode: ErasureMode.Declared
   def isWitness: Boolean
   def effects: context.DefaultExprContext.EffectInfo
 
@@ -345,7 +345,7 @@ abstract class RecordFieldC extends UsingContext derives CanEqual {
 
   val id: UniqueIdentifier
   val isMutable: Boolean
-  def isErased: Boolean = false
+  def erasureMode: ErasureMode.DeclaredNonToken = ErasureMode.Concrete
   val name: IdentifierExpr
   val fieldType: Expr
 
@@ -402,7 +402,7 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
   val owner: MethodOwner[context.type]
 
   def isInline: Boolean
-  def isErased: Boolean
+  def erasureMode: ErasureMode.DeclaredNonToken
   def isWitness: Boolean
   def effects: context.DefaultExprContext.EffectInfo
 

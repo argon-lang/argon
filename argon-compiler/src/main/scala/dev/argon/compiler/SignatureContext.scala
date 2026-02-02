@@ -5,7 +5,7 @@ import cats.implicits.given
 import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.expr.{BuiltinType, ExprContext}
 import dev.argon.util.WithSource
-import dev.argon.expr.Substitution
+import dev.argon.expr.{Substitution, ErasureMode}
 import dev.argon.util.{*, given}
 
 trait SignatureContext {
@@ -70,7 +70,7 @@ trait SignatureContext {
   
   final case class SignatureParameter(
     listType: FunctionParameterListType,
-    isErased: Boolean,
+    erasureMode: ErasureMode.Declared,
     bindings: Seq[ParameterBinding],
     name: Option[IdentifierExpr],
     paramType: Expr,
@@ -82,7 +82,7 @@ trait SignatureContext {
         parameterIndex = index,
         varType = paramType,
         name = name,
-        isErased = isErased,
+        erasureMode = erasureMode,
         isWitness = listType == FunctionParameterListType.RequiresList,
       )
     

@@ -3,6 +3,7 @@ package dev.argon.source
 import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
 import dev.argon.compiler.*
+import dev.argon.expr.ErasureMode
 import dev.argon.util.{*, given}
 import zio.*
 
@@ -12,11 +13,23 @@ private[source] object SourceMethod {
       funcId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
       implCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.implementations.MethodImplementation]
+
+      mp <- ModifierParser.make(decl.modifiers, decl.name.location)
+      _ <- mp.parse(ModifierParser.accessModifierMember)
+      inlineFlag <- mp.parse(ModifierParser.isInline)
+      witnessFlag <- mp.parse(ModifierParser.isWitness)
+      erasure <- mp.parse(ModifierParser.erasureModeWithoutToken)
+      methodSlot <- mp.parse(
+        if decl.body.isEmpty then
+          ModifierParser.methodSlotAbstract
+        else
+          ModifierParser.methodSlotConcrete
+      )
+      _ <- mp.done
       
-      erased = decl.modifiers.exists(_.value == ast.Modifier.Erased)
-      
+
       _ <- ErrorLog.logError(CompilerError.ErasedMustBePure(decl.name.location))
-        .whenDiscard(erased && !decl.purity)
+        .whenDiscard(erasure == ErasureMode.Erased && !decl.purity)
       
     yield new ArMethodC {
       override val context: ctx.type = ctx
@@ -24,9 +37,9 @@ private[source] object SourceMethod {
       override val id: UniqueIdentifier = funcId
       override val owner: MethodOwner[context.type] = methodOwner
 
-      override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
-      override def isErased: Boolean = erased
-      override def isWitness: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Witness)
+      override def isInline: Boolean = inlineFlag
+      override def erasureMode: ErasureMode.DeclaredNonToken = erasure
+      override def isWitness: Boolean = witnessFlag
 
       override def effects: context.DefaultExprContext.EffectInfo =
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
@@ -89,7 +102,7 @@ private[source] object SourceMethod {
                   override val context: ctx.type = ctx
                 }
 
-                tr.typeCheckExpr(scope3)(expr, sig.returnType, effects, erased = isErased)
+                tr.typeCheckExpr(scope3)(expr, sig.returnType, effects, erasure)
                   .map(context.implementations.MethodImplementation.Expr.apply)
             }
           yield impl

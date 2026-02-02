@@ -78,4 +78,5 @@ trait ExprShifter[F[_]: Monad] extends TreeShifter[F] {
   private given Shifter[BinaryBuiltin, BinaryBuiltin] = identityShifter
   private given Shifter[IdentifierExpr, IdentifierExpr] = identityShifter
   private given Shifter[UniqueIdentifier, UniqueIdentifier] = identityShifter
+  private given [E <: ErasureMode] => Shifter[E, E] = identityShifter
 }

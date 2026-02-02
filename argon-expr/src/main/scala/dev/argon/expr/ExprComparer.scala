@@ -54,4 +54,5 @@ trait ExprComparer extends TreeComparison {
 
   private given Comparer[UniqueIdentifier] = equalComparer
   private given Comparer[IdentifierExpr] = equalComparer
+  private given [E <: ErasureMode] => Comparer[E] = equalComparer
 }

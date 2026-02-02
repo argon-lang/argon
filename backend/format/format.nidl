@@ -320,8 +320,7 @@ record signature-parameter {
     list-type: function-parameter-list-type;
 
     @esexpr:(keyword)
-    @esexpr:(default-value #false)
-    erased: bool;
+    erasure: erasure-mode;
 
     @esexpr:(keyword)
     bindings: list[parameter-binding];
@@ -350,6 +349,12 @@ enum effect-info {
     effectful,
 }
 
+@esexpr:(derive-codec)
+enum erasure-mode {
+    concrete,
+    erased,
+    token,
+}
 
 
 @esexpr:(derive-codec)
@@ -362,8 +367,7 @@ record function-definition {
     inline: bool;
 
     @esexpr:(keyword)
-    @esexpr:(default-value #false)
-    erased: bool;
+    erasure: erasure-mode;
 
     @esexpr:(keyword)
     @esexpr:(default-value #false)
@@ -894,8 +898,7 @@ enum var {
         var-type: expr;
 
         @esexpr:(keyword)
-        @esexpr:(default-value #false)
-        erased: bool;
+        erasure: erasure-mode;
 
         @esexpr:(keyword)
         @esexpr:(default-value #false)
