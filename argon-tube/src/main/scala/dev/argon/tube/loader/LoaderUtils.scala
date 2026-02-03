@@ -490,6 +490,28 @@ private[loader] trait LoaderUtils extends UsingContext {
             decodedFields <- ZIO.foreach(fields)(decodeRecordLiteralField)
           yield ArExpr.RecordLiteral(decodedRecordType, decodedFields)
 
+        case Expr.RefCellType(elementType) =>
+          for
+            t <- expr(elementType)
+          yield ArExpr.RefCellType(t)
+
+        case Expr.RefCellCreate(elementType, value) =>
+          for
+            t <- expr(elementType)
+            v <- expr(value)
+          yield ArExpr.RefCellCreate(t, v)
+
+        case Expr.RefCellLoad(cell) =>
+          for
+            cell <- expr(cell)
+          yield ArExpr.RefCellLoad(cell)
+
+        case Expr.RefCellStore(cell, value) =>
+          for
+            cell <- expr(cell)
+            v <- expr(value)
+          yield ArExpr.RefCellStore(cell, v)
+
         case Expr.Sequence(head, tail) =>
           for
             headExpr <- expr(head)

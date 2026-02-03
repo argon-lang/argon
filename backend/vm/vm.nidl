@@ -457,6 +457,9 @@ enum token {
     instance-token-parameter {
         index: nat;
     },
+    ref-cell {
+        inner: token;
+    },
     trait {
         trait-id: nat;
 
@@ -609,6 +612,11 @@ enum instruction {
         field-extractors: list[field-extractor];
     },
 
+    load-reference {
+        dest: register-id;
+        ref: register-id;
+    },
+
     load-token {
         dest: register-id;
         token: token;
@@ -626,6 +634,11 @@ enum instruction {
         token-args: list[token];
         @esexpr:(vararg)
         args: list[register-id];
+    },
+
+    new-reference {
+        dest: register-id;
+        value: register-id;
     },
 
     partially-applied-function {
@@ -705,6 +718,11 @@ enum instruction {
     },
 
     unreachable,
+
+    update-reference {
+        ref: register-id;
+        value: register-id;
+    }
 }
 
 @esexpr:(derive-codec)

@@ -27,6 +27,7 @@ trait Evaluator[R, E] {
            Expr.Lambda(_, _, _) |
            Expr.NewInstance(_, _) |
            Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
+           Expr.RefCellType(_) |
            Expr.EnumType(_, _) | Expr.EnumVariantLiteral(_, _, _, _) |
            Expr.TraitType(_, _) |
            Expr.Tuple(_) |
@@ -38,6 +39,9 @@ trait Evaluator[R, E] {
       case Expr.BindVariable(_, _) |
            Expr.Sequence(_, _) |
            Expr.VariableStore(_, _) |
+           Expr.RefCellCreate(_, _) |
+           Expr.RefCellLoad(_) |
+           Expr.RefCellStore(_, _) |
            _: Expr.RecordFieldStore |
            _: Expr.Is => ???
 

@@ -936,6 +936,28 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 fieldValue <- expr(fieldValue)
               yield Expr.RecordFieldStore(rt, field, recordValue, fieldValue)
 
+            case ArExpr.RefCellType(elementType) =>
+              for
+                t <- expr(elementType)
+              yield Expr.RefCellType(t)
+
+            case ArExpr.RefCellCreate(elementType, value) =>
+              for
+                t <- expr(elementType)
+                v <- expr(value)
+              yield Expr.RefCellCreate(t, v)
+
+            case ArExpr.RefCellLoad(cell) =>
+              for
+                cell <- expr(cell)
+              yield Expr.RefCellLoad(cell)
+
+            case ArExpr.RefCellStore(cell, value) =>
+              for
+                cell <- expr(cell)
+                v <- expr(value)
+              yield Expr.RefCellStore(cell, v)
+
             case ArExpr.Sequence(stmts, result) =>
               for
                 head <- expr(stmts.headOption.getOrElse(result))

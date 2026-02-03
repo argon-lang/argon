@@ -1406,6 +1406,19 @@ class BlockEmitter extends EmitterBase {
                 });
                 break;
 
+            case "load-reference":
+                assign(insn.dest, {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.getReg(insn.ref),
+                    property: {
+                        type: "Identifier",
+                        name: "value",
+                    },
+                });
+                break;
+
             case "load-token":
                 assign(insn.dest, this.buildTokenValue(insn.token));
                 break;
@@ -1437,6 +1450,14 @@ class BlockEmitter extends EmitterBase {
                 assign(insn.dest, callExpr);
                 break;
             }
+
+            case "new-reference":
+                assign(insn.dest, {
+                    type: "NewExpression",
+                    callee: this.getArgonRuntimeExport("RefCell"),
+                    arguments: [this.getReg(insn.value)],
+                });
+                break;
 
             case "partially-applied-function":
             case "partially-applied-token-function":
@@ -1664,6 +1685,27 @@ class BlockEmitter extends EmitterBase {
                 });
                 break;
 
+            case "update-reference":
+                stmts.push({
+                    type: "ExpressionStatement",
+                    expression: {
+                        type: "AssignmentExpression",
+                        operator: "=",
+                        left: {
+                            type: "MemberExpression",
+                            computed: false,
+                            optional: false,
+                            object: this.getReg(insn.ref),
+                            property: {
+                                type: "Identifier",
+                                name: "value",
+                            },
+                        },
+                        right: this.getReg(insn.value),
+                    },
+                });
+                break;
+
             default:
                 ensureExhaustive(insn);
         }
@@ -1786,6 +1828,15 @@ class BlockEmitter extends EmitterBase {
                         type: "Identifier",
                         name: `args_${t.index}`,
                     },
+                };
+
+            case "ref-cell":
+                return {
+                    type: "NewExpression",
+                    callee: this.getArgonRuntimeExport("RefCellType"),
+                    arguments: [
+                        this.buildTokenValue(t.inner),
+                    ],
                 };
 
             case "trait":

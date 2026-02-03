@@ -1279,7 +1279,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
               }
 
-            case e @ (ArExpr.RecordType(_, _) | ArExpr.EnumType(_, _)) =>
+            case e @ (ArExpr.RecordType(_, _) | ArExpr.EnumType(_, _) | ArExpr.RefCellType(_) | ArExpr.TraitType(_, _)) =>
               intoRegister(e, output) { r =>
                 tokenExpr(e).flatMap { t =>
                   emit(Instruction.LoadToken(r, t))
@@ -1322,6 +1322,14 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                     yield RecordFieldLiteral(fieldId, fieldRegsMap(fieldDef))
                   }
                   _ <- emit(Instruction.RecordLiteral(r, recType, fieldRegsOrdered))
+                yield ()
+              }
+
+            case ArExpr.RefCellCreate(_, value) =>
+              intoRegister(e, output) { r =>
+                for
+                  valueReg <- expr(value, ExprOutput.AnyRegister)
+                  _ <- emit(Instruction.NewReference(r, valueReg))
                 yield ()
               }
 

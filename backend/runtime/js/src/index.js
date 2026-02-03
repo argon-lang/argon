@@ -22,11 +22,24 @@ export class FunctionTypeToken {
 export const typeInfo = {};
 export const erasedType = {};
 
+export class RefCellType {
+    constructor(inner) {
+        this.inner = inner;
+    }
+}
+
 export class UnreachableError extends Error {
     constructor() {
         super();
     }
 }
+
+export class RefCell {
+    constructor(value) {
+        this.value = value;
+    }
+}
+
 
 
 function isSameType(a, b) {
@@ -54,6 +67,14 @@ function isSameType(a, b) {
 
     if(a instanceof FunctionTypeErased && b instanceof FunctionTypeErased) {
         return isSameType(a.res, b.res);
+    }
+
+    if(a instanceof FunctionTypeToken && b instanceof FunctionTypeToken) {
+        return isSameType(a.param, b.param) && isSameType(a.res, b.res);
+    }
+
+    if(a instanceof RefCellType && b instanceof RefCellType) {
+        return isSameType(a.inner, b.inner);
     }
 
     return false;

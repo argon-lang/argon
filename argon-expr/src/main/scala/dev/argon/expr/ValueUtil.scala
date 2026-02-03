@@ -34,6 +34,10 @@ object ValueUtil {
       case Expr.RecordFieldLoad(_, _, _) => false
       case Expr.RecordFieldStore(_, _, _, _) => false
       case Expr.RecordLiteral(_, _) => true
+      case Expr.RefCellType(_) => true
+      case Expr.RefCellCreate(_, _) => true
+      case Expr.RefCellLoad(_) => false
+      case Expr.RefCellStore(_, _) => false
       case Expr.Sequence(_, _) => false
       case Expr.StringLiteral(_) => true
       case Expr.TraitType(_, _) => true

@@ -682,6 +682,20 @@ enum expr {
         @esexpr:(vararg)
         fields: list[record-field-literal];
     },
+    ref-cell-type {
+        element-type: expr;
+    },
+    ref-cell-create {
+        element-type: expr;
+        value: expr;
+    },
+    ref-cell-load {
+        cell: expr;
+    },
+    ref-cell-store {
+        cell: expr;
+        value: expr;
+    },
     sequence {
         head: expr;
 
