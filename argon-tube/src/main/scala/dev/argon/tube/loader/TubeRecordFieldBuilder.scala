@@ -1,7 +1,7 @@
 package dev.argon.tube.loader
 
 import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.{HasContext, RecordFieldC, UsingContext}
+import dev.argon.compiler.{RecordFieldC, UsingContext}
 import dev.argon.tube.RecordFieldDefinition
 import dev.argon.util.UniqueIdentifier
 

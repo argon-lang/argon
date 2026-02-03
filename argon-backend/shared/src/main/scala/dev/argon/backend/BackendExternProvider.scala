@@ -1,14 +1,11 @@
 package dev.argon.backend
 
 import dev.argon.backend.options.OptionValue
-import dev.argon.compiler.{Context, ExternProvider, HasContext, UsingContext}
+import dev.argon.compiler.{Context, ExternProvider, HasContext}
 import dev.argon.tube.{ExternMap, SupportedPlatform}
 import esexpr.{Dictionary, ESExpr}
 import zio.*
-import cats.instances.{*, given}
-import cats.instances.map.{*, given}
-import cats.implicits.{*, given}
-import cats.syntax.all.{*, given}
+import cats.syntax.all.*
 import cats.data.OptionT
 import zio.interop.catz.core.given
 

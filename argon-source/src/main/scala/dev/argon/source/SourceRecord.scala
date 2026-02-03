@@ -2,9 +2,8 @@ package dev.argon.source
 
 import dev.argon.ast
 import dev.argon.compiler.*
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
-import dev.argon.ast.IdentifierExpr
 
 private[source] object SourceRecord {
   def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, importFactory: ImportFactory)(decl: ast.RecordDeclarationStmt): ctx.Comp[ArRecordC & HasContext[ctx.type]] =
@@ -36,7 +35,7 @@ private[source] object SourceRecord {
             sig <- signature
             scope2 = context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Rec(this), scope, sig.parameters)
             fields <- ZIO.foreach(
-              decl.body.collect { case WithLocation(field: ast.RecordField, loc) => field }
+              decl.body.collect { case WithLocation(field: ast.RecordField, _) => field }
             ) { field =>
               SourceRecordField(context, scope2, sig, this)(field)
             }

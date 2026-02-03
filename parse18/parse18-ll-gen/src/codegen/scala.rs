@@ -110,7 +110,16 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
                     writeln!(w, "        for")?;
                 }
 
-                write!(w, "          x{} <- ", i)?;
+
+
+                write!(w, "          ")?;
+                if sym.discard {
+                    write!(w, "_")?;
+                }
+                else {
+                    write!(w, "x{}", i)?;
+                }
+                write!(w, " <- ")?;
 
                 if sym.with_location {
                     write!(w, "withLocation(")?;
@@ -295,12 +304,19 @@ where
             emit_value(w, next_var_index, &*second)?;
             write!(w, ".location))")?;
         },
-        LL1RuleValue::Lambda(arg_type, body) => {
+        LL1RuleValue::Lambda { discard_param, param_type, body } => {
             let var_index = *next_var_index;
             *next_var_index += 1;
 
-            write!(w, "(x{}: ", var_index)?;
-            emit_type(w, arg_type)?;
+            write!(w, "(")?;
+            if *discard_param {
+                write!(w, "_")?;
+            }
+            else {
+                write!(w, "x{}", var_index)?;
+            }
+            write!(w, ": ")?;
+            emit_type(w, param_type)?;
             write!(w, ") => ")?;
             emit_value(w, next_var_index, body.as_ref())?;
 

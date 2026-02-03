@@ -6,6 +6,8 @@ import scala.quoted.{Expr, Quotes, Type}
 import cats.*
 import cats.implicits.given
 
+import scala.annotation.unused
+
 trait TreeScanner[F[_]: Monad] {
   type Scanner[T] = TreeScanner.Scanner[F, T]
 
@@ -95,7 +97,7 @@ object TreeScanner {
         override def scan(a: T): F[Unit] =
           ${
             MacroUtils.patternMatch[T, Cases, F[Unit]]('a)([U] => (u: Expr[U], uType: Type[U]) => {
-              given Type[U] = uType
+              @unused given Type[U] = uType
               '{ $matcher.autoScannerProduct[U](using summonInline[Mirror.ProductOf[U]]).scan($u) }
             })
           }

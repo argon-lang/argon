@@ -13,7 +13,6 @@ import zio.stream.*
 import java.io.{IOException, InterruptedIOException}
 import java.util as ju
 import scala.jdk.OptionConverters.*
-import scala.reflect.TypeTest
 import scala.compiletime.asMatchable
 
 trait BinaryResource[E] {
@@ -35,7 +34,6 @@ trait BinaryResource[E] {
       override def asInputStream[E1 >: E](using ew: ErrorWrapper[E1] { type EX <: IOException }): ZIO[Scope, ew.EX, InputStreamWithError[ew.EX]] =
         ZIO.fromAutoCloseable(ErrorWrapper.wrapEffect(BinaryResource.this.asInputStream)(using ew))
           .map { is =>
-            import ew.given
             is.convertError[E, ew.EX, ew.EX](
               WrappingIOErrorType[E],
               e => ew.wrap(Cause.fail(e)),
@@ -148,14 +146,5 @@ object BinaryResource {
 
       override def toThrowable(t: ew.EX): ew.EX = t
     }
-
-  private trait WrappedJavaBinaryResource[E] {
-    val javaBinaryResource: javaApi.BinaryResource[E]
-  }
-
-  private trait WrappedScalaBinaryResource[E] {
-    val scalaBinaryResource: BinaryResource[E]
-  }
-
 }
 

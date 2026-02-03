@@ -3,7 +3,7 @@ package dev.argon.source
 import dev.argon.ast
 import dev.argon.compiler.*
 import dev.argon.expr.ErasureMode
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
 
 private[source] object SourceFunction {

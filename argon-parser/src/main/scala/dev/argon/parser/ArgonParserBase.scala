@@ -1,12 +1,11 @@
 package dev.argon.parser
 
-import dev.argon.ast.{BinaryOperator, Expr, FunctionParameterListType, StringFragment, UnaryOperator}
-import dev.argon.ast.Operator.ValidIdentifier
+import dev.argon.ast.{Expr, FunctionParameterListType, StringFragment}
 import dev.argon.parser.Token.{BinaryOperatorToken, UnaryOperatorToken}
-import dev.argon.util.{Location, MacroUtils, SourceLocation, WithSource, WithLocation as WithLoc}
+import dev.argon.util.{Location, SourceLocation, WithSource, WithLocation as WithLoc}
 import zio.{UIO, ZEnvironment, ZIO}
 
-import scala.compiletime.{erasedValue, summonInline}
+import scala.annotation.unused
 import scala.reflect.TypeTest
 
 private[parser] abstract class ArgonParserBase {
@@ -44,7 +43,7 @@ private[parser] abstract class ArgonParserBase {
 
 
 
-  protected def const[A](a: A)(_ignored: Any*): A = a
+  protected def const[A](a: A)(@unused ignored: Any*): A = a
 
 
   protected def unaryOp(op: UnaryOperatorToken[?], expr: WithSource[Expr]): Expr =

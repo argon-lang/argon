@@ -3,7 +3,6 @@ package dev.argon.io
 import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
-import dev.argon.util.async.ErrorWrapper
 
 
 trait TextResource[+E] extends BinaryResource[E] {

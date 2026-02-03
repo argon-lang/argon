@@ -1,5 +1,6 @@
 package dev.argon.backend.scalaApi
 
+import scala.annotation.unused
 import dev.argon.backend.sjs
 import dev.argon.util.async.AsyncIterableTools
 import dev.argon.util.async.AsyncIterableTools.AsyncIterable
@@ -9,7 +10,6 @@ import zio.*
 import zio.stream.*
 import dev.argon.io
 
-import scala.reflect.TypeTest
 import scala.scalajs.js
 import scala.scalajs.js.JavaScriptException
 import scala.scalajs.js.typedarray.Uint8Array
@@ -29,7 +29,7 @@ trait BinaryResource[E] {
 }
 
 object BinaryResource {
-  def jsAdapter[SE, JE](eAdapter: JSAdapter[SE, JE])(using Runtime[Any], ErrorType[SE], ErrorType[JE]): JSAdapter[BinaryResource[SE], sjs.BinaryResource[JE]] =
+  def jsAdapter[SE, JE](eAdapter: JSAdapter[SE, JE])(using rt: Runtime[Any], @unused scalaError: ErrorType[SE], jsError: ErrorType[JE]): JSAdapter[BinaryResource[SE], sjs.BinaryResource[JE]] =
     new JSAdapter[BinaryResource[SE], sjs.BinaryResource[JE]] {
       override def toJS(s: BinaryResource[SE]): sjs.BinaryResource[JE] =
         new sjs.BinaryResource[JE] {

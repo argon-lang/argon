@@ -1,15 +1,9 @@
 package dev.argon.source
 
-import cats.data.{NonEmptySeq, OptionT}
-import dev.argon.ast.{IdentifierExpr, ModulePatternMapping, ModulePatternSegment}
-import dev.argon.compiler.{ArModuleC, ArTubeC, CompilerError, Context, ErrorLog, ExternProvider, HasContext, ModulePath, TubeImporter, TubeName}
+import dev.argon.compiler.*
 import dev.argon.io.{DirectoryEntry, DirectoryResource}
-import dev.argon.util.{*, given}
 import zio.ZIO
 import zio.stream.ZStream
-import cats.*
-import cats.implicits.given
-import zio.interop.catz.core.given
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets

@@ -3,7 +3,6 @@ package dev.argon.prover
 
 import dev.argon.util.Fuel
 import zio.*
-import zio.stream.*
 
 trait ProverContext[R, E] {
   val syntax: ProverSyntax

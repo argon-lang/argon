@@ -3,10 +3,7 @@ package dev.argon.compiler
 import cats.Monad
 import cats.implicits.given
 import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
-import dev.argon.expr.{BuiltinType, ExprContext}
-import dev.argon.util.WithSource
-import dev.argon.expr.{Substitution, ErasureMode}
-import dev.argon.util.{*, given}
+import dev.argon.expr.{ExprContext, Substitution, ErasureMode}
 
 trait SignatureContext {
   val exprContext: ExprContext

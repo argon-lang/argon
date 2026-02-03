@@ -1,7 +1,6 @@
 package dev.argon.compiler
 
 import dev.argon.expr.*
-import cats.Id
 import zio.*
 
 trait ExprType {
@@ -85,9 +84,9 @@ trait ExprType {
       case Expr.IntLiteral(_) =>
         ZIO.succeed(intType)
 
-      case Expr.InstanceMethodCall(m, instanceType, obj, args) =>
+      case Expr.InstanceMethodCall(m, instanceType, _, args) =>
         for
-          sig <- sigContext.instanceMethodSig(m, instanceType, obj)
+          sig <- sigContext.instanceMethodSig(m, instanceType)
         yield sig.returnTypeForArgs(
           exprContext.ExpressionOwner.Method(m),
           args

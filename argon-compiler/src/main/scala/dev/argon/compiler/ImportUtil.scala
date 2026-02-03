@@ -7,7 +7,7 @@ import zio.stm.*
 import cats.*
 import cats.implicits.given
 import zio.interop.catz.core.given
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 
 object ImportUtil {
   def getModuleExports
@@ -37,6 +37,7 @@ object ImportUtil {
         tube.modules.get(path) match {
           case Some(module) =>
             module.allExports(reexportingModules)
+              .map(_.view.filterKeys(name => !excludedNames.contains(name)).toMap)
 
           case None =>
             ErrorLog.logError(CompilerError.UnknownModule(tubeName, path, location))

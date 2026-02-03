@@ -1,8 +1,5 @@
 package dev.argon.expr
 
-import cats.*
-import cats.data.State
-import cats.implicits.given
 import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{*, given}
 
@@ -27,7 +24,6 @@ trait ExprComparer extends TreeComparison {
 
   private given Comparer[Expr.RecordType] = autoComparer
   private given Comparer[Expr.EnumType] = autoComparer
-  private given Comparer[Expr.TraitType] = autoComparer
   
   private given Comparer[MethodInstanceType]:
     override def compare(a: MethodInstanceType, b: MethodInstanceType): Comparison =

@@ -1,5 +1,6 @@
 package dev.argon.util
 
+import scala.annotation.unused
 import scala.compiletime.{erasedValue, summonInline}
 import scala.deriving.Mirror
 import scala.quoted.{Expr, Quotes, Type}
@@ -120,7 +121,7 @@ object TreeComparison {
         override def compare(a: T, b: T): C =
           ${
             MacroUtils.patternMatch2[T, Cases, C]('a, 'b)('{ $matcher.comparisonFromBoolean(false) })([U] => (u1: Expr[U], u2: Expr[U], uType: Type[U]) => {
-              given Type[U] = uType
+              @unused given Type[U] = uType
               '{ $matcher.autoComparerProduct[U](using summonInline[Mirror.ProductOf[U]]).compare($u1, $u2) }
             })
           }

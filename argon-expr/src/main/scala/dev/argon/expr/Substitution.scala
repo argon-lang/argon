@@ -1,8 +1,7 @@
 package dev.argon.expr
 
-import dev.argon.util.{TreeShifter, UniqueIdentifier}
+import dev.argon.util.TreeShifter
 import cats.*
-import dev.argon.ast.IdentifierExpr
 
 private abstract class Substitution[EC <: ExprContext](val exprContext: EC) extends ExprShifter[Id] {
   import exprContext.*

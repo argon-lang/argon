@@ -2,9 +2,8 @@ package dev.argon.tube.loader
 
 import dev.argon.tube as t
 import dev.argon.compiler.*
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
-import dev.argon.ast.IdentifierExpr
 
 private[loader] object TubeRecord {
   def apply(ctx: Context, elemLoader: ElementLoader & HasContext[ctx.type], rec: t.RecordDefinition): ctx.Comp[ArRecordC & HasContext[ctx.type]] =

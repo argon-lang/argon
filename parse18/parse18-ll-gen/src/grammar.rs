@@ -74,7 +74,11 @@ pub enum RuleValue<G: GrammarTypes> {
         second: Box<RuleValue<G>>,
         value: Box<RuleValue<G>>,
     },
-    Lambda(RuleType<G>, Box<RuleValue<G>>),
+    Lambda {
+        discard_param: bool,
+        param_type: RuleType<G>,
+        body: Box<RuleValue<G>>,
+    },
 
     // f, a
     Apply(Box<RuleValue<G>>, Box<RuleValue<G>>),
@@ -113,7 +117,7 @@ impl <G: GrammarTypes> RuleValue<G> {
                 value.substitute_indexes_with(f);
             }
 
-            RuleValue::Lambda(_, body) => body.substitute_indexes_with(f),
+            RuleValue::Lambda { body,  .. } => body.substitute_indexes_with(f),
             RuleValue::Apply(func, a) => {
                 func.substitute_indexes_with(f);
                 a.substitute_indexes_with(f);
@@ -569,7 +573,11 @@ pub enum LL1RuleValue<'a, G: GrammarTypes> {
         second: Box<LL1RuleValue<'a, G>>,
         value: Box<LL1RuleValue<'a, G>>,
     },
-    Lambda(LL1RuleType<'a, G>, Box<LL1RuleValue<'a, G>>),
+    Lambda {
+        discard_param: bool,
+        param_type: LL1RuleType<'a, G>,
+        body: Box<LL1RuleValue<'a, G>>,
+    },
 
     // f, a
     Apply(Box<LL1RuleValue<'a, G>>, Box<LL1RuleValue<'a, G>>),
@@ -594,11 +602,13 @@ impl <'a, G: GrammarTypes> LL1RuleValue<'a, G> {
                     value: Box::new(Self::from_rule_value(grammar, value)),
                 },
 
-            RuleValue::Lambda(arg_type, body) =>
-                LL1RuleValue::Lambda(
-                    LL1RuleType::from_rule_type(grammar, arg_type),
-                    Box::new(Self::from_rule_value(grammar, body)),
-                ),
+            RuleValue::Lambda { discard_param, param_type, body } =>
+                LL1RuleValue::Lambda {
+                    discard_param: *discard_param,
+                    param_type: LL1RuleType::from_rule_type(grammar, param_type),
+                    body: Box::new(Self::from_rule_value(grammar, body)),
+                },
+
             RuleValue::Apply(f, a) =>
                 LL1RuleValue::Apply(
                     Box::new(Self::from_rule_value(grammar, f)),
@@ -848,7 +858,11 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                         rule_type.clone()
                     };
 
-                r.value = RuleValue::Lambda(prefix_arg_type, Box::new(value));
+                r.value = RuleValue::Lambda {
+                    discard_param: sym.discard,
+                    param_type: prefix_arg_type,
+                    body: Box::new(value),
+                };
 
                 suffix_rules.push(r);
             }
@@ -920,9 +934,10 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                         },
                     ],
                     // x2 => x1(x0(x2))
-                    value: RuleValue::Lambda(
-                        prefix_arg_type.clone(),
-                        Box::new(RuleValue::Apply(
+                    value: RuleValue::Lambda {
+                        discard_param: false,
+                        param_type: prefix_arg_type.clone(),
+                        body: Box::new(RuleValue::Apply(
                             Box::new(RuleValue::SymbolValue(1)),
                             Box::new(RuleValue::BuildLocation {
                                 first: Box::new(RuleValue::SymbolValue(2)),
@@ -933,21 +948,22 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                                 )),
                             }),
                         )),
-                    ),
+                    },
                 },
 
                 // Empty rule for no recursion.
                 Rule {
                     symbols: vec![],
-                    value: RuleValue::Lambda(
-                        prefix_arg_type.clone(),
-                        if has_location {
+                    value: RuleValue::Lambda {
+                        discard_param: false,
+                        param_type: prefix_arg_type.clone(),
+                        body: if has_location {
                             Box::new(RuleValue::DropLocation(Box::new(RuleValue::SymbolValue(0))))
                         }
                         else {
                             Box::new(RuleValue::SymbolValue(0))
                         },
-                    ),
+                    },
                 }
             ],
             lex_mode: None,
@@ -986,7 +1002,13 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
             let mut prefixes: HashMap<Vec<Symbol>, usize> = HashMap::new();
             for rule in &ruleset.rules {
                 for j in 1..=rule.symbols.len() {
-                    *prefixes.entry(rule.symbols[0..j].to_vec()).or_insert(0) += 1;
+                    let mut entry_prefix_vec = rule.symbols[0..j].to_vec();
+                    for sym in &mut entry_prefix_vec {
+                        sym.discard = false;
+                    }
+
+
+                    *prefixes.entry(entry_prefix_vec).or_insert(0) += 1;
                 }
             }
     
@@ -1013,7 +1035,18 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                 // Find matching prefixes.
                 // Prefer the longest of the most common prefixes.
                 if let Some(prefix) = prefixes.iter()
-                    .filter(|(prefix, n)| **n > 1 && r.symbols.starts_with(prefix))
+                    .filter(|(prefix, n)|
+                        **n > 1 &&
+                            prefix.len() <= r.symbols.len() &&
+                            r.symbols
+                                .iter()
+                                .zip(prefix.iter())
+                                .all(|(a, b)| {
+                                    let mut a2 = a.clone();
+                                    a2.discard = false;
+                                    a2 == *b
+                                })
+                    )
                     .max_by_key(|(prefix, n)| (**n, prefix.len()))
                     .map(|(prefix, _)| prefix)
                 {
@@ -1059,7 +1092,6 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                                 rules: Vec::new(),
                                 lex_mode: None,
                             };
-
                             
                             adjusted_rules.push(Rule {
                                 symbols,
@@ -1078,7 +1110,7 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                             (ruleset_index, ruleset)
                         });
 
-                    r.symbols.drain(0..prefix.len());
+                    let all_elements_discarded = r.symbols.drain(0..prefix.len()).all(|sym| sym.discard);
 
                     r.value.substitute_indexes_with(&|index| {
                         if index < prefix.len() {
@@ -1097,7 +1129,11 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                         }
                     });
 
-                    r.value = RuleValue::Lambda(new_rule_arg_type, Box::new(r.value));
+                    r.value = RuleValue::Lambda {
+                        discard_param: all_elements_discarded,
+                        param_type: new_rule_arg_type,
+                        body: Box::new(r.value),
+                    };
 
                     new_ruleset.rules.push(r);
                 }

@@ -3,7 +3,6 @@ package dev.argon.backend
 import dev.argon.backend.scalaApi.{ScopedResource, StreamUtil}
 import dev.argon.backend.scalaApi.ScopedResourceExtensions.*
 import dev.argon.backend.options.{OptionParseFailure, OptionParser, OptionValue, OutputProvider}
-import dev.argon.compiler.TubeName
 import dev.argon.io.{BinaryResource, FileSystemResource}
 import dev.argon.util.async.ErrorWrapper
 import dev.argon.vm
@@ -33,11 +32,10 @@ object ScalaApiBackendLoader {
           }
         )
       })
-    yield createBackend(backendName, backend, apiPlatformDataLoader, apiCodeGen)
+    yield createBackend(backendName, apiPlatformDataLoader, apiCodeGen)
 
   private def createBackend[E >: BackendException | IOException, TubeOpts, CodeGenOpts, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(
     backendName: String,
-    backend: scalaApi.Backend[ew.EX, Outs],
     apiPlatformDataLoader: scalaApi.PlatformDataLoader[ew.EX, TubeOpts],
     apiCodeGen: scalaApi.CodeGenerator[ew.EX, CodeGenOpts, Outs],
   ): Backend[E] =

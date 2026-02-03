@@ -1,8 +1,7 @@
 package dev.argon.expr
 
 import cats.*
-import dev.argon.ast.IdentifierExpr
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 
 private[expr] sealed trait HoleScanner extends ExprScanner[[A] =>> Either[Unit, A]] {
   val exprContext: ExprContext

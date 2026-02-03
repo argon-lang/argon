@@ -1,8 +1,6 @@
 package dev.argon.parser
 
 import dev.argon.ast.*
-import dev.argon.util.*
-import cats.data.NonEmptySeq
 
 private[parser] sealed abstract class Token derives CanEqual {
   val category: TokenCategory

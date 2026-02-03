@@ -4,8 +4,6 @@ import dev.argon.ast.{IdentifierExpr, Modifier}
 import dev.argon.util.{FilePosition, Location}
 import zio.*
 import ErrorExprContext.Expr
-import zio.prelude.NonEmptySet
-
 
 enum CompilerError {
   case DuplicateModuleDefinition(modulePath: ModulePath)

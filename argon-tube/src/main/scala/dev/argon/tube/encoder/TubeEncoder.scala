@@ -3,9 +3,7 @@ package dev.argon.tube.encoder
 import dev.argon.{ast, compiler as c, expr as e}
 import dev.argon.tube.*
 import zio.*
-import zio.stream.*
-import zio.stm.{TMap, ZSTM}
-import dev.argon.compiler.{HasContext, MethodOwner, SignatureEraser, UsingContext, VTableBuilder}
+import dev.argon.compiler.{MethodOwner, SignatureEraser}
 import esexpr.Dictionary
 
 
@@ -178,8 +176,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
 
       private def emitModules(orderedModules: Seq[ArModule]): Comp[Seq[Module]] =
-        ZIO.foreach(orderedModules.zipWithIndex) {
-          case (module, index) =>
+        ZIO.foreach(orderedModules) { module =>
             for
               modExports <- module.allExports(Set.empty)
               groups <- ZIO.foreach(modExports.toSeq) { (name, items) =>
@@ -349,7 +346,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               recordId <- getRecordId(r)
             yield TubeFileEntry.RecordFieldReference(
               recordFieldId = id,
-              recordId = id,
+              recordId = recordId,
               name = encodeIdentifier(field.name),
             )
 

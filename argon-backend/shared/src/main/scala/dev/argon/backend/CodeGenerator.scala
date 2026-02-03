@@ -1,7 +1,6 @@
 package dev.argon.backend
 
 import dev.argon.backend.options.{OptionParser, OutputProvider}
-import dev.argon.compiler.TubeName
 import dev.argon.vm.resource.VmIrResource
 
 import java.io.IOException

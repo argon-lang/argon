@@ -13,7 +13,6 @@ import zio.logging.*
 import nobleidl.core.{ErrorType, JavaAdapter}
 
 import java.io.{BufferedReader, IOException, InputStreamReader}
-import java.nio.file.Path
 import scala.jdk.CollectionConverters.*
 import scala.compiletime.asMatchable
 
@@ -188,9 +187,6 @@ class CompilerDriver extends JavaCompilerDriver {
     ZIO.runtime[Any]
       .flatMap { runtime =>
         given Runtime[Any] = runtime
-
-        val errorContext = ErrorWrapper.Context[IOException]
-        import errorContext.given
 
         CompilerDriverImpl.runCommand(
           DriverCommand.javaAdapter(

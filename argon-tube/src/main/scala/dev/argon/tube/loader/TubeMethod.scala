@@ -5,7 +5,7 @@ import dev.argon.compiler.*
 import dev.argon.expr.ErasureMode
 import dev.argon.tube as t
 import dev.argon.tube.EffectInfo
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
 
 private[loader] object TubeMethod {
@@ -13,7 +13,6 @@ private[loader] object TubeMethod {
     for
       methodId <- UniqueIdentifier.make
 
-      specCell <- MemoCell.make[ctx.Env, ctx.Error, ImportSpecifier]
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
       implCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.implementations.MethodImplementation]
 

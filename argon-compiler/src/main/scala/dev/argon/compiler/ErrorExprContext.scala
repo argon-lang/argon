@@ -1,7 +1,6 @@
 package dev.argon.compiler
 
 import dev.argon.expr.{ExprContext, ExprContextWithHoles}
-import dev.argon.util.UniqueIdentifier
 import dev.argon.ast.IdentifierExpr
 
 object ErrorExprContext extends ExprContext with ExprContextWithHoles {

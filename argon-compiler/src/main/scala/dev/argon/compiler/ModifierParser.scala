@@ -1,11 +1,10 @@
 package dev.argon.compiler
 
-import cats.syntax.group
 import dev.argon.util.{SourceLocation, WithSource}
 import dev.argon.ast.Modifier
 import dev.argon.expr.ErasureMode
 import zio.*
-import zio.prelude.{NonEmptyMap, NonEmptySet}
+import zio.prelude.NonEmptyMap
 
 trait ModifierParser {
   def parse[A](group: NonEmptyMap[Set[Modifier], A]): URIO[ErrorLog, A]
@@ -19,7 +18,7 @@ object ModifierParser {
       modifierGroup <- Ref.make(groupedModifiers.view.mapValues(_.head.location).toMap)
 
       _ <- ZIO.foreachDiscard(groupedModifiers) { (k, v) =>
-        ErrorLog.logError(CompilerError.DuplicateModifier(v.head.location, v.head.value))
+        ErrorLog.logError(CompilerError.DuplicateModifier(v.head.location, k))
           .whenDiscard(v.size > 1)
       }
 
@@ -124,7 +123,7 @@ object ModifierParser {
     Set() -> MethodSlot.Abstract,
     Set(Modifier.Override) -> MethodSlot.AbstractOverride,
   )
-  
-  
+
+
 
 }

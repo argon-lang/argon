@@ -2,8 +2,7 @@ package dev.argon.expr
 
 import cats.*
 import cats.implicits.given
-import dev.argon.ast.IdentifierExpr
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import cats.data.State
 
 object FreeVariableScanner {

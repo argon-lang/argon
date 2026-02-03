@@ -1,14 +1,11 @@
 package dev.argon.source
 
-import dev.argon.ast.{ModuleDeclaration, Stmt}
-import dev.argon.compiler.*
+import dev.argon.ast.ModuleDeclaration
 import dev.argon.io.*
 import dev.argon.parser.{ArgonSourceParser, SyntaxError}
-import dev.argon.util.WithSource
 import zio.ZIO
 import zio.stream.*
 
-import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
 abstract class ArgonSourceCodeResource[+E] extends TextResource[E]:

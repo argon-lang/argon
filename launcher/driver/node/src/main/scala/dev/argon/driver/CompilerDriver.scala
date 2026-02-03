@@ -4,11 +4,9 @@ import dev.argon.backend.metadata.BackendMetadata
 import dev.argon.backend.scalaApi.{BinaryWriter, DirectoryEntry, DirectoryWriter, ScopedResource}
 import dev.argon.backend.{Backend, BackendException, BackendFactory, BackendProvider}
 import dev.argon.backend.{ScalaApiBackendLoader, scalaApi, sjs}
-import dev.argon.driver.CompilerDriver.parseCommandLineArguments
 import dev.argon.driver.scalaApi.command.DriverCommand
 import dev.argon.driver.{scalaApi as dScalaApi, sjs as dsjs}
 import dev.argon.util.async.{ErrorWrapper, JSPromiseUtil}
-import dev.argon.util.{*, given}
 import esexpr.Dictionary
 import zio.*
 import nobleidl.core.{ErrorType, JSAdapter}
@@ -17,7 +15,6 @@ import java.io.IOException
 import scala.scalajs.js
 import scala.scalajs.js.annotation.*
 import scala.scalajs.js.JavaScriptException
-import scala.compiletime.asMatchable
 
 @JSExportTopLevel("compilerDriver")
 object CompilerDriver extends dsjs.CompilerDriver {

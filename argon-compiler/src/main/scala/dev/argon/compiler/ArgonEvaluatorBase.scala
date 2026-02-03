@@ -1,7 +1,6 @@
 package dev.argon.compiler
 
-import dev.argon.util.{*, given}
-import dev.argon.expr.{Evaluator, ExprContext, Substitution}
+import dev.argon.expr.{Evaluator, Substitution}
 import dev.argon.util.Fuel
 import zio.ZIO
 

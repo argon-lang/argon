@@ -1,11 +1,11 @@
 package dev.argon.io
 
 import esexpr.*
-import dev.argon.io.{BinaryResource, BinaryResourceDecoder, TextResource}
+import dev.argon.io.{BinaryResource, BinaryResourceDecoder}
 import zio.*
 import zio.stream.*
-
 import dev.argon.util.async.ErrorWrapper
+
 import java.io.IOException
 
 trait ESExprBinaryStreamResource[+E] extends BinaryResource[E] with ESExprStreamResource[E]

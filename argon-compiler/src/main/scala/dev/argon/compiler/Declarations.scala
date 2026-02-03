@@ -2,8 +2,8 @@ package dev.argon.compiler
 
 import cats.data.NonEmptySeq
 import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.{ErasureMode, ExprContext, ExprContextWithHoles, Substitution}
-import dev.argon.util.{FilePosition, Fuel, Location, UniqueIdentifier}
+import dev.argon.expr.{ErasureMode, ExprContext, ExprContextWithHoles}
+import dev.argon.util.{Fuel, UniqueIdentifier}
 import zio.*
 
 import scala.reflect.TypeTest
@@ -123,7 +123,7 @@ trait Context extends ScopeContext {
         ensuresClauses = Seq(),
       )
       
-    def instanceMethodSig(method: exprContext.Method, instanceType: exprContext.MethodInstanceType, instanceObject: Expr): Comp[FunctionSignature] = {
+    def instanceMethodSig(method: exprContext.Method, instanceType: exprContext.MethodInstanceType): Comp[FunctionSignature] = {
       instanceType match {
         case instanceType: Expr.TraitType =>
           for
@@ -427,7 +427,6 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
 
       case MethodOwner.ByInstance(i) =>
         for
-          instOwner = context.DefaultExprContext.ExpressionOwner.Instance(i)
           instSig <- i.signature
         yield instSig.returnType
     }

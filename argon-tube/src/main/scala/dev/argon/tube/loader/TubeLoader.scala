@@ -4,9 +4,7 @@ import dev.argon.io.{BinaryResource, ESExprDecodedBinaryStreamResource}
 import dev.argon.compiler.*
 import dev.argon.tube as t
 import dev.argon.tube.{ExternMap, SupportedPlatform}
-import esexpr.{ESExpr, ESExprBinaryDecoder, ESExprCodec, ESExprException, ESExprFormatException}
-import dev.argon.util.async.ErrorWrapper
-import dev.argon.util.{*, given}
+import esexpr.{ESExpr, ESExprException}
 import dev.argon.util.ErrorTestUtils.splitCause
 import zio.*
 import zio.stream.*
@@ -29,9 +27,6 @@ object TubeLoader {
     res: BinaryResource[context.Error],
   )(using TubeImporter & HasContext[context.type]): ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
     ZIO.suspendSucceed {
-      val errorContext = ErrorWrapper.Context[context.Error]()
-      import errorContext.given
-
       val tubeEntries: ZStream[context.Env, context.Error, t.TubeFileEntry] =
         res.decode[[E] =>> ESExprDecodedBinaryStreamResource[E, t.TubeFileEntry]]
           .decoded

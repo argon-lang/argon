@@ -1,10 +1,8 @@
 package dev.argon.expr
 
-import cats.Monad
 import dev.argon.ast.IdentifierExpr
-import dev.argon.util.{TreeShifter, UniqueIdentifier}
+import dev.argon.util.UniqueIdentifier
 
-import scala.reflect.TypeTest
 import dev.argon.util.SourceLocation
 
 import java.util.Objects

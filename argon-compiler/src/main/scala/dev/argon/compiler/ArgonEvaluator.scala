@@ -1,8 +1,6 @@
 package dev.argon.compiler
 
-import dev.argon.expr.{Evaluator, Substitution}
-import dev.argon.util.Fuel
-import zio.ZIO
+import dev.argon.expr.Evaluator
 
 object ArgonEvaluator {
   def apply(ctx: Context): Evaluator[ctx.Env, ctx.Error] { val exprContext: ctx.DefaultExprContext.type } =

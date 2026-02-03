@@ -2,7 +2,7 @@ package dev.argon.backend
 
 import dev.argon.backend.scalaApi.WrappingIOException
 import dev.argon.io.BinaryResource
-import dev.argon.nobleidl.runtime.util.{InputStreamWithError, RefiningInputStreamWithError}
+import dev.argon.nobleidl.runtime.util.InputStreamWithError
 import dev.argon.util.async.ErrorWrapper
 import nobleidl.core.ErrorType
 import zio.*

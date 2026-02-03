@@ -1,9 +1,8 @@
 package dev.argon.compiler
 
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import dev.argon.ast
-import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
-import dev.argon.util.{FilePosition, Location}
+import dev.argon.ast.IdentifierExpr
 import zio.*
 import zio.stm.*
 import cats.*
@@ -73,7 +72,7 @@ trait ScopeContext {
           case Trait(t) => t.signature.map(TRSignatureContext.signatureFromDefault)
           case Instance(i) => i.signature.map(TRSignatureContext.signatureFromDefault)
           case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)
-          case InstanceMethod(m, instanceType, obj) => TRSignatureContext.instanceMethodSig(m, instanceType, obj)
+          case InstanceMethod(m, instanceType, _) => TRSignatureContext.instanceMethodSig(m, instanceType)
           case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
           case RecordFieldUpdate(r, field, _) => TRSignatureContext.recordFieldUpdateSig(r, field)
           case EnumVariant(v) => v.signature.map(TRSignatureContext.signatureFromDefault)

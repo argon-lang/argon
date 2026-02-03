@@ -3,9 +3,8 @@ package dev.argon.compiler
 import cats.*
 import cats.data.OptionT
 import cats.implicits.given
-import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.{BinaryBuiltin, ErasureMode, ExprContext, NullaryBuiltin, UnaryBuiltin, ExprScanner}
-import dev.argon.util.{*, given}
+import dev.argon.expr.{ErasureMode, ExprScanner}
+import dev.argon.util.*
 import zio.interop.catz.core.given
 
 object ErasedScanner {

@@ -1,7 +1,5 @@
 package dev.argon.util
 
-import java.util.Objects
-
 /** A rope/cord representation of character data. Leaves reference existing CharSequences.
   * The structure is immutable and implements CharSequence.
   */

@@ -10,7 +10,6 @@ import zio.*
 import zio.stream.*
 import scala.reflect.TypeTest
 import esexpr.{ESExpr, ESExprException}
-import dev.argon.util.*
 import java.io.IOException
 
 trait VmIrResource[+E] extends ESExprDecodedBinaryStreamResource[E, vm.TubeFileEntry]

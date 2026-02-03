@@ -1,11 +1,8 @@
 package dev.argon.expr
 
 import cats.*
-import cats.implicits.given
 import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{TreeShifter, UniqueIdentifier}
-import zio.ZIO
-import zio.interop.catz.core.given
 
 trait ExprShifter[F[_]: Monad] extends TreeShifter[F] {
 

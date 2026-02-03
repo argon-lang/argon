@@ -4,7 +4,7 @@ import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
 import dev.argon.compiler.*
 import dev.argon.expr.ErasureMode
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
 
 private[source] object SourceMethod {
@@ -45,18 +45,7 @@ private[source] object SourceMethod {
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
         else context.DefaultExprContext.EffectInfo.Effectful
 
-      override val slot: MethodSlot =
-        val isAbstract = decl.body.isEmpty
-        val isFinal = decl.modifiers.exists(_.value == ast.Modifier.Final)
-        val isOverride = decl.modifiers.exists(_.value == ast.Modifier.Override)
-        val isVirtual = decl.modifiers.exists(_.value == ast.Modifier.Virtual)
-        if isAbstract && isOverride then MethodSlot.AbstractOverride
-        else if isAbstract then MethodSlot.Abstract
-        else if isFinal && isOverride then MethodSlot.FinalOverride
-        else if isOverride then MethodSlot.Override
-        else if isVirtual then MethodSlot.Virtual
-        else MethodSlot.Final
-      end slot
+      override val slot: MethodSlot = methodSlot
 
       override def instanceParam: Comp[context.DefaultSignatureContext.InstanceParameter] =
         ZIO.succeed(context.DefaultSignatureContext.InstanceParameter(

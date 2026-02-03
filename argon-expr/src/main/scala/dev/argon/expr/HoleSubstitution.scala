@@ -1,7 +1,6 @@
 package dev.argon.expr
 
-import dev.argon.util.{TreeShifter, UniqueIdentifier}
-import dev.argon.ast.IdentifierExpr
+import dev.argon.util.TreeShifter
 import cats.*
 
 private trait HoleSubstitution[EC <: ExprContext](val exprContext: EC) extends ExprShifter[Id] {

@@ -3,10 +3,6 @@ package dev.argon.io
 import zio.*
 import zio.stream.*
 
-import java.io.IOException
-import java.nio.charset.CharacterCodingException
-import dev.argon.util.async.ErrorWrapper
-
 abstract class Resource[+E] {
   def fileName: Option[String]
 }

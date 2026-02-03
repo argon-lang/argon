@@ -1,7 +1,6 @@
 package dev.argon.compiler
 
 import cats.*
-import cats.implicits.given
 import dev.argon.expr.ContextShifter
 
 private[compiler] final class TRToErrorShifter[Ctx <: Context](val context: Ctx) extends ContextShifter[Id] {

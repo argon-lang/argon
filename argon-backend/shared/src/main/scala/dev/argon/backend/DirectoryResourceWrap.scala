@@ -7,10 +7,11 @@ import zio.*
 import zio.stream.*
 
 import java.io.IOException
+import scala.annotation.unused
 
 object DirectoryResourceWrap {
 
-  def wrap[E >: IOException](res: DirectoryResource[E, BinaryResource])(using ew: ErrorWrapper[E], rt: Runtime[Any]): scalaApi.DirectoryResource[ew.EX] =
+  def wrap[E >: IOException](res: DirectoryResource[E, BinaryResource])(using ew: ErrorWrapper[E], @unused rt: Runtime[Any]): scalaApi.DirectoryResource[ew.EX] =
     new scalaApi.DirectoryResource[ew.EX] {
       override def contents(): UIO[ScopedResource[ew.EX, scalaApi.Stream[ew.EX, scalaApi.DirectoryEntry[ew.EX]]]] =
         StreamUtil.fromZStreamScoped(

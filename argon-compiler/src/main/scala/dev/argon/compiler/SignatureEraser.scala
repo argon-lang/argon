@@ -4,7 +4,6 @@ import dev.argon.expr.BuiltinType
 import zio.*
 
 sealed trait SignatureEraser extends UsingContext {
-  import context.Comp
   import context.DefaultExprContext.*
 
   def eraseSignature(sig: FunctionSignature): Comp[ErasedSignature] =

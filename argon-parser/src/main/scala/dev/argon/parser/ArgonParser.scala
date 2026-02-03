@@ -29,13 +29,16 @@ private[parser] class ArgonParser[R1, E1 >: SyntaxError](
               case token: WithSource[Token] =>
                 ZIO.succeed {
                   currentToken = token
+                  currentSourceLocation = token.location.copy(start = token.location.end)
                   token
                 }
 
               case pos: FilePosition =>
                 ZIO.succeed {
-                  val token = WithLocation(Token.EndOfFile, Location(currentSourceLocation.fileName, pos, pos))
+                  val loc = Location(currentSourceLocation.fileName, pos, pos)
+                  val token = WithLocation(Token.EndOfFile, loc)
                   currentToken = token
+                  currentSourceLocation = loc
                   token
                 }
             }

@@ -1,7 +1,7 @@
 package dev.argon.backend.scalaApi
 
 import dev.argon.io
-import zio.stream.{ZSink, ZStream}
+import zio.stream.ZSink
 import ScopedResourceExtensions.*
 import zio.*
 

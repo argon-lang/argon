@@ -1,6 +1,5 @@
 package dev.argon.expr
 
-import dev.argon.util.{*, given}
 import cats.*
 
 trait HoleFiller[EC <: ExprContext] extends ContextShifter[Id] {

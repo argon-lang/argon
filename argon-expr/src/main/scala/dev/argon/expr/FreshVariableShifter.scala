@@ -1,9 +1,6 @@
 package dev.argon.expr
 
 import dev.argon.util.{TreeShifter, UniqueIdentifier}
-import dev.argon.ast.IdentifierExpr
-import cats.*
-import cats.data.State
 import zio.{UIO, ZIO}
 import zio.stm.TMap
 import zio.interop.catz.core.given

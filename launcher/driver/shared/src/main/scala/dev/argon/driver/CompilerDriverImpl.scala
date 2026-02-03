@@ -1,10 +1,10 @@
 package dev.argon.driver
 
 import dev.argon.backend.options.OptionValue
-import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider, CodeGenerator, DirectoryResourceWrap, scalaApi as bScalaApi}
+import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendProvider, CodeGenerator, scalaApi as bScalaApi}
 import dev.argon.backend.scalaApi.DirectoryResourceExtensions.*
 import dev.argon.backend.scalaApi.SinkExtensions.*
-import dev.argon.build.{BuildError, Compile, GenerateIR, InvalidTubeName, LogReporter}
+import dev.argon.build.{BuildError, Compile, GenerateIR, LogReporter}
 import dev.argon.compiler.{ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
 import dev.argon.driver.scalaApi.command as cmd
 import dev.argon.io.{BinaryResource, DirectoryResource, FileSystemResource}
@@ -19,7 +19,6 @@ import esexpr.Dictionary
 import java.io.IOException
 import zio.*
 import cats.data.NonEmptySeq
-import dev.argon.util.async.ErrorWrapper
 
 private[driver] object CompilerDriverImpl {
   type Error = IOException | BackendException | TubeFormatException | SyntaxError | BuildError
@@ -102,7 +101,7 @@ private[driver] object CompilerDriverImpl {
           .provideSomeLayer[BackendProvider](LogReporter.live)
     }
 
-  private def runCompile[E: ErrorWrapper](options: LiveDriverCompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error | E, Unit] =
+  private def runCompile[E](options: LiveDriverCompileCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error | E, Unit] =
     ZIO.scoped {
       for
         ctx = BackendContext[ErrorLog & LogReporter, Error]()
@@ -188,7 +187,7 @@ private[driver] object CompilerDriverImpl {
     yield ()
   end runGenIR
   
-  private def runCodegen[E: ErrorWrapper](options: LiveDriverCodegenCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
+  private def runCodegen[E](options: LiveDriverCodegenCommand): ZIO[ErrorLog & LogReporter & BackendProvider, Error, Unit] =
     ZIO.scoped(
       for
         backendFactory <- ZIO.serviceWithZIO[BackendProvider](_.getBackendFactory(options.backend))

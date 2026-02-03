@@ -4,7 +4,6 @@ import dev.argon.backend.sjs.metadata.BackendMetadata
 import dev.argon.driver.sjs.command.DriverCommand
 
 import scala.scalajs.js
-import scala.scalajs.js.annotation.*
 
 trait CompilerDriver extends js.Object {
   def parseMetadata(metadata: String): BackendMetadata

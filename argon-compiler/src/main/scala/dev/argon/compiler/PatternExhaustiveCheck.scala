@@ -32,8 +32,6 @@ trait PatternExhaustiveCheck extends UsingContext {
       }
   }
 
-  private final case class EnumVariantRemnant(variant: EnumVariant, args: Seq[Remnant], fields: Map[RecordField, Remnant])
-
   // Eliminates possible values from a remnant.
   private def eliminate(remnant: Remnant, pattern: Pattern): ZStream[Env, Error, Remnant] =
     expand(remnant).flatMap {
@@ -112,7 +110,7 @@ trait PatternExhaustiveCheck extends UsingContext {
                     for
                       sig <- variant.signature
                       owner = exprContext.ExpressionOwner.EnumVariant(variant)
-                      (sig, holes) <- signatureContext.signatureFromDefault(sig).substituteHolesForArgs(owner)(makeHole)
+                      (sig, _) <- signatureContext.signatureFromDefault(sig).substituteHolesForArgs(owner)(makeHole)
                       model <- Ref.make(model)
                       isValid <- Unification.unify[context.Env, context.Error](exprContext)(model, evaluator, context.Config.evaluatorFuel)(t, sig.returnType)
 
@@ -192,19 +190,6 @@ trait PatternExhaustiveCheck extends UsingContext {
           .andThen(f)
           .applyOrElse(pattern, _ => ZStream(remnant))
     }
-
-
-  private def crossProducts[A](s: Seq[ZStream[Env, Error, A]]): ZStream[Env, Error, Seq[A]] =
-    s match {
-      case Seq(h) => h.map(Seq(_))
-      case h +: t =>
-        for
-          t2 <- crossProducts(t)
-          h2 <- h
-        yield h2 +: t2
-      case _ => ZStream.succeed(Seq())
-    }
-
 
   def check(t: Expr, patterns: Seq[Pattern]): Comp[Unit] =
     patterns

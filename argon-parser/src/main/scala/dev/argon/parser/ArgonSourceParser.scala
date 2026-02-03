@@ -2,7 +2,7 @@ package dev.argon.parser
 
 import dev.argon.ast.ModuleDeclaration
 import zio.stream.*
-import zio.{Scope, ZIO}
+import zio.ZIO
 
 object ArgonSourceParser {  
   def parse[R, E >: SyntaxError](fileName: Option[String], stream: ZStream[R, E, String]): ZIO[R, E, ModuleDeclaration] =

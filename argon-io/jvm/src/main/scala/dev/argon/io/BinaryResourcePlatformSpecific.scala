@@ -5,7 +5,6 @@ import dev.argon.util.async.ErrorWrapper
 import zio.*
 
 import java.io.{IOException, InputStream}
-import java.nio.channels.SeekableByteChannel
 
 trait BinaryResourcePlatformSpecific[+E] {
   self: BinaryResource[E] =>

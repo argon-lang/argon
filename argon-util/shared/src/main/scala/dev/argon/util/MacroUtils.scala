@@ -1,6 +1,5 @@
 package dev.argon.util
 
-import scala.deriving.Mirror
 import scala.quoted.*
 
 object MacroUtils {

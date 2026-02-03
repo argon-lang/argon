@@ -1,14 +1,9 @@
 package dev.argon.expr
 
-import cats.*
-import cats.data.State
-import cats.implicits.given
 import dev.argon.ast.IdentifierExpr
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 
-import scala.compiletime.deferred
-
-trait ExprScanner[F[_]: Monad] extends TreeScanner[F] {
+trait ExprScanner[F[_]] extends TreeScanner[F] {
   import StandardScanners.given
 
   val exprContext: ExprContext
@@ -30,7 +25,6 @@ trait ExprScanner[F[_]: Monad] extends TreeScanner[F] {
 
   private given Scanner[Expr.RecordType] = autoScanner
   private given Scanner[Expr.EnumType] = autoScanner
-  private given Scanner[Expr.TraitType] = autoScanner
 
   private given Scanner[MethodInstanceType]:
     override def scan(a: MethodInstanceType): F[Unit] =

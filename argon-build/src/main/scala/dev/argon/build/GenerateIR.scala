@@ -2,15 +2,11 @@ package dev.argon.build
 
 import dev.argon.io.*
 import dev.argon.compiler.*
-import esexpr.{ESExpr, ESExprCodec}
 import zio.*
-import zio.stm.*
 
-import java.io.IOException
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.*
 import dev.argon.tube.encoder.TubeEncoderBase
-import dev.argon.tube.loader.TubeFormatException
 import dev.argon.vm.resource.VmIrResource
 
 abstract class GenerateIR extends CompileBase {

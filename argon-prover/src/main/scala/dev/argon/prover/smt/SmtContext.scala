@@ -1,7 +1,7 @@
 package dev.argon.prover.smt
 
 import dev.argon.prover.*
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
 import zio.stm.*
 
@@ -103,10 +103,6 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
           }
       }
 
-  private def recordKnownPredicate(state: ProverState, pf: TPredicateExpr, value: Boolean): ZIO[R, E, ProverState] =
-    ZIO.succeed { state.copy(knownPredicates = state.knownPredicates :+ KnownPredicate(pf, value)) }
-
-
   private def negationNormalForm(p: Predicate): NNF =
     p match {
       case And(a, b) => NNF.And(List(negationNormalForm(a), negationNormalForm(b)))
@@ -170,7 +166,7 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
   // Returns None to indicate that the disjunct is true
   private def simplifyDisjunct(p: List[LiteralPlus]): Option[List[Literal]] =
     p match {
-      case Nil => Some(Nil)
+      case _: Nil.type => Some(Nil)
       case (_: true) :: _ => None
       case (_: false) :: tail => simplifyDisjunct(tail)
       case (literal: Literal) :: tail => simplifyDisjunct(tail).map { literal :: _ }
@@ -399,7 +395,7 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
                   case sat @ SatResult.Sat(_) => ZIO.succeed(sat)
                   case SatResult.Unsat(constraint) =>
                     assumeKnownPredicates(p, state.copy(knownPredicates = state.knownPredicates :+ KnownPredicate(pred, !value)))
-                      .flatMap { (p, state2) =>
+                      .flatMap { (p, state) =>
                         assumeKnownPredicates(
                           p ++ constraint,
                           state.copy(

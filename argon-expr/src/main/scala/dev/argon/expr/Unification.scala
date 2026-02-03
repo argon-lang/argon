@@ -1,12 +1,9 @@
 package dev.argon.expr
 
 import dev.argon
-import dev.argon.ast.IdentifierExpr
 import dev.argon.expr
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
-
-import scala.compiletime.{erasedValue, error, summonInline}
 
 private[expr] sealed trait Unification[R, E](fuel: Fuel) {
   val exprContext: ExprContext

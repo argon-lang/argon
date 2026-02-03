@@ -4,7 +4,7 @@ import dev.argon.compiler as c
 import dev.argon.tube as t
 import dev.argon.expr as e
 import dev.argon.ast
-import dev.argon.tube.{ErasureMode, Identifier, ImportSpecifier, Pattern}
+import dev.argon.tube.{Identifier, ImportSpecifier, Pattern}
 import cats.data.NonEmptySeq
 import zio.*
 import dev.argon.compiler.{HasContext, UsingContext}

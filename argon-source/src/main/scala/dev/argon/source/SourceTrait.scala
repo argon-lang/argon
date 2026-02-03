@@ -1,9 +1,8 @@
 package dev.argon.source
 
 import dev.argon.ast
-import dev.argon.ast.IdentifierExpr
 import dev.argon.compiler.*
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
 
 private[source] object SourceTrait {
@@ -40,7 +39,7 @@ private[source] object SourceTrait {
               }
             }
             .flatMap { scope2 =>
-              ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, loc) => method })(
+              ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, _) => method })(
                 SourceMethod.make(ctx)(scope2, MethodOwner.ByTrait(this))
               )
             }

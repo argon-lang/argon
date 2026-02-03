@@ -4,8 +4,7 @@ import dev.argon.compiler as c
 import zio.*
 import zio.stream.*
 import zio.stm.*
-import dev.argon.ast
-import dev.argon.compiler.{HasContext, ImportSpecifier, MethodOwner, SignatureEraser, UsingContext}
+import dev.argon.compiler.ImportSpecifier
 import dev.argon.tube.{ExternMap, SupportedPlatform}
 import dev.argon.tube.encoder.TubeEncoderBase.EncodeContext
 import dev.argon.tube.loader.TubeFormatException
@@ -16,7 +15,6 @@ import esexpr.ESExpr
 trait TubeEncoderBase[Entry] {
   sealed trait EncodeState extends c.UsingContext {
     override val context: EncodeContext
-    import context.DefaultExprContext.Expr as ArExpr
 
     val tube: ArTube
 
@@ -64,8 +62,6 @@ trait TubeEncoderBase[Entry] {
     val ctx: context.type = context
     val tube2: tube.type = tube
 
-    import context.DefaultExprContext.ExpressionOwner
-
     class IdManager[A](nextId: TRef[BigInt], mapping: TMap[A, BigInt])(using CanEqual[A, A]) {
       def assignId(value: A, id: BigInt): UIO[Unit] =
         (mapping.put(value, id) *> nextId.update(_.max(id + 1))).commit
@@ -73,7 +69,7 @@ trait TubeEncoderBase[Entry] {
       def getIdWith(value: A)(entryBuilderQueue: TEnqueue[context.Comp[Entry]])(emit: (A, BigInt) => context.Comp[Entry]): UIO[BigInt] =
         mapping.get(value).flatMap {
           case Some(id) => ZSTM.succeed(id: BigInt)
-          case none =>
+          case None =>
             for
               id <- claimId
               _ <- mapping.put(value, id)

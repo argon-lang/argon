@@ -1,9 +1,6 @@
 package dev.argon.backend
 
-import zio.stm.{TMap, ZSTM}
-import zio.{IO, Scope, ZEnvironment, ZIO, ZLayer}
-
-import java.io.IOException
+import zio.{IO, ZIO, ZLayer}
 
 trait BackendProvider {
   def getBackendFactory(name: String): IO[BackendException, BackendFactory]

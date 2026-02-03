@@ -6,14 +6,11 @@ import dev.argon.compiler.*
 import zio.*
 import zio.stream.*
 import dev.argon.io.*
-import dev.argon.tube.ExternMap
 import esexpr.ESExpr
 
 import java.io.IOException
 import esexpr.ESExprException
 import dev.argon.tube.loader.{TubeFormatException, TubeLoader}
-import zio.Cause.Die
-import dev.argon.util.*
 
 
 sealed abstract class TubeResourceContext extends UsingContext {

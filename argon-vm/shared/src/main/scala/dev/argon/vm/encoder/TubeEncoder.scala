@@ -5,13 +5,11 @@ import dev.argon.tube.loader.TubeFormatException
 import dev.argon.tube.encoder.TubeEncoderBase
 import dev.argon.vm.*
 import zio.*
-import zio.stream.*
-import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
-import dev.argon.compiler.{ArgonEvaluator, HasContext, MethodOwner, SignatureEraser, UsingContext, VTableBuilder}
-import dev.argon.expr.{BinaryBuiltin, CaptureScanner, ErasureMode, FreeVariableScanner, NullaryBuiltin, Substitution, UnaryBuiltin, ValueUtil}
+import zio.stm.{TMap, TRef, USTM}
+import dev.argon.compiler.{ArgonEvaluator, HasContext, MethodOwner, SignatureEraser, VTableBuilder}
+import dev.argon.expr.{BinaryBuiltin, CaptureScanner, ErasureMode, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin, ValueUtil}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.vm.VmType.Builtin
-import sourcecode.Text.generate
 
 
 private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
@@ -167,11 +165,10 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         
 
       private def emitModules(orderedModules: Seq[ArModule]): Comp[Seq[Module]] =
-        ZIO.foreach(orderedModules.zipWithIndex) {
-          case (module, index) =>
+        ZIO.foreach(orderedModules) { module =>
             for
               modExports <- module.allExports(Set.empty)
-              _ <- ZIO.foreachDiscard(modExports.toSeq) { (name, items) =>
+              _ <- ZIO.foreachDiscard(modExports.values) { items =>
                 ZIO.foreachDiscard(items)(emitModuleExport)
               }
             yield Module(
@@ -241,10 +238,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           impl <- ZIO.foreach(func.implementation) { impl =>
             impl.flatMap {
               case context.implementations.FunctionImplementation.Expr(e) =>
-                val paramVars = SignatureParameter.getParameterVariables(
-                  context.DefaultExprContext.ExpressionOwner.Func(func),
-                  sig.parameters
-                )
                 for
                   block <- emitFunctionBody(e, encSig, importSpec)
                 yield FunctionImplementation.VmIr(block)
@@ -464,11 +457,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 ZIO.none
 
               case context.implementations.MethodImplementation.Expr(e) =>
-                val paramVars = SignatureParameter.getParameterVariables(
-                  ExpressionOwner.Method(m),
-                  sig.parameters
-                )
-
                 for
                   parentImportSpec <- m.owner match {
                     case MethodOwner.ByTrait(t) => t.importSpecifier
@@ -478,7 +466,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   importSpec = c.ImportSpecifier.Local(parentImportSpec, m.id)
 
                   block <- emitFunctionBody(e, encSig, importSpec)
-                  importSpec <- encodeImportSpecifier(importSpec)
                 yield Some(FunctionImplementation.VmIr(block))
 
               case context.implementations.MethodImplementation.Extern(externMap) =>
@@ -1190,7 +1177,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                       _ <- emit(Instruction.FunctionObjectTypeCall(funcResult, func, a))
                     yield ()
 
-                  case ArExpr.FunctionType(v, r) =>
+                  case ArExpr.FunctionType(_, r) =>
                     for
                       func <- expr(f, ExprOutput.AnyRegister)
                       a <- expr(a, ExprOutput.AnyRegister)
@@ -1216,7 +1203,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               functionResult(e, output) { funcResult =>
                 for
                   id <- getMethodId(m)
-                  sig <- m.signature
                   instanceType <- typeExpr(instanceType)
                   instanceObj <- expr(obj, ExprOutput.AnyRegister)
                   funcArgs <- emitMethodArguments(m, args)
@@ -1237,8 +1223,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               }
               
             case ArExpr.Lambda(param, returnType, body) =>
-              import context.DefaultExprContext.Var
-
               intoRegister(e, output) { r =>
                 for
                   funcId <- UniqueIdentifier.make
@@ -1307,7 +1291,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 }
               }
 
-            case ArExpr.RecordFieldLoad(recordType, field, recordValue) =>
+            case ArExpr.RecordFieldLoad(_, field, recordValue) =>
               intoRegister(e, output) { r =>
                 for
                   fieldId <- getRecordFieldId(field)
@@ -1316,7 +1300,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
               }
 
-            case ArExpr.RecordFieldStore(recordType, field, recordValue, fieldValue) =>
+            case ArExpr.RecordFieldStore(_, field, recordValue, fieldValue) =>
               unitResult(e, output)(
                 for
                   fieldId <- getRecordFieldId(field)
@@ -1540,12 +1524,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               emit(Instruction.Unreachable())
           }
 
-        private final case class CaptureSig(
-          typeArgs: Seq[VmType],
-          args: Seq[Capture],
-          sig: FunctionSignatureWithMapping,
-        )
-
         private def captureVariables(
           vars: Seq[Var],
         )(
@@ -1615,16 +1593,16 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
         private def emitArguments(owner: ExpressionOwner, sig: FunctionSignature, args: Seq[ArExpr]): Comp[FunctionArguments] =
           emitFunctionSignature(owner, sig).flatMap { sigWithMapping =>
-            emitArgumentsCommon(owner, sigWithMapping, args)
+            emitArgumentsCommon(sigWithMapping, args)
           }
         
         private def emitMethodArguments(method: ArMethod, args: Seq[ArExpr]): Comp[FunctionArguments] =
           for
             sigWithMapping <- emitMethodSignature(method)
-            funcArgs <- emitArgumentsCommon(ExpressionOwner.Method(method), sigWithMapping, args)
+            funcArgs <- emitArgumentsCommon(sigWithMapping, args)
           yield funcArgs
 
-        private def emitArgumentsCommon(owner: ExpressionOwner, sig: FunctionSignatureWithMapping, args: Seq[ArExpr]): Comp[FunctionArguments] =
+        private def emitArgumentsCommon(sig: FunctionSignatureWithMapping, args: Seq[ArExpr]): Comp[FunctionArguments] =
           for
             typeArgs <- TRef.make(Seq.empty[VmType]).commit
             argRegs <- TRef.make(Seq.empty[RegisterId]).commit

@@ -7,7 +7,6 @@ import dev.argon.util.*
 import zio.*
 import cats.*
 import cats.implicits.given
-import zio.interop.catz.given
 
 private[source] object SourceModule {
   def make

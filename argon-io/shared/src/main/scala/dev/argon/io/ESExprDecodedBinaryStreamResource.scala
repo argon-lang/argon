@@ -1,11 +1,10 @@
 package dev.argon.io
 
 import esexpr.*
-import dev.argon.io.{BinaryResource, BinaryResourceDecoder, TextResource}
+import dev.argon.io.{BinaryResource, BinaryResourceDecoder}
 import zio.*
 import zio.stream.*
 
-import dev.argon.util.async.ErrorWrapper
 import java.io.IOException
 import izumi.reflect.Tag
 
@@ -20,7 +19,7 @@ object ESExprDecodedBinaryStreamResource {
   given resourceDecoder: [E >: ESExprException | IOException, A: {ESExprCodec, Tag}] => BinaryResourceDecoder[[E1] =>> ESExprDecodedBinaryStreamResource[E1, A], E]:
     override def decode(resource: BinaryResource[E]): ESExprDecodedBinaryStreamResource[E, A] =
       resource match {
-        case resource: ESExprDecodedBinaryStreamResource[E, b] if summon[Tag[A]] =:= resource.elementTag =>
+        case resource: ESExprDecodedBinaryStreamResource[E, ?] if summon[Tag[A]] =:= resource.elementTag =>
           resource.asInstanceOf[ESExprDecodedBinaryStreamResource[E, A]]
 
         case _ =>

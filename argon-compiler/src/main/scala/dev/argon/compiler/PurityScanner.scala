@@ -1,18 +1,15 @@
 package dev.argon.compiler
 
 import cats.*
-import cats.data.State
 import cats.implicits.given
-import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.{BinaryBuiltin, ExprContext, NullaryBuiltin, UnaryBuiltin, ExprScanner}
-import dev.argon.util.{*, given}
+import dev.argon.expr.ExprScanner
+import dev.argon.util.*
 
 object PurityScanner {
   def apply(context: Context)(ec: context.ArgonExprContext)(expr: ec.Expr): Boolean =
     import ec.*
 
     final class PureScanner extends ExprScanner[Option] {
-      import StandardScanners.given
       override val exprContext: ec.type = ec
       
       private val pure: Option[Unit] = Some(())

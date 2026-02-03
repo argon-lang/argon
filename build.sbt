@@ -322,9 +322,13 @@ lazy val compilerOptions = Seq(
     "-Ycheck-all-patmat",
     "-Yretain-trees",
     "-Yexplicit-nulls",
+    "-Wimplausible-patterns",
+    "-Wnonunit-statement",
+    "-Wrecurse-with-default",
     "-Wsafe-init",
+//    "-Wunused:all",
+    "-Wconf:id=E029:e,id=E165:e,id=E190:e,cat=unchecked:e,cat=deprecation:e,msg=Access non-initialized value:e,src=src_managed/.*:s",
     "-Xmax-inlines", "128",
-    "-Wconf:id=E029:e,id=E165:e,id=E190:e,cat=unchecked:e,cat=deprecation:e",
   ),
 
   javacOptions ++= Seq(

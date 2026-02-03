@@ -2,12 +2,11 @@ package dev.argon.compiler
 
 import dev.argon.expr.Unification
 import zio.*
-import zio.stream.{ZSink, ZStream}
+import zio.stream.ZStream
 
 trait VTableBuilder extends UsingContext {
 
   import context.DefaultExprContext.{Expr, ExpressionOwner, MethodInstanceType}
-  import context.DefaultSignatureContext.FunctionSignature
 
 
   final class VTable(
@@ -76,7 +75,6 @@ trait VTableBuilder extends UsingContext {
 
           methods <- i.methods
 
-          owner = ExpressionOwner.Instance(i)
           vtable <- buildSingleVTable(
             parentVTableSubst,
             methods,

@@ -1,11 +1,9 @@
 package dev.argon.prover.prolog
 
 import dev.argon.prover.*
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import zio.*
 import zio.stream.*
-import cats.data.OptionT
-import zio.interop.catz.core.given
 
 abstract class PrologContext[R, E] extends ProverContext[R, E] {
   import syntax.*
@@ -36,7 +34,7 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
     def addPredicate(pred: Predicate): SolveState =
       copy(seenPredicates = seenPredicates + pred)
 
-    def hasSeenPredicate(pred: Predicate, model: Model): Boolean =
+    def hasSeenPredicate(pred: Predicate): Boolean =
       seenPredicates.contains(pred)
 
     def addGiven(proof: Proof[ProofAtom], pred: Predicate): SolveState =
@@ -45,7 +43,7 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
 
 
   def solve(goal: Predicate, model: Model, solveState: SolveState): ZStream[R, E, ProofResult.Definitive] =
-    if solveState.fuelEmpty || solveState.hasSeenPredicate(goal, model) then
+    if solveState.fuelEmpty || solveState.hasSeenPredicate(goal) then
       ZStream.empty
     else
       val solveState2 = solveState.addPredicate(goal)

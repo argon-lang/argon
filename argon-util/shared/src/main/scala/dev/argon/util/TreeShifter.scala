@@ -6,7 +6,6 @@ import cats.implicits.given
 import scala.compiletime.{erasedValue, summonInline}
 import scala.deriving.Mirror
 import scala.quoted.{Expr, Quotes, Type}
-import scala.reflect.TypeTest
 
 trait TreeShifter[F[_]: Monad] {
 
@@ -38,14 +37,14 @@ trait TreeShifter[F[_]: Monad] {
       case ma: Mirror.SumOf[A] =>
         inline mb match {
           case mb: Mirror.SumOf[B] =>
-            summonInline[ma.MirroredElemLabels =:= mb.MirroredElemLabels]
+            val _ = summonInline[ma.MirroredElemLabels =:= mb.MirroredElemLabels]
             autoShifterSum[A, B](using ma, mb)
         }
 
       case ma: Mirror.ProductOf[A] =>
         inline mb match {
           case mb: Mirror.ProductOf[B] =>
-            summonInline[ma.MirroredElemLabels =:= mb.MirroredElemLabels]
+            val _ = summonInline[ma.MirroredElemLabels =:= mb.MirroredElemLabels]
             autoShifterProduct[A, B](using ma, mb)
         }
 

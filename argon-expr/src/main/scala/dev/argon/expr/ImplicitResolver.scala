@@ -1,18 +1,15 @@
 package dev.argon.expr
 
-import dev.argon.util.{*, given}
+import dev.argon.util.*
 import dev.argon.prover.{Proof, ProverContext, ProverSyntax}
 import dev.argon.prover.prolog.PrologContext
 import dev.argon.prover.smt.SmtContext
-import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.*
-import zio.interop.catz.core.*
-import dev.argon.ast.IdentifierExpr
 
 import scala.reflect.TypeTest
-import cats.data.OptionT
-import zio.stm.TMap
+
+import scala.annotation.unused
 
 abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
 
@@ -23,9 +20,6 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
 
   sealed trait SubClassResult
 
-
-  private def substituteVariables(vars: Map[Var, Expr])(expr: Expr): Expr =
-    Substitution.substitute(exprContext)(vars)(expr)
 
   protected def evaluator(model: Ref[Model]): Evaluator[R, E] { val exprContext: ImplicitResolver.this.exprContext.type }
 
@@ -57,7 +51,7 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
   trait IRProverContext
   (
     givenAssertions: Seq[AssertionBuilder],
-    knownVarValues: Map[Var, Expr],
+    @unused knownVarValues: Map[Var, Expr],
     initialFuel: Fuel,
   ) extends ProverContext[R, E] {
     override val syntax: ExprProverSyntax.type = ExprProverSyntax
@@ -260,8 +254,6 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
     knownVarValues: Map[Var, Expr],
     initialFuel: Fuel,
   ) extends PrologContext[R, E] with IRProverContext(givenAssertions, knownVarValues, initialFuel) {
-    import syntax.*
-
 
     protected override def newVariable: ZIO[R, E, ExprProverSyntax.TVariable] =
       createHole.tap { hole =>
@@ -341,11 +333,6 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
             }.map(_.flatten)
       },
     )
-
-    private def isEqualExprs(a: Expr, b: Expr): Boolean =
-      a == b || ((a, b) match {
-        case _ => false
-      })
 
     override protected def substituteVariablesPE(varMap: Map[Hole, Expr])(pf: Expr): Expr =
       HoleSubstitution.substitute(exprContext)(varMap)(pf)
@@ -537,9 +524,6 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
 
   private def boolType: Expr =
     Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType))
-
-  private def stringType: Expr =
-    Expr.Builtin(Builtin.Nullary(NullaryBuiltin.StringType))
 
   final case class ResolvedImplicit(proof: Proof[Expr], model: Model)
 

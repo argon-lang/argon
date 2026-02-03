@@ -535,9 +535,9 @@ impl GrammarFactory for ParserFactory {
                     rule(
                         [
                             nonterm(StatementList).with_location(),
-                            term(KwEnd).with_location(),
+                            term(KwEnd).with_location().discard(),
                         ],
-                        "((thenBody: WithSource[Seq[WithSource[Stmt]]], endKeyword: WithSource[?]) => (cond: WithSource[Expr]) => Expr.IfElse(cond, thenBody, WithLocation(Seq.empty, thenBody.location)))"
+                        "((thenBody: WithSource[Seq[WithSource[Stmt]]]) => (cond: WithSource[Expr]) => Expr.IfElse(cond, thenBody, WithLocation(Seq.empty, thenBody.location)))"
                     ),
                     rule(
                         [

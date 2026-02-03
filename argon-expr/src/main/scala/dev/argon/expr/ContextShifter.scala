@@ -1,13 +1,6 @@
 package dev.argon.expr
 
-import dev.argon.util.{TreeShifter, UniqueIdentifier}
-import cats.*
-import cats.implicits.given
-import zio.ZIO
-import zio.interop.catz.core.given
-import dev.argon.ast.IdentifierExpr
-
-trait ContextShifter[F[_]: Monad] extends ExprShifter[F] {
+trait ContextShifter[F[_]] extends ExprShifter[F] {
 
   final def shiftExpr(a: ec1.Expr): F[ec2.Expr] =
     exprShifter.shift(a)
