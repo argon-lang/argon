@@ -247,30 +247,31 @@ enum import-specifier {
 @esexpr:(derive-codec)
 record function-signature {
     @esexpr:(keyword)
-    type-parameters: list[signature-type-parameter];
+    token-parameters: list[signature-token-parameter];
 
     @esexpr:(keyword)
     parameters: list[signature-parameter];
 
     @esexpr:(keyword)
-    return-type: vm-type;
+    return-type: token;
 }
 
 @esexpr:(derive-codec)
 record signature-parameter {
     name: option[identifier];
-    param-type: vm-type;
+    param-type: token;
 }
 
 @esexpr:(derive-codec)
-record signature-type-parameter {
+record signature-token-parameter {
     name: option[identifier];
+    kind: token;
 }
 
 @esexpr:(derive-codec)
 record parameter-binding {
     name: option[identifier];
-    param-type: vm-type;
+    param-type: token;
 }
 
 
@@ -313,7 +314,7 @@ record record-definition {
 @esexpr:(derive-codec)
 record record-field-definition {
     name: identifier;
-    field-type: vm-type;
+    field-type: token;
 
     @esexpr:(keyword)
     @esexpr:(default-value #false)
@@ -385,7 +386,7 @@ record vtable {
 @esexpr:(derive-codec)
 record vtable-entry {
     slot-method-id: nat;
-    slot-instance-type: vm-type;
+    slot-instance-type: token;
     target: vtable-target;
 }
 
@@ -422,56 +423,55 @@ enum method-owner {
     by-trait-object,
 }
 
-
 @esexpr:(derive-codec)
-enum vm-type {
+enum token {
     builtin {
         b: builtin-type;
 
         @esexpr:(vararg)
-        args: list[vm-type];
+        args: list[token];
     },
     function {
-        input: vm-type;
-        output: vm-type;
+        input: token;
+        output: token;
     },
     function-erased {
-        output: vm-type;
+        output: token;
+    },
+    function-token {
+        token-kind: token;
+        output: token;
     },
     record {
         record-id: nat;
 
         @esexpr:(vararg)
-        args: list[vm-type];
+        args: list[token];
     },
     enum {
         enum-id: nat;
 
         @esexpr:(vararg)
-        args: list[vm-type];
+        args: list[token];
     },
-    instance-type-parameter {
+    instance-token-parameter {
         index: nat;
     },
     trait {
         trait-id: nat;
 
         @esexpr:(vararg)
-        args: list[vm-type];
+        args: list[token];
     },
     tuple {
         @esexpr:(vararg)
-        elements: list[vm-type];
+        elements: list[token];
     },
-    type-parameter {
+    token-parameter {
         index: nat;
     },
     type-info,
-    of-type-info {
-        r: register-id;
-    },
     boxed,
-    erased,
 }
 
 @esexpr:(derive-codec)
@@ -521,7 +521,7 @@ enum instruction {
     },
 
     declare-variable {
-        type: vm-type;
+        type: token;
 
         @esexpr:(keyword)
         @esexpr:(optional)
@@ -530,11 +530,11 @@ enum instruction {
 
     enum-variant-literal {
         dest: register-id;
-        enum-type: vm-type;
+        enum-type: token;
         variant-id: nat;
 
         @esexpr:(vararg)
-        type-args: list[vm-type];
+        token-args: list[token];
 
         @esexpr:(vararg)
         args: list[register-id];
@@ -552,7 +552,7 @@ enum instruction {
         function-id: nat;
         dest: function-result;
         @esexpr:(vararg)
-        type-args: list[vm-type];
+        token-args: list[token];
         @esexpr:(vararg)
         args: list[register-id];
     },
@@ -563,10 +563,10 @@ enum instruction {
         arg: register-id;
     },
 
-    function-object-type-call {
+    function-object-token-call {
         dest: function-result;
         function: register-id;
-        arg: vm-type;
+        arg: token;
     },
 
     function-object-erased-call {
@@ -584,12 +584,12 @@ enum instruction {
         dest: function-result;
 
         method-id: nat;
-        instance-type: vm-type;
+        instance-type: token;
 
         instance-object: register-id;
 
         @esexpr:(vararg)
-        type-args: list[vm-type];
+        token-args: list[token];
 
         @esexpr:(vararg)
         args: list[register-id];
@@ -597,7 +597,7 @@ enum instruction {
 
     is-enum-variant {
         dest: register-id;
-        enum-type: vm-type;
+        enum-type: token;
         variant-id: nat;
 
         value: register-id;
@@ -609,9 +609,9 @@ enum instruction {
         field-extractors: list[field-extractor];
     },
 
-    load-type-info {
+    load-token {
         dest: register-id;
-        type: vm-type;
+        token: token;
     },
 
     move {
@@ -623,7 +623,7 @@ enum instruction {
         instance-id: nat;
         dest: register-id;
         @esexpr:(vararg)
-        type-args: list[vm-type];
+        token-args: list[token];
         @esexpr:(vararg)
         args: list[register-id];
     },
@@ -634,19 +634,19 @@ enum instruction {
 
         @esexpr:(keyword)
         @esexpr:(default-value (list))
-        type-args: list[vm-type];
+        token-args: list[token];
 
         @esexpr:(vararg)
         args: list[capture];
     },
 
-    partially-applied-type-function {
+    partially-applied-token-function {
         function-id: nat;
         dest: register-id;
 
         @esexpr:(keyword)
         @esexpr:(default-value (list))
-        type-args: list[vm-type];
+        token-args: list[token];
 
         @esexpr:(vararg)
         args: list[capture];
@@ -658,7 +658,7 @@ enum instruction {
 
         @esexpr:(keyword)
         @esexpr:(default-value (list))
-        type-args: list[vm-type];
+        token-args: list[token];
 
         @esexpr:(vararg)
         args: list[capture];
@@ -678,7 +678,7 @@ enum instruction {
 
     record-literal {
         dest: register-id;
-        record-type: vm-type;
+        record-type: token;
         @esexpr:(vararg)
         fields: list[record-field-literal];
     },
@@ -700,7 +700,7 @@ enum instruction {
 
     unbox {
         dest: register-id;
-        type: vm-type;
+        type: token;
         value: register-id;
     },
 

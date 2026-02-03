@@ -12,6 +12,14 @@ export class FunctionTypeErased {
     }
 }
 
+export class FunctionTypeToken {
+    constructor(param, res) {
+        this.param = param;
+        this.res = res;
+    }
+}
+
+export const typeInfo = {};
 export const erasedType = {};
 
 export class UnreachableError extends Error {
@@ -130,7 +138,7 @@ export function createRecordType(recordInfo) {
         }
     };
 
-    if(recordInfo.typeParameterCount !== 0) {
+    if(recordInfo.tokenParameterCount !== 0) {
         recordType.specialize = specialize();
     }
 
@@ -151,7 +159,7 @@ export function createEnumType(enumInfo) {
         }
     }
 
-    if(enumInfo.typeParameterCount === 0) {
+    if(enumInfo.tokenParameterCount === 0) {
         setupVariants(enumType);
     }
     else {
@@ -222,7 +230,7 @@ function createEnumVariant(proto, variant) {
 export function createTraitType(traitInfo) {
     const traitType = function() {};
 
-    if(traitInfo.typeParameterCount === 0) {
+    if(traitInfo.tokenParameterCount === 0) {
         traitType.methods = Object.create(null);
         applyVTable(traitType, traitInfo.methods, traitInfo.vtable);
     }
@@ -320,7 +328,7 @@ export function createInstanceDefinition(instanceInfo) {
         return constructor;
     }
 
-    if(instanceInfo.typeParameterCount === 0) {
+    if(instanceInfo.tokenParameterCount === 0) {
         return lazyFunctionBuilder(() => {
             const inst = createInstanceConstructor(instanceInfo.baseConstructor());
             applyVTable(inst, instanceInfo.methods, instanceInfo.vtable);

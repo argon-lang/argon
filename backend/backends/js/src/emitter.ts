@@ -403,7 +403,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
                 const regOffset = useThis ? 1 : 0;
 
-                for(const i of signature.typeParameters.keys()) {
+                for(const i of signature.tokenParameters.keys()) {
                     params.push({
                         type: "Identifier",
                         name: `t${i}`,
@@ -486,7 +486,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                         callee: this.getArgonRuntimeExport("createRecordType"),
                         arguments: [
                             jsonToExpression({
-                                typeParameterCount: rec.signature.typeParameters.length,
+                                tokenParameterCount: rec.signature.tokenParameters.length,
                                 fields: rec.fields.map(field => ({
                                     name: this.getExportNameForId(field.name),
                                     mutable: field.mutable,
@@ -505,7 +505,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         const variantsObj: JsonObject = Object.create(null);
         for(const variant of enumDef.variants) {
             variantsObj[this.getExportNameForId(variant.name)] = {
-                argCount: variant.signature.typeParameters.length + variant.signature.parameters.length,
+                argCount: variant.signature.tokenParameters.length + variant.signature.parameters.length,
                 fields: variant.fields.map(field => ({
                     name: this.getExportNameForId(field.name),
                     mutable: field.mutable,
@@ -529,7 +529,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                         callee: this.getArgonRuntimeExport("createEnumType"),
                         arguments: [
                             jsonToExpression({
-                                typeParameterCount: enumDef.signature.typeParameters.length,
+                                tokenParameterCount: enumDef.signature.tokenParameters.length,
                                 variants: variantsObj,
                             }),
                         ],
@@ -556,11 +556,11 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     kind: "init",
                     key: {
                         type: "Identifier",
-                        name: "typeParameterCount",
+                        name: "tokenParameterCount",
                     },
                     value: {
                         type: "Literal",
-                        value: traitDef.signature.typeParameters.length,
+                        value: traitDef.signature.tokenParameters.length,
                     },
                 },
                 {
@@ -699,7 +699,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     type: "MemberExpression",
                     computed: false,
                     optional: false,
-                    object: new BlockEmitter(this, 0).buildTypeInfo(entry.slotInstanceType),
+                    object: new BlockEmitter(this, 0).buildTokenValue(entry.slotInstanceType),
                     property: {
                         type: "Identifier",
                         name: "methods",
@@ -803,11 +803,11 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     kind: "init",
                     key: {
                         type: "Identifier",
-                        name: "typeParameterCount",
+                        name: "tokenParameterCount",
                     },
                     value: {
                         type: "Literal",
-                        value: instanceDef.signature.typeParameters.length,
+                        value: instanceDef.signature.tokenParameters.length,
                     },
                 },
                 {
@@ -867,7 +867,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                             body: [
                                 {
                                     type: "ReturnStatement",
-                                    argument: new BlockEmitter(this, instanceDef.signature.parameters.length).buildTypeInfo(instanceDef.signature.returnType),
+                                    argument: new BlockEmitter(this, instanceDef.signature.parameters.length).buildTokenValue(instanceDef.signature.returnType),
                                 }
                             ],
                         },
@@ -1138,8 +1138,8 @@ class BlockEmitter extends EmitterBase {
             case "enum-variant-literal":
             {
                 const args: estree.Expression[] = [];
-                for(const typeArg of insn.typeArgs) {
-                    args.push(this.buildTypeInfo(typeArg));
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
                 }
 
                 for(const arg of insn.args) {
@@ -1196,8 +1196,8 @@ class BlockEmitter extends EmitterBase {
                 const funcExpr = this.moduleEmitter.getImportExpr(functionInfo.importSpecifier);
 
                 const args: estree.Expression[] = [];
-                for(const typeArg of insn.typeArgs) {
-                    args.push(this.buildTypeInfo(typeArg));
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
                 }
 
                 for(const arg of insn.args) {
@@ -1228,12 +1228,12 @@ class BlockEmitter extends EmitterBase {
                 break;
             }
 
-            case "function-object-type-call":
+            case "function-object-token-call":
             {
                 const callExpr: estree.Expression = {
                     type: "CallExpression",
                     callee: this.getReg(insn.function),
-                    arguments: [ this.buildTypeInfo(insn.arg) ],
+                    arguments: [ this.buildTokenValue(insn.arg) ],
                     optional: false,
                 };
 
@@ -1297,7 +1297,7 @@ class BlockEmitter extends EmitterBase {
                         type: "MemberExpression",
                         computed: false,
                         optional: false,
-                        object: this.buildTypeInfo(insn.instanceType),
+                        object: this.buildTokenValue(insn.instanceType),
                         property: {
                             type: "Identifier",
                             name: "methods",
@@ -1311,8 +1311,8 @@ class BlockEmitter extends EmitterBase {
                 };
 
                 const args: estree.Expression[] = [];
-                for(const typeArg of insn.typeArgs) {
-                    args.push(this.buildTypeInfo(typeArg));
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
                 }
 
                 for(const arg of insn.args) {
@@ -1406,8 +1406,8 @@ class BlockEmitter extends EmitterBase {
                 });
                 break;
 
-            case "load-type-info":
-                assign(insn.dest, this.buildTypeInfo(insn.type));
+            case "load-token":
+                assign(insn.dest, this.buildTokenValue(insn.token));
                 break;
 
             case "move":
@@ -1420,8 +1420,8 @@ class BlockEmitter extends EmitterBase {
                 const funcExpr = this.moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
 
                 const args: estree.Expression[] = [];
-                for(const typeArg of insn.typeArgs) {
-                    args.push(this.buildTypeInfo(typeArg));
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
                 }
 
                 for(const arg of insn.args) {
@@ -1439,7 +1439,7 @@ class BlockEmitter extends EmitterBase {
             }
 
             case "partially-applied-function":
-            case "partially-applied-type-function":
+            case "partially-applied-token-function":
             case "partially-applied-function-erased":
             {
                 const argName: estree.Identifier = {
@@ -1447,15 +1447,17 @@ class BlockEmitter extends EmitterBase {
                     name: "arg",
                 };
 
+                // Build token args for call
                 const args: estree.Expression[] = [];
-                for(const typeArg of insn.typeArgs) {
-                    args.push(this.buildTypeInfo(typeArg));
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
                 }
 
-                if(insn.$type === "partially-applied-type-function") {
+                if(insn.$type === "partially-applied-token-function") {
                     args.push(argName);
                 }
 
+                // Build concrete args for call
                 const block: estree.Statement[] = [];
 
                 for(const arg of insn.args) {
@@ -1496,6 +1498,7 @@ class BlockEmitter extends EmitterBase {
                     args.push(argName);
                 }
 
+                // Build call
                 const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
                 const funcExpr = this.moduleEmitter.getImportExpr(functionInfo.importSpecifier);
 
@@ -1581,7 +1584,7 @@ class BlockEmitter extends EmitterBase {
             case "record-literal":
                 assign(insn.dest, {
                     type: "NewExpression",
-                    callee: this.buildTypeInfo(insn.recordType),
+                    callee: this.buildTokenValue(insn.recordType),
                     arguments: [
                         {
                             type: "ObjectExpression",
@@ -1666,7 +1669,7 @@ class BlockEmitter extends EmitterBase {
         }
     }
 
-    buildTypeInfo(t: ir.VmType): estree.Expression {
+    buildTokenValue(t: ir.Token): estree.Expression {
         switch(t.$type) {
             case "builtin":
                 switch(t.b.$type) {
@@ -1699,17 +1702,27 @@ class BlockEmitter extends EmitterBase {
                     type: "NewExpression",
                     callee: this.getArgonRuntimeExport("FunctionType"),
                     arguments: [
-                        this.buildTypeInfo(t.input),
-                        this.buildTypeInfo(t.output),
+                        this.buildTokenValue(t.input),
+                        this.buildTokenValue(t.output),
                     ],
                 };
 
             case "function-erased":
                 return {
                     type: "NewExpression",
-                    callee: this.getArgonRuntimeExport("FunctionType"),
+                    callee: this.getArgonRuntimeExport("FunctionTypeErased"),
                     arguments: [
-                        this.buildTypeInfo(t.output),
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "function-token":
+                return {
+                    type: "NewExpression",
+                    callee: this.getArgonRuntimeExport("FunctionTypeToken"),
+                    arguments: [
+                        this.buildTokenValue(t.tokenKind),
+                        this.buildTokenValue(t.output),
                     ],
                 };
 
@@ -1733,7 +1746,7 @@ class BlockEmitter extends EmitterBase {
                             name: "specialize",
                         },
                     },
-                    arguments: t.args.map(arg => this.buildTypeInfo(arg)),
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
                 };
             }
 
@@ -1757,11 +1770,11 @@ class BlockEmitter extends EmitterBase {
                             name: "specialize",
                         },
                     },
-                    arguments: t.args.map(arg => this.buildTypeInfo(arg)),
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
                 };
             }
 
-            case "instance-type-parameter":
+            case "instance-token-parameter":
                 return {
                     type: "MemberExpression",
                     computed: false,
@@ -1795,34 +1808,28 @@ class BlockEmitter extends EmitterBase {
                             name: "specialize",
                         },
                     },
-                    arguments: t.args.map(arg => this.buildTypeInfo(arg)),
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
                 };
             }
 
             case "tuple":
                 return {
                     type: "ArrayExpression",
-                    elements: t.elements.map(item => this.buildTypeInfo(item)),
+                    elements: t.elements.map(item => this.buildTokenValue(item)),
                 };
 
-            case "type-parameter":
+            case "token-parameter":
                 return this.getTypeParam(t.index);
 
             case "type-info":
-                throw new Error("Not implemented buildTypeInfo type-info");
-
-            case "of-type-info":
-                return this.getReg(t.r);
+                return this.getArgonRuntimeExport("typeInfo");
 
             case "boxed":
                 return this.getArgonRuntimeExport("erasedType");
-
-            case "erased":
-                throw new Error("Cannot get type info for erased");
         }
     }
 
-    private getVariantClass(enumType: ir.VmType, variantId: bigint): estree.Expression {
+    private getVariantClass(enumType: ir.Token, variantId: bigint): estree.Expression {
         const variantInfo = this.options.program.getEnumVariantInfo(variantId);
 
 
@@ -1839,7 +1846,7 @@ class BlockEmitter extends EmitterBase {
                 computed: false,
                 optional: false,
 
-                object: this.buildTypeInfo(enumType),
+                object: this.buildTokenValue(enumType),
                 property: {
                     type: "Identifier",
                     name: "variants",
