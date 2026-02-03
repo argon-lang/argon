@@ -609,7 +609,7 @@ enum expr {
         a: expr;
     },
     function-type {
-        a: local-var;
+        a: lambda-parameter-var;
         r: expr;
     },
     if-else {
@@ -645,7 +645,7 @@ enum expr {
         pattern: pattern;
     },
     lambda {
-        v: local-var;
+        v: lambda-parameter-var;
         return-type: expr;
         body: expr;
     },
@@ -831,6 +831,24 @@ record local-var {
 }
 
 @esexpr:(derive-codec)
+record lambda-parameter-var {
+    id: nat;
+    var-type: expr;
+    name: option[identifier];
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    mutable: bool;
+
+    @esexpr:(keyword)
+    erasure: erasure-mode;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    witness: bool;
+}
+
+@esexpr:(derive-codec)
 record record-type {
     id: nat;
 
@@ -903,6 +921,9 @@ enum var {
         @esexpr:(keyword)
         @esexpr:(default-value #false)
         witness: bool;
+    },
+    lambda-parameter-var {
+        id: nat;
     },
 }
 

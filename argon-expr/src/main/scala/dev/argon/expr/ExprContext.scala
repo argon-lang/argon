@@ -76,6 +76,23 @@ trait ExprContext extends ConditionalVars {
     override def isMutable: Boolean = false
     override def isWitness: Boolean = false
   }
+  
+  final case class LambdaParameterVar(
+    id: UniqueIdentifier,
+    varType: Expr,
+    name: Option[IdentifierExpr],
+    isMutable: Boolean,
+    erasureMode: ErasureMode.Declared,
+    isWitness: Boolean,
+  ) extends Var {
+    override def hashCode(): Int = id.hashCode()
+
+    override def equals(obj: Any): Boolean =
+      obj.asMatchable match {
+        case other: LambdaParameterVar => id == other.id
+        case _ => false
+      }
+  }
 
   type Function <: Matchable
   given functionCanEqual: CanEqual[Function, Function] = deferred
@@ -132,7 +149,7 @@ trait ExprContext extends ConditionalVars {
     case Finally(action: Expr, ensuring: Expr)
     case FunctionCall(f: Function, args: Seq[Expr])
     case FunctionObjectCall(f: Expr, a: Expr)
-    case FunctionType(a: LocalVar, r: Expr)
+    case FunctionType(a: LambdaParameterVar, r: Expr)
     case IfElse(
       whenTrueWitness: Option[LocalVar],
       whenFalseWitness: Option[LocalVar],
@@ -144,7 +161,7 @@ trait ExprContext extends ConditionalVars {
     case InstanceSingletonType(i: Instance, args: Seq[Expr])
     case IntLiteral(i: BigInt)
     case Is(value: Expr, pattern: Pattern)
-    case Lambda(v: LocalVar, returnType: Expr, body: Expr)
+    case Lambda(v: LambdaParameterVar, returnType: Expr, body: Expr)
     case Match(value: Expr, cases: Seq[MatchCase])
     case NewInstance(i: Instance, args: Seq[Expr])
     case Or(a: Expr, b: Expr)

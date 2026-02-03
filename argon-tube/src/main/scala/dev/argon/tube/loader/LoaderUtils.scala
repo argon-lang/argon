@@ -167,7 +167,7 @@ private[loader] trait LoaderUtils extends UsingContext {
 
   protected def decodeExpr(e: t.Expr): Comp[context.DefaultExprContext.Expr] =
     for
-      knownVars <- Ref.make(Map.empty[BigInt, context.DefaultExprContext.LocalVar])
+      knownVars <- Ref.make(Map.empty[BigInt, context.DefaultExprContext.Var])
       res <- ExprDecoder(
         knownVars = knownVars,
       ).expr(e)
@@ -192,7 +192,7 @@ private[loader] trait LoaderUtils extends UsingContext {
     }
 
   private final class ExprDecoder(
-    knownVars: Ref[Map[BigInt, context.DefaultExprContext.LocalVar]]
+    knownVars: Ref[Map[BigInt, context.DefaultExprContext.Var]]
   ) {
     import dev.argon.tube.Expr
     import context.DefaultExprContext.{Expr as ArExpr, Pattern as ArPattern}
@@ -211,6 +211,21 @@ private[loader] trait LoaderUtils extends UsingContext {
         )
         _ <- knownVars.update(kv => kv + (v.id -> localVar))
       yield localVar
+
+    private def declareLambdaVar(v: t.LambdaParameterVar): Comp[context.DefaultExprContext.LambdaParameterVar] =
+      for
+        id <- UniqueIdentifier.make
+        varType <- expr(v.varType)
+        lambdaVar = context.DefaultExprContext.LambdaParameterVar(
+          id = id,
+          varType = varType,
+          name = v.name.map(decodeIdentifier),
+          isMutable = v.mutable,
+          erasureMode = decodeErasure(v.erasure),
+          isWitness = v.witness,
+        )
+        _ <- knownVars.update(kv => kv + (v.id -> lambdaVar))
+      yield lambdaVar
 
     private def getVar(v: t.Var): Comp[context.DefaultExprContext.Var] =
       v match {
@@ -242,6 +257,12 @@ private[loader] trait LoaderUtils extends UsingContext {
             erasureMode = decodeErasure(paramVar.erasure),
             isWitness = paramVar.witness,
           )
+
+        case t.Var.LambdaParameterVar(index) =>
+          for
+            kv <- knownVars.get
+            lambdaVar <- ZIO.succeed(kv(index.toInt))
+          yield lambdaVar
       }
 
     def expr(e: Expr): Comp[ArExpr] =
@@ -369,7 +390,7 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case Expr.FunctionType(a, r) =>
           for
-            argExpr <- declareVar(a)
+            argExpr <- declareLambdaVar(a)
             returnExpr <- expr(r)
           yield ArExpr.FunctionType(argExpr, returnExpr)
 
@@ -413,7 +434,7 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case Expr.Lambda(v, returnType, body) =>
           for
-            localVar <- declareVar(v)
+            localVar <- declareLambdaVar(v)
             returnTypeExpr <- expr(returnType)
             bodyExpr <- expr(body)
           yield ArExpr.Lambda(

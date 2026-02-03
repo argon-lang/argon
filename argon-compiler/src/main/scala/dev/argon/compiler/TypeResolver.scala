@@ -19,7 +19,7 @@ trait TypeResolver extends UsingContext {
   import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable, ImplicitValue}
 
-  import TRExprContext.{Expr, Pattern, Builtin, LocalVar, Hole, HoleInfo, AnnotatedExpr, RecordFieldLiteral, EffectInfo, MatchCase}
+  import TRExprContext.{Expr, Pattern, Builtin, LambdaParameterVar, LocalVar, Hole, HoleInfo, AnnotatedExpr, RecordFieldLiteral, EffectInfo, MatchCase}
   private type Loc = Location[FilePosition]
 
 
@@ -183,7 +183,7 @@ trait TypeResolver extends UsingContext {
           for
             argType <- makeHole(Expr.AnyType(), ErasureMode.Concrete, loc)
             paramId <- UniqueIdentifier.make
-            param = LocalVar(paramId, argType, None, isMutable = false, erasureMode = ErasureMode.Concrete, isWitness = false)
+            param = LambdaParameterVar(paramId, argType, None, isMutable = false, erasureMode = ErasureMode.Concrete, isWitness = false)
             funcType = Expr.FunctionType(param, t)
             f <- ExprFactory.this.check(funcType)
             arg <- arg.arg.check(argType)
@@ -208,7 +208,7 @@ trait TypeResolver extends UsingContext {
           case ErasureMode.Token | ErasureMode.TypeAnnotationToken => true
           case _ => false
         })
-    
+
   }
 
   private abstract class InferFactory extends ExprFactory {
@@ -522,7 +522,7 @@ trait TypeResolver extends UsingContext {
             for
               _ <- prohibitForToken
               paramId <- UniqueIdentifier.make
-              param = LocalVar(paramId, t.a.varType, parameterName, isMutable = t.a.isMutable, erasureMode = t.a.erasureMode, isWitness = t.a.isWitness)
+              param = LambdaParameterVar(paramId, t.a.varType, parameterName, isMutable = t.a.isMutable, erasureMode = t.a.erasureMode, isWitness = t.a.isWitness)
 
               nestedScope <- Scopes.LocalScope.make(state.scope)
               _ <- nestedScope.addVariable(param, None)
@@ -538,7 +538,7 @@ trait TypeResolver extends UsingContext {
               a <- resolveType(a)
               r <- resolveType(r)
               paramId <- UniqueIdentifier.make
-              param = LocalVar(paramId, a, None, isMutable = false, erasureMode = ErasureMode.Concrete, isWitness = false)
+              param = LambdaParameterVar(paramId, a, None, isMutable = false, erasureMode = ErasureMode.Concrete, isWitness = false)
             yield InferredExpr(Expr.FunctionType(param, r), Expr.TypeN(Expr.IntLiteral(0))) // TODO: Infer proper level
         }
 
@@ -1708,7 +1708,7 @@ trait TypeResolver extends UsingContext {
       arguments: Seq[Expr],
       remainingSig: TRSignatureContext.FunctionSignature,
       remainingArguments: Seq[ArgumentInfo],
-      lambdaParameters: Seq[LocalVar],
+      lambdaParameters: Seq[LambdaParameterVar],
     ) extends OverloadAttempt
 
     final case class Failure(errors: Seq[CompilerError]) extends OverloadAttempt
@@ -1764,11 +1764,11 @@ trait TypeResolver extends UsingContext {
       args: Seq[Expr],
       remainingSig: TRSignatureContext.FunctionSignature,
       remainingArgs: Seq[ArgumentInfo],
-      lambdaParameters: Seq[LocalVar],
+      lambdaParameters: Seq[LambdaParameterVar],
     )
 
-    private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, funcLocation: SourceLocation, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LocalVar])(using state: EmitState): Comp[AttemptOverloadCheckResult] =
-      def applyArg(param: TRSignatureContext.SignatureParameter, tailParams: Seq[TRSignatureContext.SignatureParameter], callLocation: SourceLocation, arg: Expr, restArgs: Seq[ArgumentInfo], lambdaParam: Option[LocalVar]): Comp[AttemptOverloadCheckResult] =
+    private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, funcLocation: SourceLocation, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LambdaParameterVar])(using state: EmitState): Comp[AttemptOverloadCheckResult] =
+      def applyArg(param: TRSignatureContext.SignatureParameter, tailParams: Seq[TRSignatureContext.SignatureParameter], callLocation: SourceLocation, arg: Expr, restArgs: Seq[ArgumentInfo], lambdaParam: Option[LambdaParameterVar]): Comp[AttemptOverloadCheckResult] =
         val restSig = overload.asOwner match {
           case Some(owner) =>
             val paramVar = param.asParameterVar(owner, callArgs.size)
@@ -1822,15 +1822,12 @@ trait TypeResolver extends UsingContext {
             case FunctionParameterListType.NormalList =>
               for
                   varId <- UniqueIdentifier.make
-                  lambdaParam = LocalVar(
+                  lambdaParam = LambdaParameterVar(
                     id = varId,
                     varType = param.paramType,
                     name = None,
                     isMutable = false,
-                    erasureMode = param.erasureMode match {
-                      case erasureMode: ErasureMode.DeclaredNonToken => erasureMode
-                      case ErasureMode.Token => ???
-                    },
+                    erasureMode = param.erasureMode,
                     isWitness = false,
                   )
               yield (Expr.Variable(lambdaParam), Some(lambdaParam))
@@ -2128,22 +2125,19 @@ trait TypeResolver extends UsingContext {
                   for
                     variable = param.asParameterVar(TRExprContext.ExpressionOwner.Func(function), args.size)
                     varId <- UniqueIdentifier.make
-                    local = LocalVar(
+                    lambdaParam = LambdaParameterVar(
                       varId,
                       paramType,
                       paramName,
                       isMutable = false,
-                      erasureMode = erasureMode match {
-                        case erasureMode: ErasureMode.DeclaredNonToken => erasureMode
-                        case ErasureMode.Token => ???
-                      },
+                      erasureMode = erasureMode,
                       isWitness = false
                     )
-                    loadLocal = Expr.Variable(local)
+                    loadLocal = Expr.Variable(lambdaParam)
                     ir.Assertion(witness, assertionType) <- buildCall(sig.copy(parameters = tailParams).substituteVar(variable, loadLocal), args :+ loadLocal)
                   yield ir.Assertion(
-                    witness = Expr.Lambda(local, assertionType, witness),
-                    assertionType = Expr.FunctionType(local, assertionType),
+                    witness = Expr.Lambda(lambdaParam, assertionType, witness),
+                    assertionType = Expr.FunctionType(lambdaParam, assertionType),
                   )
 
                 case TRSignatureContext.SignatureParameter(FunctionParameterListType.NormalList, _, _, _, _) :: _ => ???

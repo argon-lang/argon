@@ -26,6 +26,7 @@ trait ExprShifter[F[_]: Monad] extends TreeShifter[F] {
   protected def shiftHole(hole: ec1.Hole): F[ec2.Expr]
   protected def varShifter: Shifter[ec1.Var, ec2.Var] = autoShifter
   protected def localVarShifter: Shifter[ec1.LocalVar, ec2.LocalVar] = autoShifter
+  protected def lambdaVarShifter: Shifter[ec1.LambdaParameterVar, ec2.LambdaParameterVar] = autoShifter
   
   
   private given Shifter[ec1.Expr, ec2.Expr] = exprShifter
@@ -58,6 +59,7 @@ trait ExprShifter[F[_]: Monad] extends TreeShifter[F] {
 
   private given Shifter[ec1.Var, ec2.Var] = varShifter
   private given Shifter[ec1.LocalVar, ec2.LocalVar] = localVarShifter
+  private given Shifter[ec1.LambdaParameterVar, ec2.LambdaParameterVar] = lambdaVarShifter
   private given Shifter[ec1.ExpressionOwner, ec2.ExpressionOwner] = autoShifter
   protected final given effectShifter: Shifter[ec1.EffectInfo, ec2.EffectInfo] = autoShifter
 

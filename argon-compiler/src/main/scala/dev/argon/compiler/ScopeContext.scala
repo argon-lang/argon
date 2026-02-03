@@ -274,8 +274,8 @@ trait ScopeContext {
         parentScope.knownVarValues
     }
 
-    final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar], variableValues: TMap[Var, TRExprContext.Expr], givenVars: TSet[Var]) extends Scope {
-      def addVariable(v: LocalVar, value: Option[TRExprContext.Expr]): UIO[Unit] =
+    final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, Var], variableValues: TMap[Var, TRExprContext.Expr], givenVars: TSet[Var]) extends Scope {
+      def addVariable(v: Var, value: Option[TRExprContext.Expr]): UIO[Unit] =
         ZIO.foreachDiscard(v.name)(name => variables.put(name, v).commit) *>
           (
             value match {
@@ -330,14 +330,14 @@ trait ScopeContext {
     object LocalScope {
       def make(parentScope: Scope): UIO[LocalScope] =
         for
-          variables <- TMap.empty[IdentifierExpr, LocalVar].commit
+          variables <- TMap.empty[IdentifierExpr, Var].commit
           variableValues <- TMap.empty[Var, TRExprContext.Expr].commit
           givenVars <- TSet.empty[Var].commit
         yield LocalScope(parentScope, variables, variableValues, givenVars)
     }
 
     final class PartialScope private[Scopes](
-      private[Scopes] val variables: Map[IdentifierExpr, LocalVar],
+      private[Scopes] val variables: Map[IdentifierExpr, Var],
       private[Scopes] val variableValues: Map[Var, TRExprContext.Expr],
       private[Scopes] val givenVars: Set[Var],
     )

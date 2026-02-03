@@ -1236,8 +1236,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                     case ErasureMode.Erased =>
                       emit(Instruction.PartiallyAppliedFunctionErased(synId, r, typeArgs, args))
 
-                    // Token
-//                    emit(Instruction.PartiallyAppliedTypeFunction(synId, r, typeArgs, args))
+                    case ErasureMode.Token =>
+                      emit(Instruction.PartiallyAppliedTypeFunction(synId, r, typeArgs, args))
 
                     case ErasureMode.Concrete =>
                       emit(Instruction.PartiallyAppliedFunction(synId, r, typeArgs, args))

@@ -581,7 +581,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
       private def emitExpr(e: ArExpr): Comp[Expr] =
         for
-          knownVars <- Ref.make(Map.empty[context.DefaultExprContext.LocalVar, Int])
+          knownVars <- Ref.make(Map.empty[context.DefaultExprContext.Var, Int])
           res <- ExprEmitter(
             knownVars = knownVars,
           ).expr(e)
@@ -627,17 +627,20 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
         }
 
       private final class ExprEmitter(
-        knownVars: Ref[Map[context.DefaultExprContext.LocalVar, Int]]
+        knownVars: Ref[Map[context.DefaultExprContext.Var, Int]]
       ) {
+
+        private def getNewVarId(v: context.DefaultExprContext.Var): Comp[Int] =
+          knownVars.modify(kv => kv.get(v) match {
+            case Some(id) => (id, kv)
+            case None =>
+              val id = kv.size
+              (id, kv + (v -> id))
+          })
 
         private def declareVar(v: context.DefaultExprContext.LocalVar): Comp[LocalVar] =
           for
-            id <- knownVars.modify(kv => kv.get(v) match {
-              case Some(id) => (id, kv)
-              case None =>
-                val id = kv.size
-                (id, kv + (v -> id))
-            })
+            id <- getNewVarId(v)
             t <- expr(v.varType)
           yield LocalVar(
             id = id,
@@ -645,6 +648,19 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             name = v.name.map(encodeIdentifier),
             mutable = v.isMutable,
             erased = encodeErasure(v.erasureMode),
+            witness = v.isWitness,
+          )
+
+        private def declareLambdaVar(v: context.DefaultExprContext.LambdaParameterVar): Comp[LambdaParameterVar] =
+          for
+            id <- getNewVarId(v)
+            t <- expr(v.varType)
+          yield LambdaParameterVar(
+            id = id,
+            varType = t,
+            name = v.name.map(encodeIdentifier),
+            mutable = v.isMutable,
+            erasure = encodeErasure(v.erasureMode),
             witness = v.isWitness,
           )
 
@@ -682,6 +698,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 erasure = encodeErasure(v.erasureMode),
                 witness = v.isWitness,
               )
+
+            case v: context.DefaultExprContext.LambdaParameterVar =>
+              for
+                kv <- knownVars.get
+                index <- ZIO.succeed(kv(v))
+              yield Var.LambdaParameterVar(index)
           }
           
         
@@ -811,7 +833,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case ArExpr.FunctionType(a, r) =>
               for
-                a <- declareVar(a)
+                a <- declareLambdaVar(a)
                 r <- expr(r)
               yield Expr.FunctionType(a, r)
 
@@ -857,7 +879,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case lambda: ArExpr.Lambda =>
               for
-                v <- declareVar(lambda.v)
+                v <- declareLambdaVar(lambda.v)
                 returnType <- expr(lambda.returnType)
                 body <- expr(lambda.body)
 

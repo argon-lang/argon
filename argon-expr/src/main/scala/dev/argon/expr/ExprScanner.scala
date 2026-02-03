@@ -21,6 +21,7 @@ trait ExprScanner[F[_]] extends TreeScanner[F] {
   
   private given Scanner[Builtin] = autoScanner
   private given Scanner[LocalVar] = autoScanner
+  private given Scanner[LambdaParameterVar] = autoScanner
   private given Scanner[Var] = autoScanner
 
   private given Scanner[Expr.RecordType] = autoScanner

@@ -20,6 +20,7 @@ trait ExprComparer extends TreeComparison {
   
   private given Comparer[Builtin] = autoComparer
   private given Comparer[LocalVar] = autoComparer
+  private given Comparer[LambdaParameterVar] = autoComparer
   private given Comparer[Var] = autoComparer
 
   private given Comparer[Expr.RecordType] = autoComparer
