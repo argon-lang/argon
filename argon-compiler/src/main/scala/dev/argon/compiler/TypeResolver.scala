@@ -202,6 +202,13 @@ trait TypeResolver extends UsingContext {
     def memberLookupSource(member: MemberInfo): OverloadLookupSource =
       MemberLookupSource(member.memberAccessLocation, this, hasExplicitAssign = false, member.memberName.value)
 
+    protected final def prohibitForToken(using state: EmitState): Comp[Unit] =
+      ErrorLog.logError(CompilerError.TokenExpressionRequired(loc))
+        .whenDiscard(state.erased match {
+          case ErasureMode.Token | ErasureMode.TypeAnnotationToken => true
+          case _ => false
+        })
+    
   }
 
   private abstract class InferFactory extends ExprFactory {
@@ -383,6 +390,7 @@ trait TypeResolver extends UsingContext {
 
           override def check(t: Expr)(using EmitState): Comp[Expr] =
             for
+              _ <- prohibitForToken
               tt <- exprType.getExprType(t)
               innerType <- makeHole(tt, ErasureMode.TypeAnnotationToken, loc)
               _ <- checkTypesMatchNoBox(loc)(t, Expr.Boxed(innerType))
@@ -434,6 +442,7 @@ trait TypeResolver extends UsingContext {
 
           override def infer(using EmitState): Comp[InferredExpr] =
             for
+              _ <- prohibitForToken
               left <- resolveExpr(left).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
               right <- resolveExpr(right).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
             yield InferredExpr(
@@ -448,6 +457,7 @@ trait TypeResolver extends UsingContext {
 
           override def infer(using EmitState): Comp[InferredExpr] =
             for
+              _ <- prohibitForToken
               left <- resolveExpr(left).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
               right <- resolveExpr(right).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
             yield InferredExpr(
@@ -470,6 +480,7 @@ trait TypeResolver extends UsingContext {
 
               override def check(t: Expr)(using EmitState): Comp[Expr] =
                 for
+                  _ <- prohibitForToken
                   bodyExpr <- bodyFac.check(t)
                   finallyExpr <- resolveStmtBlock(finallyBody).check(Expr.Tuple(Seq()))
                 yield Expr.Finally(bodyExpr, finallyExpr)
@@ -482,10 +493,12 @@ trait TypeResolver extends UsingContext {
         new InferFactory {
           override def loc: Loc = expr.location
           override def infer(using state: EmitState): Comp[InferredExpr] =
-            ZIO.succeed(InferredExpr(
+            for
+              _ <- prohibitForToken
+            yield InferredExpr(
               Expr.BoolLiteral(b),
               boolType,
-            ))
+            )
         }
 
       case ast.Expr.Builtin(name) =>
@@ -507,6 +520,7 @@ trait TypeResolver extends UsingContext {
 
           override def checkFunction(t: Expr.FunctionType)(using state: EmitState): Comp[Expr] =
             for
+              _ <- prohibitForToken
               paramId <- UniqueIdentifier.make
               param = LocalVar(paramId, t.a.varType, parameterName, isMutable = t.a.isMutable, erasureMode = t.a.erasureMode, isWitness = t.a.isWitness)
 
@@ -537,6 +551,7 @@ trait TypeResolver extends UsingContext {
 
           override def check(t: Expr)(using state: EmitState): Comp[Expr] =
             for
+              _ <- prohibitForToken
               condExpr <- resolveExpr(cond).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
               isPureCond = PurityScanner(context)(TRExprContext)(condExpr)
 
@@ -575,10 +590,12 @@ trait TypeResolver extends UsingContext {
         new InferFactory {
           override def loc: Loc = expr.location
           override def infer(using state: EmitState): Comp[InferredExpr] =
-            ZIO.succeed(InferredExpr(
+            for
+              _ <- prohibitForToken
+            yield InferredExpr(
               Expr.IntLiteral(i),
               intType,
-            ))
+            )
         }
 
       case ast.Expr.Is(value, pattern) =>
@@ -587,6 +604,7 @@ trait TypeResolver extends UsingContext {
 
           override def infer(using EmitState): Comp[InferredExpr] =
             for
+              _ <- prohibitForToken
               t <- makeHole(Expr.AnyType(), ErasureMode.TypeAnnotationToken, loc)
               e <- resolveExpr(value).check(t)
               p <- resolvePattern(pattern, t)
@@ -602,6 +620,7 @@ trait TypeResolver extends UsingContext {
 
           override def check(t: Expr)(using EmitState): Comp[Expr] =
             for
+              _ <- prohibitForToken
               patternType <- makeHole(Expr.AnyType(), ErasureMode.TypeAnnotationToken, loc)
               e <- resolveExpr(value).check(patternType)
               cases <- ZIO.foreach(cases)(resolveMatchCase(t, patternType))
@@ -658,10 +677,12 @@ trait TypeResolver extends UsingContext {
                 override def loc: Loc = expr.location
 
                 override def infer(using state: EmitState): Comp[InferredExpr] =
-                  ZIO.succeed(InferredExpr(
+                  for
+                    _ <- prohibitForToken
+                  yield InferredExpr(
                     Expr.StringLiteral(s),
                     stringType,
-                  ))
+                  )
               }
 
             case ast.StringFragment.Interpolate(_) => ???
@@ -712,6 +733,7 @@ trait TypeResolver extends UsingContext {
 
           override def check(t: Expr)(using EmitState): Comp[Expr] =
             for
+              _ <- prohibitForToken
               innerValue <- resolveExpr(value).check(Expr.Boxed(t))
             yield Expr.Unbox(t, innerValue)
         }
@@ -1037,6 +1059,7 @@ trait TypeResolver extends UsingContext {
 
                 override def infer(using state: EmitState): Comp[InferredExpr] =
                   for
+                    _ <- prohibitForToken
                     _ <- ErrorLog.logError(CompilerError.CanNotMutate(loc)).whenDiscard(!v.isMutable)
                     _ <- checkAllowedEffect(loc)(EffectInfo.Effectful)
 
@@ -1339,7 +1362,7 @@ trait TypeResolver extends UsingContext {
 
                         override def infer(using EmitState): Comp[InferredExpr] =
                           for
-                            _ <- ZIO.unit
+                            _ <- prohibitForToken
 
                             recordExpr = expr
                             recordFields <- recordExpr.record.fields
@@ -1433,7 +1456,7 @@ trait TypeResolver extends UsingContext {
 
                         override def infer(using EmitState): Comp[InferredExpr] =
                           for
-                            _ <- ZIO.unit
+                            _ <- prohibitForToken
 
                             recordFields <- v.fields
 
@@ -1992,10 +2015,12 @@ trait TypeResolver extends UsingContext {
 
   private final class NullaryBuiltinFactory(override val loc: Loc, builtin: NullaryBuiltin, resType: Expr) extends InferFactory {
     override def infer(using EmitState): Comp[InferredExpr] =
-      ZIO.succeed(InferredExpr(
+      for
+        _ <- prohibitForToken.whenDiscard(!builtin.allowToken)
+      yield InferredExpr(
         Expr.Builtin(Builtin.Nullary(builtin)),
         resType
-      ))
+      )
   }
 
   private final class UnaryBuiltinFactory(override val loc: Loc, builtin: UnaryBuiltin, resType: Expr, aType: Expr) extends FixedSizeFactory1 {
@@ -2005,6 +2030,7 @@ trait TypeResolver extends UsingContext {
 
         override def infer(using EmitState): Comp[InferredExpr] =
           for
+            _ <- prohibitForToken.whenDiscard(!builtin.allowToken)
             aExpr <- a.arg.check(aType)
           yield InferredExpr(
             Expr.Builtin(Builtin.Unary(builtin, aExpr)),
@@ -2020,6 +2046,7 @@ trait TypeResolver extends UsingContext {
 
         override def infer(using EmitState): Comp[InferredExpr] =
           for
+            _ <- prohibitForToken.whenDiscard(!builtin.allowToken)
             aExpr <- a.arg.check(aType)
             bExpr <- b.arg.check(bType)
           yield InferredExpr(

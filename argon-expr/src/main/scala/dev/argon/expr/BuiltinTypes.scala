@@ -1,7 +1,11 @@
 package dev.argon.expr
 
-sealed trait BuiltinBase derives CanEqual
-sealed trait BuiltinType extends BuiltinBase derives CanEqual
+sealed trait BuiltinBase derives CanEqual {
+  def allowToken: Boolean = false
+}
+sealed trait BuiltinType extends BuiltinBase derives CanEqual {
+  override def allowToken: Boolean = true
+}
 
 enum NullaryBuiltin extends BuiltinBase derives CanEqual {
   case IntType extends NullaryBuiltin with BuiltinType
