@@ -83,8 +83,12 @@ enum CompilerError {
     t: Expr,
     actualSize: Int,
   )
-  
+
   case TypeParameterIsConcrete(
+    loc: Location[FilePosition],
+  )
+
+  case TokenFunctionNotInline(
     loc: Location[FilePosition],
   )
 

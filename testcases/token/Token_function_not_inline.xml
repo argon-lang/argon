@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Token function with concrete parameter (error)</Name>
+    <Name>Token function not inline (error)</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
@@ -8,7 +8,7 @@
 
         import Argon.Core::*
 
-        inline token def doSomething[A: type]: String = "x"
+        token def doSomething[token A: type]: String = "x"
 
         proc main(): () do
             let x = doSomething[Int]
@@ -17,6 +17,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>TypeParameterIsConcrete</ExpectedError>
+    <ExpectedError>TokenFunctionNotInline</ExpectedError>
 
 </ArgonTest>

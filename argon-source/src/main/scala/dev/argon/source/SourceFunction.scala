@@ -22,6 +22,9 @@ private[source] object SourceFunction {
 
       _ <- ErrorLog.logError(CompilerError.ErasedMustBePure(decl.name.location))
         .whenDiscard(erasure == ErasureMode.Erased && !decl.purity)
+
+      _ <- ErrorLog.logError(CompilerError.TokenFunctionNotInline(decl.name.location))
+        .whenDiscard(erasure == ErasureMode.Token && !inlineFlag)
       
     yield new ArFuncC {
       override val context: ctx.type = ctx

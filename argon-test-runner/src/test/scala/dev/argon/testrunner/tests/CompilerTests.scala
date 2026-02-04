@@ -51,7 +51,7 @@ object CompilerTests extends ZIOSpecDefault {
     Assertion.assertion("matchesExpectedResult")(actual => expectedResult.matchedBy(actual))
 
   private def createTest(s: CompilerTestSuiteBase)(tc: GroupedTestCase): Spec[TestEnvironment & Scope, Any] =
-    test(tc.getBaseName) {
+    test(tc.getTestCase.getName) {
       for
         testResult <- ZIO.attempt(s.runTestCase(tc))
       yield assert(testResult)(matchesExpectedResult(tc.getExpectedResult))
