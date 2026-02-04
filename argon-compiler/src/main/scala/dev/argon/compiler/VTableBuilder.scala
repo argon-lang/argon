@@ -54,7 +54,7 @@ trait VTableBuilder extends UsingContext {
           
           vtable <- buildSingleVTable(
             VTable(Map.empty),
-            methods,
+            methods.map(_.method),
             traitType,
           )
         yield VTableWithParent(None, vtable)
@@ -77,7 +77,7 @@ trait VTableBuilder extends UsingContext {
 
           vtable <- buildSingleVTable(
             parentVTableSubst,
-            methods,
+            methods.map(_.method),
             traitType,
           )
 

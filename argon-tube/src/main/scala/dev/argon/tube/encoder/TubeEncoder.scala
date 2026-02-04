@@ -6,6 +6,8 @@ import zio.*
 import dev.argon.compiler.{MethodOwner, SignatureEraser}
 import esexpr.Dictionary
 
+import java.lang.classfile.Attributes.signature
+
 
 private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
   override def createEmitter(state: EncodeState): state.Emitter =
@@ -198,6 +200,17 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           case c.AccessModifier.Public => AccessModifierGlobal.Public()
           case c.AccessModifier.Internal => AccessModifierGlobal.Internal()
           case c.AccessModifier.ModulePrivate => AccessModifierGlobal.ModulePrivate()
+        }
+
+      private def emitAccessModifier(access: c.AccessModifier): AccessModifier =
+        access match {
+          case c.AccessModifier.Public => AccessModifier.Public()
+          case c.AccessModifier.Private => AccessModifier.Private()
+          case c.AccessModifier.Protected => AccessModifier.Protected()
+          case c.AccessModifier.Internal => AccessModifier.Internal()
+          case c.AccessModifier.ProtectedOrInternal => AccessModifier.ProtectedOrInternal()
+          case c.AccessModifier.ProtectedAndInternal => AccessModifier.ProtectedAndInternal()
+          case c.AccessModifier.ModulePrivate => AccessModifier.ModulePrivate()
         }
 
       private def emitModuleBinding[Decl <: c.DeclarationBase & c.HasContext[context.type]]
@@ -430,7 +443,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           importSpec <- encodeImportSpecifier(importSpec)
 
           methods <- t.methods
-          methods <- ZIO.foreach(methods)(emitMethodDef)
+          methods <- ZIO.foreach(methods)(emitMethodEntry)
 
         yield TubeFileEntry.TraitDefinition(
           TraitDefinition(
@@ -446,6 +459,14 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           traitId = id,
           `import` = specifier,
         ))
+
+      private def emitMethodEntry(entry: c.MethodEntry[context.type]): Comp[MethodEntry] =
+        for
+          methodDef <- emitMethodDef(entry.method)
+        yield MethodEntry(
+          emitAccessModifier(entry.access),
+          methodDef,
+        )
 
       override def emitMethod(m: ArMethod, id: BigInt): Comp[TubeFileEntry] =
         emitMethodRef(id)(m)
@@ -524,7 +545,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           importSpec <- encodeImportSpecifier(importSpec)
 
           methods <- i.methods
-          methods <- ZIO.foreach(methods)(emitMethodDef)
+          methods <- ZIO.foreach(methods)(emitMethodEntry)
 
         yield TubeFileEntry.InstanceDefinition(
           InstanceDefinition(

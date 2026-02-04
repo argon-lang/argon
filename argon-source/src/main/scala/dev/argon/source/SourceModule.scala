@@ -107,7 +107,7 @@ private[source] object SourceModule {
             AccessToken(
               tubeName,
               path,
-              Seq()
+              Set()
             )
 
           override def scope: context.Scopes.Scope = moduleScope

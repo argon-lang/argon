@@ -402,7 +402,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           importSpec <- encodeImportSpecifier(importSpec)
 
           methods <- t.methods
-          methodDefs <- ZIO.foreach(methods)(emitMethodDef)
+          methodDefs <- ZIO.foreach(methods) { entry =>
+            emitMethodDef(entry.method)
+          }
 
           vtableBuilder = VTableBuilder(context)
           vtable <- vtableBuilder.buildVTable(MethodOwner.ByTrait(t))
@@ -488,7 +490,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         vtableBuilder: VTableBuilder & HasContext[context.type]
       )(
         ownerSig: FunctionSignatureWithMapping,
-        methods: Seq[ArMethod],
+        methods: Seq[c.MethodEntry[context.type]],
       )(
         vtable: vtableBuilder.VTable
       ): Comp[Vtable] =
@@ -497,7 +499,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case vtableBuilder.VTableTarget.Abstract => ZIO.succeed(VtableTarget.Abstract())
             case vtableBuilder.VTableTarget.Ambiguous(_) => ZIO.succeed(VtableTarget.Ambiguous())
             case vtableBuilder.VTableTarget.Implementation(method) =>
-              val methodIndex = methods.indexOf(method)
+              val methodIndex = methods.indexWhere(_.method == method)
               if methodIndex >= 0 then
                 ZIO.succeed(VtableTarget.Implementation(methodIndex))
               else
@@ -527,7 +529,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           importSpec <- encodeImportSpecifier(importSpec)
 
           methods <- i.methods
-          methodDefs <- ZIO.foreach(methods)(emitMethodDef)
+          methodDefs <- ZIO.foreach(methods) { entry =>
+            emitMethodDef(entry.method)
+          }
 
           vtableBuilder = VTableBuilder(context)
           vtable <- vtableBuilder.buildVTable(MethodOwner.ByInstance(i))

@@ -1180,8 +1180,8 @@ trait TypeResolver extends UsingContext {
             methods <- t.methods
 
             methodOverloads = methods
-              .filter { method => method.name == memberName }
-              .map { method => Overloadable.InstanceMethod(method, traitType, e) }
+              .filter { method => method.method.name == memberName }
+              .map { method => Overloadable.InstanceMethod(method.method, traitType, e) }
 
           yield LookupResult.Overloaded(
             methodOverloads,

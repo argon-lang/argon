@@ -204,16 +204,16 @@ private[loader] object TubeDeserialized {
                     res <- ZStream.fromZIO(getTrait(methodRef.traitId))
                       .mapZIO(_.methods)
                       .flatMap(ZStream.fromIterable(_))
-                      .filter { m => m.name == name }
+                      .filter { m => m.method.name == name }
                       .filterZIO { m =>
                         for
-                          sig <- m.signature
+                          sig <- m.method.signature
                           sig <- SignatureEraser(context).eraseSignature(sig)
                         yield sig == erasedSig
                       }
                       .runHead
                     item <- ZIO.fromOption(res).orElseFail(TubeFormatException("Could not find method " + methodRef))
-                  yield item
+                  yield item.method
               }
           }
 

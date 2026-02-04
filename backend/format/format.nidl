@@ -192,6 +192,17 @@ enum access-modifier-global {
     module-private,
 }
 
+@esexpr:(derive-codec)
+enum access-modifier {
+    public,
+    private,
+    protected,
+    internal,
+    protected-or-internal,
+    protected-and-internal,
+    module-private,
+}
+
 
 
 @esexpr:(derive-codec)
@@ -472,7 +483,13 @@ record trait-definition {
     signature: function-signature;
 
     @esexpr:(vararg)
-    methods: list[method-definition];
+    methods: list[method-entry];
+}
+
+@esexpr:(derive-codec)
+record method-entry {
+    access: access-modifier;
+    method: method-definition;
 }
 
 @esexpr:(derive-codec)
@@ -519,7 +536,7 @@ record instance-definition {
     signature: function-signature;
 
     @esexpr:(vararg)
-    methods: list[method-definition];
+    methods: list[method-entry];
 }
 
 @esexpr:(derive-codec)

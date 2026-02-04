@@ -4,7 +4,7 @@ import dev.argon.compiler as c
 import dev.argon.tube as t
 import dev.argon.expr as e
 import dev.argon.ast
-import dev.argon.tube.{AccessModifierGlobal, Identifier, ImportSpecifier, Pattern}
+import dev.argon.tube.{Identifier, ImportSpecifier, Pattern}
 import cats.data.NonEmptySeq
 import zio.*
 import dev.argon.compiler.{HasContext, UsingContext}
@@ -67,9 +67,20 @@ private[loader] trait LoaderUtils extends UsingContext {
     
   protected def decodeAccessModifierGlobal(access: t.AccessModifierGlobal): c.AccessModifier.Global =
     access match {
-      case AccessModifierGlobal.Public() => c.AccessModifier.Public
-      case AccessModifierGlobal.Internal() => c.AccessModifier.Internal
-      case AccessModifierGlobal.ModulePrivate() => c.AccessModifier.ModulePrivate
+      case t.AccessModifierGlobal.Public() => c.AccessModifier.Public
+      case t.AccessModifierGlobal.Internal() => c.AccessModifier.Internal
+      case t.AccessModifierGlobal.ModulePrivate() => c.AccessModifier.ModulePrivate
+    }
+    
+  protected def decodeAccessModifier(access: t.AccessModifier): c.AccessModifier =
+    access match {
+      case t.AccessModifier.Public() => c.AccessModifier.Public
+      case t.AccessModifier.Private() => c.AccessModifier.Private
+      case t.AccessModifier.Protected() => c.AccessModifier.Protected
+      case t.AccessModifier.Internal() => c.AccessModifier.Internal
+      case t.AccessModifier.ProtectedOrInternal() => c.AccessModifier.ProtectedOrInternal
+      case t.AccessModifier.ProtectedAndInternal() => c.AccessModifier.ProtectedAndInternal
+      case t.AccessModifier.ModulePrivate() => c.AccessModifier.ModulePrivate
     }
 
   protected def decodeImportSpecifier(specifier: t.ImportSpecifier): Comp[c.ImportSpecifier] =

@@ -387,7 +387,7 @@ abstract class EnumVariantC extends UsingContext derives CanEqual {
 }
 
 abstract class ArTraitC extends UsingContext with DeclarationBase derives CanEqual {
-  def methods: Comp[Seq[ArMethod]]
+  def methods: Comp[Seq[MethodEntry[context.type]]]
 
   override def hashCode(): Int = id.hashCode()
 
@@ -397,6 +397,8 @@ abstract class ArTraitC extends UsingContext with DeclarationBase derives CanEqu
       case _ => false
     }
 }
+
+final case class MethodEntry[Ctx <: Context](access: AccessModifier, method: ArMethodC & HasContext[Ctx])
 
 abstract class ArMethodC extends UsingContext derives CanEqual {
   val id: UniqueIdentifier
@@ -458,7 +460,7 @@ enum MethodOwner[Ctx <: Context] derives CanEqual {
 
 
 abstract class ArInstanceC extends UsingContext with DeclarationBase derives CanEqual {
-  def methods: Comp[Seq[ArMethod]]
+  def methods: Comp[Seq[MethodEntry[context.type]]]
 
   override def hashCode(): Int = id.hashCode()
 

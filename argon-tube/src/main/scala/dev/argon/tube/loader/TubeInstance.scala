@@ -12,7 +12,7 @@ private[loader] object TubeInstance {
 
       specCell <- MemoCell.make[ctx.Env, ctx.Error, ImportSpecifier]
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
-      methodsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ArMethodC & HasContext[ctx.type]]]
+      methodsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[MethodEntry[ctx.type]]]
 
     yield new ArInstanceC with LoaderUtils with TubeRecordFieldBuilder {
 
@@ -28,9 +28,14 @@ private[loader] object TubeInstance {
         sigCell.get(decodeFunctionSignature(trt.signature))
 
 
-      override def methods: Comp[Seq[ArMethod]] =
-        methodsCell.get(ZIO.foreach(trt.methods) { method =>
-          TubeMethod(ctx, elemLoader, method, MethodOwner.ByInstance(this))
+      override def methods: Comp[Seq[MethodEntry[context.type]]] =
+        methodsCell.get(ZIO.foreach(trt.methods) { entry =>
+          for
+            method <- TubeMethod(ctx, elemLoader, entry.method, MethodOwner.ByInstance(this))
+          yield MethodEntry(
+            decodeAccessModifier(entry.access),
+            method
+          )
         })
     }
 }
