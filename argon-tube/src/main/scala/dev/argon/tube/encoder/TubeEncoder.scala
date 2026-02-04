@@ -192,48 +192,46 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               groups = groups,
             )
         }
+        
+      private def emitAccessModifierGlobal(access: c.AccessModifier.Global): AccessModifierGlobal =
+        access match {
+          case c.AccessModifier.Public => AccessModifierGlobal.Public()
+          case c.AccessModifier.Internal => AccessModifierGlobal.Internal()
+          case c.AccessModifier.ModulePrivate => AccessModifierGlobal.ModulePrivate()
+        }
 
+      private def emitModuleBinding[Decl <: c.DeclarationBase & c.HasContext[context.type]]
+      (access: c.AccessModifier.Global, decl: Decl)
+      (
+        getId: Decl => Comp[BigInt],
+        createExport: (BigInt, AccessModifierGlobal, ErasedSignature) => dev.argon.tube.ModuleExport
+      )
+      : Comp[dev.argon.tube.ModuleExport] =
+        for
+          id <- getId(decl)
+          sig <- decl.signature
+          sig <- SignatureEraser(context).eraseSignature(sig)
+          sig <- encodeErasedSignature(sig)
+        yield createExport(id, emitAccessModifierGlobal(access), sig)
+        
+        
+      
       private def emitModuleExport(exp: ModuleExport): Comp[dev.argon.tube.ModuleExport] =
         exp match {
-          case c.ModuleExportC.Function(f) =>
-            for
-              id <- getFunctionId(f)
-              sig <- f.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.tube.ModuleExport.Function(id, sig)
+          case c.ModuleExportC.Binding(access, c.ModuleExportBindingC.Function(f)) =>
+            emitModuleBinding(access, f)(getFunctionId, dev.argon.tube.ModuleExport.Function.apply)
 
-          case c.ModuleExportC.Record(r) =>
-            for
-              id <- getRecordId(r)
-              sig <- r.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.tube.ModuleExport.Record(id, sig)
+          case c.ModuleExportC.Binding(access, c.ModuleExportBindingC.Record(r)) =>
+            emitModuleBinding(c.AccessModifier.Public, r)(getRecordId, dev.argon.tube.ModuleExport.Record.apply)
 
-          case c.ModuleExportC.Enum(e) =>
-            for
-              id <- getEnumId(e)
-              sig <- e.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.tube.ModuleExport.Enum(id, sig)
+          case c.ModuleExportC.Binding(access, c.ModuleExportBindingC.Enum(e)) =>
+            emitModuleBinding(c.AccessModifier.Public, e)(getEnumId, dev.argon.tube.ModuleExport.Enum.apply)
 
-          case c.ModuleExportC.Trait(t) =>
-            for
-              id <- getTraitId(t)
-              sig <- t.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.tube.ModuleExport.Trait(id, sig)
+          case c.ModuleExportC.Binding(access, c.ModuleExportBindingC.Trait(t)) =>
+            emitModuleBinding(c.AccessModifier.Public, t)(getTraitId, dev.argon.tube.ModuleExport.Trait.apply)
 
-          case c.ModuleExportC.Instance(i) =>
-            for
-              id <- getInstanceId(i)
-              sig <- i.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.tube.ModuleExport.Instance(id, sig)
+          case c.ModuleExportC.Binding(access, c.ModuleExportBindingC.Instance(i)) =>
+            emitModuleBinding(c.AccessModifier.Public, i)(getInstanceId, dev.argon.tube.ModuleExport.Instance.apply)
 
           case c.ModuleExportC.Exported(exp) =>
             for

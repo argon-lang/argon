@@ -274,9 +274,7 @@ trait TubeImporter extends UsingContext {
   def getTube(name: TubeName): Comp[ArTube]
 }
 
-sealed trait DeclarationBase {
-  self: UsingContext =>
-
+sealed trait DeclarationBase extends UsingContext {
   val id: UniqueIdentifier
   def importSpecifier: Comp[ImportSpecifier]
 
@@ -302,12 +300,16 @@ abstract class ArModuleC extends UsingContext {
 }
 
 enum ModuleExportC[Ctx <: Context] {
+  case Binding(access: AccessModifier.Global, binding: ModuleExportBindingC[Ctx])
+  case Exported(exp: ModuleExportC[Ctx])
+}
+
+enum ModuleExportBindingC[Ctx <: Context] {
   case Function(f: ArFuncC & HasContext[Ctx])
   case Record(r: ArRecordC & HasContext[Ctx])
   case Enum(e: ArEnumC & HasContext[Ctx])
   case Trait(t: ArTraitC & HasContext[Ctx])
   case Instance(i: ArInstanceC & HasContext[Ctx])
-  case Exported(exp: ModuleExportC[Ctx])
 }
 
 abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqual {

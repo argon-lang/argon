@@ -134,19 +134,19 @@ trait ScopeContext {
       def addImport(importSpec: WithSource[ast.ImportStmt]): GlobalScopeBuilder =
         GlobalScopeBuilder(imports :+ importSpec, module)
 
-      def toScope: Comp[Scope] = ZIO.succeed(CurrentModuleScope(GlobalScope(imports, module), module))
+      def toScope: Scope = CurrentModuleScope(GlobalScope(imports, module), module)
     }
 
     private def toExportedGiven(exp: ModuleExportC[self.type]): Option[ImplicitValue] =
       exp match {
-        case ModuleExportC.Function(f) if f.isWitness =>
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Function(f)) if f.isWitness =>
           Some(ImplicitValue.OfFunction(f))
 
-        case ModuleExportC.Function(_) => None
-        case ModuleExportC.Record(_) => None
-        case ModuleExportC.Enum(_) => None
-        case ModuleExportC.Trait(_) => None
-        case ModuleExportC.Instance(_) => None
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Function(_)) => None
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Record(_)) => None
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Enum(_)) => None
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Trait(_)) => None
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Instance(_)) => None
         case ModuleExportC.Exported(exp) => toExportedGiven(exp)
       }
 
@@ -157,11 +157,11 @@ trait ScopeContext {
 
     private def moduleExportToOverloadable(exp: ModuleExportC[self.type]): Overloadable =
       exp match {
-        case ModuleExportC.Function(f) => Overloadable.Function(f)
-        case ModuleExportC.Record(r) => Overloadable.Record(r)
-        case ModuleExportC.Enum(e) => Overloadable.Enum(e)
-        case ModuleExportC.Trait(t) => Overloadable.Trait(t)
-        case ModuleExportC.Instance(i) => Overloadable.Instance(i)
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Function(f)) => Overloadable.Function(f)
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Record(r)) => Overloadable.Record(r)
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Enum(e)) => Overloadable.Enum(e)
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Trait(t)) => Overloadable.Trait(t)
+        case ModuleExportC.Binding(_, ModuleExportBindingC.Instance(i)) => Overloadable.Instance(i)
         case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
       }
 

@@ -9,6 +9,11 @@ sealed trait EnumBodyStmt
 sealed trait TraitBodyStmt
 sealed trait NewTraitObjectBodyStmt
 
+sealed trait DeclarationStmt extends Stmt {
+  val modifiers: Seq[WithSource[Modifier]]
+  val name: WithSource[IdentifierExpr]
+}
+
 final case class FunctionDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
   purity: Boolean,
@@ -16,7 +21,7 @@ final case class FunctionDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
   body: FunctionBody,
-) extends Stmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
+) extends DeclarationStmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
 
 final case class VariableDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
@@ -32,7 +37,7 @@ final case class RecordDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: Option[WithSource[Expr]],
   body: Seq[WithSource[RecordBodyStmt]],
-) extends Stmt
+) extends DeclarationStmt
 
 final case class RecordField(
   isMutable: Boolean,
@@ -46,7 +51,7 @@ final case class EnumDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: Option[WithSource[Expr]],
   body: Seq[WithSource[EnumBodyStmt]],
-) extends Stmt
+) extends DeclarationStmt
 
 enum EnumVariant extends EnumBodyStmt {
   case Constructor(
@@ -64,7 +69,7 @@ final case class TraitDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: Option[WithSource[Expr]],
   body: Seq[WithSource[TraitBodyStmt]],
-) extends Stmt
+) extends DeclarationStmt
 
 final case class MethodDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
@@ -75,7 +80,7 @@ final case class MethodDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: WithSource[ReturnTypeSpecifier],
   body: Option[FunctionBody],
-) extends Stmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
+) extends DeclarationStmt with RecordBodyStmt with EnumBodyStmt with TraitBodyStmt with NewTraitObjectBodyStmt
 
 final case class InstanceDeclarationStmt(
   modifiers: Seq[WithSource[Modifier]],
@@ -83,7 +88,7 @@ final case class InstanceDeclarationStmt(
   parameters: Seq[WithSource[FunctionParameterList]],
   returnType: Option[WithSource[Expr]],
   body: Seq[WithSource[TraitBodyStmt]],
-) extends Stmt
+) extends DeclarationStmt
 
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)

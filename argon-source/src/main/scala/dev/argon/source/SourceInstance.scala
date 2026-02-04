@@ -6,44 +6,54 @@ import dev.argon.util.*
 import zio.*
 
 private[source] object SourceInstance {
-  def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, importFactory: ImportFactory)(decl: ast.InstanceDeclarationStmt)(using externProvider: ExternProvider & HasContext[ctx.type]): ctx.Comp[ArInstanceC & HasContext[ctx.type]] =
+  def make
+  (ctx: Context)
+  (closure: DeclarationClosure & HasContext[ctx.type])
+  (decl: ast.InstanceDeclarationStmt)
+  : ctx.Comp[DeclarationResult[closure.Access, ArInstanceC & HasContext[ctx.type]]] =
     for
       recId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
       methodsCache <- MemoCell.make[ctx.Env, ctx.Error, Seq[ArMethodC & HasContext[ctx.type]]]
-    yield new ArInstanceC {
-      override val context: ctx.type = ctx
-      override val id: UniqueIdentifier = recId
 
-      override def importSpecifier: Comp[ImportSpecifier] =
-        for
-          sig <- signature
-          erasedSig <- SignatureEraser(ctx).eraseSignature(sig)
-        yield importFactory.getImportSpecifier(erasedSig)
+      mp <- ModifierParser.make(decl.modifiers, decl.name.location)
+      access <- mp.parse(closure.accessModifierParser)
+      _ <- mp.done
 
-      override def signature: Comp[FunctionSignature] = sigCache.get(
-        scope.toScope.flatMap { scope =>
+    yield DeclarationResult(
+      access,
+      new ArInstanceC {
+        override val context: ctx.type = ctx
+        override val id: UniqueIdentifier = recId
+        
+        import closure.given
+  
+        override def importSpecifier: Comp[ImportSpecifier] =
+          for
+            sig <- signature
+            erasedSig <- SignatureEraser(ctx).eraseSignature(sig)
+          yield closure.getImportSpecifier(erasedSig)
+  
+        override def signature: Comp[FunctionSignature] = sigCache.get {
+          val scope = closure.scope
           val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
           SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Instance(this))(decl.parameters, rt)
         }
-      )
-
-      override def methods: Comp[Seq[ArMethod]] =
-        methodsCache.get(
-          scope.toScope
-            .flatMap { scope =>
-              signature.map { sig =>
-                context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Instance(this), scope, sig.parameters)
+  
+        override def methods: Comp[Seq[ArMethod]] =
+          methodsCache.get(
+            signature.map { sig =>
+              context.Scopes.ParameterScope(context.TRExprContext.ExpressionOwner.Instance(this), closure.scope, sig.parameters)
+            }
+              .flatMap { scope2 =>
+                ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, _) => method })(
+                  SourceMethod.make(ctx)(scope2, MethodOwner.ByInstance(this))
+                )
               }
-            }
-            .flatMap { scope2 =>
-              ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, _) => method })(
-                SourceMethod.make(ctx)(scope2, MethodOwner.ByInstance(this))
-              )
-            }
-        )
-
-      override def toString(): String =
-        decl.name.toString()
-    }
+          )
+  
+        override def toString(): String =
+          decl.name.toString()
+      },
+    )
 }

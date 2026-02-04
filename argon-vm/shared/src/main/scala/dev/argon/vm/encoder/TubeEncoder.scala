@@ -177,19 +177,19 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
       private def emitModuleExport(exp: ModuleExport): Comp[Unit] =
         exp match {
-          case c.ModuleExportC.Function(f) =>
+          case c.ModuleExportC.Binding(_, c.ModuleExportBindingC.Function(f)) =>
             getFunctionId(f).unit.whenDiscard(f.erasureMode != ErasureMode.Erased)
 
-          case c.ModuleExportC.Record(r) =>
+          case c.ModuleExportC.Binding(_, c.ModuleExportBindingC.Record(r)) =>
             getRecordId(r).unit
 
-          case c.ModuleExportC.Enum(e) =>
+          case c.ModuleExportC.Binding(_, c.ModuleExportBindingC.Enum(e)) =>
             getEnumId(e).unit
 
-          case c.ModuleExportC.Trait(t) =>
+          case c.ModuleExportC.Binding(_, c.ModuleExportBindingC.Trait(t)) =>
             getTraitId(t).unit
 
-          case c.ModuleExportC.Instance(i) =>
+          case c.ModuleExportC.Binding(_, c.ModuleExportBindingC.Instance(i)) =>
             getInstanceId(i).unit
             
           case c.ModuleExportC.Exported(exp) =>
@@ -265,7 +265,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         for
           block <- emitFunctionBody(body, sig, importSpec)
           importSpec <- encodeImportSpecifier(importSpec)
-          
+
         yield TubeFileEntry.FunctionDefinition(
           FunctionDefinition(
             functionId = id,
@@ -630,7 +630,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
 
             case ErasureMode.Concrete =>
-              
+
               def putParam(sigParam: dev.argon.vm.SignatureParameter): USTM[Unit] =
                 for
                   size <- params.modify(params => (params.size, params :+ sigParam))
@@ -1404,7 +1404,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   intoRegister(e, output) { r =>
                     emit(Instruction.LoadReference(r, id))
                   }
-                  
+
                 case Some(VariableRealization.Tok(tk)) =>
                   intoRegister(e, output) { r =>
                     emit(Instruction.LoadToken(r, tk))

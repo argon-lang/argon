@@ -1,12 +1,13 @@
 package dev.argon.source
 
 import dev.argon.ast
-import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.*
+import dev.argon.ast.{DeclarationStmt, IdentifierExpr, Modifier}
+import dev.argon.compiler.{AccessModifier, *}
 import dev.argon.util.*
 import zio.*
 import cats.*
 import cats.implicits.given
+import zio.prelude.NonEmptyMap
 
 private[source] object SourceModule {
   def make
@@ -44,35 +45,35 @@ private[source] object SourceModule {
           }
             .map { (_, acc) => acc }
 
-      private def processStmt(reexportingModules: Set[ModuleName])(stmt: WithSource[ast.Stmt], scope: GlobalScopeBuilder): Comp[(GlobalScopeBuilder, Map[IdentifierExpr, Seq[ModuleExportC[ctx.type]]])] =
+      private def processStmt(reexportingModules: Set[ModuleName])(stmt: WithSource[ast.Stmt], scope: GlobalScopeBuilder): Comp[(GlobalScopeBuilder, Map[IdentifierExpr, Seq[ModuleExportC[ctx.type]]])] = {
+
+        inline def buildBinding[DeclStmt <: DeclarationStmt, Decl](
+          declStmt: DeclStmt,
+          createRes: (context: Context) => (closure: DeclarationClosure & HasContext[context.type]) => DeclStmt => context.Comp[DeclarationResult[closure.Access, Decl & HasContext[context.type]]],
+          createBinding: Decl & HasContext[ctx.type] => ModuleExportBindingC[ctx.type]
+        ): Comp[(GlobalScopeBuilder, Map[IdentifierExpr, Seq[ModuleExportC[ctx.type]]])] =
+          for
+            res <- createRes(ctx)(createImportFactory(declStmt.name.value, scope.toScope))(declStmt)
+          yield (scope, Map(declStmt.name.value -> Seq(ModuleExportC.Binding(res.access, createBinding(res.declaration)))))
+
         stmt.value match {
           case importStmt: ast.ImportStmt =>
             ZIO.succeed((scope.addImport(WithLocation(importStmt, stmt.location)), Map.empty))
 
           case funcDecl: ast.FunctionDeclarationStmt =>
-            for
-              f <- SourceFunction.make(context)(scope, createImportFactory(funcDecl.name.value))(funcDecl)
-            yield (scope, Map(funcDecl.name.value -> Seq(ModuleExportC.Function(f))))
+            buildBinding(funcDecl, SourceFunction.make, ModuleExportBindingC.Function.apply)
 
           case recordDecl: ast.RecordDeclarationStmt =>
-            for
-              r <- SourceRecord.make(context)(scope, createImportFactory(recordDecl.name.value))(recordDecl)
-            yield (scope, Map(recordDecl.name.value -> Seq(ModuleExportC.Record(r))))
+            buildBinding(recordDecl, SourceRecord.make, ModuleExportBindingC.Record.apply)
 
           case enumDecl: ast.EnumDeclarationStmt =>
-            for
-              e <- SourceEnum.make(context)(scope, createImportFactory(enumDecl.name.value))(enumDecl)
-            yield (scope, Map(enumDecl.name.value -> Seq(ModuleExportC.Enum(e))))
+            buildBinding(enumDecl, SourceEnum.make, ModuleExportBindingC.Enum.apply)
 
           case traitDecl: ast.TraitDeclarationStmt =>
-            for
-              t <- SourceTrait.make(context)(scope, createImportFactory(traitDecl.name.value))(traitDecl)
-            yield (scope, Map(traitDecl.name.value -> Seq(ModuleExportC.Trait(t))))
+            buildBinding(traitDecl, SourceTrait.make, ModuleExportBindingC.Trait.apply)
 
           case instanceDecl: ast.InstanceDeclarationStmt =>
-            for
-              i <- SourceInstance.make(context)(scope, createImportFactory(instanceDecl.name.value))(instanceDecl)
-            yield (scope, Map(instanceDecl.name.value -> Seq(ModuleExportC.Instance(i))))
+            buildBinding(instanceDecl, SourceInstance.make, ModuleExportBindingC.Instance.apply)
             
           case ast.ExportStmt(fromImport) =>
             ImportUtil.getModuleExports(context)(reexportingModules + ModuleName(tubeName, path))(tubeName, path)(fromImport)
@@ -82,9 +83,15 @@ private[source] object SourceModule {
             scala.Console.err.println(stmt.value.getClass)
             ???
         }
+      }
+      end processStmt
 
-      private def createImportFactory(name: IdentifierExpr): ImportFactory =
-        new ImportFactory {
+
+      private def createImportFactory(name: IdentifierExpr, moduleScope: context.Scopes.Scope): DeclarationClosure & HasContext[ctx.type] { type Access = AccessModifier.Global } =
+        new DeclarationClosure {
+          override val context: ctx.type = ctx
+          override type Access = AccessModifier.Global
+
           override def getImportSpecifier(sig: ErasedSignature): ImportSpecifier =
             ImportSpecifier.Global(
               tube = tn,
@@ -92,6 +99,18 @@ private[source] object SourceModule {
               name = name,
               signature = sig,
             )
+
+          override def accessModifierParser: NonEmptyMap[Set[Modifier], AccessModifier.Global] =
+            ModifierParser.accessModifierGlobal
+
+          override def accessToken: AccessToken[ctx.type] =
+            AccessToken(
+              tubeName,
+              path,
+              Seq()
+            )
+
+          override def scope: context.Scopes.Scope = moduleScope
         }
     }
 }

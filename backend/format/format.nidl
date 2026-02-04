@@ -152,26 +152,31 @@ record export-group {
 enum module-export {
     function {
         function-id: nat;
+        access: access-modifier-global;
         signature: erased-signature;
     },
 
     record {
         record-id: nat;
+        access: access-modifier-global;
         signature: erased-signature;
     },
 
     enum {
         enum-id: nat;
+        access: access-modifier-global;
         signature: erased-signature;
     },
 
     trait {
         trait-id: nat;
+        access: access-modifier-global;
         signature: erased-signature;
     },
 
     instance {
         instance-id: nat;
+        access: access-modifier-global;
         signature: erased-signature;
     },
 
@@ -180,6 +185,12 @@ enum module-export {
     },
 }
 
+@esexpr:(derive-codec)
+enum access-modifier-global {
+    public,
+    internal,
+    module-private,
+}
 
 
 

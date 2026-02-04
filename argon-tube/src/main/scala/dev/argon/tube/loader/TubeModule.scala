@@ -38,30 +38,30 @@ private[loader] object TubeModule {
 
           def loadExport(exp: t.ModuleExport): Comp[ModuleExport] =
             exp match {
-              case t.ModuleExport.Function(functionId, _) =>
+              case t.ModuleExport.Function(functionId, access, _) =>
                 for
                   f <- elemLoader.getFunction(functionId)
-                yield ModuleExportC.Function(f)
+                yield ModuleExportC.Binding(decodeAccessModifierGlobal(access), ModuleExportBindingC.Function(f))
 
-              case t.ModuleExport.Record(recordId, _) =>
+              case t.ModuleExport.Record(recordId, access, _) =>
                 for
                   rec <- elemLoader.getRecord(recordId)
-                yield ModuleExportC.Record(rec)
+                yield ModuleExportC.Binding(decodeAccessModifierGlobal(access), ModuleExportBindingC.Record(rec))
 
-              case t.ModuleExport.Enum(enumId, _) =>
+              case t.ModuleExport.Enum(enumId, access, _) =>
                 for
                   e <- elemLoader.getEnum(enumId)
-                yield ModuleExportC.Enum(e)
+                yield ModuleExportC.Binding(decodeAccessModifierGlobal(access), ModuleExportBindingC.Enum(e))
 
-              case t.ModuleExport.Trait(traitId, _) =>
+              case t.ModuleExport.Trait(traitId, access, _) =>
                 for
                   e <- elemLoader.getTrait(traitId)
-                yield ModuleExportC.Trait(e)
+                yield ModuleExportC.Binding(decodeAccessModifierGlobal(access), ModuleExportBindingC.Trait(e))
 
-              case t.ModuleExport.Instance(instanceId, _) =>
+              case t.ModuleExport.Instance(instanceId, access, _) =>
                 for
                   i <- elemLoader.getInstance(instanceId)
-                yield ModuleExportC.Instance(i)
+                yield ModuleExportC.Binding(decodeAccessModifierGlobal(access), ModuleExportBindingC.Instance(i))
 
               case t.ModuleExport.Exported(inner) =>
                 for

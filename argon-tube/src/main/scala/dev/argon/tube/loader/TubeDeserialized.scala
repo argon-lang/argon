@@ -92,7 +92,7 @@ private[loader] object TubeDeserialized {
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
-                    case ModuleExportC.Function(f) => f
+                    case ModuleExportC.Binding(_, ModuleExportBindingC.Function(f)) => f
                   }
 
                 case funcDef: t.FunctionDefinition =>
@@ -111,7 +111,7 @@ private[loader] object TubeDeserialized {
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
-                    case ModuleExportC.Record(r) => r
+                    case ModuleExportC.Binding(_, ModuleExportBindingC.Record(r)) => r
                   }
 
                 case recDef: t.RecordDefinition =>
@@ -150,7 +150,7 @@ private[loader] object TubeDeserialized {
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
-                    case ModuleExportC.Enum(e) => e
+                    case ModuleExportC.Binding(_, ModuleExportBindingC.Enum(e)) => e
                   }
 
                 case enumDef: t.EnumDefinition =>
@@ -179,7 +179,7 @@ private[loader] object TubeDeserialized {
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
-                    case ModuleExportC.Trait(t) => t
+                    case ModuleExportC.Binding(_, ModuleExportBindingC.Trait(t)) => t
                   }
 
                 case traitDef: t.TraitDefinition =>
@@ -228,7 +228,7 @@ private[loader] object TubeDeserialized {
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
-                    case ModuleExportC.Instance(i) => i
+                    case ModuleExportC.Binding(_, ModuleExportBindingC.Instance(i)) => i
                   }
 
                 case instanceDef: t.InstanceDefinition =>
