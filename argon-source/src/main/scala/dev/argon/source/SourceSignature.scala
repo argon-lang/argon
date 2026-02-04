@@ -2,7 +2,7 @@ package dev.argon.source
 
 import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.{Context, ModifierParser, TypeResolver}
+import dev.argon.compiler.{CompilerError, Context, ErrorLog, ModifierParser, TypeResolver}
 import dev.argon.expr.ErasureMode
 import dev.argon.util.{WithLocation, WithSource}
 import zio.*
@@ -35,6 +35,16 @@ object SourceSignature {
       case ctx.TRExprContext.ExpressionOwner.Instance(_) => false
     }
 
+    val allowConcreteParams = owner match {
+      case ctx.TRExprContext.ExpressionOwner.Func(f) => f.erasureMode != ErasureMode.Token
+      case ctx.TRExprContext.ExpressionOwner.Rec(_) => false
+      case ctx.TRExprContext.ExpressionOwner.Enum(_) => false
+      case ctx.TRExprContext.ExpressionOwner.EnumVariant(_) => true
+      case ctx.TRExprContext.ExpressionOwner.Trait(_) => false
+      case ctx.TRExprContext.ExpressionOwner.Method(_) => true
+      case ctx.TRExprContext.ExpressionOwner.Instance(_) => true
+    }
+
     def impl(remainingParams: Seq[WithSource[ast.FunctionParameterList]], convParams: Seq[SignatureParameter]): Comp[FunctionSignature] =
       remainingParams match {
         case head +: tail =>
@@ -42,6 +52,9 @@ object SourceSignature {
             mp <- ModifierParser.make(head.value.modifiers, head.location)
             erasureMode <- mp.parse(ModifierParser.erasureModeWithToken)
             _ <- mp.done
+
+            _ <- ErrorLog.logError(CompilerError.TypeParameterIsConcrete(head.location))
+              .whenDiscard(!allowConcreteParams && erasureMode == ErasureMode.Concrete)
             
             bindings <- ZIO.foreach(head.value.parameters) { param =>
               for

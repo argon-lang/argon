@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>Enum with concrete parameter (error)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        enum Option [T: type]
+            Some(value: T)
+            None
+        end
+
+        proc main(): () do
+            let o = Option.Some "ABC"
+            if o is Option.Some (val s) then
+                puts s
+            else
+                puts "(empty)"
+            end
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>TypeParameterIsConcrete</ExpectedError>
+
+</ArgonTest>

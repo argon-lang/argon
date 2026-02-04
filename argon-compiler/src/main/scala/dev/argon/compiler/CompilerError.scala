@@ -83,6 +83,10 @@ enum CompilerError {
     t: Expr,
     actualSize: Int,
   )
+  
+  case TypeParameterIsConcrete(
+    loc: Location[FilePosition],
+  )
 
   case UnknownModule(tube: TubeName, modulePath: ModulePath, loc: Location[FilePosition])
 

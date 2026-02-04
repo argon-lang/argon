@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Record with concrete parameter (error)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        record MyRecord[T: type]
+            name: String
+        end
+
+        proc getName(r: MyRecord[String]): String =
+            r.name
+        
+        proc main(): () do
+            let r = MyRecord[String] {
+                name: "Hello"
+            }
+
+            puts (getName r)
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>TypeParameterIsConcrete</ExpectedError>
+
+</ArgonTest>
