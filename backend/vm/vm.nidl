@@ -525,10 +525,6 @@ enum instruction {
 
     declare-variable {
         type: token;
-
-        @esexpr:(keyword)
-        @esexpr:(optional)
-        captured: optional-field[variable-capture-mode];
     },
 
     enum-variant-literal {
@@ -650,7 +646,7 @@ enum instruction {
         token-args: list[token];
 
         @esexpr:(vararg)
-        args: list[capture];
+        args: list[register-id];
     },
 
     partially-applied-token-function {
@@ -662,7 +658,7 @@ enum instruction {
         token-args: list[token];
 
         @esexpr:(vararg)
-        args: list[capture];
+        args: list[register-id];
     },
 
     partially-applied-function-erased {
@@ -674,7 +670,7 @@ enum instruction {
         token-args: list[token];
 
         @esexpr:(vararg)
-        args: list[capture];
+        args: list[register-id];
     },
 
     record-field-load {
@@ -726,16 +722,6 @@ enum instruction {
 }
 
 @esexpr:(derive-codec)
-enum capture {
-    mutable {
-        r: register-id;
-    },
-    value {
-        r: register-id;
-    },
-}
-
-@esexpr:(derive-codec)
 record record-field-literal {
     field-id: nat;
     value: register-id;
@@ -751,12 +737,6 @@ enum function-result {
     register { id: register-id; },
     discard,
     return-value,
-}
-
-@esexpr:(derive-codec)
-simple enum variable-capture-mode {
-    copy,
-    reference,
 }
 
 @esexpr:(derive-codec)

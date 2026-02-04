@@ -1482,37 +1482,24 @@ class BlockEmitter extends EmitterBase {
                 const block: estree.Statement[] = [];
 
                 for(const arg of insn.args) {
-                    switch(arg.$type) {
-                        case "mutable":
-                            args.push(this.getReg(arg.r));
-                            break;
+                    const name: estree.Identifier = {
+                        type: "Identifier",
+                        name: "capture" + block.length,
+                    };
 
-                        case "value":
-                        {
-                            const name: estree.Identifier = {
-                                type: "Identifier",
-                                name: "capture" + block.length,
-                            };
+                    block.push({
+                        type: "VariableDeclaration",
+                        kind: "const",
+                        declarations: [
+                            {
+                                type: "VariableDeclarator",
+                                id: name,
+                                init: this.getReg(arg),
+                            },
+                        ],
+                    });
 
-                            block.push({
-                                type: "VariableDeclaration",
-                                kind: "const",
-                                declarations: [
-                                    {
-                                        type: "VariableDeclarator",
-                                        id: name,
-                                        init: this.getReg(arg.r),
-                                    },
-                                ],
-                            });
-
-                            args.push(name);
-                            break;
-                        }
-
-                        default:
-                            ensureExhaustive(arg);
-                    }
+                    args.push(name);
                 }
 
                 if(insn.$type === "partially-applied-function") {

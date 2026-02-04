@@ -265,6 +265,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         for
           block <- emitFunctionBody(body, sig, importSpec)
           importSpec <- encodeImportSpecifier(importSpec)
+          
         yield TubeFileEntry.FunctionDefinition(
           FunctionDefinition(
             functionId = id,
@@ -490,7 +491,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         methods: Seq[ArMethod],
       )(
         vtable: vtableBuilder.VTable
-      ): Comp[Vtable] = {
+      ): Comp[Vtable] =
         def encodeTarget(target: vtableBuilder.VTableTarget): Comp[VtableTarget] =
           target match {
             case vtableBuilder.VTableTarget.Abstract => ZIO.succeed(VtableTarget.Abstract())
@@ -512,7 +513,6 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             yield VtableEntry(slotMethodId, slotInstanceType, target)
           }
         yield Vtable(entries)
-      }
       end encodeVTable
 
       override def emitInstance(i: ArInstance, id: BigInt): Comp[TubeFileEntry] =
@@ -568,7 +568,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
         instanceParam: TRef[Option[context.DefaultExprContext.Var]],
         typeParamMapping: TMap[context.DefaultExprContext.Var, Int],
-        paramVarMapping: TMap[context.DefaultExprContext.Var, Int],
+        paramVarMapping: TMap[context.DefaultExprContext.Var, (index: Int, capturedRef: Boolean)],
       ) {
 
         private def typeEmitter: UIO[TokenEmitter] =
@@ -589,7 +589,10 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               
               instanceTypeParams.view.mapValues(VariableRealization.Tok.apply).toMap ++
                 inst.toList.map { inst => inst -> VariableRealization.Reg(RegisterId(0)) }.toMap ++
-                pvm.map { (param, index) => param -> VariableRealization.Reg(RegisterId(regOffset + index)) } ++
+                pvm.map {
+                  case (param, (index, false)) => param -> VariableRealization.Reg(RegisterId(regOffset + index))
+                  case (param, (index, true)) => param -> VariableRealization.RegRefCell(RegisterId(regOffset + index))
+                } ++
                 tpm.map { (param, index) => param -> VariableRealization.Tok(Token.TokenParameter(index)) }
             }
           ).commit
@@ -605,7 +608,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           instanceParam.set(Some(v)).commit
           
         
-        def addParameter(v: context.DefaultExprContext.Var): Comp[Unit] =
+        def addParameter(v: context.DefaultExprContext.Var, capturedRef: Boolean): Comp[Unit] =
           v.erasureMode match {
             case ErasureMode.Erased =>
               argConsumers.update(_ :+ ArgConsumer.Erased).commit
@@ -627,10 +630,11 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
 
             case ErasureMode.Concrete =>
+              
               def putParam(sigParam: dev.argon.vm.SignatureParameter): USTM[Unit] =
                 for
                   size <- params.modify(params => (params.size, params :+ sigParam))
-                  _ <- paramVarMapping.put(v, size)
+                  _ <- paramVarMapping.put(v, (size, capturedRef))
                   _ <- argConsumers.update(_ :+ ArgConsumer.Arg)
                 yield ()
 
@@ -640,7 +644,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 t <- te.tokenExpr(v.varType)
                 sigParam = dev.argon.vm.SignatureParameter(
                   name = v.name.map(encodeIdentifier),
-                  paramType = t,
+                  paramType = if capturedRef then Token.RefCell(t) else t,
                 )
                 _ <- putParam(sigParam).commit
 
@@ -680,7 +684,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
             instParam <- TRef.make(Option.empty[context.DefaultExprContext.Var]).commit
             paramVarMapping <- TMap.empty[context.DefaultExprContext.Var, Int].commit
-            typeParamMapping <- TMap.empty[context.DefaultExprContext.Var, Int].commit
+            typeParamMapping <- TMap.empty[context.DefaultExprContext.Var, (index: Int, capturedRef: Boolean)].commit
           yield FunctionSignatureBuilder(instanceTokenParams, typeParams, params, argConsumers, instParam, paramVarMapping, typeParamMapping)
       }
 
@@ -725,12 +729,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
       private def emitFunctionSignatureParameters(paramOwner: ExpressionOwner, sig: FunctionSignature)(sb: FunctionSignatureBuilder): Comp[Unit] =
         ZIO.foreachDiscard(sig.parameters.view.zipWithIndex) { (param, origIndex) =>
           val paramVar = param.asParameterVar(paramOwner, origIndex)
-          sb.addParameter(paramVar)
+          sb.addParameter(paramVar, capturedRef = false)
         }
 
 
       enum VariableRealization {
         case Reg(register: RegisterId)
+        case RegRefCell(registerId: RegisterId)
         case Tok(token: Token)
       }
 
@@ -769,6 +774,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         }
 
         final case class Register(reg: RegisterId) extends KnownLocation
+        final case class RefCell(cell: RegisterId) extends KnownLocation
         case object Discard extends KnownLocation
         case object Return extends KnownLocation
 
@@ -907,15 +913,21 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           yield (block, a)
 
         private def declareVar(v: context.DefaultExprContext.LocalVar): Comp[RegisterId] =
-          for
-            t <- tokenExpr(v.varType)
-            id <- addVar(t).tap { id => knownVars.put(v, VariableRealization.Reg(id)) }.commit
-          yield id
+          if capturedVars.contains(v) && v.isMutable then
+            for
+              t <- tokenExpr(v.varType)
+              id <- addVar(Token.RefCell(t)).tap { id => knownVars.put(v, VariableRealization.RegRefCell(id)) }.commit
+            yield id
+          else
+            for
+              t <- tokenExpr(v.varType)
+              id <- addVar(t).tap { id => knownVars.put(v, VariableRealization.Reg(id)) }.commit
+            yield id
 
-        private def addVar(t: Token, captured: Option[VariableCaptureMode] = None): USTM[RegisterId] =
+        private def addVar(t: Token): USTM[RegisterId] =
           for
             id <- varOffset.getAndUpdate(_ + 1)
-            _ <- varInstructions.update(_ :+ Instruction.DeclareVariable(t, captured = captured))
+            _ <- varInstructions.update(_ :+ Instruction.DeclareVariable(t))
           yield RegisterId(id)
           
         def toBlock: Comp[Block] =
@@ -956,6 +968,12 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 _ <- emit(Instruction.Move(o.reg, r))
               yield () : o.ResultType
 
+            case o: (ExprOutput.RefCell & output.type) =>
+              for
+                r <- res
+                _ <- emit(Instruction.UpdateReference(o.cell, r))
+              yield () : o.ResultType
+
             case o: (ExprOutput.Discard.type & output.type) =>
               res.unit : Comp[o.ResultType]
 
@@ -984,14 +1002,17 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           }
 
         private def functionResult(e: ArExpr, output: ExprOutput)(f: FunctionResult => Comp[Unit]): Comp[output.ResultType] =
-          knownLocation(e, output) { location =>
-            val functionResult = location match {
-              case ExprOutput.Register(reg) => FunctionResult.Register(reg)
-              case ExprOutput.Discard => FunctionResult.Discard()
-              case ExprOutput.Return => FunctionResult.ReturnValue()
-            }
+          knownLocation(e, output) {
+            case ExprOutput.Register(reg) =>
+              f(FunctionResult.Register(reg))
 
-            f(functionResult)
+            case location@ExprOutput.RefCell(cell) =>
+              intoRegister(e, location) { r =>
+                f(FunctionResult.Register(r))
+              }
+
+            case ExprOutput.Discard => f(FunctionResult.Discard())
+            case ExprOutput.Return => f(FunctionResult.ReturnValue())
           }
 
         private def unitResult(e: ArExpr, output: ExprOutput)(f: => Comp[Unit]): Comp[output.ResultType] =
@@ -1028,7 +1049,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   unitResult(e, output)(
                     for
                       r <- declareVar(v)
-                      _ <- expr(value, ExprOutput.Register(r))
+                      _ <-
+                        if capturedVars.contains(v) && v.isMutable then
+                          expr(value, ExprOutput.AnyRegister).flatMap { valueReg =>
+                            emit(Instruction.NewReference(r, valueReg))
+                          }
+                        else
+                          expr(value, ExprOutput.Register(r))
                     yield ()
                   )
               }
@@ -1231,7 +1258,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   synImportSpec: c.ImportSpecifier.Local = c.ImportSpecifier.Local(parentImportSpecifier, funcId)
                   synId <- newSyntheticFunctionId
                   freeVars = FreeVariableScanner(context.DefaultExprContext)(e)
-                  (tokenArgs, args, sig) <- captureVariables(freeVars)(_.addParameter(param), _.finish(returnType))
+                  (tokenArgs, args, sig) <- captureVariables(freeVars)(_.addParameter(param, false), _.finish(returnType))
 
                   _ <- state.emitEntryBuilder(emitSyntheticFunctionDef(sig, synId, synImportSpec, body))
                   _ <- param.erasureMode match {
@@ -1373,6 +1400,11 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 case Some(VariableRealization.Reg(id)) =>
                   existingRegister(output)(ZIO.succeed(id))
 
+                case Some(VariableRealization.RegRefCell(id)) =>
+                  intoRegister(e, output) { r =>
+                    emit(Instruction.LoadReference(r, id))
+                  }
+                  
                 case Some(VariableRealization.Tok(tk)) =>
                   intoRegister(e, output) { r =>
                     emit(Instruction.LoadToken(r, tk))
@@ -1388,6 +1420,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 knownVars.get(v).commit.flatMap {
                   case Some(VariableRealization.Reg(r)) =>
                     expr(value, ExprOutput.Register(r))
+
+                  case Some(VariableRealization.RegRefCell(cellReg)) =>
+                    expr(value, ExprOutput.RefCell(cellReg))
 
                   case Some(VariableRealization.Tok(_)) =>
                     ZIO.fail(TubeFormatException("Cannot assign to token parameter"))
@@ -1532,19 +1567,18 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         )(
           buildRest: FunctionSignatureBuilder => Comp[Unit],
           finish: FunctionSignatureBuilder => Comp[FunctionSignatureWithMapping],
-        ): Comp[(Seq[Token], Seq[Capture], FunctionSignatureWithMapping)] =
+        ): Comp[(Seq[Token], Seq[RegisterId], FunctionSignatureWithMapping)] =
           FunctionSignatureBuilder.make(Map())
             .tap { sb =>
-              ZIO.foreachDiscard(vars)(sb.addParameter) *>
+              ZIO.foreachDiscard(vars)(v => sb.addParameter(v, v.isMutable)) *>
                 buildRest(sb)
             }
             .flatMap { sb =>
               for
                 sig <- finish(sb)
+                args <- Ref.make(Seq.empty[RegisterId])
                 tokenArgs <- Ref.make(Seq.empty[Token])
-                args <- Ref.make(Seq.empty[Capture])
 
-                // This will drop any consumers after the args
                 _ <- ZIO.foreachDiscard(sig.argConsumers.zip(vars)) {
                   case (ArgConsumer.Erased, _) => ZIO.unit
                   case (ArgConsumer.Token, v) =>
@@ -1559,13 +1593,10 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   case (ArgConsumer.Arg, v) =>
                     knownVars.get(v).commit.flatMap {
                       case Some(VariableRealization.Reg(r)) =>
-                        val capture =
-                          if v.isMutable then
-                            Capture.Mutable(r)
-                          else
-                            Capture.Value(r)
+                        args.update(_ :+ r)
 
-                        args.update(_ :+ capture)
+                      case Some(VariableRealization.RegRefCell(r)) =>
+                        args.update(_ :+ r)
 
                       case _ =>
                         ZIO.fail(TubeFormatException("Capture type mismatch"))
@@ -1573,15 +1604,15 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
                 }
 
-                tokenArgs <- tokenArgs.get
                 args <- args.get
+                tokenArgs <- tokenArgs.get
               yield (tokenArgs, args, sig)
             }
 
         override protected def getParameterAsToken(v: state.context.DefaultExprContext.Var): Comp[Option[Token]] =
           knownVars.get(v).commit.map(_.flatMap {
-            case VariableRealization.Reg(_) => None
             case VariableRealization.Tok(tk) => Some(tk)
+            case _ => None
           })
 
         private final case class FunctionArguments(
