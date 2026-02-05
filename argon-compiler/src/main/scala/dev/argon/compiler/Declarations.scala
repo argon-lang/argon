@@ -312,6 +312,19 @@ enum ModuleExportBindingC[Ctx <: Context] {
   case Instance(i: ArInstanceC & HasContext[Ctx])
 }
 
+object ModuleExportBindingC {
+  object Any {
+    def unapply[Ctx <: Context](binding: ModuleExportBindingC[Ctx]): Some[DeclarationBase & HasContext[Ctx]] =
+      binding match {
+        case ModuleExportBindingC.Function(f) => Some(f)
+        case ModuleExportBindingC.Record(r) => Some(r)
+        case ModuleExportBindingC.Enum(e) => Some(e)
+        case ModuleExportBindingC.Trait(t) => Some(t)
+        case ModuleExportBindingC.Instance(i) => Some(i)
+      }
+  }
+}
+
 abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqual {
   def isInline: Boolean
   def erasureMode: ErasureMode.Declared

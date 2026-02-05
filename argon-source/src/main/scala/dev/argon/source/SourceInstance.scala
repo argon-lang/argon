@@ -39,7 +39,7 @@ private[source] object SourceInstance {
         override def signature: Comp[FunctionSignature] = sigCache.get {
           val scope = closure.scope
           val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Instance(this))(decl.parameters, rt)
+          SourceSignature.parse(ctx)(scope)(closure.accessToken)(context.TRExprContext.ExpressionOwner.Instance(this))(decl.parameters, rt)
         }
 
         override def methods: Comp[Seq[MethodEntry[context.type]]] =
@@ -63,7 +63,7 @@ private[source] object SourceInstance {
                   override def scope: context.Scopes.Scope =
                     scope2
 
-                  override def accessToken: AccessToken[context.type] =
+                  override def accessToken: AccessToken & HasContext[context.type] =
                     closure.accessToken.add(thisInstance)
                 }
 

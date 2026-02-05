@@ -27,7 +27,7 @@ private[source] object SourceTrait {
       new ArTraitC {
         override val context: ctx.type = ctx
         override val id: UniqueIdentifier = recId
-        
+
         import closure.given
 
         override def importSpecifier: Comp[ImportSpecifier] =
@@ -39,7 +39,7 @@ private[source] object SourceTrait {
         override def signature: Comp[FunctionSignature] = sigCache.get {
           val scope = closure.scope
           val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Trait(this))(decl.parameters, rt)
+          SourceSignature.parse(ctx)(scope)(closure.accessToken)(context.TRExprContext.ExpressionOwner.Trait(this))(decl.parameters, rt)
         }
 
 
@@ -65,7 +65,7 @@ private[source] object SourceTrait {
                   override def scope: context.Scopes.Scope =
                     scope2
 
-                  override def accessToken: AccessToken[context.type] =
+                  override def accessToken: AccessToken & HasContext[context.type] =
                     closure.accessToken.add(thisTrait)
                 }
                 ZIO.foreach(decl.body.collect { case WithLocation(method: ast.MethodDeclarationStmt, _) => method }) { methodDecl =>

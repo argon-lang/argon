@@ -7,11 +7,11 @@ import scala.compiletime.deferred
 
 trait DeclarationClosure extends UsingContext {
   type Access
-  def accessModifierParser: NonEmptyMap[Set[ast.Modifier], Access] 
+  def accessModifierParser: NonEmptyMap[Set[ast.Modifier], Access]
   def getImportSpecifier(sig: ErasedSignature): ImportSpecifier
-  
+
   given externProvider: ExternProvider & HasContext[context.type] = deferred
-  
+
   def scope: context.Scopes.Scope
-  def accessToken: AccessToken[context.type]
+  def accessToken: AccessToken & HasContext[context.type]
 }

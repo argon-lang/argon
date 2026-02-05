@@ -38,26 +38,26 @@ private[source] object SourceMethod {
         override val name: IdentifierExpr = decl.name.value
         override val id: UniqueIdentifier = funcId
         override val owner: MethodOwner[context.type] = closure.methodOwner
-  
+
         override def isInline: Boolean = inlineFlag
         override def erasureMode: ErasureMode.DeclaredNonToken = erasure
         override def isWitness: Boolean = witnessFlag
-  
+
         override def effects: context.DefaultExprContext.EffectInfo =
           if decl.purity then context.DefaultExprContext.EffectInfo.Pure
           else context.DefaultExprContext.EffectInfo.Effectful
-  
+
         override val slot: MethodSlot = methodSlot
-  
+
         override def instanceParam: Comp[context.DefaultSignatureContext.InstanceParameter] =
           ZIO.succeed(context.DefaultSignatureContext.InstanceParameter(
             decl.instanceName.value,
           ))
-  
+
         override def signature: Comp[FunctionSignature] = sigCache.get(
-          SourceSignature.parse(ctx)(closure.scope)(context.TRExprContext.ExpressionOwner.Method(this))(decl.parameters, decl.returnType)
+          SourceSignature.parse(ctx)(closure.scope)(closure.accessToken)(context.TRExprContext.ExpressionOwner.Method(this))(decl.parameters, decl.returnType)
         )
-  
+
         override def implementation: Option[Comp[context.implementations.MethodImplementation]] =
           Some(implCache.get(
             for
@@ -73,35 +73,35 @@ private[source] object SourceMethod {
               impl <- decl.body match {
                 case None =>
                   ZIO.succeed(context.implementations.MethodImplementation.Abstract)
-  
+
                 case Some(ast.FunctionBody.ExternBody(WithLocation(name, loc))) =>
                   closure.externProvider.getExternMethod(name)
                     .flatMap {
                       case Some(ext) =>
                         ZIO.succeed(ctx.implementations.MethodImplementation.Extern(ext))
-  
+
                       case None =>
                         ErrorLog.logError(CompilerError.UnknownExtern(loc, name))
                           .as(context.implementations.MethodImplementation.Expr(
                             context.DefaultExprContext.Expr.Error()
                           ))
                     }
-  
-  
+
+
                 case Some(ast.FunctionBody.ExprBody(expr)) =>
                   val tr = new TypeResolver {
                     override val context: ctx.type = ctx
                   }
-  
-                  tr.typeCheckExpr(scope3)(expr, sig.returnType, effects, erasure)
+
+                  tr.typeCheckExpr(scope3)(expr, sig.returnType, effects, erasure, closure.accessToken)
                     .map(context.implementations.MethodImplementation.Expr.apply)
               }
             yield impl
           ))
-  
+
         override def toString(): String =
           decl.name.toString()
-  
+
       },
     )
 }

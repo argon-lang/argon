@@ -36,7 +36,7 @@ private[source] object SourceEnum {
         override def signature: Comp[FunctionSignature] = sigCache.get {
           val scope = closure.scope
           val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Enum(this))(decl.parameters, rt)
+          SourceSignature.parse(ctx)(scope)(closure.accessToken)(context.TRExprContext.ExpressionOwner.Enum(this))(decl.parameters, rt)
         }
   
         override def variants: Comp[Seq[EnumVariant]] =
@@ -74,11 +74,11 @@ private[source] object SourceEnum {
                       returnType match {
                         case Some(returnTypeExpr) =>
                           val rt = SourceSignature.exprToReturnType(returnTypeExpr)
-                          SourceSignature.parse(ctx)(scope)(paramOwner)(decl.parameters, rt)
+                          SourceSignature.parse(ctx)(scope)(closure.accessToken)(paramOwner)(decl.parameters, rt)
   
                         case None =>
                           val fakeRT = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
-                          SourceSignature.parse(ctx)(scope)(paramOwner)(decl.parameters ++ params, fakeRT)
+                          SourceSignature.parse(ctx)(scope)(closure.accessToken)(paramOwner)(decl.parameters ++ params, fakeRT)
                             .map { sig =>
                               sig.copy(
                                 returnType = context.DefaultExprContext.Expr.EnumType(
@@ -108,7 +108,7 @@ private[source] object SourceEnum {
                           fields <- ZIO.foreach(
                             body.collect { case WithLocation(field: ast.RecordField, _) => field }
                           ) { field =>
-                            SourceRecordField(context, scope2, sig, this)(field)
+                            SourceRecordField(context, scope2, closure.accessToken, sig, this)(field)
                           }
                         yield fields
                       )

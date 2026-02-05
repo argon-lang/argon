@@ -103,8 +103,8 @@ private[source] object SourceModule {
           override def accessModifierParser: NonEmptyMap[Set[Modifier], AccessModifier.Global] =
             ModifierParser.accessModifierGlobal
 
-          override def accessToken: AccessToken[ctx.type] =
-            AccessToken(
+          override def accessToken: AccessToken & HasContext[ctx.type] =
+            AccessToken(context)(
               tubeName,
               path,
               Set()

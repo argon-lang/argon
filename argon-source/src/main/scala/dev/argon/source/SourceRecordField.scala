@@ -2,13 +2,14 @@ package dev.argon.source
 
 import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.{ArRecordC, Context, EnumVariantC, HasContext, RecordFieldC, TypeResolver}
+import dev.argon.compiler.{AccessToken, ArRecordC, Context, EnumVariantC, HasContext, RecordFieldC, TypeResolver}
 import dev.argon.util.UniqueIdentifier
 
 object SourceRecordField {
   def apply(
     ctx: Context,
     scope: ctx.Scopes.Scope,
+    accessToken: AccessToken & HasContext[ctx.type],
     sig: ctx.DefaultSignatureContext.FunctionSignature,
     owningRec: (ArRecordC & HasContext[ctx.type]) | (EnumVariantC & HasContext[ctx.type]),
   )(field: ast.RecordField): ctx.Comp[RecordFieldC & HasContext[ctx.type]] =
@@ -18,7 +19,7 @@ object SourceRecordField {
 
     for
       fieldId <- UniqueIdentifier.make
-      t <- tr.typeCheckTypeExprWithKind(scope)(field.fieldType, sig.returnType, erased = false)
+      t <- tr.typeCheckTypeExprWithKind(scope)(field.fieldType, sig.returnType, erased = false, access = accessToken)
     yield new RecordFieldC {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = fieldId

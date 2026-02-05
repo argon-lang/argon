@@ -35,7 +35,7 @@ private[source] object SourceRecord {
         override def signature: Comp[FunctionSignature] = sigCache.get {
           val scope = closure.scope
           val rt = SourceSignature.getTypeSigReturnType(decl.name, decl.returnType)
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Rec(this))(decl.parameters, rt)
+          SourceSignature.parse(ctx)(scope)(closure.accessToken)(context.TRExprContext.ExpressionOwner.Rec(this))(decl.parameters, rt)
         }
   
         override def fields: Comp[Seq[RecordField]] =
@@ -47,7 +47,7 @@ private[source] object SourceRecord {
               fields <- ZIO.foreach(
                 decl.body.collect { case WithLocation(field: ast.RecordField, _) => field }
               ) { field =>
-                SourceRecordField(context, scope2, sig, this)(field)
+                SourceRecordField(context, scope2, closure.accessToken, sig, this)(field)
               }
             yield fields
           )

@@ -28,35 +28,36 @@ trait TypeResolver extends UsingContext {
     scope: Scopes.LocalScope,
     effects: EffectInfo,
     erased: ErasureMode,
+    access: AccessToken & HasContext[context.type],
   )
 
-  final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, effects: context.DefaultExprContext.EffectInfo, erasure: ErasureMode.Declared): Comp[context.DefaultExprContext.Expr] =
+  final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, effects: context.DefaultExprContext.EffectInfo, erasure: ErasureMode.Declared, access: AccessToken & HasContext[context.type]): Comp[context.DefaultExprContext.Expr] =
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
       shifter = DefaultToTRShifter[context.type](context)
-      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects), erased = erasure))
+      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects), erased = erasure, access = access))
       model <- model.get
-      shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
+      shifted <- ResolvedHoleFiller(model)(access).shiftExpr(expr)
     yield shifted
 
-  final def typeCheckTypeExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], erased: Boolean): Comp[context.DefaultExprContext.Expr] =
+  final def typeCheckTypeExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], erased: Boolean, access: AccessToken & HasContext[context.type]): Comp[context.DefaultExprContext.Expr] =
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
-      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure, erased = if erased then ErasureMode.Erased else ErasureMode.TypeAnnotationToken))
+      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure, erased = if erased then ErasureMode.Erased else ErasureMode.TypeAnnotationToken, access = access))
       model <- model.get
-      shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
+      shifted <- ResolvedHoleFiller(model)(access).shiftExpr(expr)
     yield shifted
 
-  final def typeCheckTypeExprWithKind(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, erased: Boolean): Comp[context.DefaultExprContext.Expr] =
+  final def typeCheckTypeExprWithKind(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, erased: Boolean, access: AccessToken & HasContext[context.type]): Comp[context.DefaultExprContext.Expr] =
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
       shifter = DefaultToTRShifter[context.type](context)
-      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, EffectInfo.Pure, erased = if erased then ErasureMode.Erased else ErasureMode.TypeAnnotationToken))
+      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, EffectInfo.Pure, erased = if erased then ErasureMode.Erased else ErasureMode.TypeAnnotationToken, access = access))
       model <- model.get
-      shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
+      shifted <- ResolvedHoleFiller(model)(access).shiftExpr(expr)
     yield shifted
 
 
@@ -869,7 +870,7 @@ trait TypeResolver extends UsingContext {
 
     p.value match {
       case ast.PatternPath.Member(WithLocation(ast.PatternPath.Base(base), _), member) =>
-        state.scope.lookup(base.value)
+        state.scope.lookup(base.value)(state.access)
           .flatMap(processLookup)
           .flatMap {
             case _: ArRecord => ???
@@ -881,7 +882,7 @@ trait TypeResolver extends UsingContext {
 
 
       case ast.PatternPath.Base(name) =>
-        state.scope.lookup(name.value)
+        state.scope.lookup(name.value)(state.access)
           .flatMap(processLookup)
           .flatMap {
             case record: ArRecord => ZIO.succeed(record)
@@ -1035,7 +1036,7 @@ trait TypeResolver extends UsingContext {
 
   private final class LookupIdFactory(override val loc: Loc, id: IdentifierExpr) extends WrappedFactory {
     override protected def unwrap(using state: EmitState): Comp[ExprFactory] =
-      state.scope.lookup(id).map {
+      state.scope.lookup(id)(state.access).map {
         case LookupResult.NotFound() =>
           ErrorFactory(loc, CompilerError.UnknownIdentifier(loc, id))
 
@@ -1119,7 +1120,7 @@ trait TypeResolver extends UsingContext {
 
   private class RerunLookupSource(id: IdentifierExpr) extends OverloadLookupSource {
     override def lookup(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
-      state.scope.lookup(id).map {
+      state.scope.lookup(id)(state.access).map {
         case res: LookupResult.OverloadableOnly => res
         case _ => LookupResult.NotFound()
       }
@@ -1160,7 +1161,7 @@ trait TypeResolver extends UsingContext {
       else
         EmptyOverloadSource()
 
-    private def overloadsFromType(t: Expr, e: Expr, next: Comp[LookupResult.OverloadableOnly]): Comp[LookupResult.OverloadableOnly] =
+    private def overloadsFromType(t: Expr, e: Expr, next: Comp[LookupResult.OverloadableOnly])(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
       def fieldRead = t match {
         case recType @ Expr.RecordType(record, args) =>
           for
@@ -1179,9 +1180,18 @@ trait TypeResolver extends UsingContext {
           for
             methods <- t.methods
 
-            methodOverloads = methods
-              .filter { method => method.method.name == memberName }
-              .map { method => Overloadable.InstanceMethod(method.method, traitType, e) }
+            methodOverloads <-
+              ZIO.filter(methods) { entry =>
+                  val request = AccessRequest[context.type](
+                    t,
+                    Some(t),
+                    entry.access,
+                  )
+
+                  ZIO.succeed(entry.method.name == memberName) &&
+                    state.access.allows(request)
+              }
+              .map(_.map { entry => Overloadable.InstanceMethod(entry.method, traitType, e) })
 
           yield LookupResult.Overloaded(
             methodOverloads,
@@ -1215,7 +1225,7 @@ trait TypeResolver extends UsingContext {
 
 
     private def extensionMethods(t: Expr, e: Expr)(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
-      state.scope.lookup(IdentifierExpr.Extension(memberName)).map {
+      state.scope.lookup(IdentifierExpr.Extension(memberName))(state.access).map {
         case LookupResult.Overloaded(overloads, next) =>
           val emOverloads = overloads.flatMap {
             case Overloadable.Function(f) =>
@@ -1734,6 +1744,7 @@ trait TypeResolver extends UsingContext {
           scope = attemptScope,
           effects = state.effects,
           erased = state.erased,
+          access = state.access,
         )
 
         sig <- overload.signature
@@ -2183,7 +2194,7 @@ trait TypeResolver extends UsingContext {
       hole.holeType
   }
 
-  private final class ResolvedHoleFiller(model: TRExprContext.Model) extends ContextShifter[Comp] {
+  private final class ResolvedHoleFiller(model: TRExprContext.Model)(access: AccessToken & HasContext[context.type]) extends ContextShifter[Comp] {
     override val ec1: context.TRExprContext.type = context.TRExprContext
     override val ec2: context.DefaultExprContext.type = context.DefaultExprContext
 
@@ -2199,6 +2210,7 @@ trait TypeResolver extends UsingContext {
               scope = localScope,
               effects = EffectInfo.Pure,
               erased = hole.erased,
+              access = access,
             )
             et <- exprType.getExprType(e)
             e <- checkTypesMatch(hole.location)(e)(hole.holeType, et)

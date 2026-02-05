@@ -52,7 +52,7 @@ private[source] object SourceFunction {
 
         override def signature: Comp[FunctionSignature] = sigCache.get {
           val scope = closure.scope
-          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ExpressionOwner.Func(this))(decl.parameters, decl.returnType)
+          SourceSignature.parse(ctx)(scope)(closure.accessToken)(context.TRExprContext.ExpressionOwner.Func(this))(decl.parameters, decl.returnType)
         }
 
         override def implementation: Option[Comp[context.implementations.FunctionImplementation]] =
@@ -81,7 +81,7 @@ private[source] object SourceFunction {
                     override val context: ctx.type = ctx
                   }
 
-                  tr.typeCheckExpr(scope2)(expr, sig.returnType, effects, erasure)
+                  tr.typeCheckExpr(scope2)(expr, sig.returnType, effects, erasure, closure.accessToken)
                     .map(context.implementations.FunctionImplementation.Expr.apply)
               }
             yield impl

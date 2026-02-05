@@ -1073,7 +1073,7 @@ lazy val esexpr_multichannel = project.in(file("esexpr-multichannel"))
   )
 
 lazy val test_runner = project.in(file("argon-test-runner"))
-  .dependsOn(compiler_driverJVM, compiler_launcher, esexpr_multichannel)
+  .dependsOn(compiler_driver_api, esexpr_multichannel)
   .settings(
     commonSettingsNoLibs,
     commonJVMSettingsNoLibs,
@@ -1082,8 +1082,6 @@ lazy val test_runner = project.in(file("argon-test-runner"))
     compileOrder := CompileOrder.JavaThenScala,
 
     semanticdbEnabled := false,
-    autoScalaLibrary := false,
-    crossPaths := false,
 
     Compile / fork := true,
 

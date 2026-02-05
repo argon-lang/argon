@@ -11,7 +11,6 @@ object CompilerTests extends ZIOSpecDefault {
 
   private val testSuiteCreators: Seq[() => CompilerTestSuiteBase] = Seq(
     JVMCompilerCLITestSuite.apply,
-    JVMCompilerRPCTestSuite.apply,
     JVMCompilerJSBackendTestSuite.apply,
     NodeCompilerCLITestSuite.apply,
     NodeCompilerJSBackendTestSuite.apply,

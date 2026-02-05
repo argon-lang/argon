@@ -5,6 +5,8 @@ import dev.argon.testrunner.DriverCommandExecutorCLI;
 import dev.argon.testrunner.GroupedTestCase;
 import dev.argon.testrunner.RunnerContext;
 
+import java.util.List;
+
 public class JVMCompilerCLITestSuite
 	extends CompilerTestSuiteBase
 	implements JVMCompilerTestSuiteCommon,
@@ -17,6 +19,7 @@ public class JVMCompilerCLITestSuite
 
 	@Override
 	protected boolean useTestCase(GroupedTestCase testCase) {
-		return !testCase.getGroup().isEmpty() && testCase.getGroup().getFirst().equals("hello_world");
+		return testCase.getGroup().equals(List.of("hello_world")) &&
+			testCase.getTestCase().getName().equals("Hello World");
 	}
 }

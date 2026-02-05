@@ -2,7 +2,7 @@ package dev.argon.source
 
 import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.{CompilerError, Context, ErrorLog, ModifierParser, TypeResolver}
+import dev.argon.compiler.{AccessToken, CompilerError, Context, ErrorLog, HasContext, ModifierParser, TypeResolver}
 import dev.argon.expr.ErasureMode
 import dev.argon.util.{WithLocation, WithSource}
 import zio.*
@@ -11,6 +11,7 @@ object SourceSignature {
   def parse
   (ctx: Context)
   (scope: ctx.Scopes.Scope)
+  (accessToken: AccessToken & HasContext[ctx.type])
   (owner: ctx.TRExprContext.ExpressionOwner)
   (parameters: Seq[WithSource[ast.FunctionParameterList]], returnType: WithSource[ast.ReturnTypeSpecifier])
   : ctx.Comp[ctx.DefaultSignatureContext.FunctionSignature] =
@@ -58,7 +59,13 @@ object SourceSignature {
             
             bindings <- ZIO.foreach(head.value.parameters) { param =>
               for
-                t <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(param.value.paramType, erased = ownerIsErased || erasureMode == ErasureMode.Erased)
+                t <- tr.typeCheckTypeExpr(
+                  ParameterScope(owner, scope, convParams)
+                )(
+                  param.value.paramType,
+                  erased = ownerIsErased || erasureMode == ErasureMode.Erased,
+                  access = accessToken,
+                )
               yield ParameterBinding(
                 name = Some(param.value.name),
                 paramType = t,
@@ -82,8 +89,21 @@ object SourceSignature {
 
         case _ =>
           for
-            returnTypeExpr <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(returnType.value.returnType, erased = ownerIsErased)
-            ensuresClauses <- ZIO.foreach(returnType.value.ensuresClauses)(tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(_, erased = true))
+            returnTypeExpr <- tr.typeCheckTypeExpr(
+              ParameterScope(owner, scope, convParams)
+            )(
+              returnType.value.returnType,
+              erased = ownerIsErased,
+              access = accessToken,
+            )
+            ensuresClauses <- ZIO.foreach(returnType.value.ensuresClauses)(
+              tr.typeCheckTypeExpr(
+                ParameterScope(owner, scope, convParams)
+              )(
+                _,
+                erased = true,
+                access = accessToken,
+              ))
           yield FunctionSignature(
             parameters = convParams,
             returnType = returnTypeExpr,

@@ -116,13 +116,13 @@ trait ScopeContext {
     }
 
     trait Scope {
-      def lookup(id: IdentifierExpr): Comp[LookupResult]
+      def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult]
       def givenAssertions: Comp[Seq[ImplicitValue]]
       def knownVarValues: Comp[Map[Var, TRExprContext.Expr]]
     }
 
     object Empty extends Scope {
-      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+      override def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult] =
         ZIO.succeed(LookupResult.NotFound())
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] = ZIO.succeed(Seq.empty)
@@ -165,15 +165,34 @@ trait ScopeContext {
         case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
       }
 
+    private def canAccessModuleExport(access: AccessToken & HasContext[self.type])(exp: ModuleExportC[self.type]): Comp[Boolean] =
+      exp match {
+        case ModuleExportC.Binding(bindingAccess, ModuleExportBindingC.Any(decl)) =>
+          access.allows(AccessRequest(
+            decl,
+            None,
+            bindingAccess,
+          ))
+
+        case ModuleExportC.Exported(exp) =>
+          canAccessModuleExport(access)(exp)
+      }
+
     final class GlobalScope private[Scopes] (imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]) extends Scope {
-      override def lookup(id: IdentifierExpr): Comp[LookupResult.OverloadableOnly] =
+      override def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult.OverloadableOnly] = {
         Foldable[Seq].collectFold(imports)(ImportUtil.getModuleExports(self)(Set.empty)(module.tubeName, module.path)(_))
-          .map { importMap =>
-            importMap.get(id) match {
+          .flatMap { importMap =>
+            ZIO.foreach(importMap.get(id)) { res =>
+                ZIO.filter(res)(canAccessModuleExport(access))
+            }
+          }
+          .map { res =>
+            res.filter(_.nonEmpty) match {
               case Some(res) => LookupResult.Overloaded(res.map(moduleExportToOverloadable), ZIO.succeed(LookupResult.NotFound()))
               case None => LookupResult.NotFound()
             }
           }
+      }
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
         ZIO.foreach(imports) { imp =>
@@ -189,15 +208,15 @@ trait ScopeContext {
     }
 
     final class CurrentModuleScope(parent: GlobalScope, module: ArModuleC & HasContext[self.type]) extends Scope {
-      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+      override def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult] =
         module.getExports(Set.empty)(id).flatMap {
           case Some(exports) =>
             ZIO.succeed(LookupResult.Overloaded(
               exports.map(moduleExportToOverloadable),
-              parent.lookup(id)
+              parent.lookup(id)(access)
             ))
 
-          case None => parent.lookup(id)
+          case None => parent.lookup(id)(access)
         }
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
@@ -214,11 +233,11 @@ trait ScopeContext {
     }
 
     final class InstanceVarScope(parentScope: Scope, instanceVar: TRExprContext.InstanceParameterVar) extends Scope {
-      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+      override def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult] =
         if instanceVar.name.contains(id) then
           ZIO.succeed(LookupResult.Variable(instanceVar))
         else
-          parentScope.lookup(id)
+          parentScope.lookup(id)(access)
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
         parentScope.givenAssertions
@@ -244,7 +263,7 @@ trait ScopeContext {
       end parameters
 
 
-      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+      override def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult] =
         parameters.find(_.name.contains(id))
           .map { v => ZIO.succeed(LookupResult.Variable(v)) }
           .orElse {
@@ -262,7 +281,7 @@ trait ScopeContext {
               }
           }
           .getOrElse {
-            parentScope.lookup(id)
+            parentScope.lookup(id)(access)
           }
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
@@ -311,10 +330,10 @@ trait ScopeContext {
           }.commit
           
 
-      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+      override def lookup(id: IdentifierExpr)(access: AccessToken & HasContext[self.type]): Comp[LookupResult] =
         variables.get(id).commit.flatMap {
           case Some(v) => ZIO.succeed(LookupResult.Variable(v))
-          case None => parent.lookup(id)
+          case None => parent.lookup(id)(access)
         }
 
       def toPartialScope: UIO[PartialScope] =

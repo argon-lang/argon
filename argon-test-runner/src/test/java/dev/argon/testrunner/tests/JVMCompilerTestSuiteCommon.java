@@ -10,7 +10,7 @@ public interface JVMCompilerTestSuiteCommon extends CompilerTestSuite {
 
 	@Override
 	default DriverCommandExecutor createCommandExecutor(RunnerContext context) throws Exception {
-		return new DriverCommandExecutorJVM(context);
+		return new DriverCommandExecutorRPC(context);
 	}
 
 
