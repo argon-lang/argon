@@ -56,8 +56,7 @@ trait ExprType {
 
           case BinaryBuiltin.StringConcat => stringType
           case _ =>
-            println("Unimplemented getExprType binary builtin: " + builtin)
-            ???
+            throw new RuntimeException("Unimplemented getExprType binary builtin: " + builtin)
         })
 
       case Expr.Builtin(exprContext.Builtin.Unary(builtin, _)) =>

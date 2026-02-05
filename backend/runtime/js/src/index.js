@@ -319,7 +319,7 @@ function applyVTable(c, methods, vtable) {
                 throw new Error("Unexpected target type");
         }
 
-        c[entry.slotMethodSymbol.call(c)] = method;
+        c.prototype[entry.slotMethodSymbol.call(c)] = method;
     }
 }
 
@@ -352,6 +352,7 @@ export function createInstanceDefinition(instanceInfo) {
     if(instanceInfo.tokenParameterCount === 0) {
         return lazyFunctionBuilder(() => {
             const inst = createInstanceConstructor(instanceInfo.baseConstructor());
+            inst.methods = Object.create(null);
             applyVTable(inst, instanceInfo.methods, instanceInfo.vtable);
             return inst;
         });
@@ -363,6 +364,7 @@ export function createInstanceDefinition(instanceInfo) {
                 return createInstanceConstructor(instanceInfo.baseConstructor(...typeArgs));
             },
             customize(specialized) {
+                specialized.methods = Object.create(null);
                 applyVTable(specialized, instanceInfo.methods, instanceInfo.vtable);
             },
         });

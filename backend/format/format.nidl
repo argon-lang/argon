@@ -90,6 +90,13 @@ enum tube-file-entry {
         signature: erased-signature;
     },
 
+    instance-method-reference {
+        method-id: nat;
+        instance-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+
     @esexpr:(inline-value)
     instance-definition {
         definition: instance-definition;

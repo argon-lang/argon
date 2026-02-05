@@ -107,10 +107,7 @@ trait VTableBuilder extends UsingContext {
       .flatMap { vtables =>
         val vtable = mergeSiblingVTablesSameType(vtables)
 
-        if vtable.entries.exists { case (_, value) => value.target == VTableTarget.Abstract } then
-          ???
-        else
-          ZIO.succeed(VTable(parent.entries ++ vtable.entries))
+        ZIO.succeed(VTable(parent.entries ++ vtable.entries))
       }
 
   private def mergeSiblingVTablesSameType(vtables: Seq[VTable]): VTable =

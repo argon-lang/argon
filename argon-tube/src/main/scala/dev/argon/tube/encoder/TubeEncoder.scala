@@ -519,19 +519,31 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
       private def emitMethodRef(id: BigInt)(m: ArMethod): Comp[TubeFileEntry] =
         for
-          traitId <- m.owner match {
+          ownerId <- m.owner match {
             case MethodOwner.ByTrait(t) => getTraitId(t)
             case MethodOwner.ByInstance(i) => getInstanceId(i)
           }
           sig <- m.signature
           sig <- SignatureEraser(context).eraseSignature(sig)
           sig <- encodeErasedSignature(sig)
-        yield TubeFileEntry.TraitMethodReference(
-          methodId = id,
-          traitId = traitId,
-          name = encodeIdentifier(m.name),
-          signature = sig,
-        )
+        yield m.owner match {
+          case MethodOwner.ByTrait(t) =>
+            TubeFileEntry.TraitMethodReference(
+              methodId = id,
+              traitId = ownerId,
+              name = encodeIdentifier(m.name),
+              signature = sig,
+            )
+
+          case MethodOwner.ByInstance(i) =>
+            TubeFileEntry.InstanceMethodReference(
+              methodId = id,
+              instanceId = ownerId,
+              name = encodeIdentifier(m.name),
+              signature = sig,
+            )
+        } 
+          
 
       override def emitInstance(i: ArInstance, id: BigInt): Comp[TubeFileEntry] =
         importOrDefine(i, i.importSpecifier)(emitInstanceDef(id), emitInstanceRef(id))

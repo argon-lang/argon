@@ -20,7 +20,7 @@ private[loader] object TubeDeserialized {
       enums: TMap[BigInt, t.EnumDefinition | t.ImportSpecifier],
       enumVariantReferences: TMap[BigInt, t.TubeFileEntry.EnumVariantReference],
       traits: TMap[BigInt, t.TraitDefinition | t.ImportSpecifier],
-      methods: TMap[BigInt, t.TubeFileEntry.TraitMethodReference],
+      methods: TMap[BigInt, t.TubeFileEntry.TraitMethodReference | t.TubeFileEntry.InstanceMethodReference],
       instances: TMap[BigInt, t.InstanceDefinition | t.ImportSpecifier],
     )
 
@@ -214,6 +214,25 @@ private[loader] object TubeDeserialized {
                       .runHead
                     item <- ZIO.fromOption(res).orElseFail(TubeFormatException("Could not find method " + methodRef))
                   yield item.method
+                  
+                case methodRef: t.TubeFileEntry.InstanceMethodReference =>
+                  for
+                    name = decodeIdentifier(methodRef.name)
+
+                    erasedSig <- decodeErasedSignature(methodRef.signature)
+                    res <- ZStream.fromZIO(getInstance(methodRef.instanceId))
+                      .mapZIO(_.methods)
+                      .flatMap(ZStream.fromIterable(_))
+                      .filter { m => m.method.name == name }
+                      .filterZIO { m =>
+                        for
+                          sig <- m.method.signature
+                          sig <- SignatureEraser(context).eraseSignature(sig)
+                        yield sig == erasedSig
+                      }
+                      .runHead
+                    item <- ZIO.fromOption(res).orElseFail(TubeFormatException("Could not find method " + methodRef))
+                  yield item.method
               }
           }
 
@@ -315,7 +334,7 @@ private[loader] object TubeDeserialized {
           enums <- TMap.empty[BigInt, t.EnumDefinition | t.ImportSpecifier]
           enumVariantReferences <- TMap.empty[BigInt, t.TubeFileEntry.EnumVariantReference]
           traits <- TMap.empty[BigInt, t.TraitDefinition | t.ImportSpecifier]
-          methods <- TMap.empty[BigInt, t.TubeFileEntry.TraitMethodReference]
+          methods <- TMap.empty[BigInt, t.TubeFileEntry.TraitMethodReference | t.TubeFileEntry.InstanceMethodReference]
           instances <- TMap.empty[BigInt, t.InstanceDefinition | t.ImportSpecifier]
         yield ElementState(
           functions = functions,
@@ -374,6 +393,9 @@ private[loader] object TubeDeserialized {
               ZChannel.fromZIO(state.traits.put(traitId, importSpec).commit) *> iter(state)
 
             case methodRef: t.TubeFileEntry.TraitMethodReference =>
+              ZChannel.fromZIO(state.methods.put(methodRef.methodId, methodRef).commit) *> iter(state)
+
+            case methodRef: t.TubeFileEntry.InstanceMethodReference =>
               ZChannel.fromZIO(state.methods.put(methodRef.methodId, methodRef).commit) *> iter(state)
 
             case t.TubeFileEntry.InstanceDefinition(instanceDef) =>

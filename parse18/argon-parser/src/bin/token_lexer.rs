@@ -49,6 +49,7 @@ fn main() {
     b.add(Regex::str("final"), "TokenType.Token(Token.KW_FINAL)");
     b.add(Regex::str("override"), "TokenType.Token(Token.KW_OVERRIDE)");
     b.add(Regex::str("virtual"), "TokenType.Token(Token.KW_VIRTUAL)");
+    b.add(Regex::str("abstract"), "TokenType.Token(Token.KW_ABSTRACT)");
     b.add(Regex::str("if"), "TokenType.Token(Token.KW_IF)");
     b.add(Regex::str("then"), "TokenType.Token(Token.KW_THEN)");
     b.add(Regex::str("else"), "TokenType.Token(Token.KW_ELSE)");

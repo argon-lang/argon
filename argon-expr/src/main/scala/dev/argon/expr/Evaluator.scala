@@ -119,7 +119,9 @@ trait Evaluator[R, E] {
           }
         }
 
-      case Expr.FunctionObjectCall(f, a) => ???
+      case Expr.FunctionObjectCall(f, a) =>
+        ZIO.logError("Unimplemented normalizeToValue FunctionObjectCall: " + f + ", " + a).as(???)
+
       case Expr.InstanceMethodCall(_, _, _, _) => ???
 
       case Expr.TupleElement(index, tuple) =>

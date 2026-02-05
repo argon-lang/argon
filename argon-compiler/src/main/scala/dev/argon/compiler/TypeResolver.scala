@@ -468,8 +468,7 @@ trait TypeResolver extends UsingContext {
         }
 
       case ast.Expr.BinaryOperation(_, op, _) =>
-        println("Unimplemented AST binary operation: " + op)
-        ???
+        throw RuntimeException("Unimplemented AST binary operation: " + op)
 
       case ast.Expr.Block(body, finallyBody) =>
         val bodyFac = resolveStmtBlock(body)
@@ -748,8 +747,7 @@ trait TypeResolver extends UsingContext {
           ))
 
       case _ =>
-        println("Unimplemented AST Expression type: " + expr.value.getClass)
-        ???
+        throw RuntimeException("Unimplemented AST expression type: " + expr.value.getClass)
     }
 
   private def resolveType(expr: WithSource[ast.Expr])(using state: EmitState): Comp[Expr] =
@@ -929,8 +927,7 @@ trait TypeResolver extends UsingContext {
   
       case "equal_to_type" => ???
       case _ =>
-        scala.Console.err.println(name)
-        ???
+        throw RuntimeException(s"Unexpected builtin name: $name")
     }
 
 

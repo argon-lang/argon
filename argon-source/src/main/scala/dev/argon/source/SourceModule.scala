@@ -80,8 +80,7 @@ private[source] object SourceModule {
               .map(exports => (scope, exports.map((k, v) => k -> v.map(ModuleExportC.Exported.apply))))
 
           case _ =>
-            scala.Console.err.println(stmt.value.getClass)
-            ???
+            ZIO.logError(s"Unexpected module statement: ${stmt.value.getClass}").as(???)
         }
       }
       end processStmt

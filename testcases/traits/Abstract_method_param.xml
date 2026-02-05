@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Trait instance method (param)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait MyTrait
+            public proc _.say_hello(msg: String): () = abstract
+        end
+
+        instance MyInst: MyTrait
+            public override proc _.say_hello(msg: String): () =
+                puts msg
+        end
+        
+        proc main(): () do
+            let o = MyInst
+
+            o.say_hello "Hello World"
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>
