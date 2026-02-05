@@ -442,6 +442,12 @@ enum token {
         token-kind: token;
         output: token;
     },
+    instance-value {
+        instance-id: nat;
+
+        @esexpr:(vararg)
+        args: list[token];
+    },
     record {
         record-id: nat;
 
@@ -454,7 +460,7 @@ enum token {
         @esexpr:(vararg)
         args: list[token];
     },
-    instance-token-parameter {
+    parent-token-parameter {
         index: nat;
     },
     ref-cell {

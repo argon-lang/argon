@@ -83,10 +83,10 @@ function isSameType(a, b) {
 function specialize(options = {}) {
     const specializations = [];
 
-    function getSpecialization(...typeArgs) {
-        const o = options.getInstancePrototype ? options.getInstancePrototype(this, typeArgs) : this;
+    function getSpecialization(...tokenArgs) {
+        const o = options.getInstancePrototype ? options.getInstancePrototype(this, tokenArgs) : this;
         for(const spec of specializations) {
-            if(isSameType(spec.typeArgs, typeArgs)) {
+            if(isSameType(spec.tokenArgs, tokenArgs)) {
                 return spec.specializedClass;
             }
         }
@@ -95,14 +95,14 @@ function specialize(options = {}) {
             o.call(this, ...args);
         };
         specializedClass.prototype = Object.create(o.prototype);
-        specializedClass.typeArgs = typeArgs;
+        storeTokenArgs(this, specializedClass, tokenArgs)
 
         if(options.customize) {
             options.customize(specializedClass);
         }
 
         specializations.push({
-            typeArgs,
+            tokenArgs,
             specializedClass,
         });
 
@@ -112,22 +112,22 @@ function specialize(options = {}) {
     return getSpecialization;
 }
 
-function lazyFunctionBuilder(create) {
-    let f = null;
-    return function(...args) {
-        if(f === null) {
-            f = create();
-        }
-
-        if(new.target) {
-            return new f(...args);
-        }
-        else {
-            return f(...args);
-        }
-    }
+function defineTokenArgSymbols(t, info) {
+    t.tokenParameterSymbols = Array.from({ length: info.tokenParameterCount }, () => Symbol());
 }
 
+function storeTokenArgs(t, c, args) {
+    for(let i = 0; i < args.length; ++i) {
+        Object.defineProperty(
+            c.prototype,
+            t.tokenParameterSymbols[i],
+            {
+                value: args[i],
+                writable: false,
+            },
+        );
+    }
+}
 
 export function createRecordType(recordInfo) {
     const recordType = function(values) {
@@ -163,6 +163,8 @@ export function createRecordType(recordInfo) {
         recordType.specialize = specialize();
     }
 
+    defineTokenArgSymbols(recordType, recordInfo);
+
     return recordType;
 }
 
@@ -190,6 +192,8 @@ export function createEnumType(enumInfo) {
             },
         });
     }
+
+    defineTokenArgSymbols(enumType, enumInfo);
 
     return enumType;
 }
@@ -264,6 +268,8 @@ export function createTraitType(traitInfo) {
         });
     }
 
+    defineTokenArgSymbols(traitType, traitInfo);
+
     return traitType;
 }
 
@@ -282,7 +288,9 @@ function applyVTable(c, methods, vtable) {
 
     for(const [name, methodImpl] of Object.entries(methods)) {
         const sym = Symbol();
-        c.methods[name] = sym;
+        if(c.methods !== undefined) {
+            c.methods[name] = sym;
+        }
         const method = methodImpl.method;
         methodImpls.push(method);
         if(method === null) {
@@ -349,27 +357,45 @@ export function createInstanceDefinition(instanceInfo) {
         return constructor;
     }
 
-    if(instanceInfo.tokenParameterCount === 0) {
-        return lazyFunctionBuilder(() => {
-            const inst = createInstanceConstructor(instanceInfo.baseConstructor());
-            inst.methods = Object.create(null);
-            applyVTable(inst, instanceInfo.methods, instanceInfo.vtable);
-            return inst;
-        });
+
+    const inst = {};
+    inst.specialize = specialize({
+        getInstancePrototype(_inst, tokenArgs) {
+            return createInstanceConstructor(instanceInfo.baseConstructor(...tokenArgs));
+        },
+        customize(specialized) {
+            specialized.methods = Object.create(null);
+            applyVTable(specialized, instanceInfo.methods, instanceInfo.vtable);
+        },
+    });
+
+    defineTokenArgSymbols(inst, instanceInfo);
+
+    let createInstance;
+
+    if(instanceInfo.argCount === 0) {
+        const instanceMemo = new Map();
+        createInstance = function(...tokenArgs) {
+            const ctor = inst.specialize(...tokenArgs);
+            let instance = instanceMemo.get(ctor);
+            if(instance === undefined) {
+                instance = new ctor();
+                instanceMemo.set(ctor, instance);
+            }
+            return instance;
+        };
     }
     else {
-        const inst = {};
-        inst.specialize = specialize({
-            getInstancePrototype(_inst, typeArgs) {
-                return createInstanceConstructor(instanceInfo.baseConstructor(...typeArgs));
-            },
-            customize(specialized) {
-                specialized.methods = Object.create(null);
-                applyVTable(specialized, instanceInfo.methods, instanceInfo.vtable);
-            },
-        });
-        return inst;
+        createInstance = function(...allArgs) {
+            const tokenArgs = allArgs.slice(0, instanceInfo.tokenParameterCount);
+            const args = allArgs.slice(instanceInfo.tokenParameterCount);
+
+            return new (inst.specialize(...tokenArgs))(...args);
+        };
     }
+
+    createInstance.tokenParameterSymbols = inst.tokenParameterSymbols;
+    return createInstance;
 }
 
 

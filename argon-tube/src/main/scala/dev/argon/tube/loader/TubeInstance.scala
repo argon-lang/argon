@@ -1,12 +1,13 @@
 package dev.argon.tube.loader
 
 import dev.argon.compiler.*
+import dev.argon.expr.ErasureMode
 import dev.argon.tube as t
 import dev.argon.util.*
 import zio.*
 
 private[loader] object TubeInstance {
-  def apply(ctx: TubeLoader.TubeLoadContext, elemLoader: ElementLoader & HasContext[ctx.type], trt: t.InstanceDefinition): ctx.Comp[ArInstanceC & HasContext[ctx.type]] =
+  def apply(ctx: TubeLoader.TubeLoadContext, elemLoader: ElementLoader & HasContext[ctx.type], inst: t.InstanceDefinition): ctx.Comp[ArInstanceC & HasContext[ctx.type]] =
     for
       instanceId <- UniqueIdentifier.make
 
@@ -22,14 +23,17 @@ private[loader] object TubeInstance {
       override val id: UniqueIdentifier = instanceId
 
       override def importSpecifier: Comp[ImportSpecifier] =
-        specCell.get(decodeImportSpecifier(trt.`import`))
-        
+        specCell.get(decodeImportSpecifier(inst.`import`))
+
+      override def erasureMode: ErasureMode.Declared =
+        decodeErasure(inst.erasure)
+
       override def signature: Comp[FunctionSignature] =
-        sigCell.get(decodeFunctionSignature(trt.signature))
+        sigCell.get(decodeFunctionSignature(inst.signature))
 
 
       override def methods: Comp[Seq[MethodEntry[context.type]]] =
-        methodsCell.get(ZIO.foreach(trt.methods) { entry =>
+        methodsCell.get(ZIO.foreach(inst.methods) { entry =>
           for
             method <- TubeMethod(ctx, elemLoader, entry.method, MethodOwner.ByInstance(this))
           yield MethodEntry(

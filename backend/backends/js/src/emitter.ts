@@ -1,4 +1,4 @@
-import type { ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel } from "./program-model.js";
+import type {ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel} from "./program-model.js";
 import { encodeTubePathComponent, ensureExhaustive, getModuleId, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
 
 import type * as estree from "estree";
@@ -18,6 +18,309 @@ export interface OutputModuleInfo {
 export interface EmitOptions {
     readonly program: ProgramModel,
 }
+
+
+abstract class TokenEmitter {
+    constructor(moduleEmitter: ModuleEmitter) {
+        this.#moduleEmitter = moduleEmitter;
+    }
+
+    readonly #moduleEmitter: ModuleEmitter;
+
+
+    buildTokenValue(t: ir.Token): estree.Expression {
+        switch(t.$type) {
+            case "builtin":
+                switch(t.b.$type) {
+                    case "bool":
+                        return {
+                            type: "Literal",
+                            value: "boolean",
+                        };
+
+                    case "int":
+                        return {
+                            type: "Literal",
+                            value: "bigint",
+                        };
+
+                    case "string":
+                        return {
+                            type: "Literal",
+                            value: "string",
+                        };
+
+                    case "never":
+                    case "conjunction":
+                    case "disjunction":
+                        throw new Error("Not implemented buildTypeInfo builtin " + t.b.$type);
+                }
+
+            case "function":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("FunctionType"),
+                    arguments: [
+                        this.buildTokenValue(t.input),
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "function-erased":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("FunctionTypeErased"),
+                    arguments: [
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "function-token":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("FunctionTypeToken"),
+                    arguments: [
+                        this.buildTokenValue(t.tokenKind),
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "instance-value":
+            {
+                const instanceInfo = this.#moduleEmitter.options.program.getInstanceInfo(t.instanceId);
+                const funcExpr = this.#moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: funcExpr,
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "record":
+            {
+                const rec = this.#moduleEmitter.options.program.getRecordInfo(t.recordId);
+                if(t.args.length === 0) {
+                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "enum":
+            {
+                const rec = this.#moduleEmitter.options.program.getEnumInfo(t.enumId);
+                if(t.args.length === 0) {
+                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "parent-token-parameter":
+                return this.getParentTypeParam(t.index);
+
+            case "ref-cell":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("RefCellType"),
+                    arguments: [
+                        this.buildTokenValue(t.inner),
+                    ],
+                };
+
+            case "trait":
+            {
+                const rec = this.#moduleEmitter.options.program.getTraitInfo(t.traitId);
+                if(t.args.length === 0) {
+                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "tuple":
+                return {
+                    type: "ArrayExpression",
+                    elements: t.elements.map(item => this.buildTokenValue(item)),
+                };
+
+            case "token-parameter":
+                return this.getTypeParam(t.index);
+
+            case "type-info":
+                return this.#moduleEmitter.getArgonRuntimeExport("typeInfo");
+
+            case "boxed":
+                return this.#moduleEmitter.getArgonRuntimeExport("erasedType");
+        }
+    }
+
+    protected abstract getTypeParam(index: bigint): estree.Expression;
+    protected abstract getParentTypeParam(index: bigint): estree.Expression;
+
+}
+
+class VTableTokenEmitter extends TokenEmitter {
+    constructor(
+        moduleEmitter: ModuleEmitter,
+        private readonly parentExpr: estree.Expression,
+    ) {
+        super(moduleEmitter);
+    }
+
+
+    protected override getParentTypeParam(index: bigint): estree.Expression {
+        return {
+            type: "MemberExpression",
+            computed: true,
+            optional: false,
+            object: {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+                object: {
+                    type: "ThisExpression",
+                },
+                property: {
+                    type: "Identifier",
+                    name: "prototype",
+                },
+            },
+            property: {
+                type: "MemberExpression",
+                computed: true,
+                optional: false,
+                object: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.parentExpr,
+                    property: {
+                        type: "Identifier",
+                        name: "tokenParameterSymbols",
+                    },
+                },
+                property: {
+                    type: "Literal",
+                    value: Number(index),
+                },
+            },
+        };
+    }
+
+    protected override getTypeParam(_index: bigint): estree.Identifier {
+        throw new Error("Method type parameters not supported in vtable");
+    }
+}
+
+class InstanceBaseConstructorTokenEmitter extends TokenEmitter {
+    protected getParentTypeParam(_index: bigint): estree.Expression {
+        throw new Error("Parent type parameters not supported in instance base constructor");
+    }
+
+    protected getTypeParam(index: bigint): estree.Expression {
+        return {
+            type: "Identifier",
+            name: `t${index}`,
+        };
+    }
+
+}
+
+class BlockTokenEmitter extends TokenEmitter {
+    constructor(
+        moduleEmitter: ModuleEmitter,
+        private readonly parentExpr: estree.Expression | undefined,
+    ) {
+        super(moduleEmitter);
+    }
+
+    protected getParentTypeParam(index: bigint): estree.Expression {
+        if(this.parentExpr === undefined) {
+            throw new Error("Parent type parameters not supported in this block");
+        }
+
+        return {
+            type: "MemberExpression",
+            computed: true,
+            optional: false,
+            object: {
+                type: "ThisExpression",
+            },
+            property: {
+                type: "MemberExpression",
+                computed: true,
+                optional: false,
+                object: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.parentExpr,
+                    property: {
+                        type: "Identifier",
+                        name: "tokenParameterSymbols",
+                    },
+                },
+                property: {
+                    type: "Literal",
+                    value: Number(index),
+                },
+            },
+        };
+    }
+
+    protected getTypeParam(index: bigint): estree.Expression {
+        return {
+            type: "Identifier",
+            name: `t${index}`,
+        };
+    }
+}
+
 
 abstract class EmitterBase {
     constructor(
@@ -143,38 +446,6 @@ abstract class EmitterBase {
                 return "$_";
         }
     }
-
-
-
-    protected getReg(r: ir.RegisterId): estree.Identifier {
-        return {
-            type: "Identifier",
-            name: `r${r.id}`,
-        };
-    }
-
-    protected getTypeParam(index: bigint): estree.Identifier {
-        return {
-            type: "Identifier",
-            name: `t${index}`,
-        };
-    }
-
-    protected getArgonRuntimeExport(name: string): estree.Expression {
-        return {
-            type: "MemberExpression",
-            computed: false,
-            optional: false,
-            object: {
-                type: "Identifier",
-                name: this.getImportId("@argon-lang/runtime"),
-            },
-            property: {
-                type: "Identifier",
-                name,
-            },
-        };
-    }
 }
 
 export function* emitTube(options: EmitOptions): Iterable<OutputModuleInfo> {
@@ -255,6 +526,21 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         return "import" + index;
     }
 
+    getArgonRuntimeExport(name: string): estree.Expression {
+        return {
+            type: "MemberExpression",
+            computed: false,
+            optional: false,
+            object: {
+                type: "Identifier",
+                name: this.getImportId("@argon-lang/runtime"),
+            },
+            property: {
+                type: "Identifier",
+                name,
+            },
+        };
+    }
 
 
     private getImportSource(moduleInfo: ModuleInfo): string {
@@ -366,7 +652,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             throw new Error("Missing function implementation");
         }
 
-        const impl = this.emitFunctionImpl(false, func.signature, func.implementation);
+        const impl = this.emitFunctionImpl(false, func.signature, func.implementation, undefined);
 
         if(impl.type == "FunctionDeclaration") {
             this.addDeclaration({
@@ -395,7 +681,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
     }
 
-    private emitFunctionImpl(useThis: boolean, signature: ir.FunctionSignature, impl: ir.FunctionImplementation): ReadonlyDeep<estree.MaybeNamedFunctionDeclaration | estree.Expression> {
+    private emitFunctionImpl(useThis: boolean, signature: ir.FunctionSignature, impl: ir.FunctionImplementation, parentExpr: estree.Expression | undefined): ReadonlyDeep<estree.MaybeNamedFunctionDeclaration | estree.Expression> {
         switch(impl.$type) {
             case "vm-ir":
             {
@@ -417,7 +703,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     });
                 }
 
-                const blockEmitter = new BlockEmitter(this, signature.parameters.length + regOffset);
+                const blockEmitter = new BlockEmitter(this, parentExpr, signature.parameters.length + regOffset);
                 
                 blockEmitter.emitBlock(impl.body.block);
 
@@ -541,9 +827,13 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
     private emitTrait(traitDef: ir.TraitDefinition): void {
         const name = this.getExportNameForImport(traitDef.import);
+        const nameId: estree.Expression = {
+            type: "Identifier",
+            name,
+        };
 
-        const methodFuncs = this.emitMethods(traitDef.methods);
-        const vtable = this.emitVTable(traitDef.vtable);
+        const methodFuncs = this.emitMethods(traitDef.methods, nameId);
+        const vtable = this.emitVTable(traitDef.vtable, nameId);
 
         const traitInfo: ReadonlyDeep<estree.Expression> = {
             type: "ObjectExpression",
@@ -597,10 +887,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             declarations: [
                 {
                     type: "VariableDeclarator",
-                    id: {
-                        type: "Identifier",
-                        name,
-                    },
+                    id: nameId,
                     init: {
                         type: "CallExpression",
                         optional: false,
@@ -614,14 +901,14 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         });
     }
 
-    private emitMethods(methods: readonly ir.MethodDefinition[]): ReadonlyDeep<estree.Expression> {
+    private emitMethods(methods: readonly ir.MethodDefinition[], parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
         const methodFuncs: ReadonlyDeep<estree.Property>[] = [];
 
         for(const methodDef of methods) {
             const methodName = this.getExportNameForIdSig(methodDef.name, methodDef.erasedSignature);
             const useSimpleName = isValidIdName(methodName) && methodName !== "__proto__";
 
-            const methodImpl = this.emitMethodBody(methodDef);
+            const methodImpl = this.emitMethodBody(methodDef, parentExpr);
 
             methodFuncs.push({
                 type: "Property",
@@ -662,7 +949,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         };
     }
 
-    private emitMethodBody(methodDef: ir.MethodDefinition): ReadonlyDeep<estree.Expression> {
+    private emitMethodBody(methodDef: ir.MethodDefinition, parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
         if(methodDef.implementation === undefined) {
             return {
                 type: "Literal",
@@ -670,7 +957,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             };
         }
         
-        const impl = this.emitFunctionImpl(true, methodDef.signature, methodDef.implementation);
+        const impl = this.emitFunctionImpl(true, methodDef.signature, methodDef.implementation, parentExpr);
 
         if(impl.type == "FunctionDeclaration") {
             return {
@@ -684,7 +971,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
     }
 
-    private emitVTable(vtable: ir.Vtable): ReadonlyDeep<estree.Expression> {
+    private emitVTable(vtable: ir.Vtable, parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
         const entries: ReadonlyDeep<estree.Expression>[] = [];
 
         for(const entry of vtable.entries) {
@@ -699,7 +986,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     type: "MemberExpression",
                     computed: false,
                     optional: false,
-                    object: new BlockEmitter(this, 0).buildTokenValue(entry.slotInstanceType),
+                    object: new VTableTokenEmitter(this, parentExpr).buildTokenValue(entry.slotInstanceType),
                     property: {
                         type: "Identifier",
                         name: "methods",
@@ -788,9 +1075,13 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
     private emitInstance(instanceDef: ir.InstanceDefinition): void {
         const name = this.getExportNameForImport(instanceDef.import);
+        const nameId: estree.Expression = {
+            type: "Identifier",
+            name,
+        };
 
-        const methodFuncs = this.emitMethods(instanceDef.methods);
-        const vtable = this.emitVTable(instanceDef.vtable);
+        const methodFuncs = this.emitMethods(instanceDef.methods, nameId);
+        const vtable = this.emitVTable(instanceDef.vtable, nameId);
 
         const instanceInfo: ReadonlyDeep<estree.Expression> = {
             type: "ObjectExpression",
@@ -861,13 +1152,16 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     },
                     value: {
                         type: "FunctionExpression",
-                        params: [],
+                        params: instanceDef.signature.tokenParameters.map((_, i) => ({
+                            type: "Identifier",
+                            name: `t${i}`,
+                        })),
                         body: {
                             type: "BlockStatement",
                             body: [
                                 {
                                     type: "ReturnStatement",
-                                    argument: new BlockEmitter(this, instanceDef.signature.parameters.length).buildTokenValue(instanceDef.signature.returnType),
+                                    argument: new InstanceBaseConstructorTokenEmitter(this).buildTokenValue(instanceDef.signature.returnType),
                                 }
                             ],
                         },
@@ -883,10 +1177,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             declarations: [
                 {
                     type: "VariableDeclarator",
-                    id: {
-                        type: "Identifier",
-                        name,
-                    },
+                    id: nameId,
                     init: {
                         type: "CallExpression",
                         optional: false,
@@ -904,19 +1195,22 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 class BlockEmitter extends EmitterBase {
     constructor(
         private moduleEmitter: ModuleEmitter,
+        private parentExpr: estree.Expression | undefined,
         private varOffset: number,
     ) {
         super(moduleEmitter.options);
+        this.tokenEmitter = new BlockTokenEmitter(this.moduleEmitter, this.parentExpr);
     }
 
     readonly stmts: estree.Statement[] = [];
+    private readonly tokenEmitter: TokenEmitter;
 
     protected override getImportId(source: string): string {
         return this.moduleEmitter.getImportId(source);
     }
 
     private emitNestedBlock(block: ir.Block): estree.BlockStatement {
-        const nestedEmitter = new BlockEmitter(this.moduleEmitter, this.varOffset);
+        const nestedEmitter = new BlockEmitter(this.moduleEmitter, this.parentExpr, this.varOffset);
         nestedEmitter.emitBlock(block);
         return nestedEmitter.toBlock();
     }
@@ -1442,7 +1736,8 @@ class BlockEmitter extends EmitterBase {
                 }
 
                 const callExpr: estree.Expression = {
-                    type: "NewExpression",
+                    type: "CallExpression",
+                    optional: false,
                     callee: funcExpr,
                     arguments: args,
                 };
@@ -1454,7 +1749,7 @@ class BlockEmitter extends EmitterBase {
             case "new-reference":
                 assign(insn.dest, {
                     type: "NewExpression",
-                    callee: this.getArgonRuntimeExport("RefCell"),
+                    callee: this.moduleEmitter.getArgonRuntimeExport("RefCell"),
                     arguments: [this.getReg(insn.value)],
                 });
                 break;
@@ -1666,7 +1961,7 @@ class BlockEmitter extends EmitterBase {
                     type: "ThrowStatement",
                     argument: {
                         type: "NewExpression",
-                        callee: this.getArgonRuntimeExport("UnreachableError"),
+                        callee: this.moduleEmitter.getArgonRuntimeExport("UnreachableError"),
                         arguments: [],
                     }
                 });
@@ -1695,175 +1990,6 @@ class BlockEmitter extends EmitterBase {
 
             default:
                 ensureExhaustive(insn);
-        }
-    }
-
-    buildTokenValue(t: ir.Token): estree.Expression {
-        switch(t.$type) {
-            case "builtin":
-                switch(t.b.$type) {
-                    case "bool":
-                        return {
-                            type: "Literal",
-                            value: "boolean",
-                        };
-
-                    case "int":
-                        return {
-                            type: "Literal",
-                            value: "bigint",
-                        };
-                        
-                    case "string":
-                        return {
-                            type: "Literal",
-                            value: "string",
-                        };
-
-                    case "never":
-                    case "conjunction":
-                    case "disjunction":
-                        throw new Error("Not implemented buildTypeInfo builtin " + t.b.$type);
-                }
-
-            case "function":
-                return {
-                    type: "NewExpression",
-                    callee: this.getArgonRuntimeExport("FunctionType"),
-                    arguments: [
-                        this.buildTokenValue(t.input),
-                        this.buildTokenValue(t.output),
-                    ],
-                };
-
-            case "function-erased":
-                return {
-                    type: "NewExpression",
-                    callee: this.getArgonRuntimeExport("FunctionTypeErased"),
-                    arguments: [
-                        this.buildTokenValue(t.output),
-                    ],
-                };
-
-            case "function-token":
-                return {
-                    type: "NewExpression",
-                    callee: this.getArgonRuntimeExport("FunctionTypeToken"),
-                    arguments: [
-                        this.buildTokenValue(t.tokenKind),
-                        this.buildTokenValue(t.output),
-                    ],
-                };
-
-            case "record":
-            {
-                const rec = this.options.program.getRecordInfo(t.recordId);
-                if(t.args.length === 0) {
-                    return this.moduleEmitter.getImportExpr(rec.importSpecifier);
-                }
-
-                return {
-                    type: "CallExpression",
-                    optional: false,
-                    callee: {
-                        type: "MemberExpression",
-                        computed: false,
-                        optional: false,
-                        object: this.moduleEmitter.getImportExpr(rec.importSpecifier),
-                        property: {
-                            type: "Identifier",
-                            name: "specialize",
-                        },
-                    },
-                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
-                };
-            }
-
-            case "enum":
-            {
-                const rec = this.options.program.getEnumInfo(t.enumId);
-                if(t.args.length === 0) {
-                    return this.moduleEmitter.getImportExpr(rec.importSpecifier);
-                }
-
-                return {
-                    type: "CallExpression",
-                    optional: false,
-                    callee: {
-                        type: "MemberExpression",
-                        computed: false,
-                        optional: false,
-                        object: this.moduleEmitter.getImportExpr(rec.importSpecifier),
-                        property: {
-                            type: "Identifier",
-                            name: "specialize",
-                        },
-                    },
-                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
-                };
-            }
-
-            case "instance-token-parameter":
-                return {
-                    type: "MemberExpression",
-                    computed: false,
-                    optional: false,
-                    object: {
-                        type: "ThisExpression",
-                    },
-                    property: {
-                        type: "Identifier",
-                        name: `args_${t.index}`,
-                    },
-                };
-
-            case "ref-cell":
-                return {
-                    type: "NewExpression",
-                    callee: this.getArgonRuntimeExport("RefCellType"),
-                    arguments: [
-                        this.buildTokenValue(t.inner),
-                    ],
-                };
-
-            case "trait":
-            {
-                const rec = this.options.program.getTraitInfo(t.traitId);
-                if(t.args.length === 0) {
-                    return this.moduleEmitter.getImportExpr(rec.importSpecifier);
-                }
-
-                return {
-                    type: "CallExpression",
-                    optional: false,
-                    callee: {
-                        type: "MemberExpression",
-                        computed: false,
-                        optional: false,
-                        object: this.moduleEmitter.getImportExpr(rec.importSpecifier),
-                        property: {
-                            type: "Identifier",
-                            name: "specialize",
-                        },
-                    },
-                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
-                };
-            }
-
-            case "tuple":
-                return {
-                    type: "ArrayExpression",
-                    elements: t.elements.map(item => this.buildTokenValue(item)),
-                };
-
-            case "token-parameter":
-                return this.getTypeParam(t.index);
-
-            case "type-info":
-                return this.getArgonRuntimeExport("typeInfo");
-
-            case "boxed":
-                return this.getArgonRuntimeExport("erasedType");
         }
     }
 
@@ -1899,6 +2025,18 @@ class BlockEmitter extends EmitterBase {
                 value: variantName,
             },
         };
+    }
+
+
+    private getReg(reg: ir.RegisterId): estree.Identifier {
+        return {
+            type: "Identifier",
+            name: `r${reg.id}`,
+        };
+    }
+
+    private buildTokenValue(token: ir.Token): estree.Expression {
+        return this.tokenEmitter.buildTokenValue(token);
     }
 }
 

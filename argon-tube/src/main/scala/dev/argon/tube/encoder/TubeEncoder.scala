@@ -563,6 +563,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           InstanceDefinition(
             instanceId = id,
             `import` = importSpec,
+            erasure = encodeErasure(i.erasureMode),
             signature = sig,
             methods = methods,
           )

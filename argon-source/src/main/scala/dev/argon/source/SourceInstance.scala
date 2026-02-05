@@ -3,6 +3,7 @@ package dev.argon.source
 import dev.argon.ast
 import dev.argon.ast.Modifier
 import dev.argon.compiler.*
+import dev.argon.expr.ErasureMode
 import dev.argon.util.*
 import zio.*
 import zio.prelude.NonEmptyMap
@@ -20,6 +21,7 @@ private[source] object SourceInstance {
 
       mp <- ModifierParser.make(decl.modifiers, decl.name.location)
       access <- mp.parse(closure.accessModifierParser)
+      erasure <- mp.parse(ModifierParser.erasureModeWithToken)
       _ <- mp.done
 
     yield DeclarationResult(
@@ -29,6 +31,8 @@ private[source] object SourceInstance {
         override val id: UniqueIdentifier = recId
 
         import closure.given
+
+        override def erasureMode: ErasureMode.Declared = erasure
 
         override def importSpecifier: Comp[ImportSpecifier] =
           for

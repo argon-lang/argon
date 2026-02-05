@@ -1526,7 +1526,7 @@ trait TypeResolver extends UsingContext {
                     override def infer(using EmitState): Comp[InferredExpr] =
                       for
                         e = Expr.NewInstance(i, overloadResult.arguments)
-                        e <- checkErasure(loc)(e)(ErasureMode.Token)
+                        e <- checkErasure(loc)(e)(i.erasureMode)
                       yield InferredExpr(
                         e,
                         overloadResult.remainingSig.returnType

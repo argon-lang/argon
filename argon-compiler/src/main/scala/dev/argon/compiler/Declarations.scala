@@ -473,6 +473,8 @@ enum MethodOwner[Ctx <: Context] derives CanEqual {
 
 
 abstract class ArInstanceC extends UsingContext with DeclarationBase derives CanEqual {
+  def erasureMode: ErasureMode.Declared
+
   def methods: Comp[Seq[MethodEntry[context.type]]]
 
   override def hashCode(): Int = id.hashCode()

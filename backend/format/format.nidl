@@ -540,6 +540,9 @@ record instance-definition {
     import: import-specifier;
 
     @esexpr:(keyword)
+    erasure: erasure-mode;
+
+    @esexpr:(keyword)
     signature: function-signature;
 
     @esexpr:(vararg)

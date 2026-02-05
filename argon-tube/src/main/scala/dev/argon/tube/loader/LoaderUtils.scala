@@ -10,9 +10,9 @@ import zio.*
 import dev.argon.compiler.{HasContext, UsingContext}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.ast.IdentifierExpr
-import dev.argon.tube.loader.LoaderUtils.*
 
 private[loader] trait LoaderUtils extends UsingContext {
+  export LoaderUtils.decodeErasure
 
   protected def elementLoader: ElementLoader & HasContext[context.type]
   

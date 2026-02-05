@@ -510,7 +510,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           entries <- ZIO.foreach(vtable.entries.toSeq) { (slot, slotValue) =>
             for
               slotMethodId <- getMethodId(slot.method)
-              slotInstanceType <- ownerSig.typeEmitter.tokenExpr(slotValue.slotInstanceType)
+              methodSig <- emitMethodSignature(slot.method)
+              slotInstanceType <- methodSig.typeEmitter.tokenExpr(slotValue.slotInstanceType)
               target <- encodeTarget(slotValue.target)
             yield VtableEntry(slotMethodId, slotInstanceType, target)
           }
@@ -575,7 +576,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         paramVarMapping: TMap[context.DefaultExprContext.Var, (index: Int, capturedRef: Boolean)],
       ) {
 
-        private def typeEmitter: UIO[TokenEmitter] =
+        private def tokenEmitter: UIO[TokenEmitter] =
           (
             for
               tpm <- typeParamMapping.toMap
@@ -605,7 +606,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           (
             for
               tpm <- typeParamMapping.toMap
-            yield tpm.view.mapValues(i => Token.InstanceTokenParameter(i)).toMap
+            yield tpm.view.mapValues(i => Token.ParentTokenParameter(i)).toMap
             ).commit
 
         def addInstanceParameter(v: context.DefaultExprContext.InstanceParameterVar): Comp[Unit] =
@@ -619,7 +620,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
             case ErasureMode.Token =>
                 for
-                  te <- typeEmitter
+                  te <- tokenEmitter
                   tokenKind <- te.tokenExpr(v.varType)
                   tp = dev.argon.vm.SignatureTokenParameter(
                     name = v.name.map(encodeIdentifier),
@@ -643,7 +644,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
 
               for
-                te <- typeEmitter
+                te <- tokenEmitter
 
                 t <- te.tokenExpr(v.varType)
                 sigParam = dev.argon.vm.SignatureParameter(
@@ -657,12 +658,12 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
         def finish(returnType: ArExpr): Comp[FunctionSignatureWithMapping] =
           for
-            returnType <- typeEmitter.flatMap(_.tokenExpr(returnType))
+            returnType <- tokenEmitter.flatMap(_.tokenExpr(returnType))
 
             tokenParams <- tokenParams.get.commit
             params <- params.get.commit
             argConsumers <- argConsumers.get.commit
-            te <- typeEmitter
+            te <- tokenEmitter
             kv <- knownVars
             itp <- asInstanceTokenParams
           yield FunctionSignatureWithMapping(
@@ -831,6 +832,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 id <- getEnumId(rec)
                 args <- ZIO.foreach(args)(tokenExpr)
               yield Token.Enum(id, args)
+
+            case ArExpr.NewInstance(inst, args) =>
+              for
+                id <- getInstanceId(inst)
+                args <- ZIO.foreach(args)(tokenExpr)
+              yield Token.InstanceValue(id, args)
+              
 
             case ArExpr.TraitType(trt, args) =>
               for
@@ -1103,8 +1111,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                     case BinaryBuiltin.BoolEQ => BuiltinBinaryOp.BoolEq
                     case BinaryBuiltin.BoolNE => BuiltinBinaryOp.BoolNe
                     case _ =>
-                      println("Unimplemented binary builtin: " + builtin)
-                      ???
+                      throw new RuntimeException("Unimplemented binary builtin: " + builtin)
                   }
                   _ <- emit(Instruction.BuiltinBinary(op, r, ar, br))
                 yield ()

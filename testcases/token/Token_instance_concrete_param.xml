@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Token instance (concrete param)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait MyTrait
+            public proc self.say_hello(): () do
+                puts "Hello World"
+            end
+        end
+
+        token instance MyInst(x: String): MyTrait
+        end
+
+        proc do_say_hello(token t: MyTrait): () =
+            t.say_hello()
+        
+        proc main(): () do
+            do_say_hello (MyInst "Hello")
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>TypeParameterIsConcrete</ExpectedError>
+
+</ArgonTest>
