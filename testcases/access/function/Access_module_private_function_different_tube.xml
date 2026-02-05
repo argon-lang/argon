@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Access module private function in different tube</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+        import Argon.TestReference::my_module_private_function
+
+        proc main(): () do
+            my_module_private_function()
+        end
+
+
+    </InputSource>
+
+    <Libraries>
+        <Library>Argon.Core</Library>
+        <Library>Argon.TestReference</Library>
+    </Libraries>
+
+    <ExpectedError>UnknownIdentifier</ExpectedError>
+
+</ArgonTest>

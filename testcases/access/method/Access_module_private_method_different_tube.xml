@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Access module private method in different tube</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+        import Argon.TestReference::MyInstance
+
+        proc main(): () do
+            MyInstance.my_module_private_method()
+        end
+
+
+    </InputSource>
+
+    <Libraries>
+        <Library>Argon.Core</Library>
+        <Library>Argon.TestReference</Library>
+    </Libraries>
+
+    <ExpectedError>InvalidOverload</ExpectedError>
+
+</ArgonTest>

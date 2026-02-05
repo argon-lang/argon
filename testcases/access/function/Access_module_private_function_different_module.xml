@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Access module private function in different module</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+        import ::Module2::my_function
+
+        proc main(): () do
+            my_function()
+        end
+
+
+    </InputSource>
+
+    <InputSource name="Module2.argon">
+        module Module2
+
+        import Argon.Core::*
+
+        private internal proc my_function(): () do
+            puts "called"
+        end
+
+    </InputSource>
+
+    <ExpectedError>UnknownIdentifier</ExpectedError>
+
+</ArgonTest>

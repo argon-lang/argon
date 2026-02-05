@@ -81,12 +81,17 @@ public class TestCaseRunner implements Closeable {
         var outputFile = outputLibDir.resolve(libraryName + ".artube");
 		
 		var options = LibraryUtils.platformOptions(library, context.targetPlatform(), libDir);
+		
+		var referencedCompiledTubes = new ArrayList<String>();
+		for(var ref : LibraryUtils.referencedLibraries(library)) {
+			referencedCompiledTubes.add(buildLibraryTube(ref).toString());
+		}
 
 		var command = new DriverCommand.CompileCommand<String, String, String, String>(
 			library,
 			libDir.resolve("src").toString(),
 			outputFile.toString(),
-			List.of(),
+			referencedCompiledTubes,
 			List.of(context.targetPlatform().backendId()),
 			options
 		);
@@ -107,10 +112,15 @@ public class TestCaseRunner implements Closeable {
 		var inputFile = outputLibDir.resolve(libraryName + ".artube");
 		var outputFile = outputLibDir.resolve(libraryName + ".arvm");
 
+		var referencedCompiledTubes = new ArrayList<String>();
+		for(var ref : LibraryUtils.referencedLibraries(library)) {
+			referencedCompiledTubes.add(buildLibraryTube(ref).toString());
+		}
+
 		var command = new DriverCommand.GenIrCommand<String, String, String, String>(
 			inputFile.toString(),
 			outputFile.toString(),
-			List.of(),
+			referencedCompiledTubes,
 			context.targetPlatform().backendId()
 		);
 		
@@ -129,11 +139,16 @@ public class TestCaseRunner implements Closeable {
 		var outputDir = outputLibDir.resolve("output");
 		Files.createDirectories(outputDir);
 
+		var referencedTubesIR = new ArrayList<String>();
+		for(var ref : LibraryUtils.referencedLibraries(library)) {
+			referencedTubesIR.add(buildLibraryIR(ref).toString());
+		}
+
 		var command = new DriverCommand.CodegenCommand<String, String, String, String>(
 			context.targetPlatform().backendId(),
 			
 			outputLibDir.resolve(libraryName + ".arvm").toString(),
-			List.of(),
+			referencedTubesIR,
 			
 			new KeywordMapping<>(Map.of()),
 			LibraryUtils.outputOptions(context.targetPlatform(), outputDir)

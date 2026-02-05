@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Access public function in different tube</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+        import Argon.TestReference::my_public_function
+
+        proc main(): () do
+            my_public_function()
+        end
+
+
+    </InputSource>
+
+    <Libraries>
+        <Library>Argon.Core</Library>
+        <Library>Argon.TestReference</Library>
+    </Libraries>
+
+    <ExpectedOutput>called my_public_function</ExpectedOutput>
+
+</ArgonTest>

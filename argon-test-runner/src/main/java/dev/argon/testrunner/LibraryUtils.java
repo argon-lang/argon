@@ -29,7 +29,19 @@ public class LibraryUtils {
 	}
 
 	public static final TubeName LIBRARY_ARGON_CORE = new TubeName("Argon", List.of("Core"));
-	
+	public static final TubeName LIBRARY_ARGON_TESTREFERENCE = new TubeName("Argon", List.of("TestReference"));
+
+	public static List<TubeName> referencedLibraries(TubeName library) {
+		if(library.equals(LIBRARY_ARGON_CORE)) {
+			return List.of();
+		}
+		else if(library.equals(LIBRARY_ARGON_TESTREFERENCE)) {
+			return List.of(LIBRARY_ARGON_CORE);
+		}
+		else {
+			throw new IllegalArgumentException("Unknown library: " + library);
+		}
+	}
 
 	public static KeywordMapping<KeywordMapping<CompilerDriverOptionValue<String, String>>> platformOptions(TubeName library, Backend platform, Path libraryDir) {
 		Map<String, CompilerDriverOptionValue<String, String>> optionMap;
@@ -42,6 +54,9 @@ public class LibraryUtils {
 					)
 				);
 			};
+		}
+		else if(library.equals(LIBRARY_ARGON_TESTREFERENCE)) {
+			optionMap = Map.of();
 		}
 		else {
 			throw new IllegalArgumentException("Unknown library: " + library);

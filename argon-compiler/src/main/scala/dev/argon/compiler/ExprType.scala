@@ -98,6 +98,14 @@ trait ExprType {
       case Expr.Lambda(v, returnType, _) =>
         ZIO.succeed(Expr.FunctionType(v, returnType))
 
+      case Expr.NewInstance(inst, args) =>
+        for
+          sig <- inst.signature
+        yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
+          exprContext.ExpressionOwner.Instance(inst),
+          args
+        )
+
       case Expr.Or(_, _) =>
         ZIO.succeed(boolType)
 

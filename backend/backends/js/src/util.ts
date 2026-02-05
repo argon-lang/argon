@@ -37,7 +37,7 @@ export function getModuleOutputFileParts(modulePath: ir.ModulePath): [ string[],
 
 export function getModulePathUrl(modulePath: ir.ModulePath): string {
     if(modulePath.path.length === 0) {
-        return "";
+        return "index.js";
     }
     else if(modulePath.path.length === 1 && modulePath.path[0]!.match(/^_*index$/)) {
         return "_" + encodeTubePathComponent(modulePath.path[0]!) + ".js";

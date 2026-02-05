@@ -1,0 +1,26 @@
+module _
+
+import Argon.Core::*
+
+public proc my_public_function(): () =
+    puts "called my_public_function"
+
+internal proc my_internal_function(): () =
+    puts "called my_internal_function"
+
+private internal proc my_module_private_function(): () =
+    puts "called my_module_private_function"
+
+public trait MyTrait
+    public proc _.my_public_method(): () =
+        puts "called my_public_method"
+
+    internal proc _.my_internal_method(): () =
+        puts "called my_internal_method"
+
+    private internal proc _.my_module_private_method(): () =
+        puts "called my_module_private_method"
+end
+
+public instance MyInstance: MyTrait
+end

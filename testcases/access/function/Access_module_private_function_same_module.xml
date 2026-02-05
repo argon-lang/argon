@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Access module private function in same module</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        private internal proc my_function(): () do
+            puts "called"
+        end
+
+        proc main(): () do
+            my_function()
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>called</ExpectedOutput>
+
+</ArgonTest>

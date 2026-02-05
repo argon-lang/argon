@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Access internal method in different module</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+        import ::Module2::MyInstance
+
+        proc main(): () do
+            MyInstance.my_internal_method()
+        end
+
+
+    </InputSource>
+
+    <InputSource name="Module2.argon">
+        module Module2
+
+        import Argon.Core::*
+
+        public trait MyTrait
+            public proc _.my_internal_method(): () =
+                puts "called my_internal_method"
+        end
+
+        public instance MyInstance: MyTrait
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>called my_internal_method</ExpectedOutput>
+
+</ArgonTest>
