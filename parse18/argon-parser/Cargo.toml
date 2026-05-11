@@ -1,0 +1,8 @@
+[package]
+name = "argon-parser"
+edition = "2024"
+
+[dependencies]
+parse18-lexer-gen = { workspace = true }
+parse18-ll-gen = { workspace = true }
+strum = { workspace = true }
