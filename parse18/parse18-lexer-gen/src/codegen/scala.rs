@@ -1,5 +1,4 @@
-
-use std::{io::Write, io};
+use std::{io, io::Write};
 
 use unicode_general_category::GeneralCategory;
 
@@ -11,19 +10,27 @@ pub struct ScalaSettings {
     pub access_modifier: String,
     pub object_name: String,
     pub token_type: String,
-
 }
 
-
-pub fn emit_scala<W: Write>(w: &mut W, dfa: DFA<String>, settings: &ScalaSettings) -> io::Result<()> {
+pub fn emit_scala<W: Write>(
+    w: &mut W,
+    dfa: DFA<String>,
+    settings: &ScalaSettings,
+) -> io::Result<()> {
     writeln!(w, "package {}", settings.package)?;
-    writeln!(w, "{}object {} {{", settings.access_modifier, settings.object_name)?;
+    writeln!(
+        w,
+        "{}object {} {{",
+        settings.access_modifier, settings.object_name
+    )?;
     writeln!(w, "  opaque type State = Int")?;
     writeln!(w, "  val initialState: State = 0")?;
 
     writeln!(w, "  def isAccept(state: State): Boolean =")?;
     {
-        let mut iter = dfa.states.iter()
+        let mut iter = dfa
+            .states
+            .iter()
             .enumerate()
             .filter(|(_, state)| state.acceptance.is_some());
 
@@ -36,26 +43,34 @@ pub fn emit_scala<W: Write>(w: &mut W, dfa: DFA<String>, settings: &ScalaSetting
             writeln!(w, " => true")?;
             writeln!(w, "      case _ => false")?;
             writeln!(w, "    }}")?;
-        }
-        else {
+        } else {
             writeln!(w, "    false")?;
         }
     }
 
-
-    writeln!(w, "  def acceptance(state: State): {} =", settings.token_type)?;
+    writeln!(
+        w,
+        "  def acceptance(state: State): {} =",
+        settings.token_type
+    )?;
     writeln!(w, "    state match {{")?;
     for (state_id, state) in dfa.states.iter().enumerate() {
-        let Some(acceptance) = &state.acceptance else { continue; };
+        let Some(acceptance) = &state.acceptance else {
+            continue;
+        };
         writeln!(w, "      case {} => {}", state_id, acceptance)?;
     }
-    writeln!(w, "      case _ => throw new RuntimeException(\"Invalid state\")")?;
+    writeln!(
+        w,
+        "      case _ => throw new RuntimeException(\"Invalid state\")"
+    )?;
     writeln!(w, "    }}")?;
-
 
     writeln!(w, "  def isReject(state: State): Boolean =")?;
     {
-        let mut iter = dfa.states.iter()
+        let mut iter = dfa
+            .states
+            .iter()
             .enumerate()
             .filter(|(_, state)| state.is_reject);
 
@@ -68,8 +83,7 @@ pub fn emit_scala<W: Write>(w: &mut W, dfa: DFA<String>, settings: &ScalaSetting
             writeln!(w, " => true")?;
             writeln!(w, "      case _ => false")?;
             writeln!(w, "    }}")?;
-        }
-        else {
+        } else {
             writeln!(w, "    false")?;
         }
     }
@@ -81,10 +95,11 @@ pub fn emit_scala<W: Write>(w: &mut W, dfa: DFA<String>, settings: &ScalaSetting
 
         emit_transition(w, 4, &state.transition)?;
     }
-    writeln!(w, "      case _ => throw new RuntimeException(\"Unknown state\")")?;
+    writeln!(
+        w,
+        "      case _ => throw new RuntimeException(\"Unknown state\")"
+    )?;
     writeln!(w, "    }}")?;
-
-
 
     writeln!(w, "  private def isWhitespace(c: Int): Boolean =")?;
     writeln!(w, "    val t = java.lang.Character.getType(c)")?;
@@ -94,7 +109,6 @@ pub fn emit_scala<W: Write>(w: &mut W, dfa: DFA<String>, settings: &ScalaSetting
     writeln!(w, "      (c >= 0x9 && c <= 0xD) ||")?;
     writeln!(w, "      c == 0x85")?;
     writeln!(w, "  end isWhitespace")?;
-
 
     writeln!(w, "}}")?;
 
@@ -106,7 +120,7 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
         DFATransition::Always(target) => {
             emit_indent(w, indent)?;
             writeln!(w, "{}", target)?;
-        },
+        }
         DFATransition::IfCharacter(c, a, b) => {
             emit_indent(w, indent)?;
             writeln!(w, "if c == 0x{:X} then", u32::from(*c) as i32)?;
@@ -116,19 +130,27 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
             emit_transition(w, indent + 1, b.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "end if")?;
-        },
+        }
         DFATransition::IfCharacterRange(start, end, a, b) => {
             emit_indent(w, indent)?;
-            writeln!(w, "if c >= 0x{:X} && c <= 0x{:X} then", u32::from(*start) as i32, u32::from(*end) as i32)?;
+            writeln!(
+                w,
+                "if c >= 0x{:X} && c <= 0x{:X} then",
+                u32::from(*start) as i32,
+                u32::from(*end) as i32
+            )?;
             emit_transition(w, indent + 1, a.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "else")?;
             emit_transition(w, indent + 1, b.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "end if")?;
-        },
+        }
 
-        DFATransition::ForCategory { categories, fallback } => {
+        DFATransition::ForCategory {
+            categories,
+            fallback,
+        } => {
             emit_indent(w, indent)?;
             writeln!(w, "java.lang.Character.getType(c) match {{")?;
 
@@ -187,15 +209,13 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
                 emit_transition(w, indent + 2, t)?;
             }
 
-            
             emit_indent(w, indent + 1)?;
             writeln!(w, "case _ =>")?;
             emit_transition(w, indent + 2, fallback.as_ref())?;
 
-
             emit_indent(w, indent)?;
             writeln!(w, "}}")?;
-        },
+        }
 
         DFATransition::IfProperty(prop, a, b) => {
             emit_indent(w, indent)?;
@@ -212,7 +232,7 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
             emit_transition(w, indent + 1, b.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "end if")?;
-        },
+        }
     }
 
     Ok(())

@@ -329,6 +329,10 @@ impl <G: GrammarTypes> SymbolInfo<G> {
         self.discard = true;
         self
     }
+
+    pub fn is_discard(&self) -> bool {
+        self.discard
+    }
 }
 
 enum SymbolInfoType<G: GrammarTypes> {
@@ -1364,5 +1368,4 @@ fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEle
 
     table
 }
-
 

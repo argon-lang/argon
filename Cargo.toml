@@ -1,11 +1,15 @@
 [workspace]
 resolver = "3"
-members = ["argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen"]
+members = ["argon-format","argon-parser","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
+argon-util = { path = "argon-util" }
+encoding_rs = "0.8.35"
+num-bigint = "0.4.6"
+num-traits = "0.2.19"
 parse18-lexer-gen = { path = "parse18/parse18-lexer-gen" }
 parse18-ll-gen = { path = "parse18/parse18-ll-gen" }
-regex-syntax = "0.8.6"
-strum = { version = "0.27.2", features = ["derive"] }
+parse18-runtime = { path = "parse18/parse18-runtime" }
+regex-syntax = "0.8.10"
+strum = { version = "0.28.0", features = ["derive"] }
 unicode-general-category = "1.1.0"
-

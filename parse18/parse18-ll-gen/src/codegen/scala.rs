@@ -1,6 +1,7 @@
-use crate::grammar::{Grammar, GrammarTypes, LL1Conflict, LL1RuleType, LL1RuleValue, LL1SymbolType};
+use crate::grammar::{
+    Grammar, GrammarTypes, LL1Conflict, LL1RuleType, LL1RuleValue, LL1SymbolType,
+};
 use std::io::{self, Write};
-
 
 pub struct ScalaSettings {
     pub package: String,
@@ -11,11 +12,10 @@ pub struct ScalaSettings {
     pub header_stmts: Vec<String>,
 }
 
-
 pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings) -> io::Result<()>
-    where
-        W: Write,
-        G: GrammarTypes<ExternalFunction=String, ExternalLexMode=String, ExternalRuleType=String>,
+where
+    W: Write,
+    G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
 {
     let table = match grammar.table().to_ll1() {
         Ok(table) => table,
@@ -24,7 +24,11 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
 
             for conflict in &e.conflicts {
                 match *conflict {
-                    LL1Conflict::FirstFirst { ruleset, rule, terminal } => {
+                    LL1Conflict::FirstFirst {
+                        ruleset,
+                        rule,
+                        terminal,
+                    } => {
                         let resolved_ruleset = &grammar.rulesets()[ruleset];
                         eprintln!(
                             "First/First conflict in ruleset {}.{} rule #{} with terminal {}",
@@ -34,7 +38,11 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
                             grammar.terminals()[terminal],
                         );
                     }
-                    LL1Conflict::FirstFollow { ruleset, rule, terminal } => {
+                    LL1Conflict::FirstFollow {
+                        ruleset,
+                        rule,
+                        terminal,
+                    } => {
                         let resolved_ruleset = &grammar.rulesets()[ruleset];
                         eprintln!(
                             "First/Follow conflict in ruleset {}.{} rule #{} with terminal {}",
@@ -57,7 +65,7 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
             }
 
             panic!("Encountered LL1 errors");
-        },
+        }
     };
 
     writeln!(w, "package {}", settings.package)?;
@@ -66,19 +74,29 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
         writeln!(w, "{}", stmt)?;
     }
 
-    writeln!(w, "{}abstract class {} extends {} {{", settings.access_modifier, settings.class_name, settings.base_class)?;
-    
+    writeln!(
+        w,
+        "{}abstract class {} extends {} {{",
+        settings.access_modifier, settings.class_name, settings.base_class
+    )?;
+
     for ruleset in table.rulesets() {
-        write!(w, "  protected def {}_{}: F[", ruleset.rule_name(), ruleset.rule_offshoot_index())?;
+        write!(
+            w,
+            "  protected def {}_{}: F[",
+            ruleset.rule_name(),
+            ruleset.rule_offshoot_index()
+        )?;
         emit_type(w, &ruleset.rule_type())?;
         writeln!(w, "] =")?;
 
         write!(w, "    ")?;
 
-        let error_rule = ruleset.rules()
-            .find(|r| {
-                r.symbols().next().is_some_and(|sym| matches!(sym.symbol_type, LL1SymbolType::Error))
-            });
+        let error_rule = ruleset.rules().find(|r| {
+            r.symbols()
+                .next()
+                .is_some_and(|sym| matches!(sym.symbol_type, LL1SymbolType::Error))
+        });
 
         if error_rule.is_some() {
             write!(w, "recoverWith[")?;
@@ -100,11 +118,8 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
                 write!(w, "Nothing")?;
             }
 
-
-
             write!(w, "](")?;
         }
-
 
         if let Some(lex_mode) = ruleset.lex_mode() {
             write!(w, "withLexMode({})(", lex_mode)?;
@@ -112,18 +127,20 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
         writeln!(w, "peek.flatMap {{")?;
 
         for rule in ruleset.rules() {
-            if rule.symbols().next().is_some_and(|sym| matches!(sym.symbol_type, LL1SymbolType::Error)) {
+            if rule
+                .symbols()
+                .next()
+                .is_some_and(|sym| matches!(sym.symbol_type, LL1SymbolType::Error))
+            {
                 continue;
             }
-
 
             let mut has_terminal = false;
             for (i, term) in rule.terminals().enumerate() {
                 has_terminal = true;
                 if i == 0 {
                     write!(w, "      case ")?;
-                }
-                else {
+                } else {
                     write!(w, " | ")?;
                 }
 
@@ -139,21 +156,16 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
 
             writeln!(w, " =>")?;
 
-            
-
             let mut i: usize = 0;
             for sym in rule.symbols() {
                 if i == 0 {
                     writeln!(w, "        for")?;
                 }
 
-
-
                 write!(w, "          ")?;
                 if sym.discard {
                     write!(w, "_")?;
-                }
-                else {
+                } else {
                     write!(w, "x{}", i)?;
                 }
                 write!(w, " <- ")?;
@@ -163,17 +175,17 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
                 }
 
                 match sym.symbol_type {
-                    LL1SymbolType::Terminal(t) =>
-                        write!(w, "terminal[{}]", t)?,
+                    LL1SymbolType::Terminal(t) => write!(w, "terminal[{}]", t)?,
 
-                    LL1SymbolType::NonTerminal { name, offshoot_index } =>
-                        write!(w, "{}_{}", name, offshoot_index)?,
+                    LL1SymbolType::NonTerminal {
+                        name,
+                        offshoot_index,
+                    } => write!(w, "{}_{}", name, offshoot_index)?,
 
                     LL1SymbolType::Error => {
                         panic!("Encountered error symbol in LL1 table");
-                    },
+                    }
                 }
-
 
                 if sym.with_location {
                     write!(w, ")")?;
@@ -186,10 +198,8 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
 
             if i == 0 {
                 write!(w, "        pure(")?;
-            }
-            else {
+            } else {
                 write!(w, "        yield (")?;
-
             }
 
             emit_value(w, &mut i, &rule.value())?;
@@ -197,7 +207,6 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
             write!(w, ")")?;
 
             writeln!(w)?;
-
         }
 
         {
@@ -207,8 +216,7 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
                 for term in r.terminals() {
                     if has_prev_terminal {
                         write!(w, " | ")?;
-                    }
-                    else {
+                    } else {
                         write!(w, "[")?;
                         has_prev_terminal = true;
                     }
@@ -216,17 +224,16 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
                     match term {
                         Some(term) => {
                             write!(w, "{}", term)?;
-                        },
+                        }
                         None => {
                             write!(w, "EOFToken")?;
-                        },
+                        }
                     }
                 }
             }
             if has_prev_terminal {
                 write!(w, "]")?;
-            }
-            else {
+            } else {
                 write!(w, "[Nothing]")?;
             }
 
@@ -260,7 +267,7 @@ pub fn emit_scala<W, G>(w: &mut W, grammar: Grammar<G>, settings: &ScalaSettings
 fn emit_type<W, G>(w: &mut W, t: &LL1RuleType<G>) -> io::Result<()>
 where
     W: Write,
-    G: GrammarTypes<ExternalFunction=String, ExternalLexMode=String, ExternalRuleType=String>,
+    G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
 {
     match t {
         LL1RuleType::ExternalType(t) => write!(w, "{}", t)?,
@@ -270,7 +277,7 @@ where
             emit_type(w, a.as_ref())?;
             write!(w, ") => ")?;
             emit_type(w, b.as_ref())?;
-        },
+        }
         LL1RuleType::Tuple(items) => {
             let mut iter = items.into_iter();
             if let Some(first) = iter.next() {
@@ -284,37 +291,32 @@ where
                         emit_type(w, item)?;
                     }
                     write!(w, ")")?;
-                }
-                else {
+                } else {
                     write!(w, "Tuple1[")?;
                     emit_type(w, first)?;
                     write!(w, "]")?;
                 }
-            }
-            else {
+            } else {
                 write!(w, "Unit")?;
             }
-        },
+        }
         LL1RuleType::WithLocation(t) => {
             write!(w, "WithLocation[")?;
             emit_type(w, t.as_ref())?;
             write!(w, "]")?;
-        },
+        }
     }
 
     Ok(())
 }
 
-
 fn emit_value<W, G>(w: &mut W, next_var_index: &mut usize, t: &LL1RuleValue<G>) -> io::Result<()>
 where
     W: Write,
-    G: GrammarTypes<ExternalFunction=String, ExternalLexMode=String, ExternalRuleType=String>,
+    G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
 {
     match t {
-        LL1RuleValue::SymbolValue(i) => {
-            write!(w, "x{}", i)?
-        },
+        LL1RuleValue::SymbolValue(i) => write!(w, "x{}", i)?,
         LL1RuleValue::ExternalFunction(f, args) => {
             write!(w, "{}(", f)?;
             for (i, arg) in args.iter().enumerate() {
@@ -325,7 +327,7 @@ where
                 emit_value(w, next_var_index, arg)?;
             }
             write!(w, ")")?;
-        },
+        }
         LL1RuleValue::MakeTuple(items) => {
             if items.len() == 1 {
                 write!(w, "Tuple1")?;
@@ -340,16 +342,20 @@ where
                 emit_value(w, next_var_index, item)?;
             }
             write!(w, ")")?;
-        },
+        }
         LL1RuleValue::GetTuple(tuple, i) => {
             emit_value(w, next_var_index, tuple)?;
             write!(w, "._{}", i + 1)?;
-        },
+        }
         LL1RuleValue::DropLocation(value) => {
             emit_value(w, next_var_index, value)?;
             write!(w, ".value")?;
-        },
-        LL1RuleValue::BuildLocation { first, second, value } => {
+        }
+        LL1RuleValue::BuildLocation {
+            first,
+            second,
+            value,
+        } => {
             write!(w, "WithLocation(")?;
             emit_value(w, next_var_index, &*value)?;
             write!(w, ", mergeLocations(")?;
@@ -357,16 +363,19 @@ where
             write!(w, ".location, ")?;
             emit_value(w, next_var_index, &*second)?;
             write!(w, ".location))")?;
-        },
-        LL1RuleValue::Lambda { discard_param, param_type, body } => {
+        }
+        LL1RuleValue::Lambda {
+            discard_param,
+            param_type,
+            body,
+        } => {
             let var_index = *next_var_index;
             *next_var_index += 1;
 
             write!(w, "(")?;
             if *discard_param {
                 write!(w, "_")?;
-            }
-            else {
+            } else {
                 write!(w, "x{}", var_index)?;
             }
             write!(w, ": ")?;
@@ -375,15 +384,14 @@ where
             emit_value(w, next_var_index, body.as_ref())?;
 
             *next_var_index -= 1;
-        },
+        }
         LL1RuleValue::Apply(f, a) => {
             emit_value(w, next_var_index, f.as_ref())?;
             write!(w, "(")?;
             emit_value(w, next_var_index, a.as_ref())?;
             write!(w, ")")?;
-        },
+        }
     }
 
     Ok(())
 }
-
