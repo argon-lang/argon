@@ -12,6 +12,10 @@ unicode-general-category = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 
+[dev-dependencies]
+argon-testcases = { path = "../argon-testcases" }
+rstest = { workspace = true }
+
 [build-dependencies]
 parse18-lexer-gen = { workspace = true }
 parse18-ll-gen = { workspace = true }

@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Hello World (let)</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc main(): () do
+            let msg = "Hello World"
+            puts msg
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

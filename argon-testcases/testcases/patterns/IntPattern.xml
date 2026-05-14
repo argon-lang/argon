@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Int pattern</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let i = 77
+            if i is 42 then
+                puts "42"
+            elsif i is 77 then
+                puts "77"
+            else
+                puts "other"
+            end
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>77</ExpectedOutput>
+
+</ArgonTest>

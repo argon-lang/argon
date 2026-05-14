@@ -1,0 +1,34 @@
+<ArgonTest>
+
+    <Name>Finally for block on Error</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+
+        instance MyError: Exception
+            public override def _.message: String = "My custom error message"
+        end
+        
+        proc add(a: Int, b: Int): Int do
+            begin
+                raise MyError
+            finally
+                puts "Hello"
+            end
+        end
+        
+        proc main(): () do
+            puts (add(1, 1).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedExecutionError>My custom error message</ExpectedExecutionError>
+    <ExpectedExecutionError>Hello</ExpectedExecutionError>
+
+</ArgonTest>

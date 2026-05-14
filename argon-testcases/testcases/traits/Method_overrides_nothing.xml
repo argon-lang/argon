@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Method overrides nothing</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait MyTrait
+            public virtual proc _.say_hello(): () =
+                puts "Hello World"
+        end
+
+        instance MyInst: MyTrait
+            public override proc _.say_hello2(): () =
+                puts "Hello World2"
+        end
+        
+        proc main(): () do
+            let o = MyInst
+
+            o.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>AR0014</ExpectedError>
+
+</ArgonTest>

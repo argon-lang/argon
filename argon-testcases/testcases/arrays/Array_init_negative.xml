@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Array init negative</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let arr = Array.newFilled (-4) 77
+            puts (arr.length.to_s())
+            let mut i = 0
+            while i < arr.length do
+                puts (arr(i).to_s())
+                i := i + 1
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedExecutionError>Negative array size</ExpectedExecutionError>
+
+</ArgonTest>

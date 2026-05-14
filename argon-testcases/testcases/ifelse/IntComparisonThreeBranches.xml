@@ -1,0 +1,36 @@
+<ArgonTest>
+
+    <Name>Int comparison (three branches)</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        def zero: Int = 0
+
+        proc main(): () do
+            let a = zero
+            if a = 0 then
+                assert a == 0
+                puts "Zero is 0"
+            elsif a < 0 then
+                assert (a < 0) == true
+                puts "Zero is negative"
+            else
+                assert (a == 0) -> Never
+                assert ((a > 0) == true)
+
+                puts "Zero is positive"
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Zero is 0
+    </ExpectedOutput>
+
+</ArgonTest>

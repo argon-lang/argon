@@ -2,7 +2,6 @@ use crate::Location;
 use num_bigint::BigInt;
 use parse18_runtime::WithLocation;
 
-
 #[derive(Debug, Clone)]
 pub struct NonEmptyVec<T> {
     pub head: T,
@@ -401,9 +400,7 @@ pub struct StringLiteral {
 #[derive(Debug, Clone)]
 pub enum StringFragment {
     Text(String),
-    Interpolate {
-        value: WithLocation<Expr>,
-    },
+    Interpolate { value: WithLocation<Expr> },
 }
 
 pub trait Operator {

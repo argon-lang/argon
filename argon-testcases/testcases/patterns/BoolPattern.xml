@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Bool pattern</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let b = true
+            if b is false then
+                puts "false"
+            elsif b is true then
+                puts "true"
+            else
+                puts "other"
+            end
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>true</ExpectedOutput>
+
+</ArgonTest>

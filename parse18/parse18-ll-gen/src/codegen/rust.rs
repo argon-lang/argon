@@ -88,11 +88,7 @@ where
     }
 
     emit_indent(w, base_indent)?;
-    writeln!(
-        w,
-        "{} {{",
-        settings.impl_group
-    )?;
+    writeln!(w, "{} {{", settings.impl_group)?;
 
     for ruleset in table.rulesets() {
         emit_ruleset(w, base_indent + 1, &ruleset, settings)?;
@@ -125,9 +121,7 @@ where
     write!(
         w,
         "{} fn {}(&mut self) -> {}<",
-        settings.visibility,
-        rule_name,
-        settings.result_type
+        settings.visibility, rule_name, settings.result_type
     )?;
     emit_type(w, &ruleset.rule_type(), settings)?;
     writeln!(w, "> {{")?;
@@ -304,15 +298,7 @@ where
     }
 
     emit_rule_body_chain(
-        w,
-        indent,
-        receiver,
-        rule_type,
-        value,
-        &symbols,
-        settings,
-        rule_name,
-        0,
+        w, indent, receiver, rule_type, value, &symbols, settings, rule_name, 0,
     )?;
 
     writeln!(w)?;
@@ -617,10 +603,7 @@ fn emit_indent<W: Write>(w: &mut W, indent: usize) -> io::Result<()> {
     Ok(())
 }
 
-fn emit_terminal_or_eof_category_expr<W, G>(
-    w: &mut W,
-    term: Option<&G::Terminal>,
-) -> io::Result<()>
+fn emit_terminal_or_eof_category_expr<W, G>(w: &mut W, term: Option<&G::Terminal>) -> io::Result<()>
 where
     W: Write,
     G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,

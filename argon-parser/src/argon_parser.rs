@@ -1,12 +1,17 @@
-use std::path::PathBuf;
-use num_bigint::BigInt;
-use argon_util::ErrorReporter;
-use parse18_runtime::{FilePosition, FilePositionRange, ParseResult, ParserRuntime, WithLocation, WithRange};
-use crate::{ast, ParseError, ParserError};
 use crate::Location;
 use crate::ast::*;
 use crate::lexer::{LexedToken, LexerMode, TokenReader};
-use crate::token::{BinaryOperator as TokenBinaryOperator, Token, TokenCategory, UnaryOperator as TokenUnaryOperator};
+use crate::token::{
+    BinaryOperator as TokenBinaryOperator, Token, TokenCategory,
+    UnaryOperator as TokenUnaryOperator,
+};
+use crate::{ParseError, ParserError, ast};
+use argon_util::ErrorReporter;
+use num_bigint::BigInt;
+use parse18_runtime::{
+    FilePosition, FilePositionRange, ParseResult, ParserRuntime, WithLocation, WithRange,
+};
+use std::path::PathBuf;
 
 fn merge_locations(first: Location, second: Location) -> Location {
     Location {
@@ -189,8 +194,7 @@ fn simplify_fragments(fragments: Vec<StringFragment>) -> StringLiteral {
 
                 if let Some(StringFragment::Text(prev)) = parts.last_mut() {
                     prev.push_str(&text);
-                }
-                else {
+                } else {
                     parts.push(StringFragment::Text(text));
                 }
             }
@@ -266,7 +270,11 @@ fn expr_while_no_body(
     cond: WithLocation<Vec<WithLocation<Stmt>>>,
     end_keyword: WithLocation<Token>,
 ) -> Expr {
-    expr_while(label, cond, WithLocation::new(Vec::new(), end_keyword.location))
+    expr_while(
+        label,
+        cond,
+        WithLocation::new(Vec::new(), end_keyword.location),
+    )
 }
 
 fn string_fragment_text_token(token: Token) -> StringFragment {
@@ -323,7 +331,9 @@ fn variable_declaration_rest_builder(
     value: WithLocation<Expr>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
     let (is_mutable, id, type_annotation) = binding;
-    Box::new(move |modifiers| variable_declaration_stmt(modifiers, is_mutable, id, type_annotation, value))
+    Box::new(move |modifiers| {
+        variable_declaration_stmt(modifiers, is_mutable, id, type_annotation, value)
+    })
 }
 
 fn method_declaration_stmt_rest_from_named_instance(
@@ -389,7 +399,9 @@ fn record_declaration_stmt_rest_builder(
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<RecordBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordDeclarationStmt> {
-    Box::new(move |modifiers| record_declaration_stmt(modifiers, name, parameters, type_annotation, body))
+    Box::new(move |modifiers| {
+        record_declaration_stmt(modifiers, name, parameters, type_annotation, body)
+    })
 }
 
 fn record_body_stmt_record_field(field: RecordField) -> RecordBodyStmt {
@@ -402,7 +414,9 @@ fn enum_declaration_stmt_rest_builder(
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<EnumBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
-    Box::new(move |modifiers| enum_declaration_stmt(modifiers, name, parameters, type_annotation, body))
+    Box::new(move |modifiers| {
+        enum_declaration_stmt(modifiers, name, parameters, type_annotation, body)
+    })
 }
 
 fn enum_body_stmt_from_variant_builder(
@@ -432,7 +446,9 @@ fn enum_constructor_variant_builder(
     parameters: Vec<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> EnumBodyStmt> {
-    Box::new(move |modifiers| enum_variant_constructor(modifiers, name, parameters, type_annotation))
+    Box::new(move |modifiers| {
+        enum_variant_constructor(modifiers, name, parameters, type_annotation)
+    })
 }
 
 fn trait_declaration_stmt_rest_builder(
@@ -441,7 +457,9 @@ fn trait_declaration_stmt_rest_builder(
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
-    Box::new(move |modifiers| trait_declaration_stmt(modifiers, name, parameters, type_annotation, body))
+    Box::new(move |modifiers| {
+        trait_declaration_stmt(modifiers, name, parameters, type_annotation, body)
+    })
 }
 
 fn instance_declaration_stmt_rest_builder(
@@ -450,7 +468,9 @@ fn instance_declaration_stmt_rest_builder(
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
-    Box::new(move |modifiers| instance_declaration_stmt(modifiers, name, parameters, type_annotation, body))
+    Box::new(move |modifiers| {
+        instance_declaration_stmt(modifiers, name, parameters, type_annotation, body)
+    })
 }
 
 fn tube_name_single(token: Token) -> NonEmptyVec<String> {
@@ -472,7 +492,10 @@ fn import_path_segment_renaming_token(
     import_path_segment_renaming(id.map(identifier_expr_named_token), viewed_name)
 }
 
-fn import_path_segment_cons_token(id: WithLocation<Token>, path: ImportPathSegment) -> ImportPathSegment {
+fn import_path_segment_cons_token(
+    id: WithLocation<Token>,
+    path: ImportPathSegment,
+) -> ImportPathSegment {
     import_path_segment_cons(token_identifier_name(id.value), path)
 }
 
@@ -819,14 +842,20 @@ fn pattern_path_base(name: WithLocation<IdentifierExpr>) -> PatternPath {
     PatternPath::Base { name }
 }
 
-fn pattern_path_member(base: WithLocation<PatternPath>, member: WithLocation<IdentifierExpr>) -> PatternPath {
+fn pattern_path_member(
+    base: WithLocation<PatternPath>,
+    member: WithLocation<IdentifierExpr>,
+) -> PatternPath {
     PatternPath::Member {
         base: Box::new(base),
         member,
     }
 }
 
-fn pattern_argument(function_parameter_list_type: FunctionParameterListType, arg: WithLocation<Pattern>) -> PatternArgument {
+fn pattern_argument(
+    function_parameter_list_type: FunctionParameterListType,
+    arg: WithLocation<Pattern>,
+) -> PatternArgument {
     PatternArgument {
         function_parameter_list_type,
         arg,
@@ -1011,7 +1040,10 @@ fn enum_variant_record(record: RecordDeclarationStmt) -> EnumBodyStmt {
     EnumBodyStmt::EnumVariant(EnumVariant::Record(record))
 }
 
-fn record_field_literal(name: WithLocation<IdentifierExpr>, value: WithLocation<Expr>) -> RecordFieldLiteral {
+fn record_field_literal(
+    name: WithLocation<IdentifierExpr>,
+    value: WithLocation<Expr>,
+) -> RecordFieldLiteral {
     ast::RecordFieldLiteral { name, value }
 }
 
@@ -1019,7 +1051,10 @@ fn match_case(pattern: WithLocation<Pattern>, body: WithLocation<Expr>) -> Match
     ast::MatchCase { pattern, body }
 }
 
-fn module_declaration(module_path: Vec<String>, stmts: Vec<WithLocation<Stmt>>) -> ModuleDeclaration {
+fn module_declaration(
+    module_path: Vec<String>,
+    stmts: Vec<WithLocation<Stmt>>,
+) -> ModuleDeclaration {
     ast::ModuleDeclaration { module_path, stmts }
 }
 
@@ -1039,7 +1074,10 @@ fn import_stmt_tube(tube_name: NonEmptyVec<String>, path: ImportPathSegment) -> 
     ImportStmt::Tube { tube_name, path }
 }
 
-fn import_path_segment_cons(id: impl Into<String>, sub_path: ImportPathSegment) -> ImportPathSegment {
+fn import_path_segment_cons(
+    id: impl Into<String>,
+    sub_path: ImportPathSegment,
+) -> ImportPathSegment {
     ImportPathSegment::Cons {
         id: id.into(),
         sub_path: Box::new(sub_path),
@@ -1088,10 +1126,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ArgonParser<'a, L, ER> {
             lex_mode: LexerMode::Normal,
             lexer,
             error_reporter,
-            last_token_end_position: FilePosition {
-                line: 1,
-                column: 1,
-            },
+            last_token_end_position: FilePosition { line: 1, column: 1 },
             peek_token: None,
         }
     }
@@ -1105,40 +1140,37 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
     fn peek(&mut self) -> ParseResult<Self::Token> {
         if let Some(token) = &self.peek_token {
             ParseResult::Success(token.clone())
-        }
-        else {
+        } else {
             match self.lexer.next_token(self.lex_mode) {
                 LexedToken::Token(token) => {
                     self.peek_token = Some(token.clone());
                     ParseResult::Success(token)
                 }
-                LexedToken::EndOfFile(pos) => {
-                    ParseResult::Success(WithRange {
-                        value: Token::EndOfFile,
-                        range: FilePositionRange {
-                            start: pos,
-                            end: pos,
-                        },
-                    })
-                }
+                LexedToken::EndOfFile(pos) => ParseResult::Success(WithRange {
+                    value: Token::EndOfFile,
+                    range: FilePositionRange {
+                        start: pos,
+                        end: pos,
+                    },
+                }),
             }
         }
     }
 
     fn parser_next(&mut self) -> ParseResult<Self::Token> {
-        if let Some(token) = &self.peek_token && token.value == Token::EndOfFile {
+        if let Some(token) = &self.peek_token
+            && token.value == Token::EndOfFile
+        {
             ParseResult::Success(token.clone())
-        }
-        else if let Some(token) = self.peek_token.take() {
+        } else if let Some(token) = self.peek_token.take() {
             self.last_token_end_position = token.range.end;
             ParseResult::Success(token)
-        }
-        else {
+        } else {
             let token = match self.lexer.next_token(self.lex_mode) {
                 LexedToken::Token(token) => {
                     self.last_token_end_position = token.range.end;
                     token
-                },
+                }
                 LexedToken::EndOfFile(pos) => {
                     self.last_token_end_position = pos;
 
@@ -1153,7 +1185,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
                     self.peek_token = Some(token.clone());
 
                     token
-                },
+                }
             };
 
             ParseResult::Success(token)
@@ -1162,18 +1194,23 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
 
     fn error<T>(&mut self, rule_name: &str, categories: &[Self::TokenCategory]) -> ParseResult<T> {
         if let ParseResult::Success(token) = self.peek() {
-            self.error_reporter.report_error(ParseError::ParserError(ParserError {
-                location: Location::from_range(self.file_name.clone(), token.range),
-                found_token: format!("{:?}", token.value),
-                rule_name: rule_name.to_owned(),
-                expected_categories: categories.to_vec(),
-            }));
+            self.error_reporter
+                .report_error(ParseError::ParserError(ParserError {
+                    location: Location::from_range(self.file_name.clone(), token.range),
+                    found_token: format!("{:?}", token.value),
+                    rule_name: rule_name.to_owned(),
+                    expected_categories: categories.to_vec(),
+                }));
         }
 
         ParseResult::Failure
     }
 
-    fn with_lex_mode<T>(&mut self, lex_mode: Self::LexMode, f: impl FnOnce(&mut Self) -> ParseResult<T>) -> ParseResult<T> {
+    fn with_lex_mode<T>(
+        &mut self,
+        lex_mode: Self::LexMode,
+        f: impl FnOnce(&mut Self) -> ParseResult<T>,
+    ) -> ParseResult<T> {
         let old_lex_mode = self.lex_mode;
         self.lex_mode = lex_mode;
         let res = f(self);
@@ -1181,7 +1218,11 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
         res
     }
 
-    fn recover_with<T>(&mut self, parse_res: ParseResult<T>, fallback: impl FnOnce() -> T) -> ParseResult<T> {
+    fn recover_with<T>(
+        &mut self,
+        parse_res: ParseResult<T>,
+        fallback: impl FnOnce() -> T,
+    ) -> ParseResult<T> {
         match parse_res {
             ParseResult::Success(_) => parse_res,
             ParseResult::Failure => {
@@ -1190,7 +1231,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
                     end: self.last_token_end_position,
                 };
                 ParseResult::Success(WithRange::new(fallback(), range))
-            },
+            }
         }
     }
 
@@ -1199,7 +1240,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
             ParseResult::Success(value) => {
                 let location = Location::from_range(self.file_name.clone(), value.range);
                 ParseResult::Success(value.map(move |value| WithLocation::new(value, location)))
-            },
+            }
             ParseResult::Failure => ParseResult::Failure,
         }
     }

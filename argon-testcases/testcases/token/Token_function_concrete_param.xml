@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Token function with concrete parameter (error)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        inline token def doSomething[A: type]: String = "x"
+
+        proc main(): () do
+            let x = doSomething[Int]
+            puts x
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>AR0011</ExpectedError>
+
+</ArgonTest>

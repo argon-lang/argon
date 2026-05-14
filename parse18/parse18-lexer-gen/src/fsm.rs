@@ -4,15 +4,18 @@ use unicode_general_category::GeneralCategory;
 
 use crate::regex::{CharClass, CharClassSet, Regex, UnicodePropertySet};
 
-
 pub struct DFA<A> {
-    pub states: Vec<DFAState<A>>
+    pub states: Vec<DFAState<A>>,
 }
 
-impl <A> DFA<A> {
+impl<A> DFA<A> {
     pub fn map<B>(self, mut f: impl FnMut(A) -> B) -> DFA<B> {
         DFA {
-            states: self.states.into_iter().map(move |state| state.map(&mut f)).collect()
+            states: self
+                .states
+                .into_iter()
+                .map(move |state| state.map(&mut f))
+                .collect(),
         }
     }
 }
@@ -35,7 +38,7 @@ pub enum DFATransition {
     IfProperty(UnicodePropertySet, Box<DFATransition>, Box<DFATransition>),
 }
 
-impl <A> DFAState<A> {
+impl<A> DFAState<A> {
     pub fn map<B>(self, f: impl FnMut(A) -> B) -> DFAState<B> {
         DFAState {
             acceptance: self.acceptance.map(f),
@@ -47,15 +50,20 @@ impl <A> DFAState<A> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NFA<A> {
-    pub states: Vec<NFAState<A>>
+    pub states: Vec<NFAState<A>>,
 }
 
-impl <A> NFA<A> {
+impl<A> NFA<A> {
     fn validate_states(&self) {
         for state in &self.states {
             for t in &state.transitions {
                 for &target in &t.target {
-                    assert!(target < self.states.len(), "invalid state {}, # states = {}", target, self.states.len());
+                    assert!(
+                        target < self.states.len(),
+                        "invalid state {}, # states = {}",
+                        target,
+                        self.states.len()
+                    );
                 }
             }
         }
@@ -97,13 +105,10 @@ impl FSMTransitionConditionLiteral {
     }
 }
 
-
 pub fn nfa_to_dfa<A: NFAAcceptancePriority + Clone>(nfa: NFA<A>) -> DFA<A> {
     let mut converter = NFAConverter {
         nfa,
-        dfa: DFA {
-            states: Vec::new(),
-        },
+        dfa: DFA { states: Vec::new() },
         dfa_states: Vec::new(),
         state_mapping: HashMap::new(),
 
@@ -115,20 +120,14 @@ pub fn nfa_to_dfa<A: NFAAcceptancePriority + Clone>(nfa: NFA<A>) -> DFA<A> {
     converter.dfa
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct NFAStateSet {
     states: BTreeSet<usize>,
 }
 
-
 pub trait NFAAcceptancePriority {
     fn compare_priority(&self, rhs: &Self) -> std::cmp::Ordering;
 }
-
-
-
-
 
 struct NFAConverter<A> {
     nfa: NFA<A>,
@@ -140,11 +139,13 @@ struct NFAConverter<A> {
     unicode_prop_categories: HashMap<UnicodePropertySet, HashSet<GeneralCategory>>,
 }
 
-impl <A: NFAAcceptancePriority + Clone> NFAConverter<A> {
+impl<A: NFAAcceptancePriority + Clone> NFAConverter<A> {
     fn build(&mut self) {
         // Force the initial state to be added to dfa_states.
-        self.get_dfa_state(NFAStateSet { states: BTreeSet::from([ 0 ]) });
-        
+        self.get_dfa_state(NFAStateSet {
+            states: BTreeSet::from([0]),
+        });
+
         while self.dfa.states.len() < self.dfa_states.len() {
             let state = self.build_dfa_state(&self.dfa_states[self.dfa.states.len()].clone());
             self.dfa.states.push(state);
@@ -152,7 +153,9 @@ impl <A: NFAAcceptancePriority + Clone> NFAConverter<A> {
     }
 
     fn get_dfa_state(&mut self, nfa_states: NFAStateSet) -> usize {
-        *self.state_mapping.entry(nfa_states)
+        *self
+            .state_mapping
+            .entry(nfa_states)
             .or_insert_with_key(|nfa_states| {
                 let index = self.dfa_states.len();
                 self.dfa_states.push(nfa_states.clone());
@@ -195,7 +198,7 @@ struct DFAStateBuilder<'a, A> {
     atoms: HashSet<CharClass>,
 }
 
-impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
+impl<'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
     fn new(nfa_converter: &'a mut NFAConverter<A>) -> Self {
         DFAStateBuilder {
             nfa_converter,
@@ -226,14 +229,22 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
         let mut ranges = BTreeSet::new();
         let mut unicode_categories = HashSet::new();
         let mut unicode_property_groups = BTreeSet::new();
-        
+
         for atom in self.atoms.iter().copied() {
             match atom {
-                CharClass::Any => {},
-                CharClass::Char(c) => { ranges.insert((c, c)); },
-                CharClass::Range(a, b) => { ranges.insert((a, b)); },
-                CharClass::Category(cat) => { unicode_categories.insert(cat); },
-                CharClass::Property(prop) => { unicode_property_groups.insert(prop); },
+                CharClass::Any => {}
+                CharClass::Char(c) => {
+                    ranges.insert((c, c));
+                }
+                CharClass::Range(a, b) => {
+                    ranges.insert((a, b));
+                }
+                CharClass::Category(cat) => {
+                    unicode_categories.insert(cat);
+                }
+                CharClass::Property(prop) => {
+                    unicode_property_groups.insert(prop);
+                }
             }
         }
 
@@ -241,22 +252,19 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
         let mut prev_char = None;
         for (start, end) in ranges {
             let range = if let Some(pc) = &mut prev_char {
-                    if start <= *pc && *pc <= end {
-                        if let Some(next_char) = char::from_u32(start as u32 + 1) {
-                            next_char..=end
-                        }
-                        else {
-                            // Next value is not a valid character so we have to include the last value and then skip it.
-                            let mut range = *pc..=end;
-                            range.next();
-                            range
-                        }
+                if start <= *pc && *pc <= end {
+                    if let Some(next_char) = char::from_u32(start as u32 + 1) {
+                        next_char..=end
+                    } else {
+                        // Next value is not a valid character so we have to include the last value and then skip it.
+                        let mut range = *pc..=end;
+                        range.next();
+                        range
                     }
-                    else {
-                        start..=end
-                    }
-            }
-            else {
+                } else {
+                    start..=end
+                }
+            } else {
                 start..=end
             };
 
@@ -268,7 +276,6 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
         }
         range_builder.finalize();
         let range_mapping = range_builder.range_mapping;
-
 
         let unicode_property_groups = unicode_property_groups.into_iter().collect::<Vec<_>>();
 
@@ -290,24 +297,23 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
                 }
             }
 
-            cat_trans.push((vec![ cat ], prop_trans));
+            cat_trans.push((vec![cat], prop_trans));
         }
 
-        
-        let mut trans =
-            if cat_trans.is_empty() {
-                no_cat_trans
+        let mut trans = if cat_trans.is_empty() {
+            no_cat_trans
+        } else {
+            DFATransition::ForCategory {
+                categories: cat_trans,
+                fallback: Box::new(no_cat_trans),
             }
-            else {
-                DFATransition::ForCategory { categories: cat_trans, fallback: Box::new(no_cat_trans) }
-            };
+        };
 
         for (start, end, target) in range_mapping.into_iter().rev() {
             let range_trans = Box::new(DFATransition::Always(target));
             trans = if start == end {
                 DFATransition::IfCharacter(start, range_trans, Box::new(trans))
-            }
-            else {
+            } else {
                 DFATransition::IfCharacterRange(start, end, range_trans, Box::new(trans))
             };
         }
@@ -315,18 +321,26 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
         trans
     }
 
-    fn scan_properties(&mut self, cat: Option<GeneralCategory>, props: &[UnicodePropertySet]) -> DFATransition {
+    fn scan_properties(
+        &mut self,
+        cat: Option<GeneralCategory>,
+        props: &[UnicodePropertySet],
+    ) -> DFATransition {
         self.scan_properties_rec(cat, &mut BTreeSet::new(), props)
     }
 
-    fn scan_properties_rec(&mut self, cat: Option<GeneralCategory>, selected_props: &mut BTreeSet<UnicodePropertySet>, props: &[UnicodePropertySet]) -> DFATransition {
+    fn scan_properties_rec(
+        &mut self,
+        cat: Option<GeneralCategory>,
+        selected_props: &mut BTreeSet<UnicodePropertySet>,
+        props: &[UnicodePropertySet],
+    ) -> DFATransition {
         if props.is_empty() {
             let targets = self.find_prop_target(cat, &selected_props);
             let target = self.nfa_converter.get_dfa_state(targets);
-            
+
             DFATransition::Always(target)
-        }
-        else {
+        } else {
             let prop = props[0];
 
             let without_res = self.scan_properties_rec(cat, selected_props, &props[1..]);
@@ -335,40 +349,45 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
 
             let result = if self.is_absurd_or_obvious_property_set(cat, selected_props) {
                 without_res
-            }
-            else {
+            } else {
                 let with_res = self.scan_properties_rec(cat, selected_props, &props[1..]);
 
                 if without_res == with_res {
                     without_res
-                }
-                else {
+                } else {
                     DFATransition::IfProperty(prop, Box::new(with_res), Box::new(without_res))
                 }
             };
 
             selected_props.remove(&prop);
-            
+
             result
         }
     }
 
-    fn is_absurd_or_obvious_property_set(&mut self, cat: Option<GeneralCategory>, selected_props: &BTreeSet<UnicodePropertySet>) -> bool {
+    fn is_absurd_or_obvious_property_set(
+        &mut self,
+        cat: Option<GeneralCategory>,
+        selected_props: &BTreeSet<UnicodePropertySet>,
+    ) -> bool {
         if let Some(cat) = cat {
-            if selected_props.iter().copied().any(|prop|
-                !self.nfa_converter.get_prop_categories(prop).contains(&cat)
-            ) {
+            if selected_props
+                .iter()
+                .copied()
+                .any(|prop| !self.nfa_converter.get_prop_categories(prop).contains(&cat))
+            {
                 return true;
             }
         }
 
         // This works because the only supported properties define sets
         // that only have overlaps when one is a subset of the other.
-        !selected_props.iter().copied().all(|p1|
-            selected_props.iter().copied().all(|p2|
-                p1.implies(p2) || p2.implies(p1)
-            )
-        )
+        !selected_props.iter().copied().all(|p1| {
+            selected_props
+                .iter()
+                .copied()
+                .all(|p2| p1.implies(p2) || p2.implies(p1))
+        })
     }
 
     fn find_char_target(&mut self, c: char) -> NFAStateSet {
@@ -379,12 +398,14 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
             }
         }
 
-        NFAStateSet {
-            states
-        }
+        NFAStateSet { states }
     }
 
-    fn find_prop_target(&mut self, cat: Option<GeneralCategory>, props: &BTreeSet<UnicodePropertySet>) -> NFAStateSet {
+    fn find_prop_target(
+        &mut self,
+        cat: Option<GeneralCategory>,
+        props: &BTreeSet<UnicodePropertySet>,
+    ) -> NFAStateSet {
         let mut states = BTreeSet::new();
         for t in &self.nfa_transitions {
             if self.evaluate_prop_conjunct(cat, props, &t.conditions) {
@@ -392,19 +413,26 @@ impl <'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
             }
         }
 
-        NFAStateSet {
-            states
-        }
+        NFAStateSet { states }
     }
 
-    fn evaluate_prop_conjunct(&self, cat: Option<GeneralCategory>, props: &BTreeSet<UnicodePropertySet>, conj: &FSMTransitionConditionConjunct) -> bool {
-        conj.conditions.iter()
-            .all(|lit|
-                self.evaluate_prop_atom(cat, props, lit.condition_type) != lit.negation
-            )
+    fn evaluate_prop_conjunct(
+        &self,
+        cat: Option<GeneralCategory>,
+        props: &BTreeSet<UnicodePropertySet>,
+        conj: &FSMTransitionConditionConjunct,
+    ) -> bool {
+        conj.conditions
+            .iter()
+            .all(|lit| self.evaluate_prop_atom(cat, props, lit.condition_type) != lit.negation)
     }
 
-    fn evaluate_prop_atom(&self, cat: Option<GeneralCategory>, props: &BTreeSet<UnicodePropertySet>, cc: CharClass) -> bool {
+    fn evaluate_prop_atom(
+        &self,
+        cat: Option<GeneralCategory>,
+        props: &BTreeSet<UnicodePropertySet>,
+        cc: CharClass,
+    ) -> bool {
         match cc {
             CharClass::Any => true,
             CharClass::Char(_) => false,
@@ -423,7 +451,7 @@ struct RangeClassBuilder<'a, 'b, A> {
     range_mapping: Vec<(char, char, usize)>,
 }
 
-impl <'a, 'b, A: NFAAcceptancePriority + Clone> RangeClassBuilder<'a, 'b, A> {
+impl<'a, 'b, A: NFAAcceptancePriority + Clone> RangeClassBuilder<'a, 'b, A> {
     fn new(builder: &'b mut DFAStateBuilder<'a, A>) -> Self {
         Self {
             builder,
@@ -435,7 +463,8 @@ impl <'a, 'b, A: NFAAcceptancePriority + Clone> RangeClassBuilder<'a, 'b, A> {
     fn emit_range(&mut self) {
         if let Some((prev_range_start, prev_char, prev_target)) = self.prev.take() {
             let target = self.builder.nfa_converter.get_dfa_state(prev_target);
-            self.range_mapping.push((prev_range_start, prev_char, target));
+            self.range_mapping
+                .push((prev_range_start, prev_char, target));
         }
     }
 
@@ -444,13 +473,11 @@ impl <'a, 'b, A: NFAAcceptancePriority + Clone> RangeClassBuilder<'a, 'b, A> {
         if let Some((_, prev_char, prev_target)) = &mut self.prev {
             if (*prev_char as u32) + 1 == (c as u32) && *prev_target == new_target {
                 *prev_char = c;
-            }
-            else {
+            } else {
                 self.emit_range();
                 self.prev = Some((c, c, new_target));
             }
-        }
-        else {
+        } else {
             self.prev = Some((c, c, new_target));
         }
     }
@@ -460,22 +487,19 @@ impl <'a, 'b, A: NFAAcceptancePriority + Clone> RangeClassBuilder<'a, 'b, A> {
     }
 }
 
-
-
 fn merge_acceptance<A: NFAAcceptancePriority>(a: &mut Option<A>, b: Option<A>) {
     match (a.as_mut(), b) {
-        (Some(a), Some(b)) if a.compare_priority(&b) == std::cmp::Ordering::Less =>
-            *a = b,
+        (Some(a), Some(b)) if a.compare_priority(&b) == std::cmp::Ordering::Less => *a = b,
 
-        (None, Some(b)) =>
-            *a = Some(b),
+        (None, Some(b)) => *a = Some(b),
 
-        _ => {},
+        _ => {}
     }
 }
 
-
-pub fn nfa_from_regex_mapping<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(alts: Vec<(Regex, A)>) -> NFA<A> {
+pub fn nfa_from_regex_mapping<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(
+    alts: Vec<(Regex, A)>,
+) -> NFA<A> {
     alts.into_iter()
         .map(|(r, value)| nfa_from_regex(r, value))
         .reduce(|mut a, b| {
@@ -485,54 +509,48 @@ pub fn nfa_from_regex_mapping<A: NFAAcceptancePriority + Clone + std::fmt::Debug
         .unwrap_or_else(reject_all_nfa)
 }
 
-fn nfa_from_regex<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(r: Regex, value: A) -> NFA<A> {
+fn nfa_from_regex<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(
+    r: Regex,
+    value: A,
+) -> NFA<A> {
     match r {
-        Regex::Empty => {
-            NFA {
-                states: vec![
-                    NFAState {
-                        acceptance: Some(value),
-                        transitions: vec![],
-                    },
-                ],
-            }
+        Regex::Empty => NFA {
+            states: vec![NFAState {
+                acceptance: Some(value),
+                transitions: vec![],
+            }],
         },
 
-        Regex::CharClassSet(char_class_set) => {
-            NFA {
-                states: vec![
-                    NFAState {
-                        acceptance: None,
-                        transitions: nfa_conditions_from_regex(char_class_set, vec![ 1 ]),
-                    },
-                    NFAState {
-                        acceptance: Some(value),
-                        transitions: vec![],
-                    },
-                ],
-            }
+        Regex::CharClassSet(char_class_set) => NFA {
+            states: vec![
+                NFAState {
+                    acceptance: None,
+                    transitions: nfa_conditions_from_regex(char_class_set, vec![1]),
+                },
+                NFAState {
+                    acceptance: Some(value),
+                    transitions: vec![],
+                },
+            ],
         },
 
-        Regex::Alternative(alts) => {
-            alts.into_iter()
-                .map(|r| nfa_from_regex(r, value.clone()))
-                .reduce(|mut a, b| {
-                    nfa_union(&mut a, b);
-                    a
-                })
-                .unwrap_or_else(reject_all_nfa)
-        },
+        Regex::Alternative(alts) => alts
+            .into_iter()
+            .map(|r| nfa_from_regex(r, value.clone()))
+            .reduce(|mut a, b| {
+                nfa_union(&mut a, b);
+                a
+            })
+            .unwrap_or_else(reject_all_nfa),
 
-        Regex::Concat(parts) => {
-            parts.into_iter()
-                .map(|r| nfa_from_regex(r, value.clone()))
-                .reduce(|mut a, b| {
-                    nfa_concat(&mut a, b);
-                    a
-                })
-                .unwrap_or_else(|| nfa_from_regex(Regex::Empty, value))
-        },
-
+        Regex::Concat(parts) => parts
+            .into_iter()
+            .map(|r| nfa_from_regex(r, value.clone()))
+            .reduce(|mut a, b| {
+                nfa_concat(&mut a, b);
+                a
+            })
+            .unwrap_or_else(|| nfa_from_regex(Regex::Empty, value)),
 
         Regex::Repeat(item_regex) => {
             let mut nfa = nfa_from_regex(*item_regex, value.clone());
@@ -546,22 +564,22 @@ fn nfa_from_regex<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(r: Regex, 
                     continue;
                 }
 
-                state.transitions.extend_from_slice(&start_state_transitions);
+                state
+                    .transitions
+                    .extend_from_slice(&start_state_transitions);
             }
 
             nfa
-        },
+        }
     }
 }
 
 fn reject_all_nfa<A>() -> NFA<A> {
     NFA {
-        states: vec![
-            NFAState {
-                acceptance: None,
-                transitions: vec![],
-            },
-        ],
+        states: vec![NFAState {
+            acceptance: None,
+            transitions: vec![],
+        }],
     }
 }
 
@@ -592,8 +610,7 @@ fn nfa_union<A: NFAAcceptancePriority + std::fmt::Debug>(a: &mut NFA<A>, b: NFA<
             adjust_states(&mut b_state, adjust);
             merge_acceptance(&mut start_state.acceptance, b_state.acceptance);
             start_state.transitions.extend(b_state.transitions);
-        }
-        else {
+        } else {
             add_state(a, b_state, adjust);
         }
     }
@@ -601,30 +618,27 @@ fn nfa_union<A: NFAAcceptancePriority + std::fmt::Debug>(a: &mut NFA<A>, b: NFA<
     a.validate_states();
 }
 
-fn regex_cond_to_dnf(char_class_set: CharClassSet, negation: bool) -> Vec<Vec<FSMTransitionConditionLiteral>> {
+fn regex_cond_to_dnf(
+    char_class_set: CharClassSet,
+    negation: bool,
+) -> Vec<Vec<FSMTransitionConditionLiteral>> {
     match char_class_set {
-        CharClassSet::Empty =>
+        CharClassSet::Empty => {
             if negation {
-                vec![ vec![] ]
-            }
-            else {
+                vec![vec![]]
+            } else {
                 vec![]
-            },
+            }
+        }
 
         CharClassSet::Class(char_class) => {
-            vec![
-                vec![
-                    FSMTransitionConditionLiteral {
-                        condition_type: char_class,
-                        negation,
-                    },
-                ],
-            ]
-        },
-        
-        CharClassSet::Not(char_class_set) => {
-            regex_cond_to_dnf(*char_class_set, !negation)
-        },
+            vec![vec![FSMTransitionConditionLiteral {
+                condition_type: char_class,
+                negation,
+            }]]
+        }
+
+        CharClassSet::Not(char_class_set) => regex_cond_to_dnf(*char_class_set, !negation),
 
         CharClassSet::Union(a, b) => {
             let a = *a;
@@ -635,15 +649,14 @@ fn regex_cond_to_dnf(char_class_set: CharClassSet, negation: bool) -> Vec<Vec<FS
                         Box::new(CharClassSet::Not(Box::new(a))),
                         Box::new(CharClassSet::Not(Box::new(b))),
                     ),
-                    false
+                    false,
                 )
-            }
-            else {
+            } else {
                 let mut dnf = regex_cond_to_dnf(a, false);
                 dnf.extend(regex_cond_to_dnf(b, false));
                 dnf
             }
-        },
+        }
         CharClassSet::Intersection(a, b) => {
             let a = *a;
             let b = *b;
@@ -653,44 +666,43 @@ fn regex_cond_to_dnf(char_class_set: CharClassSet, negation: bool) -> Vec<Vec<FS
                         Box::new(CharClassSet::Not(Box::new(a))),
                         Box::new(CharClassSet::Not(Box::new(b))),
                     ),
-                    false
+                    false,
                 )
-            }
-            else {
+            } else {
                 let a2 = regex_cond_to_dnf(a, false);
                 let b2 = regex_cond_to_dnf(b, false);
 
                 a2.into_iter()
-                    .flat_map(|ai|
+                    .flat_map(|ai| {
                         b2.iter().map(move |bi| {
                             let mut conjunt = ai.clone();
                             conjunt.extend(bi.iter().cloned());
                             conjunt
                         })
-                    )
+                    })
                     .collect()
             }
-        },
+        }
     }
 }
 
-fn nfa_conditions_from_regex(char_class_set: CharClassSet, target: Vec<usize>) -> Vec<NFATransition> {
+fn nfa_conditions_from_regex(
+    char_class_set: CharClassSet,
+    target: Vec<usize>,
+) -> Vec<NFATransition> {
     let dnf = regex_cond_to_dnf(char_class_set, false);
 
     dnf.into_iter()
-        .map(|conjunct|
-            NFATransition {
-                conditions: FSMTransitionConditionConjunct {
-                    conditions: conjunct,
-                },
-                target: target.clone(),
-            }
-        )
+        .map(|conjunct| NFATransition {
+            conditions: FSMTransitionConditionConjunct {
+                conditions: conjunct,
+            },
+            target: target.clone(),
+        })
         .collect()
 }
 
 fn nfa_concat<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(a: &mut NFA<A>, b: NFA<A>) {
-
     let offset = a.states.len();
 
     let adjust = |state: &mut usize| *state += offset;
@@ -705,7 +717,9 @@ fn nfa_concat<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(a: &mut NFA<A>
         adjust_states(&mut b_start_state, adjust);
 
         state.acceptance = b_start_state.acceptance;
-        state.transitions.extend_from_slice(&b_start_state.transitions);
+        state
+            .transitions
+            .extend_from_slice(&b_start_state.transitions);
     }
 
     for state in b.states {
@@ -714,8 +728,3 @@ fn nfa_concat<A: NFAAcceptancePriority + Clone + std::fmt::Debug>(a: &mut NFA<A>
 
     a.validate_states();
 }
-
-
-
-
-

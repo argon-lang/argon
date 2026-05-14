@@ -12,8 +12,6 @@ pub enum Regex {
     Repeat(Box<Regex>),
 }
 
-
-
 impl Add for Regex {
     type Output = Regex;
 
@@ -24,18 +22,16 @@ impl Add for Regex {
             (Regex::Concat(mut a), Regex::Concat(b)) => {
                 a.extend(b);
                 Regex::Concat(a)
-            },
+            }
             (Regex::Concat(mut a), rhs) => {
                 a.push(rhs);
                 Regex::Concat(a)
-            },
+            }
             (lhs, Regex::Concat(mut b)) => {
                 b.insert(0, lhs);
                 Regex::Concat(b)
-            },
-            (lhs, rhs) => {
-                Regex::Concat(vec!(lhs, rhs))
-            },
+            }
+            (lhs, rhs) => Regex::Concat(vec![lhs, rhs]),
         }
     }
 }
@@ -48,31 +44,29 @@ impl BitOr for Regex {
             (Regex::Alternative(mut a), Regex::Concat(b)) => {
                 a.extend(b);
                 Regex::Alternative(a)
-            },
+            }
             (Regex::Alternative(mut a), rhs) => {
                 a.push(rhs);
                 Regex::Alternative(a)
-            },
+            }
             (lhs, Regex::Alternative(mut b)) => {
                 b.insert(0, lhs);
                 Regex::Alternative(b)
-            },
-            (lhs, rhs) => {
-                Regex::Alternative(vec!(lhs, rhs))
-            },
+            }
+            (lhs, rhs) => Regex::Alternative(vec![lhs, rhs]),
         }
     }
 }
 
 impl Regex {
     pub fn optional(self) -> Self {
-        Regex::Alternative(vec![ Regex::Empty, self ])
+        Regex::Alternative(vec![Regex::Empty, self])
     }
 
     pub fn repeat(self) -> Self {
         Regex::Repeat(Box::new(self))
     }
-    
+
     pub fn repeat1(self) -> Self {
         self.clone() + Regex::Repeat(Box::new(self))
     }
@@ -81,11 +75,9 @@ impl Regex {
         let mut parts = (0..m).map(|_| self.clone()).collect::<Vec<_>>();
         if parts.is_empty() {
             Regex::Empty
-        }
-        else if parts.len() == 1 {
+        } else if parts.len() == 1 {
             parts.swap_remove(0)
-        }
-        else {
+        } else {
             Regex::Concat(parts)
         }
     }
@@ -108,15 +100,13 @@ impl Regex {
     }
 
     pub fn str(s: &str) -> Self {
-        let parts = s.chars().map(|c| {
-            Regex::CharClassSet(
-                CharClassSet::Class(CharClass::Char(c))
-            )
-        }).collect::<Vec<_>>();
+        let parts = s
+            .chars()
+            .map(|c| Regex::CharClassSet(CharClassSet::Class(CharClass::Char(c))))
+            .collect::<Vec<_>>();
         if parts.is_empty() {
             Regex::Empty
-        }
-        else {
+        } else {
             Regex::Concat(parts)
         }
     }
@@ -130,22 +120,22 @@ impl Regex {
         use rast::*;
         match expr {
             Ast::Empty(_) => Regex::Empty,
-            Ast::Literal(literal) => Regex::CharClassSet(
-                CharClassSet::Class(CharClass::Char(literal.c))
-            ),
+            Ast::Literal(literal) => {
+                Regex::CharClassSet(CharClassSet::Class(CharClass::Char(literal.c)))
+            }
             Ast::Dot(_) => Regex::CharClassSet(CharClassSet::Class(CharClass::Any)),
 
             Ast::ClassUnicode(class_unicode) => {
                 Regex::CharClassSet(CharClassSet::from_regex_unicode_class(class_unicode))
-            },
+            }
 
             Ast::ClassPerl(class_perl) => {
                 Regex::CharClassSet(CharClassSet::from_regex_perl_class(class_perl))
-            },
+            }
 
             Ast::ClassBracketed(class_bracketed) => {
                 Regex::CharClassSet(CharClassSet::from_regex_bracketed(class_bracketed))
-            },
+            }
 
             Ast::Repetition(repetition) => {
                 if !repetition.greedy {
@@ -158,31 +148,29 @@ impl Regex {
                     RepetitionKind::ZeroOrOne => inner.optional(),
                     RepetitionKind::ZeroOrMore => inner.repeat(),
                     RepetitionKind::OneOrMore => inner.repeat1(),
-                    RepetitionKind::Range(RepetitionRange::Exactly(m)) =>
-                        inner.repeat_exactly(*m),
-                    RepetitionKind::Range(RepetitionRange::AtLeast(m)) =>
-                        inner.repeat_at_least(*m),
+                    RepetitionKind::Range(RepetitionRange::Exactly(m)) => inner.repeat_exactly(*m),
+                    RepetitionKind::Range(RepetitionRange::AtLeast(m)) => inner.repeat_at_least(*m),
 
-                    RepetitionKind::Range(RepetitionRange::Bounded(m, n)) =>
-                        inner.repeat_bounded(*m, *n),
+                    RepetitionKind::Range(RepetitionRange::Bounded(m, n)) => {
+                        inner.repeat_bounded(*m, *n)
+                    }
                 }
-            },
+            }
 
             Ast::Group(group) => Self::from_regex_ast(&group.ast),
 
-            Ast::Alternation(alternation) =>
-                Regex::Alternative(alternation.asts.iter().map(Self::from_regex_ast).collect()),
+            Ast::Alternation(alternation) => {
+                Regex::Alternative(alternation.asts.iter().map(Self::from_regex_ast).collect())
+            }
 
-            Ast::Concat(concat) =>
-                Regex::Concat(concat.asts.iter().map(Self::from_regex_ast).collect()),
+            Ast::Concat(concat) => {
+                Regex::Concat(concat.asts.iter().map(Self::from_regex_ast).collect())
+            }
 
             _ => panic!("Unsupported regex syntax: {:?}", expr),
         }
     }
 }
-
-
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CharClass {
@@ -192,8 +180,6 @@ pub enum CharClass {
     Category(GeneralCategory),
     Property(UnicodePropertySet),
 }
-
-
 
 impl CharClass {
     pub fn contains_char(self, c: char) -> bool {
@@ -277,8 +263,6 @@ impl UnicodePropertySet {
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CharClassSet {
     Empty,
@@ -292,22 +276,22 @@ impl CharClassSet {
     fn from_regex_unicode_class(class_unicode: &rast::ClassUnicode) -> Self {
         let mut class = match &class_unicode.kind {
             rast::ClassUnicodeKind::OneLetter(letter) => {
-                unicode_category_group(&letter.to_uppercase().to_string())    
-            },
+                unicode_category_group(&letter.to_uppercase().to_string())
+            }
             rast::ClassUnicodeKind::Named(name) => {
                 let name = normalize_prop(&name);
                 binary_property(&name)
                     .or_else(|| unicode_category_group(&name))
                     .or_else(|| unicode_category(&name))
-            },
+            }
             rast::ClassUnicodeKind::NamedValue { op, name, value } => {
                 let name = normalize_prop(name);
                 let value = normalize_prop(value);
 
                 let mut class = match name.as_str() {
-                    "General_Category" =>
-                        unicode_category_group(&value)
-                            .or_else(|| unicode_category(&name)),
+                    "General_Category" => {
+                        unicode_category_group(&value).or_else(|| unicode_category(&name))
+                    }
 
                     _ => None,
                 };
@@ -317,8 +301,9 @@ impl CharClassSet {
                 }
 
                 class
-            },
-        }.unwrap_or_else(|| panic!("Unknown unicode class: {:?}", &class_unicode.kind));
+            }
+        }
+        .unwrap_or_else(|| panic!("Unknown unicode class: {:?}", &class_unicode.kind));
 
         if class_unicode.negated {
             class = CharClassSet::Not(Box::new(class));
@@ -330,8 +315,12 @@ impl CharClassSet {
     fn from_regex_perl_class(class_perl: &rast::ClassPerl) -> Self {
         use rast::*;
         let mut class = match &class_perl.kind {
-            ClassPerlKind::Digit => CharClassSet::Class(CharClass::Category(GeneralCategory::DecimalNumber)),
-            ClassPerlKind::Space => CharClassSet::Class(CharClass::Property(UnicodePropertySet::WhiteSpace)),
+            ClassPerlKind::Digit => {
+                CharClassSet::Class(CharClass::Category(GeneralCategory::DecimalNumber))
+            }
+            ClassPerlKind::Space => {
+                CharClassSet::Class(CharClass::Property(UnicodePropertySet::WhiteSpace))
+            }
             ClassPerlKind::Word => [
                 CharClassSet::Class(CharClass::Property(UnicodePropertySet::Alphabetic)),
                 unicode_category_group("M").unwrap(),
@@ -339,9 +328,9 @@ impl CharClassSet {
                 unicode_category("Pc").unwrap(),
                 CharClassSet::Class(CharClass::Range('\u{202C}', '\u{202D}')),
             ]
-                .into_iter()
-                .reduce(|a, b| CharClassSet::Union(Box::new(a), Box::new(b)))
-                .unwrap(),
+            .into_iter()
+            .reduce(|a, b| CharClassSet::Union(Box::new(a), Box::new(b)))
+            .unwrap(),
         };
 
         if class_perl.negated {
@@ -439,63 +428,65 @@ impl CharClassSet {
         match item {
             ClassSetItem::Empty(_) => CharClassSet::Empty,
 
-            ClassSetItem::Literal(literal) =>
-                CharClassSet::Class(CharClass::Char(literal.c)),
-                
-            ClassSetItem::Range(class_set_range) =>
-                CharClassSet::Class(CharClass::Range(
-                    class_set_range.start.c,
-                    class_set_range.end.c,
-                )),
+            ClassSetItem::Literal(literal) => CharClassSet::Class(CharClass::Char(literal.c)),
 
-            ClassSetItem::Unicode(class_unicode) =>
-                CharClassSet::from_regex_unicode_class(class_unicode),
+            ClassSetItem::Range(class_set_range) => CharClassSet::Class(CharClass::Range(
+                class_set_range.start.c,
+                class_set_range.end.c,
+            )),
 
-            ClassSetItem::Perl(class_perl) =>
-                CharClassSet::from_regex_perl_class(class_perl),
+            ClassSetItem::Unicode(class_unicode) => {
+                CharClassSet::from_regex_unicode_class(class_unicode)
+            }
 
-            ClassSetItem::Ascii(class_ascii) =>
-                CharClassSet::from_regex_ascii_class(class_ascii),
+            ClassSetItem::Perl(class_perl) => CharClassSet::from_regex_perl_class(class_perl),
 
-            ClassSetItem::Bracketed(class_bracketed) =>
-                CharClassSet::from_regex_bracketed(class_bracketed),
-            ClassSetItem::Union(class_set_union) =>
-                class_set_union.items.iter()
-                    .map(Self::from_regex_class_set_item)
-                    .reduce(|a, b| CharClassSet::Union(Box::new(a), Box::new(b)))
-                    .unwrap_or(CharClassSet::Empty),
+            ClassSetItem::Ascii(class_ascii) => CharClassSet::from_regex_ascii_class(class_ascii),
+
+            ClassSetItem::Bracketed(class_bracketed) => {
+                CharClassSet::from_regex_bracketed(class_bracketed)
+            }
+            ClassSetItem::Union(class_set_union) => class_set_union
+                .items
+                .iter()
+                .map(Self::from_regex_class_set_item)
+                .reduce(|a, b| CharClassSet::Union(Box::new(a), Box::new(b)))
+                .unwrap_or(CharClassSet::Empty),
         }
     }
 
     fn from_regex_class_set(class: &rast::ClassSet) -> Self {
         use rast::*;
         match class {
-            ClassSet::Item(class_set_item) =>
-                Self::from_regex_class_set_item(class_set_item),
+            ClassSet::Item(class_set_item) => Self::from_regex_class_set_item(class_set_item),
 
             ClassSet::BinaryOp(class_set_binary_op) => {
-
                 let a = Self::from_regex_class_set(&class_set_binary_op.lhs);
                 let b = Self::from_regex_class_set(&class_set_binary_op.rhs);
 
                 match class_set_binary_op.kind {
-                    ClassSetBinaryOpKind::Intersection =>
-                        CharClassSet::Intersection(Box::new(a), Box::new(b)),
-                    ClassSetBinaryOpKind::Difference =>
-                        CharClassSet::Intersection(Box::new(a), Box::new(CharClassSet::Not(Box::new(b)))),
-                    ClassSetBinaryOpKind::SymmetricDifference =>
-                        CharClassSet::Union(
-                            Box::new(CharClassSet::Intersection(Box::new(a.clone()), Box::new(CharClassSet::Not(Box::new(b.clone()))))),
-                            Box::new(CharClassSet::Intersection(Box::new(b), Box::new(CharClassSet::Not(Box::new(a))))),
-                        ),
+                    ClassSetBinaryOpKind::Intersection => {
+                        CharClassSet::Intersection(Box::new(a), Box::new(b))
+                    }
+                    ClassSetBinaryOpKind::Difference => CharClassSet::Intersection(
+                        Box::new(a),
+                        Box::new(CharClassSet::Not(Box::new(b))),
+                    ),
+                    ClassSetBinaryOpKind::SymmetricDifference => CharClassSet::Union(
+                        Box::new(CharClassSet::Intersection(
+                            Box::new(a.clone()),
+                            Box::new(CharClassSet::Not(Box::new(b.clone()))),
+                        )),
+                        Box::new(CharClassSet::Intersection(
+                            Box::new(b),
+                            Box::new(CharClassSet::Not(Box::new(a))),
+                        )),
+                    ),
                 }
-            },
+            }
         }
     }
 }
-
-
-
 
 fn normalize_prop(class_name: &str) -> String {
     let mut s = String::new();
@@ -515,7 +506,6 @@ fn normalize_prop(class_name: &str) -> String {
 
     s
 }
-
 
 fn unicode_category(s: &str) -> Option<CharClassSet> {
     let category = match s {
@@ -604,7 +594,8 @@ fn unicode_category_group(s: &str) -> Option<CharClassSet> {
         _ => return None,
     };
 
-    categories.into_iter()
+    categories
+        .into_iter()
         .map(CharClass::Category)
         .map(CharClassSet::Class)
         .reduce(|a, b| CharClassSet::Union(Box::new(a), Box::new(b)))
@@ -623,6 +614,3 @@ fn binary_property(s: &str) -> Option<CharClassSet> {
 
     Some(CharClassSet::Class(class))
 }
-
-
-

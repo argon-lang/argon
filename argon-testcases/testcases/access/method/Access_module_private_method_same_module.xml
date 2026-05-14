@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Access module private method same module</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        public trait MyTrait
+            private internal proc _.my_module_private_method(): () =
+                puts "called my_module_private_method"
+        end
+
+        public instance MyInstance: MyTrait
+        end
+
+        proc main(): () do
+            MyInstance.my_module_private_method()
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>called my_module_private_method</ExpectedOutput>
+
+</ArgonTest>

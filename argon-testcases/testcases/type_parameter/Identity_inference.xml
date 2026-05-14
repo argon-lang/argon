@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>Identity inference</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+
+        def identity [token T: type] (value: T): T = value
+
+        proc main(): () do
+
+            let str = identity "A"
+
+            puts str
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        A
+    </ExpectedOutput>
+
+</ArgonTest>

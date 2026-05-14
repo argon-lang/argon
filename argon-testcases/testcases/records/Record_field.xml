@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Record field</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        record MyRecord
+            name: String
+        end
+        
+        proc main(): () do
+            let r = MyRecord {
+                name: "Hello"
+            }
+
+            let s = r.name
+            puts s
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+    </ExpectedOutput>
+
+</ArgonTest>

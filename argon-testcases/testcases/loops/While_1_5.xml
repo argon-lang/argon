@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>While 1-5</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let mut i = 1
+            while i <= 5 do
+                puts (i.to_s())
+                i := i + 1
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        1
+        2
+        3
+        4
+        5
+    </ExpectedOutput>
+
+</ArgonTest>

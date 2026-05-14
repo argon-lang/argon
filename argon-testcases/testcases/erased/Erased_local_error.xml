@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Erased local error</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc printMessage(n: Int): () =
+            puts "Hello World"
+
+        proc main(): () do
+            erased let erasedValue: Int = 3
+            printMessage(erasedValue)
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>AR0007</ExpectedError>
+
+</ArgonTest>

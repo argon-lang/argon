@@ -2,7 +2,7 @@ use std::{io, io::Write};
 
 use unicode_general_category::GeneralCategory;
 
-use crate::fsm::{DFATransition, DFA};
+use crate::fsm::{DFA, DFATransition};
 use crate::regex::UnicodePropertySet;
 
 pub struct ScalaSettings {

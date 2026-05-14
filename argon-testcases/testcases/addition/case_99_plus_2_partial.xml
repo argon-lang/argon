@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>99 + 2 partial application</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        def add(a: Int)(b: Int): Int =
+            a + b
+
+        def callWithTwo(f: Int -> Int): Int =
+            f 2
+
+        proc main(): () do
+            let f: Int -> Int = add 99
+            let result = callWithTwo f
+            puts (result.to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>101</ExpectedOutput>
+
+</ArgonTest>

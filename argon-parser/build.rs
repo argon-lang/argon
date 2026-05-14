@@ -17,6 +17,7 @@ fn main() -> io::Result<()> {
     println!("cargo::rerun-if-changed=build_support/argon_parser.rs");
     println!("cargo::rerun-if-changed=../parse18/parse18-lexer-gen/src");
     println!("cargo::rerun-if-changed=../parse18/parse18-ll-gen/src");
+    println!("cargo::rerun-if-changed=tests/argon_testcases");
 
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is set by Cargo"));
 

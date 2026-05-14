@@ -1,8 +1,11 @@
-use std::{collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData};
 use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    marker::PhantomData,
+};
 
 pub trait GrammarTypes {
     type Terminal: Debug + Copy + Eq + Hash + Display;
@@ -11,7 +14,6 @@ pub trait GrammarTypes {
     type ExternalFunction: Debug + Clone + Eq;
     type ExternalLexMode: Debug + Clone + Eq;
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol {
@@ -27,14 +29,12 @@ pub enum SymbolType {
     Error,
 }
 
-
-
 pub struct Rule<G: GrammarTypes> {
     symbols: Vec<Symbol>,
     value: RuleValue<G>,
 }
 
-impl <G: GrammarTypes> Rule<G> {
+impl<G: GrammarTypes> Rule<G> {
     pub fn symbols(&self) -> &[Symbol] {
         &self.symbols
     }
@@ -44,7 +44,6 @@ impl <G: GrammarTypes> Rule<G> {
     }
 }
 
-
 pub enum RuleType<G: GrammarTypes> {
     ExternalType(G::ExternalRuleType),
     TerminalType(usize),
@@ -53,7 +52,7 @@ pub enum RuleType<G: GrammarTypes> {
     WithLocation(Box<RuleType<G>>),
 }
 
-impl <G: GrammarTypes> Clone for RuleType<G> {
+impl<G: GrammarTypes> Clone for RuleType<G> {
     fn clone(&self) -> Self {
         match self {
             RuleType::ExternalType(et) => RuleType::ExternalType(et.clone()),
@@ -86,14 +85,14 @@ pub enum RuleValue<G: GrammarTypes> {
     Apply(Box<RuleValue<G>>, Box<RuleValue<G>>),
 }
 
-impl <G: GrammarTypes> RuleValue<G> {
+impl<G: GrammarTypes> RuleValue<G> {
     fn substitute_indexes(&mut self, f: &impl Fn(&mut usize)) {
         self.substitute_indexes_with(&|mut i| {
             f(&mut i);
             RuleValue::SymbolValue(i)
         });
     }
-    
+
     fn substitute_indexes_with(&mut self, f: &impl Fn(usize) -> Self) {
         match self {
             RuleValue::SymbolValue(i) => *self = f(*i),
@@ -101,33 +100,36 @@ impl <G: GrammarTypes> RuleValue<G> {
                 for arg in args {
                     arg.substitute_indexes_with(f);
                 }
-            },
-            
+            }
+
             RuleValue::MakeTuple(items) => {
                 for item in items {
                     item.substitute_indexes_with(f);
                 }
-            },
+            }
 
             RuleValue::GetTuple(tuple_value, _) => tuple_value.substitute_indexes_with(f),
 
             RuleValue::DropLocation(value) => value.substitute_indexes_with(f),
 
-            RuleValue::BuildLocation { first, second, value } => {
+            RuleValue::BuildLocation {
+                first,
+                second,
+                value,
+            } => {
                 first.substitute_indexes_with(f);
                 second.substitute_indexes_with(f);
                 value.substitute_indexes_with(f);
             }
 
-            RuleValue::Lambda { body,  .. } => body.substitute_indexes_with(f),
+            RuleValue::Lambda { body, .. } => body.substitute_indexes_with(f),
             RuleValue::Apply(func, a) => {
                 func.substitute_indexes_with(f);
                 a.substitute_indexes_with(f);
-            },
+            }
         }
     }
 }
-
 
 pub struct RuleSet<G: GrammarTypes> {
     rule_type: RuleType<G>,
@@ -137,7 +139,7 @@ pub struct RuleSet<G: GrammarTypes> {
     lex_mode: Option<G::ExternalLexMode>,
 }
 
-impl <G: GrammarTypes> RuleSet<G> {
+impl<G: GrammarTypes> RuleSet<G> {
     pub fn rule_type(&self) -> &RuleType<G> {
         &self.rule_type
     }
@@ -160,7 +162,7 @@ pub struct Grammar<G: GrammarTypes> {
     rulesets: Vec<RuleSet<G>>,
 }
 
-impl <G: GrammarTypes> Grammar<G> {
+impl<G: GrammarTypes> Grammar<G> {
     pub fn make_raw(f: impl GrammarBuilderCallback<G>) -> Grammar<G> {
         let mut builder = GrammarBuilder {
             grammar: Grammar {
@@ -180,13 +182,15 @@ impl <G: GrammarTypes> Grammar<G> {
         grammar
     }
 
-    pub fn make(factory: G) -> Self where G: GrammarFactory {
-
+    pub fn make(factory: G) -> Self
+    where
+        G: GrammarFactory,
+    {
         struct Callback<G> {
             factory: G,
         }
 
-        impl <G: GrammarFactory> GrammarBuilderCallback<G> for Callback<G> {
+        impl<G: GrammarFactory> GrammarBuilderCallback<G> for Callback<G> {
             fn accept<X>(self, builder: &mut GrammarBuilder<G, X>) {
                 let mut rule_map = HashMap::new();
                 let mut token_map: HashMap<G::Terminal, SymbolBuilder<X>> = HashMap::new();
@@ -213,33 +217,36 @@ impl <G: GrammarTypes> Grammar<G> {
                     token_map: &mut HashMap<G::Terminal, SymbolBuilder<X>>,
                     token: G::Terminal,
                 ) -> SymbolBuilder<X> {
-                    *token_map.entry(token).or_insert_with(|| builder.add_terminal(
-                        token,
-                    ))
+                    *token_map
+                        .entry(token)
+                        .or_insert_with(|| builder.add_terminal(token))
                 }
 
                 rule_queue.push_back(self.factory.start_rule());
 
-
                 while let Some(rule) = rule_queue.pop_front() {
                     if !processed_rules.insert(rule) {
-                        continue
+                        continue;
                     }
 
                     let ruleset = self.factory.create_rule_set(rule);
                     let non_term = get_non_terminal(&self.factory, builder, &mut rule_map, rule);
 
                     for rule in ruleset.rules {
-                        let symbols = rule.symbols.iter()
+                        let symbols = rule
+                            .symbols
+                            .iter()
                             .map(|sym| {
                                 let mut sb = match sym.symbol_type {
-                                    SymbolInfoType::Terminal(t) =>
-                                        get_terminal::<G, X>(builder, &mut token_map, t),
+                                    SymbolInfoType::Terminal(t) => {
+                                        get_terminal::<G, X>(builder, &mut token_map, t)
+                                    }
 
                                     SymbolInfoType::NonTerminal(nt) => {
                                         rule_queue.push_back(nt);
-                                        get_non_terminal(&self.factory, builder, &mut rule_map, nt).sym()
-                                    },
+                                        get_non_terminal(&self.factory, builder, &mut rule_map, nt)
+                                            .sym()
+                                    }
 
                                     SymbolInfoType::Error => builder.error_token(),
                                 };
@@ -286,10 +293,7 @@ impl <G: GrammarTypes> Grammar<G> {
     }
 }
 
-
-
 pub trait GrammarFactory: GrammarTypes + Clone {
-
     fn start_rule(&self) -> Self::Rule;
 
     fn create_rule_set(&self, rule: Self::Rule) -> RuleSetInfo<Self>;
@@ -301,7 +305,7 @@ pub struct RuleSetInfo<G: GrammarTypes> {
     lex_mode: Option<G::ExternalLexMode>,
 }
 
-impl <G: GrammarTypes> RuleSetInfo<G> {
+impl<G: GrammarTypes> RuleSetInfo<G> {
     pub fn lex_mode(mut self, mode: impl Into<G::ExternalLexMode>) -> Self {
         self.lex_mode = Some(mode.into());
         self
@@ -319,7 +323,7 @@ pub struct SymbolInfo<G: GrammarTypes> {
     discard: bool,
 }
 
-impl <G: GrammarTypes> SymbolInfo<G> {
+impl<G: GrammarTypes> SymbolInfo<G> {
     pub fn with_location(mut self) -> Self {
         self.with_location = true;
         self
@@ -341,8 +345,10 @@ enum SymbolInfoType<G: GrammarTypes> {
     Error,
 }
 
-
-pub fn ruleset<G: GrammarTypes>(rule_type: impl Into<G::ExternalRuleType>, rules: impl Into<Vec<RuleInfo<G>>>) -> RuleSetInfo<G> {
+pub fn ruleset<G: GrammarTypes>(
+    rule_type: impl Into<G::ExternalRuleType>,
+    rules: impl Into<Vec<RuleInfo<G>>>,
+) -> RuleSetInfo<G> {
     RuleSetInfo {
         rule_type: rule_type.into(),
         rules: rules.into(),
@@ -350,7 +356,10 @@ pub fn ruleset<G: GrammarTypes>(rule_type: impl Into<G::ExternalRuleType>, rules
     }
 }
 
-pub fn rule<G: GrammarTypes>(symbols: impl Into<Vec<SymbolInfo<G>>>, function: impl Into<G::ExternalFunction>) -> RuleInfo<G> {
+pub fn rule<G: GrammarTypes>(
+    symbols: impl Into<Vec<SymbolInfo<G>>>,
+    function: impl Into<G::ExternalFunction>,
+) -> RuleInfo<G> {
     RuleInfo {
         symbols: symbols.into(),
         function: function.into(),
@@ -381,7 +390,6 @@ pub fn error<G: GrammarTypes>() -> SymbolInfo<G> {
     }
 }
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FirstElem {
     Terminal(usize),
@@ -395,14 +403,13 @@ pub enum FollowElem {
     EndOfFile,
 }
 
-
 pub struct LLTable<'a, G: GrammarTypes> {
     grammar: &'a Grammar<G>,
     table: Vec<Vec<LLTransition>>,
     follows: Vec<HashSet<FollowElem>>,
 }
 
-impl <'a, G: GrammarTypes> LLTable<'a, G> {
+impl<'a, G: GrammarTypes> LLTable<'a, G> {
     pub fn table(&self) -> &Vec<Vec<LLTransition>> {
         &self.table
     }
@@ -410,7 +417,9 @@ impl <'a, G: GrammarTypes> LLTable<'a, G> {
     pub fn to_ll1(self) -> Result<LL1Table<'a, G>, LL1Error> {
         Ok(LL1Table {
             grammar: self.grammar,
-            table: self.table.into_iter()
+            table: self
+                .table
+                .into_iter()
                 .map(|terminals| {
                     let mut rule_map: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
                     for (terminal, trans) in terminals.into_iter().enumerate() {
@@ -421,14 +430,16 @@ impl <'a, G: GrammarTypes> LLTable<'a, G> {
                         let rule = match (e1, e2) {
                             (Some(e1), None) => e1,
                             (None, _) => continue,
-                            _ => return Err(LL1Error {
-                                conflicts: trans.conflicts,
-                            }),
+                            _ => {
+                                return Err(LL1Error {
+                                    conflicts: trans.conflicts,
+                                });
+                            }
                         };
 
                         rule_map.entry(rule).or_default().insert(terminal);
                     }
-                    
+
                     Ok(rule_map)
                 })
                 .collect::<Result<Vec<_>, LL1Error>>()?,
@@ -444,22 +455,20 @@ pub struct LL1Table<'a, G: GrammarTypes> {
     follows: Vec<HashSet<FollowElem>>,
 }
 
-impl <'a, G: GrammarTypes> LL1Table<'a, G> {
-    pub fn rulesets<'b>(&'b self) -> impl Iterator<Item=LL1RuleSet<'a, 'b, G>> {
-        self.grammar.rulesets.iter()
+impl<'a, G: GrammarTypes> LL1Table<'a, G> {
+    pub fn rulesets<'b>(&'b self) -> impl Iterator<Item = LL1RuleSet<'a, 'b, G>> {
+        self.grammar
+            .rulesets
+            .iter()
             .zip(self.table.iter())
             .zip(self.follows.iter())
-            .map(|((ruleset, rule_map), follows)|
-                LL1RuleSet {
-                    grammar: self.grammar,
-                    ruleset,
-                    rule_map,
-                    follows,
-                }
-            )
+            .map(|((ruleset, rule_map), follows)| LL1RuleSet {
+                grammar: self.grammar,
+                ruleset,
+                rule_map,
+                follows,
+            })
     }
-
-
 }
 
 pub struct LL1RuleSet<'a, 'b, G: GrammarTypes> {
@@ -470,7 +479,7 @@ pub struct LL1RuleSet<'a, 'b, G: GrammarTypes> {
     follows: &'b HashSet<FollowElem>,
 }
 
-impl <'a, 'b, G: GrammarTypes> LL1RuleSet<'a, 'b, G> {
+impl<'a, 'b, G: GrammarTypes> LL1RuleSet<'a, 'b, G> {
     pub fn rule_type(&self) -> LL1RuleType<'a, G> {
         LL1RuleType::from_rule_type(self.grammar, &self.ruleset.rule_type)
     }
@@ -483,29 +492,28 @@ impl <'a, 'b, G: GrammarTypes> LL1RuleSet<'a, 'b, G> {
         self.ruleset.offshoot_index
     }
 
-    pub fn rules(&self) -> impl Iterator<Item=LL1RuleSetRule<'a, 'b, G>> {
-        self.ruleset.rules.iter()
+    pub fn rules(&self) -> impl Iterator<Item = LL1RuleSetRule<'a, 'b, G>> {
+        self.ruleset
+            .rules
+            .iter()
             .enumerate()
-            .map(|(rule_index, rule)| {
-                LL1RuleSetRule {
-                    grammar: self.grammar,
-                    rule,
-                    terminals: match self.rule_map.get(&rule_index) {
-                        Some(terminals) => Cow::Borrowed(terminals),
-                        None => Cow::Owned(BTreeSet::new()),
-                    }
-                }
+            .map(|(rule_index, rule)| LL1RuleSetRule {
+                grammar: self.grammar,
+                rule,
+                terminals: match self.rule_map.get(&rule_index) {
+                    Some(terminals) => Cow::Borrowed(terminals),
+                    None => Cow::Owned(BTreeSet::new()),
+                },
             })
     }
 
-    pub fn follows(&self) -> impl Iterator<Item=&'a G::Terminal> {
-        self.follows.iter()
-            .flat_map(|follow| match follow {
-                FollowElem::Terminal(i) => Some(&self.grammar.terminals[*i]),
-                FollowElem::EndOfFile | FollowElem::Epsilon => None,
-            })
+    pub fn follows(&self) -> impl Iterator<Item = &'a G::Terminal> {
+        self.follows.iter().flat_map(|follow| match follow {
+            FollowElem::Terminal(i) => Some(&self.grammar.terminals[*i]),
+            FollowElem::EndOfFile | FollowElem::Epsilon => None,
+        })
     }
-    
+
     pub fn lex_mode(&self) -> Option<&'a G::ExternalLexMode> {
         self.ruleset.lex_mode.as_ref()
     }
@@ -520,22 +528,24 @@ pub enum LL1RuleType<'a, G: GrammarTypes> {
     WithLocation(Box<LL1RuleType<'a, G>>),
 }
 
-impl <'a, G: GrammarTypes> LL1RuleType<'a, G> {
+impl<'a, G: GrammarTypes> LL1RuleType<'a, G> {
     fn from_rule_type(grammar: &'a Grammar<G>, t: &'a RuleType<G>) -> Self {
         match t {
             RuleType::ExternalType(et) => LL1RuleType::ExternalType(et),
             RuleType::TerminalType(tt) => LL1RuleType::TerminalType(&grammar.terminals[*tt]),
-            RuleType::Function(a, b) =>
-                LL1RuleType::Function(
-                    Box::new(Self::from_rule_type(grammar, a)), 
-                    Box::new(Self::from_rule_type(grammar, b)),
-                ),
-            RuleType::Tuple(items) =>
-                LL1RuleType::Tuple(
-                    items.iter().map(|item| Self::from_rule_type(grammar, item)).collect()
-                ),
-            RuleType::WithLocation(inner) =>
-                LL1RuleType::WithLocation(Box::new(Self::from_rule_type(grammar, inner))),
+            RuleType::Function(a, b) => LL1RuleType::Function(
+                Box::new(Self::from_rule_type(grammar, a)),
+                Box::new(Self::from_rule_type(grammar, b)),
+            ),
+            RuleType::Tuple(items) => LL1RuleType::Tuple(
+                items
+                    .iter()
+                    .map(|item| Self::from_rule_type(grammar, item))
+                    .collect(),
+            ),
+            RuleType::WithLocation(inner) => {
+                LL1RuleType::WithLocation(Box::new(Self::from_rule_type(grammar, inner)))
+            }
         }
     }
 }
@@ -547,9 +557,14 @@ pub struct LL1RuleSetRule<'a, 'b, G: GrammarTypes> {
     terminals: Cow<'b, BTreeSet<usize>>,
 }
 
-impl <'a, 'b, G: GrammarTypes> LL1RuleSetRule<'a, 'b, G> where 'a : 'b {
-    pub fn symbols(&self) -> impl Iterator<Item=LL1Symbol<'a, G>> {
-        self.rule.symbols.iter()
+impl<'a, 'b, G: GrammarTypes> LL1RuleSetRule<'a, 'b, G>
+where
+    'a: 'b,
+{
+    pub fn symbols(&self) -> impl Iterator<Item = LL1Symbol<'a, G>> {
+        self.rule
+            .symbols
+            .iter()
             .map(|sym| LL1Symbol::from_symbol(self.grammar, *sym))
     }
 
@@ -557,20 +572,23 @@ impl <'a, 'b, G: GrammarTypes> LL1RuleSetRule<'a, 'b, G> where 'a : 'b {
         LL1RuleValue::from_rule_value(&self.grammar, &self.rule.value)
     }
 
-    pub fn terminals(&self) -> impl Iterator<Item=Option<&'a G::Terminal>> {
+    pub fn terminals(&self) -> impl Iterator<Item = Option<&'a G::Terminal>> {
         let grammar = self.grammar;
-        self.terminals.iter()
-            .map(move |i| if *i == grammar.terminals.len() { None } else { Some(&grammar.terminals[*i]) })
+        self.terminals.iter().map(move |i| {
+            if *i == grammar.terminals.len() {
+                None
+            } else {
+                Some(&grammar.terminals[*i])
+            }
+        })
     }
 }
-
 
 pub struct LL1Symbol<'a, G: GrammarTypes> {
     pub symbol_type: LL1SymbolType<'a, G>,
     pub with_location: bool,
     pub discard: bool,
 }
-
 
 pub enum LL1SymbolType<'a, G: GrammarTypes> {
     Terminal(&'a G::Terminal),
@@ -581,7 +599,7 @@ pub enum LL1SymbolType<'a, G: GrammarTypes> {
     Error,
 }
 
-impl <'a, G: GrammarTypes> LL1Symbol<'a, G> {
+impl<'a, G: GrammarTypes> LL1Symbol<'a, G> {
     fn from_symbol(grammar: &'a Grammar<G>, sb: Symbol) -> Self {
         let ll1sym_type = match sb.symbol_type {
             SymbolType::Terminal(i) => LL1SymbolType::Terminal(&grammar.terminals[i]),
@@ -591,7 +609,7 @@ impl <'a, G: GrammarTypes> LL1Symbol<'a, G> {
                     name: &ruleset.name,
                     offshoot_index: ruleset.offshoot_index,
                 }
-            },
+            }
             SymbolType::Error => LL1SymbolType::Error,
         };
 
@@ -624,42 +642,55 @@ pub enum LL1RuleValue<'a, G: GrammarTypes> {
     Apply(Box<LL1RuleValue<'a, G>>, Box<LL1RuleValue<'a, G>>),
 }
 
-impl <'a, G: GrammarTypes> LL1RuleValue<'a, G> {
+impl<'a, G: GrammarTypes> LL1RuleValue<'a, G> {
     fn from_rule_value(grammar: &'a Grammar<G>, rule_value: &'a RuleValue<G>) -> Self {
         match rule_value {
             RuleValue::SymbolValue(sym) => LL1RuleValue::SymbolValue(*sym),
-            RuleValue::ExternalFunction(f, args) =>
-                LL1RuleValue::ExternalFunction(f, args.iter().map(|arg| Self::from_rule_value(grammar, arg)).collect()),
-            RuleValue::MakeTuple(items) =>
-                LL1RuleValue::MakeTuple(items.iter().map(|item| Self::from_rule_value(grammar, item)).collect()),
-            RuleValue::GetTuple(tuple, index) =>
-                LL1RuleValue::GetTuple(Box::new(Self::from_rule_value(grammar, tuple)), *index),
-            RuleValue::DropLocation(inner) =>
-                LL1RuleValue::DropLocation(Box::new(Self::from_rule_value(grammar, inner))),
-            RuleValue::BuildLocation { first, second, value } =>
-                LL1RuleValue::BuildLocation {
-                    first: Box::new(Self::from_rule_value(grammar, first)),
-                    second: Box::new(Self::from_rule_value(grammar, second)),
-                    value: Box::new(Self::from_rule_value(grammar, value)),
-                },
+            RuleValue::ExternalFunction(f, args) => LL1RuleValue::ExternalFunction(
+                f,
+                args.iter()
+                    .map(|arg| Self::from_rule_value(grammar, arg))
+                    .collect(),
+            ),
+            RuleValue::MakeTuple(items) => LL1RuleValue::MakeTuple(
+                items
+                    .iter()
+                    .map(|item| Self::from_rule_value(grammar, item))
+                    .collect(),
+            ),
+            RuleValue::GetTuple(tuple, index) => {
+                LL1RuleValue::GetTuple(Box::new(Self::from_rule_value(grammar, tuple)), *index)
+            }
+            RuleValue::DropLocation(inner) => {
+                LL1RuleValue::DropLocation(Box::new(Self::from_rule_value(grammar, inner)))
+            }
+            RuleValue::BuildLocation {
+                first,
+                second,
+                value,
+            } => LL1RuleValue::BuildLocation {
+                first: Box::new(Self::from_rule_value(grammar, first)),
+                second: Box::new(Self::from_rule_value(grammar, second)),
+                value: Box::new(Self::from_rule_value(grammar, value)),
+            },
 
-            RuleValue::Lambda { discard_param, param_type, body } =>
-                LL1RuleValue::Lambda {
-                    discard_param: *discard_param,
-                    param_type: LL1RuleType::from_rule_type(grammar, param_type),
-                    body: Box::new(Self::from_rule_value(grammar, body)),
-                },
+            RuleValue::Lambda {
+                discard_param,
+                param_type,
+                body,
+            } => LL1RuleValue::Lambda {
+                discard_param: *discard_param,
+                param_type: LL1RuleType::from_rule_type(grammar, param_type),
+                body: Box::new(Self::from_rule_value(grammar, body)),
+            },
 
-            RuleValue::Apply(f, a) =>
-                LL1RuleValue::Apply(
-                    Box::new(Self::from_rule_value(grammar, f)),
-                    Box::new(Self::from_rule_value(grammar, a)),
-                ),
+            RuleValue::Apply(f, a) => LL1RuleValue::Apply(
+                Box::new(Self::from_rule_value(grammar, f)),
+                Box::new(Self::from_rule_value(grammar, a)),
+            ),
         }
     }
 }
-
-
 
 #[derive(Debug, Clone)]
 pub struct LL1Error {
@@ -684,20 +715,15 @@ pub enum LL1Conflict {
     },
 }
 
-
 #[derive(Debug, Clone)]
 pub struct LLTransition {
     rules: HashSet<usize>,
     conflicts: Vec<LL1Conflict>,
 }
 
-
-
 pub trait GrammarBuilderCallback<G: GrammarTypes> {
     fn accept<X>(self, builder: &mut GrammarBuilder<G, X>);
 }
-
-
 
 #[derive(Debug)]
 pub struct SymbolBuilder<X> {
@@ -705,7 +731,7 @@ pub struct SymbolBuilder<X> {
     dummy: PhantomData<X>,
 }
 
-impl <X> SymbolBuilder<X> {
+impl<X> SymbolBuilder<X> {
     pub fn with_location(mut self) -> Self {
         self.sym.with_location = true;
         self
@@ -717,7 +743,7 @@ impl <X> SymbolBuilder<X> {
     }
 }
 
-impl <X> Clone for SymbolBuilder<X> {
+impl<X> Clone for SymbolBuilder<X> {
     fn clone(&self) -> Self {
         SymbolBuilder {
             sym: self.sym,
@@ -726,7 +752,7 @@ impl <X> Clone for SymbolBuilder<X> {
     }
 }
 
-impl <X> Copy for SymbolBuilder<X> {}
+impl<X> Copy for SymbolBuilder<X> {}
 
 #[derive(Debug)]
 pub struct NonTerminalBuilder<X> {
@@ -734,7 +760,7 @@ pub struct NonTerminalBuilder<X> {
     dummy: PhantomData<X>,
 }
 
-impl <X> NonTerminalBuilder<X> {
+impl<X> NonTerminalBuilder<X> {
     pub fn sym(self) -> SymbolBuilder<X> {
         SymbolBuilder {
             sym: Symbol {
@@ -747,7 +773,7 @@ impl <X> NonTerminalBuilder<X> {
     }
 }
 
-impl <X> Clone for NonTerminalBuilder<X> {
+impl<X> Clone for NonTerminalBuilder<X> {
     fn clone(&self) -> Self {
         NonTerminalBuilder {
             non_terminal: self.non_terminal,
@@ -756,15 +782,14 @@ impl <X> Clone for NonTerminalBuilder<X> {
     }
 }
 
-impl <X> Copy for NonTerminalBuilder<X> {}
-
+impl<X> Copy for NonTerminalBuilder<X> {}
 
 pub struct GrammarBuilder<G: GrammarTypes, X> {
     grammar: Grammar<G>,
     dummy: PhantomData<X>,
 }
 
-impl <G: GrammarTypes, X> GrammarBuilder<G, X> {
+impl<G: GrammarTypes, X> GrammarBuilder<G, X> {
     pub fn add_terminal(&mut self, terminal: G::Terminal) -> SymbolBuilder<X> {
         let index = self.grammar.terminals.len();
 
@@ -780,7 +805,12 @@ impl <G: GrammarTypes, X> GrammarBuilder<G, X> {
         }
     }
 
-    pub fn add_non_terminal(&mut self, name: String, rule_type: G::ExternalRuleType, lex_mode: Option<G::ExternalLexMode>) -> NonTerminalBuilder<X> {
+    pub fn add_non_terminal(
+        &mut self,
+        name: String,
+        rule_type: G::ExternalRuleType,
+        lex_mode: Option<G::ExternalLexMode>,
+    ) -> NonTerminalBuilder<X> {
         let index = self.grammar.rulesets.len();
 
         let ruleset = RuleSet {
@@ -810,28 +840,33 @@ impl <G: GrammarTypes, X> GrammarBuilder<G, X> {
         }
     }
 
-    pub fn add_rule(&mut self, non_terminal: NonTerminalBuilder<X>, function: G::ExternalFunction, symbols: Vec<SymbolBuilder<X>>) {
+    pub fn add_rule(
+        &mut self,
+        non_terminal: NonTerminalBuilder<X>,
+        function: G::ExternalFunction,
+        symbols: Vec<SymbolBuilder<X>>,
+    ) {
         let ruleset = &mut self.grammar.rulesets[non_terminal.non_terminal];
 
         let symbols: Vec<_> = symbols.into_iter().map(|s| s.sym).collect();
         let value = RuleValue::ExternalFunction(
             function,
-            symbols.iter()
+            symbols
+                .iter()
                 .enumerate()
                 .filter(|(_, s)| !s.discard)
                 .map(|(i, _)| RuleValue::SymbolValue(i))
-                .collect()
+                .collect(),
         );
 
-        ruleset.rules.push(Rule {
-            symbols,
-            value,
-        });
+        ruleset.rules.push(Rule { symbols, value });
     }
 }
 
 fn find_next_offshoot_index<G: GrammarTypes>(grammar: &Grammar<G>, name: &str) -> usize {
-    grammar.rulesets.iter()
+    grammar
+        .rulesets
+        .iter()
         .filter(|rs| rs.name == name)
         .map(|rs| rs.offshoot_index)
         .max()
@@ -839,13 +874,13 @@ fn find_next_offshoot_index<G: GrammarTypes>(grammar: &Grammar<G>, name: &str) -
         + 1
 }
 
-
-
 fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
     for i in 0..grammar.rulesets.len() {
         let ruleset = &grammar.rulesets[i];
 
-        let has_left_rec = ruleset.rules.iter()
+        let has_left_rec = ruleset
+            .rules
+            .iter()
             .flat_map(|r| r.symbols.iter().next())
             .any(|s| s.symbol_type == SymbolType::NonTerminal(i));
 
@@ -871,7 +906,10 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
         let mut has_no_location = false;
 
         for mut r in ruleset.rules.drain(..) {
-            let is_left_rec = r.symbols.iter().next()
+            let is_left_rec = r
+                .symbols
+                .iter()
+                .next()
                 .map(|s| s.symbol_type == SymbolType::NonTerminal(i))
                 .unwrap_or_default();
 
@@ -881,34 +919,31 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
 
                 if sym.with_location {
                     has_location = true;
-                }
-                else {
+                } else {
                     has_no_location = true;
                 }
 
                 if has_no_location && has_location {
-                    panic!("Left-recursive rule {} has both location and non-location arguments", ruleset_name);
+                    panic!(
+                        "Left-recursive rule {} has both location and non-location arguments",
+                        ruleset_name
+                    );
                 }
-
 
                 let mut value = r.value;
                 value.substitute_indexes(&|i| {
                     if *i == 0 {
                         *i = lambda_arg_index;
-                    }
-                    else {
+                    } else {
                         *i -= 1;
                     }
                 });
 
-
-                let prefix_arg_type =
-                    if has_location {
-                        RuleType::WithLocation(Box::new(rule_type.clone()))
-                    }
-                    else {
-                        rule_type.clone()
-                    };
+                let prefix_arg_type = if has_location {
+                    RuleType::WithLocation(Box::new(rule_type.clone()))
+                } else {
+                    rule_type.clone()
+                };
 
                 r.value = RuleValue::Lambda {
                     discard_param: sym.discard,
@@ -917,20 +952,16 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                 };
 
                 suffix_rules.push(r);
-            }
-            else {
+            } else {
                 prefix_rules.push(r);
             }
         }
 
-
-        let prefix_arg_type =
-            if has_location {
-                RuleType::WithLocation(Box::new(rule_type.clone()))
-            }
-            else {
-                rule_type.clone()
-            };
+        let prefix_arg_type = if has_location {
+            RuleType::WithLocation(Box::new(rule_type.clone()))
+        } else {
+            rule_type.clone()
+        };
 
         ruleset.rules.push(Rule {
             symbols: vec![
@@ -960,7 +991,10 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
         });
 
         grammar.rulesets.push(RuleSet {
-            rule_type: RuleType::Function(Box::new(prefix_arg_type.clone()), Box::new(rule_type.clone())),
+            rule_type: RuleType::Function(
+                Box::new(prefix_arg_type.clone()),
+                Box::new(rule_type.clone()),
+            ),
             name: ruleset_name.clone(),
             offshoot_index: suffix_offshoot_index,
             rules: suffix_rules,
@@ -995,14 +1029,15 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                                 first: Box::new(RuleValue::SymbolValue(2)),
                                 second: Box::new(RuleValue::SymbolValue(0)),
                                 value: Box::new(RuleValue::Apply(
-                                    Box::new(RuleValue::DropLocation(Box::new(RuleValue::SymbolValue(0)))),
+                                    Box::new(RuleValue::DropLocation(Box::new(
+                                        RuleValue::SymbolValue(0),
+                                    ))),
                                     Box::new(RuleValue::SymbolValue(2)),
                                 )),
                             }),
                         )),
                     },
                 },
-
                 // Empty rule for no recursion.
                 Rule {
                     symbols: vec![],
@@ -1011,12 +1046,11 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                         param_type: prefix_arg_type.clone(),
                         body: if has_location {
                             Box::new(RuleValue::DropLocation(Box::new(RuleValue::SymbolValue(0))))
-                        }
-                        else {
+                        } else {
                             Box::new(RuleValue::SymbolValue(0))
                         },
                     },
-                }
+                },
             ],
             lex_mode: None,
         });
@@ -1051,7 +1085,7 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
 
         for i in 0..grammar.rulesets.len() {
             let ruleset = &grammar.rulesets[i];
-    
+
             let mut prefixes: HashMap<Vec<Symbol>, usize> = HashMap::new();
             for rule in &ruleset.rules {
                 for j in 1..=rule.symbols.len() {
@@ -1060,61 +1094,52 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                         sym.discard = false;
                     }
 
-
                     *prefixes.entry(entry_prefix_vec).or_insert(0) += 1;
                 }
             }
-    
+
             let has_common_prefix = prefixes.values().copied().any(|n| n > 1);
-    
+
             if !has_common_prefix {
                 continue;
             }
 
             needs_factor = true;
-    
+
             let ruleset_name = ruleset.name.clone();
             let mut new_offshoot_index = find_next_offshoot_index(grammar, &ruleset_name);
-    
+
             let mut next_new_ruleset_index_offset = grammar.rulesets.len();
             let ruleset = &mut grammar.rulesets[i];
-    
-    
-            
+
             let mut new_rulesets: HashMap<Vec<Symbol>, (usize, RuleSet<G>)> = HashMap::new();
             let mut adjusted_rules: Vec<Rule<G>> = Vec::new();
-    
+
             for mut r in ruleset.rules.drain(..) {
                 // Find matching prefixes.
                 // Prefer the longest of the most common prefixes.
-                if let Some(prefix) = prefixes.iter()
-                    .filter(|(prefix, n)|
-                        **n > 1 &&
-                            prefix.len() <= r.symbols.len() &&
-                            r.symbols
-                                .iter()
-                                .zip(prefix.iter())
-                                .all(|(a, b)| {
-                                    let mut a2 = a.clone();
-                                    a2.discard = false;
-                                    a2 == *b
-                                })
-                    )
+                if let Some(prefix) = prefixes
+                    .iter()
+                    .filter(|(prefix, n)| {
+                        **n > 1
+                            && prefix.len() <= r.symbols.len()
+                            && r.symbols.iter().zip(prefix.iter()).all(|(a, b)| {
+                                let mut a2 = a.clone();
+                                a2.discard = false;
+                                a2 == *b
+                            })
+                    })
                     .max_by_key(|(prefix, n)| (**n, prefix.len()))
                     .map(|(prefix, _)| prefix)
                 {
-                    let new_rule_arg_type =
-                        if prefix.len() == 1 {
-                            type_for_sym(prefix[0])
-                        }
-                        else {
-                            RuleType::Tuple(
-                                prefix.iter().copied().map(type_for_sym).collect()
-                            )
-                        };
+                    let new_rule_arg_type = if prefix.len() == 1 {
+                        type_for_sym(prefix[0])
+                    } else {
+                        RuleType::Tuple(prefix.iter().copied().map(type_for_sym).collect())
+                    };
 
-                    let (_, new_ruleset) = new_rulesets.entry(prefix.clone())
-                        .or_insert_with(|| {
+                    let (_, new_ruleset) =
+                        new_rulesets.entry(prefix.clone()).or_insert_with(|| {
                             let ruleset_index = next_new_ruleset_index_offset;
                             next_new_ruleset_index_offset += 1;
 
@@ -1130,13 +1155,10 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                                 discard: false,
                             });
 
-
-
-                            let new_rule_type =
-                                RuleType::Function(
-                                    Box::new(new_rule_arg_type.clone()),
-                                    Box::new(ruleset.rule_type.clone()),
-                                );
+                            let new_rule_type = RuleType::Function(
+                                Box::new(new_rule_arg_type.clone()),
+                                Box::new(ruleset.rule_type.clone()),
+                            );
 
                             let ruleset = RuleSet {
                                 rule_type: new_rule_type,
@@ -1145,39 +1167,39 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                                 rules: Vec::new(),
                                 lex_mode: None,
                             };
-                            
+
                             adjusted_rules.push(Rule {
                                 symbols,
                                 value: RuleValue::Apply(
                                     Box::new(RuleValue::SymbolValue(prefix.len())),
-                                    Box::new(
-                                        if prefix.len() == 1 {
-                                            RuleValue::SymbolValue(0)
-                                        }
-                                        else {
-                                            RuleValue::MakeTuple((0..prefix.len()).map(RuleValue::SymbolValue).collect())
-                                        }
-                                    )
+                                    Box::new(if prefix.len() == 1 {
+                                        RuleValue::SymbolValue(0)
+                                    } else {
+                                        RuleValue::MakeTuple(
+                                            (0..prefix.len()).map(RuleValue::SymbolValue).collect(),
+                                        )
+                                    }),
                                 ),
                             });
                             (ruleset_index, ruleset)
                         });
 
-                    let all_elements_discarded = r.symbols.drain(0..prefix.len()).all(|sym| sym.discard);
+                    let all_elements_discarded =
+                        r.symbols.drain(0..prefix.len()).all(|sym| sym.discard);
 
                     r.value.substitute_indexes_with(&|index| {
                         if index < prefix.len() {
                             if prefix.len() == 1 {
                                 RuleValue::SymbolValue(r.symbols.len())
+                            } else {
+                                RuleValue::GetTuple(
+                                    Box::new(RuleValue::SymbolValue(r.symbols.len())),
+                                    index,
+                                )
                             }
-                            else {
-                                RuleValue::GetTuple(Box::new(RuleValue::SymbolValue(r.symbols.len())), index)
-                            }
-                        }
-                        else if index < prefix.len() + r.symbols.len() {
+                        } else if index < prefix.len() + r.symbols.len() {
                             RuleValue::SymbolValue(index - prefix.len())
-                        }
-                        else {
+                        } else {
                             RuleValue::SymbolValue(index - prefix.len() + 1)
                         }
                     });
@@ -1189,8 +1211,7 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                     };
 
                     new_ruleset.rules.push(r);
-                }
-                else {
+                } else {
                     adjusted_rules.push(r);
                 }
             }
@@ -1199,16 +1220,15 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
 
             let mut new_rulesets = new_rulesets.into_values().collect::<Vec<_>>();
             new_rulesets.sort_by_key(|(i, _)| *i);
-            grammar.rulesets.extend(new_rulesets.into_iter().map(|(_, ruleset)| ruleset));
+            grammar
+                .rulesets
+                .extend(new_rulesets.into_iter().map(|(_, ruleset)| ruleset));
         }
     }
 }
 
-
-
-
 fn build_first<G: GrammarTypes>(grammar: &Grammar<G>) -> Vec<HashSet<FirstElem>> {
-    let mut firsts = vec![ HashSet::new(); grammar.rulesets.len() ];
+    let mut firsts = vec![HashSet::new(); grammar.rulesets.len()];
     let mut first = HashSet::new();
 
     let mut needs_build = true;
@@ -1232,35 +1252,64 @@ fn build_first<G: GrammarTypes>(grammar: &Grammar<G>) -> Vec<HashSet<FirstElem>>
     firsts
 }
 
-fn symbol_firsts(symbols: &[Symbol], firsts: &[HashSet<FirstElem>], first: &mut HashSet<FirstElem>) {
+fn symbol_firsts(
+    symbols: &[Symbol],
+    firsts: &[HashSet<FirstElem>],
+    first: &mut HashSet<FirstElem>,
+) {
     match symbols {
-        [ Symbol { symbol_type: SymbolType::Terminal(a), .. }, .. ] => {
+        [
+            Symbol {
+                symbol_type: SymbolType::Terminal(a),
+                ..
+            },
+            ..,
+        ] => {
             first.insert(FirstElem::Terminal(*a));
-        },
-        [ Symbol { symbol_type: SymbolType::NonTerminal(a), .. }, .. ] => {
+        }
+        [
+            Symbol {
+                symbol_type: SymbolType::NonTerminal(a),
+                ..
+            },
+            ..,
+        ] => {
             let a_firsts = &firsts[*a];
             if a_firsts.contains(&FirstElem::Epsilon) {
-                first.extend(a_firsts.iter().copied().filter(|s| *s != FirstElem::Epsilon));
+                first.extend(
+                    a_firsts
+                        .iter()
+                        .copied()
+                        .filter(|s| *s != FirstElem::Epsilon),
+                );
                 symbol_firsts(&symbols[1..], firsts, first);
-            }
-            else {
+            } else {
                 first.extend(a_firsts);
             }
-        },
-        [ Symbol { symbol_type: SymbolType::Error, .. }, .. ] => {},
+        }
+        [
+            Symbol {
+                symbol_type: SymbolType::Error,
+                ..
+            },
+            ..,
+        ] => {}
         [] => {
             first.insert(FirstElem::Epsilon);
-        },
+        }
     }
 }
 
-fn build_follow<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstElem>]) -> Vec<HashSet<FollowElem>> {
-    let mut follows = vec![ HashSet::new(); grammar.rulesets.len() ];
+fn build_follow<G: GrammarTypes>(
+    grammar: &Grammar<G>,
+    firsts: &[HashSet<FirstElem>],
+) -> Vec<HashSet<FollowElem>> {
+    let mut follows = vec![HashSet::new(); grammar.rulesets.len()];
     let mut follow = HashSet::new();
     let mut post_first = HashSet::new();
 
     follows[0].insert(FollowElem::EndOfFile);
-    
+
     let mut needs_build = true;
     while needs_build {
         needs_build = false;
@@ -1268,8 +1317,10 @@ fn build_follow<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEl
         for (j, ruleset) in grammar.rulesets.iter().enumerate() {
             for rule in &ruleset.rules {
                 for (k, sym) in rule.symbols.iter().copied().enumerate() {
-                    let SymbolType::NonTerminal(i) = sym.symbol_type else { continue; };
-                    
+                    let SymbolType::NonTerminal(i) = sym.symbol_type else {
+                        continue;
+                    };
+
                     post_first.clear();
                     symbol_firsts(&rule.symbols[k + 1..], firsts, &mut post_first);
 
@@ -1277,7 +1328,7 @@ fn build_follow<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEl
                         match elem {
                             FirstElem::Terminal(a) => {
                                 needs_build |= follows[i].insert(FollowElem::Terminal(*a));
-                            },
+                            }
                             FirstElem::Epsilon => {
                                 follow.clear();
                                 follow.extend(&follows[j]);
@@ -1285,7 +1336,7 @@ fn build_follow<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEl
                                 for elem in &follow {
                                     needs_build |= follows[i].insert(*elem);
                                 }
-                            },
+                            }
                         }
                     }
                 }
@@ -1296,7 +1347,11 @@ fn build_follow<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEl
     follows
 }
 
-fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstElem>], follows: &[HashSet<FollowElem>]) -> Vec<Vec<LLTransition>> {
+fn build_table<G: GrammarTypes>(
+    grammar: &Grammar<G>,
+    firsts: &[HashSet<FirstElem>],
+    follows: &[HashSet<FollowElem>],
+) -> Vec<Vec<LLTransition>> {
     let mut table = vec![
         vec![
             LLTransition {
@@ -1329,7 +1384,7 @@ fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEle
                         terminal: k,
                     });
                 }
-                
+
                 cell.rules.insert(j);
             }
 
@@ -1338,7 +1393,7 @@ fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEle
                     if !follow.contains(&FollowElem::Terminal(k)) {
                         continue;
                     }
-                    
+
                     let cell = &mut table[i][k];
                     if !cell.rules.is_empty() {
                         cell.conflicts.push(LL1Conflict::FirstFollow {
@@ -1347,10 +1402,10 @@ fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEle
                             terminal: k,
                         });
                     }
-                    
+
                     cell.rules.insert(j);
                 }
-                
+
                 if follow.contains(&FollowElem::EndOfFile) {
                     let cell = &mut table[i][eof_terminal_index];
                     if !cell.rules.is_empty() {
@@ -1359,7 +1414,7 @@ fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEle
                             rule: j,
                         });
                     }
-                    
+
                     cell.rules.insert(j);
                 }
             }
@@ -1368,4 +1423,3 @@ fn build_table<G: GrammarTypes>(grammar: &Grammar<G>, firsts: &[HashSet<FirstEle
 
     table
 }
-

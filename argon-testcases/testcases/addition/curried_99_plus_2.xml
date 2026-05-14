@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>curried 99 + 2</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        def add(a: Int)(b: Int): Int =
+            a + b
+        
+        proc main(): () do
+            let result = add 99 2
+            puts (result.to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>101</ExpectedOutput>
+
+</ArgonTest>

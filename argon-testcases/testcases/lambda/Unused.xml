@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Lambda unused</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc callFunc (f: Int -> Int) (i: Int): Int =
+            f i
+
+        proc main(): () do
+            let mut addNum: Int = 25
+            let g: Int -> Int = |x| x + addNum
+            puts ((callFunc (|y| y + addNum + 1) 10).to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>36</ExpectedOutput>
+
+</ArgonTest>

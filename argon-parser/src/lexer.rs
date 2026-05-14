@@ -1,11 +1,13 @@
+use crate::token::{StringTokenType, Token, TokenType};
+use crate::{LexerError, ParseError};
+use argon_util::ErrorReporter;
+use num_bigint::BigUint;
 use num_traits::Num;
+use parse18_runtime::{
+    FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, WithRange,
+};
 use std::collections::VecDeque;
 use std::path::PathBuf;
-use num_bigint::BigUint;
-use argon_util::ErrorReporter;
-use parse18_runtime::{FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, WithRange};
-use crate::{LexerError, ParseError};
-use crate::token::{StringTokenType, Token, TokenType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexerMode {
@@ -48,14 +50,8 @@ impl<'a, R: LexerReader, ER: ErrorReporter<ParseError>> Lexer<'a, R, ER> {
             error_reporter,
             file_name,
             has_eof: false,
-            token_start_pos: FilePosition {
-                line: 1,
-                column: 1,
-            },
-            current_pos: FilePosition {
-                line: 1,
-                column: 1,
-            },
+            token_start_pos: FilePosition { line: 1, column: 1 },
+            current_pos: FilePosition { line: 1, column: 1 },
             acc_text: VecDeque::new(),
             current_text: String::with_capacity(2048),
             current_text_offset: 0,
@@ -76,35 +72,52 @@ impl<'a, R: LexerReader, ER: ErrorReporter<ParseError>> TokenReader for Lexer<'a
 
 trait TokenProcessor {
     type Lexer: Parse18Lexer;
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(lexer: &mut Lexer<R, ER>, lex_token: <Self::Lexer as Parse18Lexer>::Token) -> Option<WithRange<Token>>;
-    
-    fn current_token_or_error<R: LexerReader, ER: ErrorReporter<ParseError>>(lexer: &mut Lexer<R, ER>, state: <Self::Lexer as Parse18Lexer>::State) -> Option<WithRange<Token>> {
+    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+        lexer: &mut Lexer<R, ER>,
+        lex_token: <Self::Lexer as Parse18Lexer>::Token,
+    ) -> Option<WithRange<Token>>;
+
+    fn current_token_or_error<R: LexerReader, ER: ErrorReporter<ParseError>>(
+        lexer: &mut Lexer<R, ER>,
+        state: <Self::Lexer as Parse18Lexer>::State,
+    ) -> Option<WithRange<Token>> {
         if let LexerAcceptance::Accept(token) = Self::Lexer::acceptance(state) {
             Self::process_token(lexer, token)
-        }
-        else {
-            lexer.error_reporter.report_error(ParseError::LexerError(LexerError {
-                location: Location {
-                    file: lexer.file_name.clone(),
-                    start: lexer.token_start_pos,
-                    end: lexer.current_pos,
-                },
-            }));
+        } else {
+            lexer
+                .error_reporter
+                .report_error(ParseError::LexerError(LexerError {
+                    location: Location {
+                        file: lexer.file_name.clone(),
+                        start: lexer.token_start_pos,
+                        end: lexer.current_pos,
+                    },
+                }));
             lexer.text_buffer.clear();
             lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-            let error_token = Token::Error { invalid_text: Box::from(lexer.text_buffer.as_str()) };
-            let range = FilePositionRange { start: lexer.token_start_pos, end: lexer.current_pos };
+            let error_token = Token::Error {
+                invalid_text: Box::from(lexer.text_buffer.as_str()),
+            };
+            let range = FilePositionRange {
+                start: lexer.token_start_pos,
+                end: lexer.current_pos,
+            };
 
             Some(WithRange::new(error_token, range))
         }
     }
 
-    fn next_token<R: LexerReader, ER: ErrorReporter<ParseError>>(lexer: &mut Lexer<R, ER>) -> LexedToken {
+    fn next_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+        lexer: &mut Lexer<R, ER>,
+    ) -> LexedToken {
         let mut state = Self::Lexer::INITIAL_STATE;
-        
+
         loop {
             if lexer.current_text_offset < lexer.current_text.len() {
-                let c = lexer.current_text[lexer.current_text_offset..].chars().next().unwrap();
+                let c = lexer.current_text[lexer.current_text_offset..]
+                    .chars()
+                    .next()
+                    .unwrap();
 
                 let next_state = Self::Lexer::step(state, c);
 
@@ -115,12 +128,10 @@ trait TokenProcessor {
 
                     if let Some(token) = token {
                         return LexedToken::Token(token);
-                    }
-                    else {
+                    } else {
                         state = Self::Lexer::INITIAL_STATE;
                     }
-                }
-                else {
+                } else {
                     lexer.current_text_offset += c.len_utf8();
 
                     state = next_state;
@@ -129,16 +140,13 @@ trait TokenProcessor {
                     if c == '\n' {
                         lexer.current_pos.line += 1;
                         lexer.current_pos.column = 1;
-                    }
-                    else {
+                    } else {
                         lexer.current_pos.column += 1;
                     }
                 }
-            }
-            else if lexer.has_eof {
+            } else if lexer.has_eof {
                 return LexedToken::EndOfFile(lexer.current_pos);
-            }
-            else {
+            } else {
                 lexer.reader.next_chunk(&mut lexer.current_text);
                 if lexer.current_text.is_empty() {
                     lexer.has_eof = true;
@@ -151,7 +159,6 @@ trait TokenProcessor {
                 }
             }
         }
-
     }
 }
 
@@ -160,7 +167,10 @@ struct NormalTokenProcessor;
 impl TokenProcessor for NormalTokenProcessor {
     type Lexer = crate::token_lexer::TokenLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(lexer: &mut Lexer<R, ER>, lex_token: <Self::Lexer as Parse18Lexer>::Token) -> Option<WithRange<Token>> {
+    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+        lexer: &mut Lexer<R, ER>,
+        lex_token: <Self::Lexer as Parse18Lexer>::Token,
+    ) -> Option<WithRange<Token>> {
         let token_opt = match lex_token {
             TokenType::Token(t) => Some(t),
             TokenType::Whitespace => None,
@@ -168,53 +178,72 @@ impl TokenProcessor for NormalTokenProcessor {
             TokenType::DecInteger => {
                 lexer.text_buffer.clear();
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 10).expect("Lexer produced token with invalid decimal integer value");
+                let n = BigUint::from_str_radix(&lexer.text_buffer, 10)
+                    .expect("Lexer produced token with invalid decimal integer value");
                 Some(Token::IntToken { value: n })
             }
             TokenType::BinInteger => {
                 lexer.text_buffer.clear();
-                lexer.text_buffer.extend(lexer.acc_text.iter().copied().skip(2));
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 2).expect("Lexer produced token with invalid binary integer value");
+                lexer
+                    .text_buffer
+                    .extend(lexer.acc_text.iter().copied().skip(2));
+                let n = BigUint::from_str_radix(&lexer.text_buffer, 2)
+                    .expect("Lexer produced token with invalid binary integer value");
                 Some(Token::IntToken { value: n })
             }
             TokenType::OctInteger => {
                 lexer.text_buffer.clear();
-                lexer.text_buffer.extend(lexer.acc_text.iter().copied().skip(2));
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 8).expect("Lexer produced token with invalid octal integer value");
+                lexer
+                    .text_buffer
+                    .extend(lexer.acc_text.iter().copied().skip(2));
+                let n = BigUint::from_str_radix(&lexer.text_buffer, 8)
+                    .expect("Lexer produced token with invalid octal integer value");
                 Some(Token::IntToken { value: n })
             }
             TokenType::HexInteger => {
                 lexer.text_buffer.clear();
-                lexer.text_buffer.extend(lexer.acc_text.iter().copied().skip(2));
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 16).expect("Lexer produced token with invalid hexadecimal integer value");
+                lexer
+                    .text_buffer
+                    .extend(lexer.acc_text.iter().copied().skip(2));
+                let n = BigUint::from_str_radix(&lexer.text_buffer, 16)
+                    .expect("Lexer produced token with invalid hexadecimal integer value");
                 Some(Token::IntToken { value: n })
             }
             TokenType::Identifier => {
                 lexer.text_buffer.clear();
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-                Some(Token::Identifier { name: Box::from(lexer.text_buffer.as_str()) })
+                Some(Token::Identifier {
+                    name: Box::from(lexer.text_buffer.as_str()),
+                })
             }
             TokenType::InvalidInteger => {
                 lexer.text_buffer.clear();
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-                lexer.error_reporter.report_error(ParseError::LexerError(LexerError {
-                    location: Location {
-                        file: lexer.file_name.clone(),
-                        start: lexer.token_start_pos,
-                        end: lexer.current_pos,
-                    },
-                }));
-                Some(Token::Error { invalid_text: Box::from(lexer.text_buffer.as_str()) })
+                lexer
+                    .error_reporter
+                    .report_error(ParseError::LexerError(LexerError {
+                        location: Location {
+                            file: lexer.file_name.clone(),
+                            start: lexer.token_start_pos,
+                            end: lexer.current_pos,
+                        },
+                    }));
+                Some(Token::Error {
+                    invalid_text: Box::from(lexer.text_buffer.as_str()),
+                })
             }
         };
 
         let pos = lexer.current_pos;
-        let token_with_loc = token_opt.map(|token|
-            WithRange::new(token, FilePositionRange {
-                start: lexer.token_start_pos,
-                end: pos,
-            })
-        );
+        let token_with_loc = token_opt.map(|token| {
+            WithRange::new(
+                token,
+                FilePositionRange {
+                    start: lexer.token_start_pos,
+                    end: pos,
+                },
+            )
+        });
 
         lexer.token_start_pos = lexer.current_pos;
 
@@ -227,9 +256,15 @@ struct SkipNewLinesTokenProcessor;
 impl TokenProcessor for SkipNewLinesTokenProcessor {
     type Lexer = crate::token_lexer::TokenLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(lexer: &mut Lexer<R, ER>, lex_token: <Self::Lexer as Parse18Lexer>::Token) -> Option<WithRange<Token>> {
+    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+        lexer: &mut Lexer<R, ER>,
+        lex_token: <Self::Lexer as Parse18Lexer>::Token,
+    ) -> Option<WithRange<Token>> {
         match NormalTokenProcessor::process_token(lexer, lex_token) {
-            Some(WithRange { value: Token::NewLine, range: _ }) => None,
+            Some(WithRange {
+                value: Token::NewLine,
+                range: _,
+            }) => None,
             token => token,
         }
     }
@@ -240,7 +275,10 @@ struct StringTokenProcessor;
 impl TokenProcessor for StringTokenProcessor {
     type Lexer = crate::double_quote_string_lexer::StringLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(lexer: &mut Lexer<R, ER>, lex_token: <Self::Lexer as Parse18Lexer>::Token) -> Option<WithRange<Token>> {
+    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+        lexer: &mut Lexer<R, ER>,
+        lex_token: <Self::Lexer as Parse18Lexer>::Token,
+    ) -> Option<WithRange<Token>> {
         let pos = lexer.current_pos;
 
         let string_token = |s: &str| {
@@ -249,7 +287,7 @@ impl TokenProcessor for StringTokenProcessor {
                 FilePositionRange {
                     start: lexer.token_start_pos,
                     end: pos,
-                }
+                },
             )
         };
 
@@ -277,28 +315,26 @@ impl TokenProcessor for StringTokenProcessor {
             StringTokenType::EscapedUnicodeCodePoint => {
                 let num_chars = lexer.acc_text.len();
                 lexer.text_buffer.clear();
-                lexer.text_buffer.extend(lexer.acc_text.iter().copied().take(num_chars - 1).skip(3));
+                lexer
+                    .text_buffer
+                    .extend(lexer.acc_text.iter().copied().take(num_chars - 1).skip(3));
                 let escaped_char_str = parse_unicode_hex_str(&mut lexer.text_buffer)?;
                 string_token(escaped_char_str)
             }
-            StringTokenType::InterpolationStart => {
-                WithRange::new(
-                    Token::StringInterpolationStart,
-                    FilePositionRange {
-                        start: lexer.token_start_pos,
-                        end: pos,
-                    }
-                )
-            }
-            StringTokenType::EndOfString => {
-                WithRange::new(
-                    Token::StringEnd,
-                    FilePositionRange {
-                        start: lexer.token_start_pos,
-                        end: pos,
-                    }
-                )
-            }
+            StringTokenType::InterpolationStart => WithRange::new(
+                Token::StringInterpolationStart,
+                FilePositionRange {
+                    start: lexer.token_start_pos,
+                    end: pos,
+                },
+            ),
+            StringTokenType::EndOfString => WithRange::new(
+                Token::StringEnd,
+                FilePositionRange {
+                    start: lexer.token_start_pos,
+                    end: pos,
+                },
+            ),
         };
 
         lexer.token_start_pos = pos;
@@ -307,9 +343,8 @@ impl TokenProcessor for StringTokenProcessor {
     }
 }
 
-
 fn parse_unicode_hex_str(buffer: &mut String) -> Option<&str> {
-    let code_point= u32::from_str_radix(buffer, 16).ok()?;
+    let code_point = u32::from_str_radix(buffer, 16).ok()?;
     let code_point = char::from_u32(code_point)?;
     buffer.clear();
     buffer.push(code_point);
@@ -318,15 +353,15 @@ fn parse_unicode_hex_str(buffer: &mut String) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
-    use std::path::PathBuf;
-    use std::rc::Rc;
-    use argon_util::ErrorReporter;
-    use num_bigint::BigUint;
-    use num_traits::Num;
     use crate::ParseError;
     use crate::lexer::{LexedToken, Lexer, LexerMode, LexerReader, TokenReader};
     use crate::token::Token;
+    use argon_util::ErrorReporter;
+    use num_bigint::BigUint;
+    use num_traits::Num;
+    use std::cell::RefCell;
+    use std::path::PathBuf;
+    use std::rc::Rc;
 
     #[derive(Clone, Default)]
     struct TestErrorReporter {
@@ -388,7 +423,10 @@ mod tests {
 
     fn lex(mode: LexerMode, text: &str) -> Vec<Token> {
         let (tokens, errors) = lex_with_errors(mode, text);
-        assert!(errors.is_empty(), "expected no lexer errors, got {errors:?}");
+        assert!(
+            errors.is_empty(),
+            "expected no lexer errors, got {errors:?}"
+        );
         tokens
     }
 
@@ -407,17 +445,35 @@ mod tests {
 
     #[test]
     fn let_prefix_letter() {
-        assert_eq!(lex_normal("lets"), vec![Token::Identifier { name: Box::from("lets") }]);
+        assert_eq!(
+            lex_normal("lets"),
+            vec![Token::Identifier {
+                name: Box::from("lets")
+            }]
+        );
     }
 
     #[test]
     fn let_prefix_bang() {
-        assert_eq!(lex_normal("let!"), vec![Token::Identifier { name: Box::from("let!") }]);
+        assert_eq!(
+            lex_normal("let!"),
+            vec![Token::Identifier {
+                name: Box::from("let!")
+            }]
+        );
     }
 
     #[test]
     fn let_keyword_identifier() {
-        assert_eq!(lex_normal("let s"), vec![Token::KwLet, Token::Identifier { name: Box::from("s") }]);
+        assert_eq!(
+            lex_normal("let s"),
+            vec![
+                Token::KwLet,
+                Token::Identifier {
+                    name: Box::from("s")
+                }
+            ]
+        );
     }
 
     #[test]
@@ -452,115 +508,232 @@ mod tests {
 
     #[test]
     fn simple_decimal_integer() {
-        assert_eq!(lex_normal("123"), vec![Token::IntToken { value: BigUint::from(123u32) }]);
+        assert_eq!(
+            lex_normal("123"),
+            vec![Token::IntToken {
+                value: BigUint::from(123u32)
+            }]
+        );
     }
 
     #[test]
     fn decimal_integer_with_leading_zero() {
-        assert_eq!(lex_normal("0123"), vec![Token::IntToken { value: BigUint::from(123u32) }]);
+        assert_eq!(
+            lex_normal("0123"),
+            vec![Token::IntToken {
+                value: BigUint::from(123u32)
+            }]
+        );
     }
 
     #[test]
     fn negative_decimal_integer() {
-        assert_eq!(lex_normal("-123"), vec![Token::OpMinus, Token::IntToken { value: BigUint::from(123u32) }]);
+        assert_eq!(
+            lex_normal("-123"),
+            vec![
+                Token::OpMinus,
+                Token::IntToken {
+                    value: BigUint::from(123u32)
+                }
+            ]
+        );
     }
 
     #[test]
     fn invalid_decimal_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "123A");
-        assert_eq!(tokens, vec![Token::Error { invalid_text: Box::from("123A") }]);
+        assert_eq!(
+            tokens,
+            vec![Token::Error {
+                invalid_text: Box::from("123A")
+            }]
+        );
         assert_eq!(errors.len(), 1);
     }
 
     #[test]
     fn binary_integer_lowercase() {
-        assert_eq!(lex_normal("0b101010"), vec![Token::IntToken { value: BigUint::from(42u32) }]);
+        assert_eq!(
+            lex_normal("0b101010"),
+            vec![Token::IntToken {
+                value: BigUint::from(42u32)
+            }]
+        );
     }
 
     #[test]
     fn binary_integer_uppercase_b() {
-        assert_eq!(lex_normal("0B101010"), vec![Token::IntToken { value: BigUint::from(42u32) }]);
+        assert_eq!(
+            lex_normal("0B101010"),
+            vec![Token::IntToken {
+                value: BigUint::from(42u32)
+            }]
+        );
     }
 
     #[test]
     fn negative_binary_integer() {
-        assert_eq!(lex_normal("-0b101010"), vec![Token::OpMinus, Token::IntToken { value: BigUint::from(42u32) }]);
+        assert_eq!(
+            lex_normal("-0b101010"),
+            vec![
+                Token::OpMinus,
+                Token::IntToken {
+                    value: BigUint::from(42u32)
+                }
+            ]
+        );
     }
 
     #[test]
     fn invalid_binary_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "0b101010A");
-        assert_eq!(tokens, vec![Token::Error { invalid_text: Box::from("0b101010A") }]);
+        assert_eq!(
+            tokens,
+            vec![Token::Error {
+                invalid_text: Box::from("0b101010A")
+            }]
+        );
         assert_eq!(errors.len(), 1);
     }
 
     #[test]
     fn octal_integer() {
-        assert_eq!(lex_normal("0o1234567"), vec![Token::IntToken { value: BigUint::from_str_radix("1234567", 8).unwrap() }]);
+        assert_eq!(
+            lex_normal("0o1234567"),
+            vec![Token::IntToken {
+                value: BigUint::from_str_radix("1234567", 8).unwrap()
+            }]
+        );
     }
 
     #[test]
     fn negative_octal_integer() {
-        assert_eq!(lex_normal("-0o1234567"), vec![Token::OpMinus, Token::IntToken { value: BigUint::from_str_radix("1234567", 8).unwrap() }]);
+        assert_eq!(
+            lex_normal("-0o1234567"),
+            vec![
+                Token::OpMinus,
+                Token::IntToken {
+                    value: BigUint::from_str_radix("1234567", 8).unwrap()
+                }
+            ]
+        );
     }
 
     #[test]
     fn invalid_octal_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "0o1234567A");
-        assert_eq!(tokens, vec![Token::Error { invalid_text: Box::from("0o1234567A") }]);
+        assert_eq!(
+            tokens,
+            vec![Token::Error {
+                invalid_text: Box::from("0o1234567A")
+            }]
+        );
         assert_eq!(errors.len(), 1);
     }
 
     #[test]
     fn hex_integer_lowercase() {
-        assert_eq!(lex_normal("0x123456789abcdef"), vec![Token::IntToken { value: BigUint::from_str_radix("123456789abcdef", 16).unwrap() }]);
+        assert_eq!(
+            lex_normal("0x123456789abcdef"),
+            vec![Token::IntToken {
+                value: BigUint::from_str_radix("123456789abcdef", 16).unwrap()
+            }]
+        );
     }
 
     #[test]
     fn hex_integer_uppercase_x() {
-        assert_eq!(lex_normal("0X123456789abcdef"), vec![Token::IntToken { value: BigUint::from_str_radix("123456789abcdef", 16).unwrap() }]);
+        assert_eq!(
+            lex_normal("0X123456789abcdef"),
+            vec![Token::IntToken {
+                value: BigUint::from_str_radix("123456789abcdef", 16).unwrap()
+            }]
+        );
     }
 
     #[test]
     fn hex_integer_uppercase_digits() {
-        assert_eq!(lex_normal("0x123456789ABCDEF"), vec![Token::IntToken { value: BigUint::from_str_radix("123456789ABCDEF", 16).unwrap() }]);
+        assert_eq!(
+            lex_normal("0x123456789ABCDEF"),
+            vec![Token::IntToken {
+                value: BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
+            }]
+        );
     }
 
     #[test]
     fn hex_integer_uppercase_x_and_digits() {
-        assert_eq!(lex_normal("0X123456789ABCDEF"), vec![Token::IntToken { value: BigUint::from_str_radix("123456789ABCDEF", 16).unwrap() }]);
+        assert_eq!(
+            lex_normal("0X123456789ABCDEF"),
+            vec![Token::IntToken {
+                value: BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
+            }]
+        );
     }
 
     #[test]
     fn negative_hex_integer() {
-        assert_eq!(lex_normal("-0x123456789abcdef"), vec![Token::OpMinus, Token::IntToken { value: BigUint::from_str_radix("123456789abcdef", 16).unwrap() }]);
+        assert_eq!(
+            lex_normal("-0x123456789abcdef"),
+            vec![
+                Token::OpMinus,
+                Token::IntToken {
+                    value: BigUint::from_str_radix("123456789abcdef", 16).unwrap()
+                }
+            ]
+        );
     }
 
     #[test]
     fn invalid_hex_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "0x123456789abcdefG");
-        assert_eq!(tokens, vec![Token::Error { invalid_text: Box::from("0x123456789abcdefG") }]);
+        assert_eq!(
+            tokens,
+            vec![Token::Error {
+                invalid_text: Box::from("0x123456789abcdefG")
+            }]
+        );
         assert_eq!(errors.len(), 1);
     }
 
     #[test]
     fn simple_identifier() {
-        assert_eq!(lex_normal("s"), vec![Token::Identifier { name: Box::from("s") }]);
+        assert_eq!(
+            lex_normal("s"),
+            vec![Token::Identifier {
+                name: Box::from("s")
+            }]
+        );
     }
 
     #[test]
     fn identifier_with_digits() {
-        assert_eq!(lex_normal("s1"), vec![Token::Identifier { name: Box::from("s1") }]);
+        assert_eq!(
+            lex_normal("s1"),
+            vec![Token::Identifier {
+                name: Box::from("s1")
+            }]
+        );
     }
 
     #[test]
     fn identifier_with_underscore_in_middle() {
-        assert_eq!(lex_normal("some_name"), vec![Token::Identifier { name: Box::from("some_name") }]);
+        assert_eq!(
+            lex_normal("some_name"),
+            vec![Token::Identifier {
+                name: Box::from("some_name")
+            }]
+        );
     }
 
     #[test]
     fn identifier_starting_with_underscore_not_lone_underscore() {
-        assert_eq!(lex_normal("_value1"), vec![Token::Identifier { name: Box::from("_value1") }]);
+        assert_eq!(
+            lex_normal("_value1"),
+            vec![Token::Identifier {
+                name: Box::from("_value1")
+            }]
+        );
     }
 
     #[test]
@@ -570,22 +743,49 @@ mod tests {
 
     #[test]
     fn identifier_ending_with_question_mark() {
-        assert_eq!(lex_normal("isEmpty?"), vec![Token::Identifier { name: Box::from("isEmpty?") }]);
+        assert_eq!(
+            lex_normal("isEmpty?"),
+            vec![Token::Identifier {
+                name: Box::from("isEmpty?")
+            }]
+        );
     }
 
     #[test]
     fn identifier_ending_with_exclamation_mark() {
-        assert_eq!(lex_normal("bang!"), vec![Token::Identifier { name: Box::from("bang!") }]);
+        assert_eq!(
+            lex_normal("bang!"),
+            vec![Token::Identifier {
+                name: Box::from("bang!")
+            }]
+        );
     }
 
     #[test]
     fn only_one_trailing_terminator_following_bang_is_operator() {
-        assert_eq!(lex_normal("a?!"), vec![Token::Identifier { name: Box::from("a?") }, Token::OpLogicalNot]);
+        assert_eq!(
+            lex_normal("a?!"),
+            vec![
+                Token::Identifier {
+                    name: Box::from("a?")
+                },
+                Token::OpLogicalNot
+            ]
+        );
     }
 
     #[test]
     fn identifier_in_pipes() {
-        assert_eq!(lex_normal("|a|"), vec![Token::SymPipe, Token::Identifier { name: Box::from("a") }, Token::SymPipe]);
+        assert_eq!(
+            lex_normal("|a|"),
+            vec![
+                Token::SymPipe,
+                Token::Identifier {
+                    name: Box::from("a")
+                },
+                Token::SymPipe
+            ]
+        );
     }
 
     #[test]
@@ -595,7 +795,15 @@ mod tests {
 
     #[test]
     fn simple_string() {
-        assert_eq!(lex_string("abc\""), vec![Token::StringText { text: Box::from("abc") }, Token::StringEnd]);
+        assert_eq!(
+            lex_string("abc\""),
+            vec![
+                Token::StringText {
+                    text: Box::from("abc")
+                },
+                Token::StringEnd
+            ]
+        );
     }
 
     #[test]
@@ -603,9 +811,15 @@ mod tests {
         assert_eq!(
             lex_string("abc\\ndef\""),
             vec![
-                Token::StringText { text: Box::from("abc") },
-                Token::StringText { text: Box::from("\n") },
-                Token::StringText { text: Box::from("def") },
+                Token::StringText {
+                    text: Box::from("abc")
+                },
+                Token::StringText {
+                    text: Box::from("\n")
+                },
+                Token::StringText {
+                    text: Box::from("def")
+                },
                 Token::StringEnd,
             ]
         );
@@ -616,7 +830,9 @@ mod tests {
         assert_eq!(
             lex_string("a #{"),
             vec![
-                Token::StringText { text: Box::from("a ") },
+                Token::StringText {
+                    text: Box::from("a ")
+                },
                 Token::StringInterpolationStart,
             ]
         );

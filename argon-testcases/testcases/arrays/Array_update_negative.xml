@@ -1,0 +1,20 @@
+<ArgonTest>
+
+    <Name>Array update negative</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let arr = Array.newFilled 4 77
+            arr(-4) := 99
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedExecutionError>Index out of bounds</ExpectedExecutionError>
+
+</ArgonTest>

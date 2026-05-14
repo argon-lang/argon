@@ -2,7 +2,7 @@
 
 use parse18_lexer_gen::{
     builder::DFABuilder,
-    codegen::rust::{emit_rust, RustSettings},
+    codegen::rust::{RustSettings, emit_rust},
     regex::Regex,
 };
 use std::io::{self, Write};
@@ -64,7 +64,10 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("record"), "TokenType::Token(Token::KwRecord)");
     b.add(Regex::str("enum"), "TokenType::Token(Token::KwEnum)");
     b.add(Regex::str("trait"), "TokenType::Token(Token::KwTrait)");
-    b.add(Regex::str("instance"), "TokenType::Token(Token::KwInstance)");
+    b.add(
+        Regex::str("instance"),
+        "TokenType::Token(Token::KwInstance)",
+    );
     b.add(Regex::str("new"), "TokenType::Token(Token::KwNew)");
     b.add(Regex::str("true"), "TokenType::Token(Token::KwTrue)");
     b.add(Regex::str("false"), "TokenType::Token(Token::KwFalse)");
@@ -78,11 +81,20 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
         "TokenType::Token(Token::KwProtected)",
     );
     b.add(Regex::str("private"), "TokenType::Token(Token::KwPrivate)");
-    b.add(Regex::str("internal"), "TokenType::Token(Token::KwInternal)");
+    b.add(
+        Regex::str("internal"),
+        "TokenType::Token(Token::KwInternal)",
+    );
     b.add(Regex::str("final"), "TokenType::Token(Token::KwFinal)");
-    b.add(Regex::str("override"), "TokenType::Token(Token::KwOverride)");
+    b.add(
+        Regex::str("override"),
+        "TokenType::Token(Token::KwOverride)",
+    );
     b.add(Regex::str("virtual"), "TokenType::Token(Token::KwVirtual)");
-    b.add(Regex::str("abstract"), "TokenType::Token(Token::KwAbstract)");
+    b.add(
+        Regex::str("abstract"),
+        "TokenType::Token(Token::KwAbstract)",
+    );
     b.add(Regex::str("if"), "TokenType::Token(Token::KwIf)");
     b.add(Regex::str("then"), "TokenType::Token(Token::KwThen)");
     b.add(Regex::str("else"), "TokenType::Token(Token::KwElse)");
@@ -103,7 +115,10 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("finally"), "TokenType::Token(Token::KwFinally)");
     b.add(Regex::str("erased"), "TokenType::Token(Token::KwErased)");
     b.add(Regex::str("token"), "TokenType::Token(Token::KwToken)");
-    b.add(Regex::str("requires"), "TokenType::Token(Token::KwRequires)");
+    b.add(
+        Regex::str("requires"),
+        "TokenType::Token(Token::KwRequires)",
+    );
     b.add(Regex::str("ensures"), "TokenType::Token(Token::KwEnsures)");
     b.add(
         Regex::str("maintains"),
@@ -119,7 +134,10 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("inverse"), "TokenType::Token(Token::KwInverse)");
     b.add(Regex::str("update"), "TokenType::Token(Token::KwUpdate)");
     b.add(Regex::str("inline"), "TokenType::Token(Token::KwInline)");
-    b.add(Regex::str("operator"), "TokenType::Token(Token::KwOperator)");
+    b.add(
+        Regex::str("operator"),
+        "TokenType::Token(Token::KwOperator)",
+    );
     b.add(Regex::str("unary"), "TokenType::Token(Token::KwUnary)");
     b.add(Regex::str("boxed"), "TokenType::Token(Token::KwBoxed)");
     b.add(Regex::str("box"), "TokenType::Token(Token::KwBox)");

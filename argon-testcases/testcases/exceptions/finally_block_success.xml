@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Finally for block on Success</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc add(a: Int, b: Int): Int do
+            begin
+                a + b
+            finally
+                puts "Hello"
+            end
+        end
+        
+        proc main(): () do
+            puts (add(1, 1).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        Hello
+        2
+    </ExpectedOutput>
+
+</ArgonTest>

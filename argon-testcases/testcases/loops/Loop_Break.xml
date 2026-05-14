@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Loop Break</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            loop
+                break
+                puts "A"
+            end
+            
+            puts "Hello World"
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

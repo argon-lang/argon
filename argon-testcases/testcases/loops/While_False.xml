@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>While False</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            while false do
+                puts "A"
+            end
+            
+            puts "Hello World"
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

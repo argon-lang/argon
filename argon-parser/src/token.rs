@@ -503,4 +503,3 @@ pub enum StringTokenType {
     InterpolationStart,
     EndOfString,
 }
-

@@ -2,7 +2,7 @@
 
 use parse18_lexer_gen::{
     builder::DFABuilder,
-    codegen::rust::{emit_rust, RustSettings},
+    codegen::rust::{RustSettings, emit_rust},
     regex::Regex,
 };
 use std::io::{self, Write};

@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Modify Local (Purity Error)</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts (doMutation().to_s())
+        end
+
+        def doMutation(): Int do
+            let mut x = 5
+            x := 1
+            x
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>AR0006</ExpectedError>
+
+</ArgonTest>

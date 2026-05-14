@@ -1,19 +1,19 @@
-use std::io::Read;
-use std::path::PathBuf;
 use crate::ast::ModuleDeclaration;
 use crate::lexer::{Lexer, LexerReader};
 use argon_util::ErrorReporter;
+use std::io::Read;
+use std::path::PathBuf;
 
 pub mod argon_parser;
-mod token_lexer;
-mod double_quote_string_lexer;
-pub mod token;
 pub mod ast;
+mod double_quote_string_lexer;
 mod lexer;
+pub mod token;
+mod token_lexer;
 
-use parse18_runtime::{Location, ParseResult};
 use crate::argon_parser::ArgonParser;
 use crate::token::TokenCategory;
+use parse18_runtime::{Location, ParseResult};
 
 #[derive(Debug, Clone)]
 pub enum ParseError {
@@ -34,7 +34,11 @@ pub struct ParserError {
     pub expected_categories: Vec<TokenCategory>,
 }
 
-pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<ParseError>>(reader: R, file_name: &PathBuf, error_reporter: ER) -> ModuleDeclaration {
+pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<ParseError>>(
+    reader: R,
+    file_name: &PathBuf,
+    error_reporter: ER,
+) -> ModuleDeclaration {
     let lexer_reader = ReadLexerReader {
         reader,
         error_reporter: error_reporter.clone(),
@@ -68,7 +72,7 @@ struct ReadLexerReader<R, ER> {
     pending_end: usize,
 }
 
-impl <R: Read, ER: ErrorReporter<std::io::Error>> LexerReader for ReadLexerReader<R, ER> {
+impl<R: Read, ER: ErrorReporter<std::io::Error>> LexerReader for ReadLexerReader<R, ER> {
     fn next_chunk(&mut self, chars: &mut String) {
         chars.clear();
 
@@ -116,7 +120,10 @@ impl <R: Read, ER: ErrorReporter<std::io::Error>> LexerReader for ReadLexerReade
             return;
         }
 
-        if self.eof && self.pending_start == self.pending_end && matches!(status, encoding_rs::CoderResult::InputEmpty) {
+        if self.eof
+            && self.pending_start == self.pending_end
+            && matches!(status, encoding_rs::CoderResult::InputEmpty)
+        {
             self.decoder_done = true;
         }
     }

@@ -1,4 +1,2 @@
-
-pub mod grammar;
 pub mod codegen;
-
+pub mod grammar;

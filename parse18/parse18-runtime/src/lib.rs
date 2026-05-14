@@ -82,7 +82,7 @@ pub struct WithRange<T> {
     pub range: FilePositionRange,
 }
 
-impl <T> WithRange<T> {
+impl<T> WithRange<T> {
     pub fn new(value: T, range: FilePositionRange) -> Self {
         Self { value, range }
     }
@@ -126,7 +126,7 @@ pub enum ParseResult<T> {
     Failure,
 }
 
-impl <T> ParseResult<T> {
+impl<T> ParseResult<T> {
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> ParseResult<U> {
         match self {
             ParseResult::Success(value) => ParseResult::Success(value.map(f)),
@@ -136,19 +136,17 @@ impl <T> ParseResult<T> {
 
     pub fn flat_map<U>(self, f: impl FnOnce(T) -> ParseResult<U>) -> ParseResult<U> {
         match self {
-            ParseResult::Success(value) =>
-                match f(value.value) {
-                    ParseResult::Success(value2) =>
-                        ParseResult::Success(WithRange {
-                            value: value2.value,
-                            range: FilePositionRange {
-                                start: value.range.start,
-                                end: value2.range.end,
-                            }
-                        }),
+            ParseResult::Success(value) => match f(value.value) {
+                ParseResult::Success(value2) => ParseResult::Success(WithRange {
+                    value: value2.value,
+                    range: FilePositionRange {
+                        start: value.range.start,
+                        end: value2.range.end,
+                    },
+                }),
 
-                    ParseResult::Failure => ParseResult::Failure,
-                }
+                ParseResult::Failure => ParseResult::Failure,
+            },
 
             ParseResult::Failure => ParseResult::Failure,
         }

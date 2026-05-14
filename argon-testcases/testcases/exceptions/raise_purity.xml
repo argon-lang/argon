@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Raise (purity error)</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+
+        instance MyError: Exception
+            public override def _.message: String = "My custom error message"
+        end
+        
+        def main(): () do
+            raise MyError
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedError>AR0006</ExpectedError>
+
+</ArgonTest>

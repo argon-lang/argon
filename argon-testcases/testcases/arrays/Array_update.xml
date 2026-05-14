@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Array update</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let arr = Array.newFilled 4 77
+            arr(2) := 99
+            puts (arr.length.to_s())
+            let mut i = 0
+            while i < arr.length do
+                puts (arr(i).to_s())
+                i := i + 1
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        4
+        77
+        77
+        99
+        77
+    </ExpectedOutput>
+
+</ArgonTest>

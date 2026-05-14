@@ -1,10 +1,11 @@
-use parse18_ll_gen::codegen::rust::{emit_rust, RustSettings};
+use parse18_ll_gen::codegen::rust::{RustSettings, emit_rust};
 use parse18_ll_gen::grammar::{
-    error, nonterm, rule as base_rule, ruleset as base_ruleset, term, Grammar, GrammarFactory,
-    GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo,
+    Grammar, GrammarFactory, GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, error, nonterm,
+    rule as base_rule, ruleset as base_ruleset, term,
 };
 use std::io::{self, Write};
 
+#[allow(unused)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, strum::Display)]
 pub enum Token {
     // String lexing (interpolation-capable)
@@ -1856,7 +1857,9 @@ pub fn emit_rust_parser<W: Write>(w: &mut W) -> io::Result<()> {
     let rust_settings = RustSettings {
         module: None,
         visibility: "pub ".to_owned(),
-        impl_group: "impl <'a, L: TokenReader, ER: ErrorReporter<ParseError>> ArgonParser<'a, L, ER>".to_owned(),
+        impl_group:
+            "impl <'a, L: TokenReader, ER: ErrorReporter<ParseError>> ArgonParser<'a, L, ER>"
+                .to_owned(),
         token_type: "Token".to_owned(),
         result_type: "ParseResult".to_owned(),
         location_type: "WithLocation".to_owned(),

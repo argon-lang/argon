@@ -1,0 +1,20 @@
+<ArgonTest>
+
+    <Name>Hello World (Purity Error)</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        def main(): () do
+            puts "Hello World"
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>AR0006</ExpectedError>
+
+</ArgonTest>

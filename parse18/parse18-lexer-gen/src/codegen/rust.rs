@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use unicode_general_category::GeneralCategory;
 
-use crate::fsm::{DFATransition, DFA};
+use crate::fsm::{DFA, DFATransition};
 use crate::regex::UnicodePropertySet;
 
 pub struct RustSettings {
@@ -40,7 +40,11 @@ pub fn emit_rust<W: Write>(w: &mut W, dfa: DFA<String>, settings: &RustSettings)
         "#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]"
     )?;
     emit_indent(w, base_indent)?;
-    writeln!(w, "{}enum {}State {{", settings.visibility, settings.type_name)?;
+    writeln!(
+        w,
+        "{}enum {}State {{",
+        settings.visibility, settings.type_name
+    )?;
     for state_id in 0..dfa.states.len() {
         emit_indent(w, base_indent + 1)?;
         writeln!(w, "{},", state_name(state_id))?;
@@ -157,7 +161,11 @@ pub fn emit_rust<W: Write>(w: &mut W, dfa: DFA<String>, settings: &RustSettings)
     writeln!(w, "type Token = {};", settings.token_type)?;
     writeln!(w)?;
     emit_indent(w, base_indent + 1)?;
-    writeln!(w, "const INITIAL_STATE: Self::State = {}::INITIAL_STATE;", settings.type_name)?;
+    writeln!(
+        w,
+        "const INITIAL_STATE: Self::State = {}::INITIAL_STATE;",
+        settings.type_name
+    )?;
     writeln!(w)?;
     emit_indent(w, base_indent + 1)?;
     writeln!(

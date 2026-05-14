@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Token instance</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait MyTrait
+            public proc self.say_hello(): () do
+                puts "Hello World"
+            end
+        end
+
+        token instance MyInst: MyTrait
+        end
+
+        proc do_say_hello(token t: MyTrait): () =
+            t.say_hello()
+        
+        proc main(): () do
+            do_say_hello MyInst
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

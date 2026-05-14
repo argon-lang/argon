@@ -1,0 +1,33 @@
+<ArgonTest>
+
+    <Name>Swap tuple</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc printTuple(a: String, b: String): () do
+            puts a
+            puts b
+        end
+        
+        def swapTuple(a: String, b: String): (String, String) =
+            b, a
+        
+        proc main(): () do
+            let tupleValue: (String, String) = "1", "2"
+            printTuple (swapTuple tupleValue)
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        2
+        1
+    </ExpectedOutput>
+
+</ArgonTest>

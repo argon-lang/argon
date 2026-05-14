@@ -1,0 +1,20 @@
+<ArgonTest>
+
+    <Name>Hello World (Parenthesis)</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts("Hello World")
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

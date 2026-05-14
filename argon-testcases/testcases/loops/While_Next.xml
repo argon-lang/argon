@@ -1,0 +1,34 @@
+<ArgonTest>
+
+    <Name>While Next</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let mut i = 1
+            while i <= 5 do
+                let s = i.to_s()
+                i := i + 1
+
+                if i = 4 then
+                    next
+                end
+
+                puts s
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        1
+        2
+        4
+        5
+    </ExpectedOutput>
+
+</ArgonTest>

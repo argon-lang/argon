@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>If condition assert</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        def zero: Int = 0
+
+        proc main(): () do
+            let a = zero
+            if a = 0 then
+                assert (a = 0) == true
+                puts "Zero is 0"
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Zero is 0
+    </ExpectedOutput>
+
+</ArgonTest>

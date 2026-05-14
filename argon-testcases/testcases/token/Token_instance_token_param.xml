@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Token instance (token param)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait Identity(token T: type)
+            public def _.identity (x: T): T = abstract
+        end
+
+        token instance MyIdentity(token T: type): Identity T
+            public override def _.identity (x: T): T = x
+        end
+
+        proc use_identity(token i: Identity Int): Int =
+            i.identity 42
+        
+        proc main(): () do
+            let x = use_identity(MyIdentity Int)
+            puts (x.to_s())
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>42</ExpectedOutput>
+
+</ArgonTest>

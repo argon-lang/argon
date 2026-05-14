@@ -1,0 +1,38 @@
+<ArgonTest>
+
+    <Name>Loop Next</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let mut i = 1
+            loop
+                let s = i.to_s()
+                i := i + 1
+
+                if i = 4 then
+                    next
+                end
+
+                puts s
+
+                if i > 5 then
+                    break
+                end
+            end
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>
+        1
+        2
+        4
+        5
+    </ExpectedOutput>
+
+</ArgonTest>

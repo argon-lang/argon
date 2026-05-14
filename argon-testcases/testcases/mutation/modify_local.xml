@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Modify Local</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let mut x = 5
+            x := x + 1
+            puts (x.to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>6</ExpectedOutput>
+
+</ArgonTest>
