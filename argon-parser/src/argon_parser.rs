@@ -405,7 +405,7 @@ fn record_declaration_stmt_rest_builder(
 }
 
 fn record_body_stmt_record_field(field: RecordField) -> RecordBodyStmt {
-    RecordBodyStmt::RecordField(field)
+    RecordBodyStmt::RecordField(Box::new(field))
 }
 
 fn enum_declaration_stmt_rest_builder(
@@ -504,15 +504,15 @@ fn import_path_segment_wildcard_token(star: WithLocation<Token>) -> ImportPathSe
 }
 
 fn stmt_expr(expr: Expr) -> Stmt {
-    Stmt::Expr(expr)
+    Stmt::Expr(Box::new(expr))
 }
 
 fn stmt_import(import_stmt: ImportStmt) -> Stmt {
-    Stmt::Import(import_stmt)
+    Stmt::Import(Box::new(import_stmt))
 }
 
 fn stmt_export(export_stmt: ExportStmt) -> Stmt {
-    Stmt::Export(export_stmt)
+    Stmt::Export(Box::new(export_stmt))
 }
 
 fn statement_apply_builder(
@@ -534,7 +534,7 @@ fn statement_record_builder(
     modifiers: Vec<WithLocation<Modifier>>,
     build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordDeclarationStmt>,
 ) -> Stmt {
-    Stmt::RecordDeclaration(build_decl(modifiers))
+    Stmt::RecordDeclaration(Box::new(build_decl(modifiers)))
 }
 
 fn record_body_stmt_from_declaration_builder(
@@ -784,7 +784,7 @@ fn identifier_expr_update(id: IdentifierExpr) -> IdentifierExpr {
 }
 
 fn function_body_expr_body(body: WithLocation<Expr>) -> FunctionBody {
-    FunctionBody::ExprBody(body)
+    FunctionBody::ExprBody(Box::new(body))
 }
 
 fn function_body_extern_body(body: WithLocation<String>) -> FunctionBody {
@@ -796,7 +796,9 @@ fn string_fragment_text(text: impl Into<String>) -> StringFragment {
 }
 
 fn string_fragment_interpolate(value: WithLocation<Expr>) -> StringFragment {
-    StringFragment::Interpolate { value }
+    StringFragment::Interpolate {
+        value: Box::new(value),
+    }
 }
 
 fn pattern_discard() -> Pattern {
@@ -897,13 +899,13 @@ fn variable_declaration_stmt(
     var_type: Option<WithLocation<Expr>>,
     value: WithLocation<Expr>,
 ) -> Stmt {
-    Stmt::VariableDeclaration(ast::VariableDeclarationStmt {
+    Stmt::VariableDeclaration(Box::new(ast::VariableDeclarationStmt {
         modifiers,
         is_mutable,
         name,
         var_type,
         value,
-    })
+    }))
 }
 
 fn function_declaration_stmt(
@@ -914,14 +916,14 @@ fn function_declaration_stmt(
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: FunctionBody,
 ) -> DeclarationStmt {
-    DeclarationStmt::Function(ast::FunctionDeclarationStmt {
+    DeclarationStmt::Function(Box::new(ast::FunctionDeclarationStmt {
         modifiers,
         purity,
         name,
         parameters,
         return_type,
         body,
-    })
+    }))
 }
 
 fn method_declaration_stmt(
@@ -934,7 +936,7 @@ fn method_declaration_stmt(
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
 ) -> DeclarationStmt {
-    DeclarationStmt::Method(ast::MethodDeclarationStmt {
+    DeclarationStmt::Method(Box::new(ast::MethodDeclarationStmt {
         modifiers,
         purity,
         instance_name,
@@ -943,7 +945,7 @@ fn method_declaration_stmt(
         parameters,
         return_type,
         body,
-    })
+    }))
 }
 
 fn record_declaration_stmt(
@@ -969,13 +971,13 @@ fn enum_declaration_stmt(
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<EnumBodyStmt>>,
 ) -> Stmt {
-    Stmt::EnumDeclaration(ast::EnumDeclarationStmt {
+    Stmt::EnumDeclaration(Box::new(ast::EnumDeclarationStmt {
         modifiers,
         name,
         parameters,
         return_type,
         body,
-    })
+    }))
 }
 
 fn trait_declaration_stmt(
@@ -985,13 +987,13 @@ fn trait_declaration_stmt(
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
 ) -> Stmt {
-    Stmt::TraitDeclaration(ast::TraitDeclarationStmt {
+    Stmt::TraitDeclaration(Box::new(ast::TraitDeclarationStmt {
         modifiers,
         name,
         parameters,
         return_type,
         body,
-    })
+    }))
 }
 
 fn instance_declaration_stmt(
@@ -1001,13 +1003,13 @@ fn instance_declaration_stmt(
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
 ) -> Stmt {
-    Stmt::InstanceDeclaration(ast::InstanceDeclarationStmt {
+    Stmt::InstanceDeclaration(Box::new(ast::InstanceDeclarationStmt {
         modifiers,
         name,
         parameters,
         return_type,
         body,
-    })
+    }))
 }
 
 fn record_field(
@@ -1028,16 +1030,16 @@ fn enum_variant_constructor(
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
 ) -> EnumBodyStmt {
-    EnumBodyStmt::EnumVariant(EnumVariant::Constructor {
+    EnumBodyStmt::EnumVariant(Box::new(EnumVariant::Constructor {
         modifiers,
         name,
         parameters,
         return_type,
-    })
+    }))
 }
 
 fn enum_variant_record(record: RecordDeclarationStmt) -> EnumBodyStmt {
-    EnumBodyStmt::EnumVariant(EnumVariant::Record(record))
+    EnumBodyStmt::EnumVariant(Box::new(EnumVariant::Record(record)))
 }
 
 fn record_field_literal(

@@ -36,9 +36,9 @@ pub fn emit_scala<W: Write>(
 
         if let Some((state_id, _)) = iter.next() {
             writeln!(w, "    state match {{")?;
-            write!(w, "      case {}", state_id)?;
+            write!(w, "      case {state_id}")?;
             for (state_id, _) in iter {
-                write!(w, " | {}", state_id)?;
+                write!(w, " | {state_id}")?;
             }
             writeln!(w, " => true")?;
             writeln!(w, "      case _ => false")?;
@@ -58,7 +58,7 @@ pub fn emit_scala<W: Write>(
         let Some(acceptance) = &state.acceptance else {
             continue;
         };
-        writeln!(w, "      case {} => {}", state_id, acceptance)?;
+        writeln!(w, "      case {state_id} => {acceptance}")?;
     }
     writeln!(
         w,
@@ -76,9 +76,9 @@ pub fn emit_scala<W: Write>(
 
         if let Some((state_id, _)) = iter.next() {
             writeln!(w, "    state match {{")?;
-            write!(w, "      case {}", state_id)?;
+            write!(w, "      case {state_id}")?;
             for (state_id, _) in iter {
-                write!(w, " | {}", state_id)?;
+                write!(w, " | {state_id}")?;
             }
             writeln!(w, " => true")?;
             writeln!(w, "      case _ => false")?;
@@ -91,7 +91,7 @@ pub fn emit_scala<W: Write>(
     writeln!(w, "  def step(state: State, c: Int): State =")?;
     writeln!(w, "    state match {{")?;
     for (state_id, state) in dfa.states.iter().enumerate() {
-        writeln!(w, "      case {} =>", state_id)?;
+        writeln!(w, "      case {state_id} =>")?;
 
         emit_transition(w, 4, &state.transition)?;
     }
@@ -119,11 +119,11 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
     match transition {
         DFATransition::Always(target) => {
             emit_indent(w, indent)?;
-            writeln!(w, "{}", target)?;
+            writeln!(w, "{target}")?;
         }
         DFATransition::IfCharacter(c, a, b) => {
             emit_indent(w, indent)?;
-            writeln!(w, "if c == 0x{:X} then", u32::from(*c) as i32)?;
+            writeln!(w, "if c == 0x{:X} then", u32::from(*c).cast_signed())?;
             emit_transition(w, indent + 1, a.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "else")?;
@@ -136,8 +136,8 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
             writeln!(
                 w,
                 "if c >= 0x{:X} && c <= 0x{:X} then",
-                u32::from(*start) as i32,
-                u32::from(*end) as i32
+                u32::from(*start).cast_signed(),
+                u32::from(*end).cast_signed()
             )?;
             emit_transition(w, indent + 1, a.as_ref())?;
             emit_indent(w, indent)?;
@@ -202,7 +202,7 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
                         _ => panic!("Unsupported unicode category: {cat:?}"),
                     };
 
-                    write!(w, "java.lang.Character.{}", cat_name)?;
+                    write!(w, "java.lang.Character.{cat_name}")?;
                 }
 
                 writeln!(w, " =>")?;
@@ -225,7 +225,7 @@ fn emit_transition<W: Write>(w: &mut W, indent: u32, transition: &DFATransition)
                 UnicodePropertySet::Lowercase => "java.lang.Character.isLowerCase(c)",
                 UnicodePropertySet::WhiteSpace => "isWhitespace(c)",
             };
-            writeln!(w, "if {} then", cond)?;
+            writeln!(w, "if {cond} then")?;
             emit_transition(w, indent + 1, a.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "else")?;

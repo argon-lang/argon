@@ -44,21 +44,16 @@ impl std::str::FromStr for TestCase {
     }
 }
 
-pub fn load_test_case(
-    path: impl AsRef<Path>,
-) -> Result<TestCase, LoadError> {
+pub fn load_test_case(path: impl AsRef<Path>) -> Result<TestCase, LoadError> {
     match fs::read_to_string(&path) {
         Ok(xml) => {
             let path = path.as_ref().to_owned();
-            TestCase::from_xml(&xml).map_err(|source| LoadError::Decode {
-                path,
-                source,
-            })
+            TestCase::from_xml(&xml).map_err(|source| LoadError::Decode { path, source })
         }
         Err(err) => {
             let path = path.as_ref().to_owned();
             Err(LoadError::Io { path, source: err })
-        },
+        }
     }
 }
 
@@ -245,7 +240,7 @@ mod tests {
     fn decode_test_case(
         #[base_dir = "testcases"]
         #[files("**/*.xml")]
-        test_case_path: PathBuf
+        test_case_path: PathBuf,
     ) {
         let test_case = TestCase::from_xml(&fs::read_to_string(test_case_path).unwrap()).unwrap();
         assert!(!test_case.name.is_empty());

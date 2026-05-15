@@ -192,11 +192,6 @@ impl<G: GrammarTypes> Grammar<G> {
 
         impl<G: GrammarFactory> GrammarBuilderCallback<G> for Callback<G> {
             fn accept<X>(self, builder: &mut GrammarBuilder<G, X>) {
-                let mut rule_map = HashMap::new();
-                let mut token_map: HashMap<G::Terminal, SymbolBuilder<X>> = HashMap::new();
-                let mut rule_queue = VecDeque::new();
-                let mut processed_rules = HashSet::new();
-
                 fn get_non_terminal<G: GrammarFactory, X>(
                     factory: &G,
                     builder: &mut GrammarBuilder<G, X>,
@@ -221,6 +216,11 @@ impl<G: GrammarTypes> Grammar<G> {
                         .entry(token)
                         .or_insert_with(|| builder.add_terminal(token))
                 }
+
+                let mut rule_map = HashMap::new();
+                let mut token_map: HashMap<G::Terminal, SymbolBuilder<X>> = HashMap::new();
+                let mut rule_queue = VecDeque::new();
+                let mut processed_rules = HashSet::new();
 
                 rule_queue.push_back(self.factory.start_rule());
 
@@ -299,6 +299,7 @@ pub trait GrammarFactory: GrammarTypes + Clone {
     fn create_rule_set(&self, rule: Self::Rule) -> RuleSetInfo<Self>;
 }
 
+#[must_use]
 pub struct RuleSetInfo<G: GrammarTypes> {
     rule_type: G::ExternalRuleType,
     rules: Vec<RuleInfo<G>>,
@@ -317,6 +318,7 @@ pub struct RuleInfo<G: GrammarTypes> {
     function: G::ExternalFunction,
 }
 
+#[must_use]
 pub struct SymbolInfo<G: GrammarTypes> {
     symbol_type: SymbolInfoType<G>,
     with_location: bool,
@@ -508,7 +510,7 @@ impl<'a, 'b, G: GrammarTypes> LL1RuleSet<'a, 'b, G> {
     }
 
     pub fn follows(&self) -> impl Iterator<Item = &'a G::Terminal> {
-        self.follows.iter().flat_map(|follow| match follow {
+        self.follows.iter().filter_map(|follow| match follow {
             FollowElem::Terminal(i) => Some(&self.grammar.terminals[*i]),
             FollowElem::EndOfFile | FollowElem::Epsilon => None,
         })
@@ -569,7 +571,7 @@ where
     }
 
     pub fn value(&self) -> LL1RuleValue<'a, G> {
-        LL1RuleValue::from_rule_value(&self.grammar, &self.rule.value)
+        LL1RuleValue::from_rule_value(self.grammar, &self.rule.value)
     }
 
     pub fn terminals(&self) -> impl Iterator<Item = Option<&'a G::Terminal>> {
@@ -726,6 +728,7 @@ pub trait GrammarBuilderCallback<G: GrammarTypes> {
 }
 
 #[derive(Debug)]
+#[must_use]
 pub struct SymbolBuilder<X> {
     sym: Symbol,
     dummy: PhantomData<X>,
@@ -745,16 +748,14 @@ impl<X> SymbolBuilder<X> {
 
 impl<X> Clone for SymbolBuilder<X> {
     fn clone(&self) -> Self {
-        SymbolBuilder {
-            sym: self.sym,
-            dummy: PhantomData,
-        }
+        *self
     }
 }
 
 impl<X> Copy for SymbolBuilder<X> {}
 
 #[derive(Debug)]
+#[must_use]
 pub struct NonTerminalBuilder<X> {
     non_terminal: usize,
     dummy: PhantomData<X>,
@@ -775,10 +776,7 @@ impl<X> NonTerminalBuilder<X> {
 
 impl<X> Clone for NonTerminalBuilder<X> {
     fn clone(&self) -> Self {
-        NonTerminalBuilder {
-            non_terminal: self.non_terminal,
-            dummy: PhantomData,
-        }
+        *self
     }
 }
 
@@ -881,7 +879,7 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
         let has_left_rec = ruleset
             .rules
             .iter()
-            .flat_map(|r| r.symbols.iter().next())
+            .filter_map(|r| r.symbols.first())
             .any(|s| s.symbol_type == SymbolType::NonTerminal(i));
 
         if !has_left_rec {
@@ -908,10 +906,8 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
         for mut r in ruleset.rules.drain(..) {
             let is_left_rec = r
                 .symbols
-                .iter()
-                .next()
-                .map(|s| s.symbol_type == SymbolType::NonTerminal(i))
-                .unwrap_or_default();
+                .first()
+                .is_some_and(|s| s.symbol_type == SymbolType::NonTerminal(i));
 
             if is_left_rec {
                 let sym = r.symbols.remove(0);
@@ -923,12 +919,10 @@ fn elim_left_rec<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                     has_no_location = true;
                 }
 
-                if has_no_location && has_location {
-                    panic!(
-                        "Left-recursive rule {} has both location and non-location arguments",
-                        ruleset_name
-                    );
-                }
+                assert!(
+                    !has_no_location || !has_location,
+                    "Left-recursive rule {ruleset_name} has both location and non-location arguments"
+                );
 
                 let mut value = r.value;
                 value.substitute_indexes(&|i| {
@@ -1124,7 +1118,7 @@ fn left_factor<G: GrammarTypes>(grammar: &mut Grammar<G>) {
                         **n > 1
                             && prefix.len() <= r.symbols.len()
                             && r.symbols.iter().zip(prefix.iter()).all(|(a, b)| {
-                                let mut a2 = a.clone();
+                                let mut a2 = *a;
                                 a2.discard = false;
                                 a2 == *b
                             })
@@ -1347,6 +1341,10 @@ fn build_follow<G: GrammarTypes>(
     follows
 }
 
+#[allow(
+    clippy::needless_range_loop,
+    reason = "Table access would be reordered"
+)]
 fn build_table<G: GrammarTypes>(
     grammar: &Grammar<G>,
     firsts: &[HashSet<FirstElem>],

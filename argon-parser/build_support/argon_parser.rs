@@ -5,7 +5,11 @@ use parse18_ll_gen::grammar::{
 };
 use std::io::{self, Write};
 
-#[allow(unused)]
+#[allow(unused, reason = "Some cases represent reserved keywords")]
+#[allow(
+    clippy::enum_variant_names,
+    reason = "Names are too common without the suffix"
+)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, strum::Display)]
 pub enum Token {
     // String lexing (interpolation-capable)
@@ -478,7 +482,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Identifier), term(OpAssign).discard() ], "identifier_expr_update"),
                 ],
             ),
-            
+
             BinaryOperatorName => ruleset(
                 "Token",
                 [

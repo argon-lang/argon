@@ -7,3 +7,6 @@ edition = "2024"
 quick-xml = { workspace = true, features = ["serialize"] }
 rstest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 unicode-general-category = "1.0"
+
+[lints]
+workspace = true

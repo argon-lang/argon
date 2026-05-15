@@ -105,8 +105,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
 
         let goal = goal.clone();
         let inferred = self.clone().infer(goal.clone(), model.clone());
-        let derived =
-            std::iter::once_with(move || self.solve_derived(goal, model)).flatten();
+        let derived = std::iter::once_with(move || self.solve_derived(goal, model)).flatten();
 
         Box::new(inferred.chain(derived))
     }
@@ -122,47 +121,42 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                 let b = b.clone();
                 let prover = self.consume_fuel();
 
-                Box::new(
-                    prover
-                        .clone()
-                        .solve(a.clone(), model)
-                        .flat_map(move |result| match result {
-                            PartialProofResult::No(not_proof, model) => {
-                                let proof = Proof::DeMorganOrPullNotOut(Box::new(
-                                    Proof::DisjunctIntroLeft(Box::new(not_proof)),
-                                ));
-                                Box::new(std::iter::once(PartialProofResult::No(proof, model)))
-                                    as Box<dyn Iterator<Item = PartialProofResult<C>>>
-                            }
+                Box::new(prover.clone().solve(a.clone(), model).flat_map(
+                    move |result| match result {
+                        PartialProofResult::No(not_proof, model) => {
+                            let proof = Proof::DeMorganOrPullNotOut(Box::new(
+                                Proof::DisjunctIntroLeft(Box::new(not_proof)),
+                            ));
+                            Box::new(std::iter::once(PartialProofResult::No(proof, model)))
+                                as Box<dyn Iterator<Item = PartialProofResult<C>>>
+                        }
 
-                            PartialProofResult::Yes(proof_a, model) => {
-                                let proof_a = proof_a.clone();
-                                let b = b.clone();
-                                Box::new(prover.clone().solve(b, model).map(move |result| {
-                                    match result {
-                                        PartialProofResult::No(proof, model) => {
-                                            PartialProofResult::No(
-                                                Proof::DeMorganOrPullNotOut(Box::new(
-                                                    Proof::DisjunctIntroRight(Box::new(proof)),
-                                                )),
-                                                model,
-                                            )
-                                        }
+                        PartialProofResult::Yes(proof_a, model) => {
+                            let proof_a = proof_a.clone();
+                            let b = b.clone();
+                            Box::new(prover.clone().solve(b, model).map(
+                                move |result| match result {
+                                    PartialProofResult::No(proof, model) => PartialProofResult::No(
+                                        Proof::DeMorganOrPullNotOut(Box::new(
+                                            Proof::DisjunctIntroRight(Box::new(proof)),
+                                        )),
+                                        model,
+                                    ),
 
-                                        PartialProofResult::Yes(proof_b, model) => {
-                                            PartialProofResult::Yes(
-                                                Proof::ConjunctIntro {
-                                                    a: Box::new(proof_a.clone()),
-                                                    b: Box::new(proof_b),
-                                                },
-                                                model,
-                                            )
-                                        }
+                                    PartialProofResult::Yes(proof_b, model) => {
+                                        PartialProofResult::Yes(
+                                            Proof::ConjunctIntro {
+                                                a: Box::new(proof_a.clone()),
+                                                b: Box::new(proof_b),
+                                            },
+                                            model,
+                                        )
                                     }
-                                }))
-                            }
-                        }),
-                )
+                                },
+                            ))
+                        }
+                    },
+                ))
             }
 
             Predicate::Or(a, b) => {
@@ -284,10 +278,9 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                     ))
                 }
 
-                Predicate::Implies(a, b) if matches!(**b, Predicate::False) => Box::new(
-                    self.consume_fuel()
-                        .solve(a.clone(), model)
-                        .map(|result| match result {
+                Predicate::Implies(a, b) if matches!(**b, Predicate::False) => {
+                    Box::new(self.consume_fuel().solve(a.clone(), model).map(
+                        |result| match result {
                             PartialProofResult::No(not_proof, model) => PartialProofResult::No(
                                 Proof::DoubleNegIntro(Box::new(not_proof)),
                                 model,
@@ -297,8 +290,9 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                                 Proof::DoubleNegIntro(Box::new(proof)),
                                 model,
                             ),
-                        }),
-                ),
+                        },
+                    ))
+                }
 
                 _ => Box::new(std::iter::empty()),
             },
@@ -334,7 +328,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
             Predicate::PredicateExpression(predicate) => {
                 let mut model = (*model).clone();
                 Box::new(self.context.intrinsic_predicate(
-                    &predicate,
+                    predicate,
                     &mut model,
                     self.clone().consume_fuel(),
                 ))
@@ -347,18 +341,20 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         goal: Rc<Predicate<C::Syntax>>,
         model: Rc<C::Model>,
     ) -> Box<dyn Iterator<Item = PartialProofResult<C>> + 'b>
-        where 'a : 'b
+    where
+        'a: 'b,
     {
         if self.fuel.is_empty() {
             return Box::new(std::iter::empty());
         }
 
-        let assertions: Vec<_> =
-            self.context.fresh_assertions(&model)
-                .into_iter()
-                .map(|(proof, pred)| (proof, Rc::new(pred)))
-                .chain(self.additional_givens.iter().cloned())
-                .collect();
+        let assertions: Vec<_> = self
+            .context
+            .fresh_assertions(&model)
+            .into_iter()
+            .map(|(proof, pred)| (proof, Rc::new(pred)))
+            .chain(self.additional_givens.iter().cloned())
+            .collect();
 
         Box::new(assertions.into_iter().flat_map(move |(proof, assertion)| {
             self.clone()
@@ -385,104 +381,111 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
             return Box::new(std::iter::empty());
         }
 
-        let unify_assertion =
-            self.unify_as_iterator(goal.clone(), assertion.clone(), model.clone())
-                .map(|model| InferOneResult::Yes(Rc::new(identity), model));
+        let unify_assertion = self
+            .unify_as_iterator(goal.clone(), assertion.clone(), model.clone())
+            .map(|model| InferOneResult::Yes(Rc::new(identity), model));
 
         let assertion_specific = std::iter::once_with(move || match &*assertion {
             Predicate::Implies(premise, conclusion) => {
                 if matches!(**premise, Predicate::False) {
                     Box::new(std::iter::empty()) as Box<dyn Iterator<Item = _>>
-                }
-                else if matches!(**conclusion, Predicate::False) {
+                } else if matches!(**conclusion, Predicate::False) {
                     Box::new(
                         self.unify_as_iterator(goal, assertion, model.clone())
-                            .map(|model| InferOneResult::No(Rc::new(identity), model))
+                            .map(|model| InferOneResult::No(Rc::new(identity), model)),
                     ) as Box<dyn Iterator<Item = _>>
-                }
-                else {
+                } else {
                     let premise = premise.clone();
                     let conclusion = conclusion.clone();
 
                     Box::new(
-                        self.clone().infer_one(goal, conclusion.clone(), model.clone())
-                            .flat_map(move |infer_res| {
-                                match infer_res {
-                                    InferOneResult::No(not_proof_builder, model) => {
-                                        Box::new(
-                                            self
-                                                .clone()
-                                                .consume_fuel()
-                                                .solve(premise.clone(), model)
-                                                .flat_map(move |proof_res| {
-                                                    let not_proof_builder = not_proof_builder.clone();
-                                                    match proof_res {
-                                                        PartialProofResult::Yes(premise_proof, model) =>
-                                                            Box::new(
-                                                                std::iter::once(
-                                                                    InferOneResult::No(
-                                                                        Rc::new(move |proof| Proof::ModusPonens {
-                                                                            implication: Box::new(not_proof_builder(proof)),
-                                                                            premise: Box::new(premise_proof.clone()),
-                                                                        }),
-                                                                        model,
-                                                                    )
-                                                                )
-                                                            ) as Box<dyn Iterator<Item = _>>,
+                        self.clone()
+                            .infer_one(goal, conclusion.clone(), model.clone())
+                            .flat_map(move |infer_res| match infer_res {
+                                InferOneResult::No(not_proof_builder, model) => Box::new(
+                                    self.clone()
+                                        .consume_fuel()
+                                        .solve(premise.clone(), model)
+                                        .flat_map(move |proof_res| {
+                                            let not_proof_builder = not_proof_builder.clone();
+                                            match proof_res {
+                                                PartialProofResult::Yes(premise_proof, model) => {
+                                                    Box::new(std::iter::once(InferOneResult::No(
+                                                        Rc::new(move |proof| Proof::ModusPonens {
+                                                            implication: Box::new(
+                                                                not_proof_builder(proof),
+                                                            ),
+                                                            premise: Box::new(
+                                                                premise_proof.clone(),
+                                                            ),
+                                                        }),
+                                                        model,
+                                                    )))
+                                                        as Box<dyn Iterator<Item = _>>
+                                                }
 
-                                                        _ => Box::new(std::iter::empty()),
-                                                    }
-                                                })
-                                        ) as Box<dyn Iterator<Item = _>>
-                                    },
-                                    InferOneResult::Yes(proof_builder, model) => {
-                                        Box::new(
-                                            self
-                                                .clone()
-                                                .consume_fuel()
-                                                .solve(premise.clone(), model)
-                                                .flat_map(move |proof_res| {
-                                                    let proof_builder = proof_builder.clone();
-                                                    match proof_res {
-                                                        PartialProofResult::Yes(premise_proof, model) =>
-                                                            Box::new(
-                                                                std::iter::once(
-                                                                    InferOneResult::Yes(
-                                                                        Rc::new(move |proof| Proof::ModusPonens {
-                                                                            implication: Box::new(proof_builder(proof)),
-                                                                            premise: Box::new(premise_proof.clone()),
-                                                                        }),
-                                                                        model,
-                                                                    )
-                                                                )
-                                                            ) as Box<dyn Iterator<Item = _>>,
+                                                _ => Box::new(std::iter::empty()),
+                                            }
+                                        }),
+                                )
+                                    as Box<dyn Iterator<Item = _>>,
+                                InferOneResult::Yes(proof_builder, model) => Box::new(
+                                    self.clone()
+                                        .consume_fuel()
+                                        .solve(premise.clone(), model)
+                                        .flat_map(move |proof_res| {
+                                            let proof_builder = proof_builder.clone();
+                                            match proof_res {
+                                                PartialProofResult::Yes(premise_proof, model) => {
+                                                    Box::new(std::iter::once(InferOneResult::Yes(
+                                                        Rc::new(move |proof| Proof::ModusPonens {
+                                                            implication: Box::new(proof_builder(
+                                                                proof,
+                                                            )),
+                                                            premise: Box::new(
+                                                                premise_proof.clone(),
+                                                            ),
+                                                        }),
+                                                        model,
+                                                    )))
+                                                        as Box<dyn Iterator<Item = _>>
+                                                }
 
-                                                        _ => Box::new(std::iter::empty()),
-                                                    }
-                                                })
-                                        ) as Box<dyn Iterator<Item = _>>
-                                    },
-                                }
-                            })
+                                                _ => Box::new(std::iter::empty()),
+                                            }
+                                        }),
+                                )
+                                    as Box<dyn Iterator<Item = _>>,
+                            }),
                     ) as Box<dyn Iterator<Item = _>>
                 }
-            },
-            _ => Box::new(std::iter::empty())
-        }).flatten();
+            }
+            _ => Box::new(std::iter::empty()),
+        })
+        .flatten();
 
         Box::new(unify_assertion.chain(assertion_specific))
     }
 
-    fn unify_as_iterator(&self, goal: Rc<Predicate<C::Syntax>>, rule: Rc<Predicate<C::Syntax>>, mut model: Rc<C::Model>) -> Box<dyn Iterator<Item = Rc<C::Model>> + 'a> {
+    fn unify_as_iterator(
+        &self,
+        goal: Rc<Predicate<C::Syntax>>,
+        rule: Rc<Predicate<C::Syntax>>,
+        mut model: Rc<C::Model>,
+    ) -> Box<dyn Iterator<Item = Rc<C::Model>> + 'a> {
         if self.try_unify(goal, rule, &mut model) {
             Box::new(std::iter::once(model))
-        }
-        else {
+        } else {
             Box::new(std::iter::empty())
         }
     }
 
-    fn try_unify(&self, goal: Rc<Predicate<C::Syntax>>, rule: Rc<Predicate<C::Syntax>>, model: &mut Rc<C::Model>) -> bool {
+    fn try_unify(
+        &self,
+        goal: Rc<Predicate<C::Syntax>>,
+        rule: Rc<Predicate<C::Syntax>>,
+        model: &mut Rc<C::Model>,
+    ) -> bool {
         let model2 = model.clone();
 
         let result = self.clone().unify(goal, rule, model);
@@ -493,23 +496,36 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         result
     }
 
-    fn unify(&mut self, goal: Rc<Predicate<C::Syntax>>, rule: Rc<Predicate<C::Syntax>>, model: &mut Rc<C::Model>) -> bool {
+    #[allow(clippy::match_same_arms, reason = "Readability")]
+    fn unify(
+        &mut self,
+        goal: Rc<Predicate<C::Syntax>>,
+        rule: Rc<Predicate<C::Syntax>>,
+        model: &mut Rc<C::Model>,
+    ) -> bool {
         if self.fuel.is_empty() {
             return false;
         }
 
         match (&*goal, &*rule) {
-            (Predicate::PredicateExpression(e1), Predicate::PredicateExpression(e2)) =>
-                self.context.unify_predicate_expression(e1, e2, model, self.fuel.clone()),
+            (Predicate::PredicateExpression(e1), Predicate::PredicateExpression(e2)) => self
+                .context
+                .unify_predicate_expression(e1, e2, model, self.fuel.clone()),
 
-            (Predicate::And(left1, right1), Predicate::And(left2, right2)) =>
-                self.unify(left1.clone(), left2.clone(), model) && self.unify(right1.clone(), right2.clone(), model),
+            (Predicate::And(left1, right1), Predicate::And(left2, right2)) => {
+                self.unify(left1.clone(), left2.clone(), model)
+                    && self.unify(right1.clone(), right2.clone(), model)
+            }
 
-            (Predicate::Or(left1, right1), Predicate::Or(left2, right2)) =>
-                self.unify(left1.clone(), left2.clone(), model) && self.unify(right1.clone(), right2.clone(), model),
+            (Predicate::Or(left1, right1), Predicate::Or(left2, right2)) => {
+                self.unify(left1.clone(), left2.clone(), model)
+                    && self.unify(right1.clone(), right2.clone(), model)
+            }
 
-            (Predicate::Implies(left1, right1), Predicate::Implies(left2, right2)) =>
-                self.unify(left1.clone(), left2.clone(), model) && self.unify(right1.clone(), right2.clone(), model),
+            (Predicate::Implies(left1, right1), Predicate::Implies(left2, right2)) => {
+                self.unify(left1.clone(), left2.clone(), model)
+                    && self.unify(right1.clone(), right2.clone(), model)
+            }
 
             (Predicate::True, Predicate::True) => true,
             (Predicate::False, Predicate::False) => true,

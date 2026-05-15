@@ -71,7 +71,7 @@ where
     writeln!(w, "package {}", settings.package)?;
 
     for stmt in &settings.header_stmts {
-        writeln!(w, "{}", stmt)?;
+        writeln!(w, "{stmt}")?;
     }
 
     writeln!(
@@ -111,7 +111,7 @@ where
                 }
                 is_empty = false;
 
-                write!(w, "{}", follows)?;
+                write!(w, "{follows}")?;
             }
 
             if is_empty {
@@ -122,7 +122,7 @@ where
         }
 
         if let Some(lex_mode) = ruleset.lex_mode() {
-            write!(w, "withLexMode({})(", lex_mode)?;
+            write!(w, "withLexMode({lex_mode})(")?;
         }
         writeln!(w, "peek.flatMap {{")?;
 
@@ -145,7 +145,7 @@ where
                 }
 
                 match term {
-                    Some(term) => write!(w, "_: {}", term)?,
+                    Some(term) => write!(w, "_: {term}")?,
                     None => write!(w, "_: EOFToken")?,
                 }
             }
@@ -166,7 +166,7 @@ where
                 if sym.discard {
                     write!(w, "_")?;
                 } else {
-                    write!(w, "x{}", i)?;
+                    write!(w, "x{i}")?;
                 }
                 write!(w, " <- ")?;
 
@@ -175,12 +175,12 @@ where
                 }
 
                 match sym.symbol_type {
-                    LL1SymbolType::Terminal(t) => write!(w, "terminal[{}]", t)?,
+                    LL1SymbolType::Terminal(t) => write!(w, "terminal[{t}]")?,
 
                     LL1SymbolType::NonTerminal {
                         name,
                         offshoot_index,
-                    } => write!(w, "{}_{}", name, offshoot_index)?,
+                    } => write!(w, "{name}_{offshoot_index}")?,
 
                     LL1SymbolType::Error => {
                         panic!("Encountered error symbol in LL1 table");
@@ -223,7 +223,7 @@ where
 
                     match term {
                         Some(term) => {
-                            write!(w, "{}", term)?;
+                            write!(w, "{term}")?;
                         }
                         None => {
                             write!(w, "EOFToken")?;
@@ -247,9 +247,10 @@ where
         }
 
         if let Some(error_rule) = error_rule {
-            if error_rule.symbols().skip(1).take(1).next().is_some() {
-                panic!("Error rules should not have any symbols after the error token.");
-            }
+            assert!(
+                error_rule.symbols().skip(1).take(1).next().is_none(),
+                "Error rules should not have any symbols after the error token."
+            );
 
             write!(w, ", ")?;
             emit_value(w, &mut 0, &error_rule.value())?;
@@ -270,8 +271,8 @@ where
     G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
 {
     match t {
-        LL1RuleType::ExternalType(t) => write!(w, "{}", t)?,
-        LL1RuleType::TerminalType(t) => write!(w, "{}", t)?,
+        LL1RuleType::ExternalType(t) => write!(w, "{t}")?,
+        LL1RuleType::TerminalType(t) => write!(w, "{t}")?,
         LL1RuleType::Function(a, b) => {
             write!(w, "(")?;
             emit_type(w, a.as_ref())?;
@@ -279,7 +280,7 @@ where
             emit_type(w, b.as_ref())?;
         }
         LL1RuleType::Tuple(items) => {
-            let mut iter = items.into_iter();
+            let mut iter = items.iter();
             if let Some(first) = iter.next() {
                 if let Some(second) = iter.next() {
                     write!(w, "(")?;
@@ -316,9 +317,9 @@ where
     G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
 {
     match t {
-        LL1RuleValue::SymbolValue(i) => write!(w, "x{}", i)?,
+        LL1RuleValue::SymbolValue(i) => write!(w, "x{i}")?,
         LL1RuleValue::ExternalFunction(f, args) => {
-            write!(w, "{}(", f)?;
+            write!(w, "{f}(")?;
             for (i, arg) in args.iter().enumerate() {
                 if i > 0 {
                     write!(w, ", ")?;
@@ -357,11 +358,11 @@ where
             value,
         } => {
             write!(w, "WithLocation(")?;
-            emit_value(w, next_var_index, &*value)?;
+            emit_value(w, next_var_index, value)?;
             write!(w, ", mergeLocations(")?;
-            emit_value(w, next_var_index, &*first)?;
+            emit_value(w, next_var_index, first)?;
             write!(w, ".location, ")?;
-            emit_value(w, next_var_index, &*second)?;
+            emit_value(w, next_var_index, second)?;
             write!(w, ".location))")?;
         }
         LL1RuleValue::Lambda {
@@ -376,7 +377,7 @@ where
             if *discard_param {
                 write!(w, "_")?;
             } else {
-                write!(w, "x{}", var_index)?;
+                write!(w, "x{var_index}")?;
             }
             write!(w, ": ")?;
             emit_type(w, param_type)?;

@@ -19,11 +19,11 @@ pub fn emit_rust<W: Write>(w: &mut W, dfa: DFA<String>, settings: &RustSettings)
         writeln!(w, "{}mod {} {{", settings.visibility, module)?;
     }
 
-    let base_indent = if settings.module.is_some() { 1 } else { 0 };
+    let base_indent = usize::from(settings.module.is_some());
 
     for stmt in &settings.header_stmts {
         emit_indent(w, base_indent)?;
-        writeln!(w, "{}", stmt)?;
+        writeln!(w, "{stmt}")?;
     }
 
     if !settings.header_stmts.is_empty() {
@@ -52,6 +52,11 @@ pub fn emit_rust<W: Write>(w: &mut W, dfa: DFA<String>, settings: &RustSettings)
     emit_indent(w, base_indent)?;
     writeln!(w, "}}")?;
     writeln!(w)?;
+
+    emit_indent(w, base_indent)?;
+    writeln!(w, "#[allow(clippy::all, reason=\"Generated code\")]")?;
+    emit_indent(w, base_indent)?;
+    writeln!(w, "#[allow(clippy::pedantic, reason=\"Generated code\")]")?;
 
     emit_indent(w, base_indent)?;
     writeln!(w, "impl {} {{", settings.type_name)?;
@@ -84,14 +89,14 @@ pub fn emit_rust<W: Write>(w: &mut W, dfa: DFA<String>, settings: &RustSettings)
                         "{}State::{} => parse18_runtime::LexerAcceptance::Accept({acceptance}),",
                         settings.type_name,
                         state_name(state_id)
-                    )?
+                    )?;
                 } else {
                     writeln!(
                         w,
                         "{}State::{} => parse18_runtime::LexerAcceptance::Accept({acceptance:?}),",
                         settings.type_name,
                         state_name(state_id)
-                    )?
+                    )?;
                 }
             }
             (None, true) => writeln!(
@@ -265,7 +270,7 @@ fn emit_transition<W: Write>(
         }
         DFATransition::IfProperty(prop, a, b) => {
             emit_indent(w, indent)?;
-            writeln!(w, "if {} {{", property_condition(prop))?;
+            writeln!(w, "if {} {{", property_condition(*prop))?;
             emit_transition(w, indent + 1, type_name, a.as_ref())?;
             emit_indent(w, indent)?;
             writeln!(w, "}} else {{")?;
@@ -352,7 +357,7 @@ fn category_name(cat: GeneralCategory) -> &'static str {
     }
 }
 
-fn property_condition(prop: &UnicodePropertySet) -> &'static str {
+fn property_condition(prop: UnicodePropertySet) -> &'static str {
     match prop {
         UnicodePropertySet::Alphabetic => "parse18_runtime::is_alphabetic(c)",
         UnicodePropertySet::Uppercase => "parse18_runtime::is_uppercase(c)",

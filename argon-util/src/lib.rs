@@ -1,8 +1,8 @@
 mod error;
 
+pub use error::*;
 use std::hash::Hash;
 use std::sync::Arc;
-pub use error::*;
 
 #[derive(Debug, Clone)]
 pub struct UniqueIdentifier(Arc<()>);
@@ -23,10 +23,9 @@ impl Eq for UniqueIdentifier {}
 
 impl Hash for UniqueIdentifier {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        Arc::as_ptr(&self.0).hash(state)
+        Arc::as_ptr(&self.0).hash(state);
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct Fuel {
@@ -37,15 +36,14 @@ impl Fuel {
     pub fn new(amount: u32) -> Self {
         Self { amount }
     }
-    
+
     pub fn consume(&mut self) {
         if self.amount > 0 {
             self.amount -= 1;
         }
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.amount == 0
     }
 }
-

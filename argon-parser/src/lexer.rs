@@ -114,6 +114,10 @@ trait TokenProcessor {
 
         loop {
             if lexer.current_text_offset < lexer.current_text.len() {
+                #[allow(
+                    clippy::unwrap_used,
+                    reason = "Safe because we just checked that the offset is within the string length and sliced it to that point"
+                )]
                 let c = lexer.current_text[lexer.current_text_offset..]
                     .chars()
                     .next()
@@ -128,9 +132,9 @@ trait TokenProcessor {
 
                     if let Some(token) = token {
                         return LexedToken::Token(token);
-                    } else {
-                        state = Self::Lexer::INITIAL_STATE;
                     }
+
+                    state = Self::Lexer::INITIAL_STATE;
                 } else {
                     lexer.current_text_offset += c.len_utf8();
 
@@ -151,10 +155,10 @@ trait TokenProcessor {
                 if lexer.current_text.is_empty() {
                     lexer.has_eof = true;
 
-                    if !lexer.acc_text.is_empty() {
-                        if let Some(token) = Self::current_token_or_error(lexer, state) {
-                            return LexedToken::Token(token);
-                        }
+                    if !lexer.acc_text.is_empty()
+                        && let Some(token) = Self::current_token_or_error(lexer, state)
+                    {
+                        return LexedToken::Token(token);
                     }
                 }
             }

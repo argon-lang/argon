@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use parse18_lexer_gen::{
     builder::DFABuilder,
     codegen::rust::{RustSettings, emit_rust},

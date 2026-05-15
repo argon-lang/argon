@@ -4,6 +4,7 @@ use regex_syntax::ast as rast;
 use unicode_general_category::GeneralCategory;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
 pub enum Regex {
     Empty,
     CharClassSet(CharClassSet),
@@ -138,9 +139,7 @@ impl Regex {
             }
 
             Ast::Repetition(repetition) => {
-                if !repetition.greedy {
-                    panic!("Non-greedy regex is not supported");
-                }
+                assert!(repetition.greedy, "Non-greedy regex is not supported");
 
                 let inner = Self::from_regex_ast(&repetition.ast);
 
@@ -167,7 +166,7 @@ impl Regex {
                 Regex::Concat(concat.asts.iter().map(Self::from_regex_ast).collect())
             }
 
-            _ => panic!("Unsupported regex syntax: {:?}", expr),
+            _ => panic!("Unsupported regex syntax: {expr:?}"),
         }
     }
 }
@@ -192,6 +191,7 @@ impl CharClass {
         }
     }
 
+    #[allow(clippy::match_same_arms, reason = "Readability")]
     pub fn implies(self, other: Self) -> bool {
         match (self, other) {
             (_, CharClass::Any) => true,
@@ -229,6 +229,7 @@ impl UnicodePropertySet {
         }
     }
 
+    #[allow(clippy::match_same_arms, reason = "Readability")]
     pub fn implies(self, other: Self) -> bool {
         match (self, other) {
             (UnicodePropertySet::Uppercase, UnicodePropertySet::Alphabetic) => true,
@@ -237,6 +238,7 @@ impl UnicodePropertySet {
         }
     }
 
+    #[allow(clippy::match_same_arms, reason = "Readability")]
     pub fn implies_not(self, other: Self) -> bool {
         match (self, other) {
             (UnicodePropertySet::WhiteSpace, UnicodePropertySet::Alphabetic) => true,
@@ -279,7 +281,7 @@ impl CharClassSet {
                 unicode_category_group(&letter.to_uppercase().to_string())
             }
             rast::ClassUnicodeKind::Named(name) => {
-                let name = normalize_prop(&name);
+                let name = normalize_prop(name);
                 binary_property(&name)
                     .or_else(|| unicode_category_group(&name))
                     .or_else(|| unicode_category(&name))
@@ -500,7 +502,7 @@ fn normalize_prop(class_name: &str) -> String {
         let mut word = word.chars();
         if let Some(first) = word.next() {
             s.extend(first.to_uppercase());
-            s.extend(word.flat_map(|c| c.to_lowercase()));
+            s.extend(word.flat_map(char::to_lowercase));
         }
     }
 
@@ -517,28 +519,28 @@ fn unicode_category(s: &str) -> Option<CharClassSet> {
         "Mn" | "Non_Spacing_Mark" => GeneralCategory::NonspacingMark,
         "Mc" | "Spacing_Combining_Mark" => GeneralCategory::SpacingMark,
         "Me" | "Enclosing_Mark" => GeneralCategory::EnclosingMark,
-        "Nd" | "Decimal_Digit_Number" => GeneralCategory::UppercaseLetter,
-        "Nl" | "Letter_Number" => GeneralCategory::UppercaseLetter,
-        "No" | "Other_Number" => GeneralCategory::UppercaseLetter,
-        "Sm" | "Math_Symbol" => GeneralCategory::UppercaseLetter,
-        "Sc" | "Currency_Symbol" => GeneralCategory::UppercaseLetter,
-        "Sk" | "Modifier_Symbol" => GeneralCategory::UppercaseLetter,
-        "So" | "Other_Symbol" => GeneralCategory::UppercaseLetter,
-        "Pc" | "Connector_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Pd" | "Dash_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Ps" | "Open_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Pe" | "Close_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Pi" | "Initial_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Pf" | "Final_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Po" | "Other_Punctuation" => GeneralCategory::UppercaseLetter,
-        "Zs" | "Space_Separator" => GeneralCategory::UppercaseLetter,
-        "Zl" | "Line_Separator" => GeneralCategory::UppercaseLetter,
-        "Zp" | "Paragraph_Separator" => GeneralCategory::UppercaseLetter,
-        "Cc" | "Control" => GeneralCategory::UppercaseLetter,
-        "Cf" | "Format" => GeneralCategory::UppercaseLetter,
-        "Cs" | "Surrogate" => GeneralCategory::UppercaseLetter,
-        "Co" | "Private_Use" => GeneralCategory::UppercaseLetter,
-        "Cn" | "Unassigned" => GeneralCategory::UppercaseLetter,
+        "Nd" | "Decimal_Digit_Number" => GeneralCategory::DecimalNumber,
+        "Nl" | "Letter_Number" => GeneralCategory::LetterNumber,
+        "No" | "Other_Number" => GeneralCategory::OtherNumber,
+        "Sm" | "Math_Symbol" => GeneralCategory::MathSymbol,
+        "Sc" | "Currency_Symbol" => GeneralCategory::CurrencySymbol,
+        "Sk" | "Modifier_Symbol" => GeneralCategory::ModifierSymbol,
+        "So" | "Other_Symbol" => GeneralCategory::OtherSymbol,
+        "Pc" | "Connector_Punctuation" => GeneralCategory::ConnectorPunctuation,
+        "Pd" | "Dash_Punctuation" => GeneralCategory::DashPunctuation,
+        "Ps" | "Open_Punctuation" => GeneralCategory::OpenPunctuation,
+        "Pe" | "Close_Punctuation" => GeneralCategory::ClosePunctuation,
+        "Pi" | "Initial_Punctuation" => GeneralCategory::InitialPunctuation,
+        "Pf" | "Final_Punctuation" => GeneralCategory::FinalPunctuation,
+        "Po" | "Other_Punctuation" => GeneralCategory::OtherPunctuation,
+        "Zs" | "Space_Separator" => GeneralCategory::SpaceSeparator,
+        "Zl" | "Line_Separator" => GeneralCategory::LineSeparator,
+        "Zp" | "Paragraph_Separator" => GeneralCategory::ParagraphSeparator,
+        "Cc" | "Control" => GeneralCategory::Control,
+        "Cf" | "Format" => GeneralCategory::Format,
+        "Cs" | "Surrogate" => GeneralCategory::Surrogate,
+        "Co" | "Private_Use" => GeneralCategory::PrivateUse,
+        "Cn" | "Unassigned" => GeneralCategory::Unassigned,
         _ => return None,
     };
 

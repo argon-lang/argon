@@ -76,16 +76,21 @@ where
         writeln!(w, "{}mod {} {{", settings.visibility, module)?;
     }
 
-    let base_indent = if settings.module.is_some() { 1 } else { 0 };
+    let base_indent = usize::from(settings.module.is_some());
 
     for stmt in &settings.header_stmts {
         emit_indent(w, base_indent)?;
-        writeln!(w, "{}", stmt)?;
+        writeln!(w, "{stmt}")?;
     }
 
     if !settings.header_stmts.is_empty() {
         writeln!(w)?;
     }
+
+    emit_indent(w, base_indent)?;
+    writeln!(w, "#[allow(clippy::all, reason=\"Generated code\")]")?;
+    emit_indent(w, base_indent)?;
+    writeln!(w, "#[allow(clippy::pedantic, reason=\"Generated code\")]")?;
 
     emit_indent(w, base_indent)?;
     writeln!(w, "{} {{", settings.impl_group)?;
@@ -132,7 +137,7 @@ where
             .is_some_and(|sym| matches!(sym.symbol_type, LL1SymbolType::Error))
     });
 
-    if error_rule.is_some() {
+    if let Some(error_rule_value) = error_rule {
         emit_indent(w, indent + 1)?;
         writeln!(w, "let __parse18_recover_value =")?;
 
@@ -153,7 +158,7 @@ where
         writeln!(w, "__parse18_recover_value,")?;
         emit_indent(w, indent + 2)?;
         write!(w, "|| ")?;
-        emit_value(w, "self", &mut 0, &error_rule.unwrap().value(), settings)?;
+        emit_value(w, &mut 0, &error_rule_value.value(), settings)?;
         writeln!(w)?;
 
         emit_indent(w, indent + 1)?;
@@ -288,7 +293,7 @@ where
         write!(w, "let __parse18_value: ")?;
         emit_type(w, rule_type, settings)?;
         write!(w, " = ")?;
-        emit_value(w, receiver, &mut 0, value, settings)?;
+        emit_value(w, &mut 0, value, settings)?;
         writeln!(w, ";")?;
         emit_indent(w, indent + 1)?;
         writeln!(w, "__parse18_value")?;
@@ -340,7 +345,7 @@ where
         emit_type(w, rule_type, settings)?;
         write!(w, " = ")?;
         let mut next_var_index = symbols.len();
-        emit_value(w, receiver, &mut next_var_index, value, settings)?;
+        emit_value(w, &mut next_var_index, value, settings)?;
         writeln!(w, ";")?;
         emit_indent(w, indent + 1)?;
         write!(w, "__parse18_value")?;
@@ -491,7 +496,6 @@ where
 
 fn emit_value<W, G>(
     w: &mut W,
-    receiver: &str,
     next_var_index: &mut usize,
     t: &LL1RuleValue<G>,
     settings: &RustSettings,
@@ -512,7 +516,7 @@ where
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    emit_value(w, receiver, next_var_index, arg, settings)?;
+                    emit_value(w, next_var_index, arg, settings)?;
                 }
                 write!(w, ")")?;
             }
@@ -521,7 +525,7 @@ where
             [] => write!(w, "()")?,
             [first] => {
                 write!(w, "(")?;
-                emit_value(w, receiver, next_var_index, first, settings)?;
+                emit_value(w, next_var_index, first, settings)?;
                 write!(w, ",)")?;
             }
             _ => {
@@ -530,19 +534,19 @@ where
                     if i > 0 {
                         write!(w, ", ")?;
                     }
-                    emit_value(w, receiver, next_var_index, item, settings)?;
+                    emit_value(w, next_var_index, item, settings)?;
                 }
                 write!(w, ")")?;
             }
         },
         LL1RuleValue::GetTuple(tuple, i) => {
             write!(w, "(")?;
-            emit_value(w, receiver, next_var_index, tuple, settings)?;
+            emit_value(w, next_var_index, tuple, settings)?;
             write!(w, ").{i}")?;
         }
         LL1RuleValue::DropLocation(value) => {
             write!(w, "(")?;
-            emit_value(w, receiver, next_var_index, value, settings)?;
+            emit_value(w, next_var_index, value, settings)?;
             write!(w, ").value")?;
         }
         LL1RuleValue::BuildLocation {
@@ -551,11 +555,11 @@ where
             value,
         } => {
             write!(w, "{{ let __parse18_first = (")?;
-            emit_value(w, receiver, next_var_index, first, settings)?;
+            emit_value(w, next_var_index, first, settings)?;
             write!(w, ").location.clone(); let __parse18_second = (")?;
-            emit_value(w, receiver, next_var_index, second, settings)?;
+            emit_value(w, next_var_index, second, settings)?;
             write!(w, ").location.clone(); {}(", settings.location_ctor)?;
-            emit_value(w, receiver, next_var_index, value, settings)?;
+            emit_value(w, next_var_index, value, settings)?;
             write!(
                 w,
                 ", {}(__parse18_first, __parse18_second)) }}",
@@ -579,16 +583,16 @@ where
             write!(w, ": ")?;
             emit_type(w, param_type, settings)?;
             write!(w, "| ")?;
-            emit_value(w, receiver, next_var_index, body.as_ref(), settings)?;
+            emit_value(w, next_var_index, body.as_ref(), settings)?;
             write!(w, ")")?;
 
             *next_var_index -= 1;
         }
         LL1RuleValue::Apply(f, a) => {
             write!(w, "(")?;
-            emit_value(w, receiver, next_var_index, f.as_ref(), settings)?;
+            emit_value(w, next_var_index, f.as_ref(), settings)?;
             write!(w, ")(")?;
-            emit_value(w, receiver, next_var_index, a.as_ref(), settings)?;
+            emit_value(w, next_var_index, a.as_ref(), settings)?;
             write!(w, ")")?;
         }
     }
@@ -652,7 +656,7 @@ fn to_snake_case(value: &str) -> String {
     while let Some(ch) = chars.next() {
         if ch.is_ascii_alphanumeric() {
             if ch.is_ascii_uppercase() {
-                let next_is_lower = chars.peek().is_some_and(|next| next.is_ascii_lowercase());
+                let next_is_lower = chars.peek().is_some_and(char::is_ascii_lowercase);
                 if !result.is_empty()
                     && !result.ends_with('_')
                     && (prev_is_lower_or_digit || (prev_is_upper && next_is_lower))

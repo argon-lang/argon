@@ -16,53 +16,53 @@ impl<T> NonEmptyVec<T> {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    FunctionDeclaration(FunctionDeclarationStmt),
-    VariableDeclaration(VariableDeclarationStmt),
-    RecordDeclaration(RecordDeclarationStmt),
-    EnumDeclaration(EnumDeclarationStmt),
-    TraitDeclaration(TraitDeclarationStmt),
-    MethodDeclaration(MethodDeclarationStmt),
-    InstanceDeclaration(InstanceDeclarationStmt),
-    Import(ImportStmt),
-    Export(ExportStmt),
-    Assert(AssertStmt),
-    Expr(Expr),
+    FunctionDeclaration(Box<FunctionDeclarationStmt>),
+    VariableDeclaration(Box<VariableDeclarationStmt>),
+    RecordDeclaration(Box<RecordDeclarationStmt>),
+    EnumDeclaration(Box<EnumDeclarationStmt>),
+    TraitDeclaration(Box<TraitDeclarationStmt>),
+    MethodDeclaration(Box<MethodDeclarationStmt>),
+    InstanceDeclaration(Box<InstanceDeclarationStmt>),
+    Import(Box<ImportStmt>),
+    Export(Box<ExportStmt>),
+    Assert(Box<AssertStmt>),
+    Expr(Box<Expr>),
 }
 
 #[derive(Debug, Clone)]
 pub enum RecordBodyStmt {
-    FunctionDeclaration(FunctionDeclarationStmt),
-    RecordField(RecordField),
-    MethodDeclaration(MethodDeclarationStmt),
+    FunctionDeclaration(Box<FunctionDeclarationStmt>),
+    RecordField(Box<RecordField>),
+    MethodDeclaration(Box<MethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
 pub enum EnumBodyStmt {
-    FunctionDeclaration(FunctionDeclarationStmt),
-    MethodDeclaration(MethodDeclarationStmt),
-    EnumVariant(EnumVariant),
+    FunctionDeclaration(Box<FunctionDeclarationStmt>),
+    MethodDeclaration(Box<MethodDeclarationStmt>),
+    EnumVariant(Box<EnumVariant>),
 }
 
 #[derive(Debug, Clone)]
 pub enum TraitBodyStmt {
-    FunctionDeclaration(FunctionDeclarationStmt),
-    MethodDeclaration(MethodDeclarationStmt),
+    FunctionDeclaration(Box<FunctionDeclarationStmt>),
+    MethodDeclaration(Box<MethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
 pub enum NewTraitObjectBodyStmt {
-    FunctionDeclaration(FunctionDeclarationStmt),
-    MethodDeclaration(MethodDeclarationStmt),
+    FunctionDeclaration(Box<FunctionDeclarationStmt>),
+    MethodDeclaration(Box<MethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
 pub enum DeclarationStmt {
-    Function(FunctionDeclarationStmt),
-    Record(RecordDeclarationStmt),
-    Enum(EnumDeclarationStmt),
-    Trait(TraitDeclarationStmt),
-    Method(MethodDeclarationStmt),
-    Instance(InstanceDeclarationStmt),
+    Function(Box<FunctionDeclarationStmt>),
+    Record(Box<RecordDeclarationStmt>),
+    Enum(Box<EnumDeclarationStmt>),
+    Trait(Box<TraitDeclarationStmt>),
+    Method(Box<MethodDeclarationStmt>),
+    Instance(Box<InstanceDeclarationStmt>),
 }
 
 impl DeclarationStmt {
@@ -382,7 +382,7 @@ pub enum IdentifierExpr {
 
 #[derive(Debug, Clone)]
 pub enum FunctionBody {
-    ExprBody(WithLocation<Expr>),
+    ExprBody(Box<WithLocation<Expr>>),
     ExternBody(WithLocation<String>),
 }
 
@@ -400,7 +400,7 @@ pub struct StringLiteral {
 #[derive(Debug, Clone)]
 pub enum StringFragment {
     Text(String),
-    Interpolate { value: WithLocation<Expr> },
+    Interpolate { value: Box<WithLocation<Expr>> },
 }
 
 pub trait Operator {
@@ -434,14 +434,15 @@ pub enum BinaryOperator {
 }
 
 impl BinaryOperator {
+    #[allow(clippy::match_same_arms, reason = "Readability")]
     pub fn is_valid_identifier(self) -> bool {
         match self {
-            BinaryOperator::Assign => false,
-            BinaryOperator::LogicalOr => false,
-            BinaryOperator::LogicalAnd => false,
-            BinaryOperator::PropEqual => false,
-            BinaryOperator::PropDisjunction => false,
-            BinaryOperator::PropConjunction => false,
+            BinaryOperator::Assign
+            | BinaryOperator::LogicalOr
+            | BinaryOperator::LogicalAnd
+            | BinaryOperator::PropEqual
+            | BinaryOperator::PropDisjunction
+            | BinaryOperator::PropConjunction => false,
             BinaryOperator::Plus
             | BinaryOperator::Minus
             | BinaryOperator::Mul

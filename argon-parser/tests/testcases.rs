@@ -41,7 +41,8 @@ mod testcases {
             let reporter = TestErrorReporter::default();
             let file_name = PathBuf::from(&input_source.name);
 
-            let module = argon_parser::parse(input_source.source.as_bytes(), &file_name, reporter.clone());
+            let module =
+                argon_parser::parse(input_source.source.as_bytes(), &file_name, reporter.clone());
 
             assert!(
                 reporter.io_errors.borrow().is_empty(),
@@ -58,7 +59,12 @@ mod testcases {
                 reporter.parse_errors.borrow()
             );
 
-            assert!(!module.stmts.is_empty(), "{}:{} is empty", test_case_path.display(), input_source.name);
+            assert!(
+                !module.stmts.is_empty(),
+                "{}:{} is empty",
+                test_case_path.display(),
+                input_source.name
+            );
         }
     }
 }

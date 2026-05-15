@@ -216,7 +216,7 @@ impl<'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
 
             for t in &state.transitions {
                 for literal in &t.conditions.conditions {
-                    self.atoms.insert(literal.condition_type.clone());
+                    self.atoms.insert(literal.condition_type);
                 }
                 self.nfa_transitions.push(t.clone());
             }
@@ -336,7 +336,7 @@ impl<'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
         props: &[UnicodePropertySet],
     ) -> DFATransition {
         if props.is_empty() {
-            let targets = self.find_prop_target(cat, &selected_props);
+            let targets = self.find_prop_target(cat, selected_props);
             let target = self.nfa_converter.get_dfa_state(targets);
 
             DFATransition::Always(target)
@@ -370,14 +370,13 @@ impl<'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
         cat: Option<GeneralCategory>,
         selected_props: &BTreeSet<UnicodePropertySet>,
     ) -> bool {
-        if let Some(cat) = cat {
-            if selected_props
+        if let Some(cat) = cat
+            && selected_props
                 .iter()
                 .copied()
                 .any(|prop| !self.nfa_converter.get_prop_categories(prop).contains(&cat))
-            {
-                return true;
-            }
+        {
+            return true;
         }
 
         // This works because the only supported properties define sets
@@ -408,7 +407,7 @@ impl<'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
     ) -> NFAStateSet {
         let mut states = BTreeSet::new();
         for t in &self.nfa_transitions {
-            if self.evaluate_prop_conjunct(cat, props, &t.conditions) {
+            if Self::evaluate_prop_conjunct(cat, props, &t.conditions) {
                 states.extend(t.target.iter().copied());
             }
         }
@@ -417,18 +416,17 @@ impl<'a, A: NFAAcceptancePriority + Clone> DFAStateBuilder<'a, A> {
     }
 
     fn evaluate_prop_conjunct(
-        &self,
         cat: Option<GeneralCategory>,
         props: &BTreeSet<UnicodePropertySet>,
         conj: &FSMTransitionConditionConjunct,
     ) -> bool {
         conj.conditions
             .iter()
-            .all(|lit| self.evaluate_prop_atom(cat, props, lit.condition_type) != lit.negation)
+            .all(|lit| Self::evaluate_prop_atom(cat, props, lit.condition_type) != lit.negation)
     }
 
+    #[allow(clippy::match_same_arms, reason = "Readability")]
     fn evaluate_prop_atom(
-        &self,
         cat: Option<GeneralCategory>,
         props: &BTreeSet<UnicodePropertySet>,
         cc: CharClass,
@@ -676,7 +674,7 @@ fn regex_cond_to_dnf(
                     .flat_map(|ai| {
                         b2.iter().map(move |bi| {
                             let mut conjunt = ai.clone();
-                            conjunt.extend(bi.iter().cloned());
+                            conjunt.extend(bi.iter().copied());
                             conjunt
                         })
                     })

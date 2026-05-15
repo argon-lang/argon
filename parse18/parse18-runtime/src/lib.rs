@@ -59,6 +59,7 @@ pub struct Location {
 }
 
 impl Location {
+    #[must_use]
     pub fn merge(&self, other: &Location) -> Location {
         Location {
             file: self.file.clone(),
