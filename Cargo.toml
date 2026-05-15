@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["argon-format","argon-parser","argon-testcases","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-format","argon-parser", "argon-prover","argon-testcases","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
 argon-util = { path = "argon-util" }

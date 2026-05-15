@@ -33,6 +33,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon-prover"
+version = "0.1.0"
+dependencies = [
+ "argon-util",
+]
+
+[[package]]
 name = "argon-testcases"
 version = "0.1.0"
 dependencies = [
