@@ -1,15 +1,14 @@
-use crate::Location;
+use crate::ast;
 use crate::ast::*;
 use crate::lexer::{LexedToken, LexerMode, TokenReader};
 use crate::token::{
     BinaryOperator as TokenBinaryOperator, Token, TokenCategory,
     UnaryOperator as TokenUnaryOperator,
 };
-use crate::{ParseError, ParserError, ast};
-use argon_util::ErrorReporter;
+use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigInt;
 use parse18_runtime::{
-    FilePosition, FilePositionRange, ParseResult, ParserRuntime, WithLocation, WithRange,
+    FilePosition, FilePositionRange, Location, ParseResult, ParserRuntime, WithLocation, WithRange,
 };
 use std::path::PathBuf;
 
@@ -150,21 +149,18 @@ fn convert_unary_operator(op: TokenUnaryOperator) -> UnaryOperator {
     }
 }
 
-fn binary_op(a: WithLocation<Expr>, token: Token, b: WithLocation<Expr>) -> Expr {
-    let op = token
-        .binary_operator()
-        .unwrap_or_else(|| panic!("expected binary operator token"));
-    expr_binary_operation(a, convert_binary_operator(op), b)
+fn binary_op(a: WithLocation<Expr>, token: WithLocation<Token>, b: WithLocation<Expr>) -> Expr {
+    let op = token.map(|t| {
+        convert_binary_operator(t.binary_operator().expect("expected binary operator token"))
+    });
+    expr_binary_operation(a, op, b)
 }
 
-fn unary_op(token: Token, a: WithLocation<Expr>) -> Expr {
-    let op = token
-        .unary_operator()
-        .unwrap_or_else(|| panic!("expected unary operator token"));
-    Expr::UnaryOperation {
-        op: convert_unary_operator(op),
-        a: Box::new(a),
-    }
+fn unary_op(token: WithLocation<Token>, a: WithLocation<Expr>) -> Expr {
+    let op = token.map(|t| {
+        convert_unary_operator(t.unary_operator().expect("expected unary operator token"))
+    });
+    Expr::UnaryOperation { op, a: Box::new(a) }
 }
 
 fn curried_call(
@@ -580,7 +576,11 @@ fn expr_assert(t: WithLocation<Expr>) -> Expr {
     Expr::Assert { t: Box::new(t) }
 }
 
-fn expr_binary_operation(a: WithLocation<Expr>, op: BinaryOperator, b: WithLocation<Expr>) -> Expr {
+fn expr_binary_operation(
+    a: WithLocation<Expr>,
+    op: WithLocation<BinaryOperator>,
+    b: WithLocation<Expr>,
+) -> Expr {
     Expr::BinaryOperation {
         a: Box::new(a),
         op,
@@ -1121,7 +1121,7 @@ pub struct ArgonParser<'a, L, ER> {
     peek_token: Option<WithRange<Token>>,
 }
 
-impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ArgonParser<'a, L, ER> {
+impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ArgonParser<'a, L, ER> {
     pub fn new(file_name: &'a PathBuf, lexer: L, error_reporter: ER) -> ArgonParser<'a, L, ER> {
         ArgonParser {
             file_name,
@@ -1134,7 +1134,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ArgonParser<'a, L, ER> {
     }
 }
 
-impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonParser<'a, L, ER> {
+impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ParserRuntime for ArgonParser<'a, L, ER> {
     type Token = Token;
     type TokenCategory = TokenCategory;
     type LexMode = LexerMode;
@@ -1196,13 +1196,12 @@ impl<'a, L: TokenReader, ER: ErrorReporter<ParseError>> ParserRuntime for ArgonP
 
     fn error<T>(&mut self, rule_name: &str, categories: &[Self::TokenCategory]) -> ParseResult<T> {
         if let ParseResult::Success(token) = self.peek() {
-            self.error_reporter
-                .report_error(ParseError::ParserError(ParserError {
-                    location: Location::from_range(self.file_name.clone(), token.range),
-                    found_token: format!("{:?}", token.value),
-                    rule_name: rule_name.to_owned(),
-                    expected_categories: categories.to_vec(),
-                }));
+            self.error_reporter.report_error(CompileError::parse_error(
+                Location::from_range(self.file_name.clone(), token.range),
+                rule_name,
+                format!("{:?}", token.value),
+                categories.iter().map(|category| format!("{category:?}")),
+            ));
         }
 
         ParseResult::Failure

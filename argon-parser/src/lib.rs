@@ -1,6 +1,6 @@
 use crate::ast::ModuleDeclaration;
 use crate::lexer::{Lexer, LexerReader};
-use argon_util::ErrorReporter;
+use argon_util::{CompileError, ErrorReporter};
 use std::io::Read;
 use std::path::PathBuf;
 
@@ -12,29 +12,10 @@ pub mod token;
 mod token_lexer;
 
 use crate::argon_parser::ArgonParser;
-use crate::token::TokenCategory;
-use parse18_runtime::{Location, ParseResult};
+pub use parse18_runtime::Location;
+use parse18_runtime::ParseResult;
 
-#[derive(Debug, Clone)]
-pub enum ParseError {
-    LexerError(LexerError),
-    ParserError(ParserError),
-}
-
-#[derive(Debug, Clone)]
-pub struct LexerError {
-    pub location: Location,
-}
-
-#[derive(Debug, Clone)]
-pub struct ParserError {
-    pub location: Location,
-    pub rule_name: String,
-    pub found_token: String,
-    pub expected_categories: Vec<TokenCategory>,
-}
-
-pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<ParseError>>(
+pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<CompileError>>(
     reader: R,
     file_name: &PathBuf,
     error_reporter: ER,

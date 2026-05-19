@@ -1,6 +1,5 @@
 use crate::token::{StringTokenType, Token, TokenType};
-use crate::{LexerError, ParseError};
-use argon_util::ErrorReporter;
+use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigUint;
 use num_traits::Num;
 use parse18_runtime::{
@@ -43,7 +42,7 @@ pub struct Lexer<'a, R, ER> {
     text_buffer: String,
 }
 
-impl<'a, R: LexerReader, ER: ErrorReporter<ParseError>> Lexer<'a, R, ER> {
+impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> Lexer<'a, R, ER> {
     pub fn new(file_name: &'a PathBuf, reader: R, error_reporter: ER) -> Self {
         Lexer {
             reader,
@@ -60,7 +59,7 @@ impl<'a, R: LexerReader, ER: ErrorReporter<ParseError>> Lexer<'a, R, ER> {
     }
 }
 
-impl<'a, R: LexerReader, ER: ErrorReporter<ParseError>> TokenReader for Lexer<'a, R, ER> {
+impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> TokenReader for Lexer<'a, R, ER> {
     fn next_token(&mut self, mode: LexerMode) -> LexedToken {
         match mode {
             LexerMode::Normal => NormalTokenProcessor::next_token(self),
@@ -72,12 +71,12 @@ impl<'a, R: LexerReader, ER: ErrorReporter<ParseError>> TokenReader for Lexer<'a
 
 trait TokenProcessor {
     type Lexer: Parse18Lexer;
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>>;
 
-    fn current_token_or_error<R: LexerReader, ER: ErrorReporter<ParseError>>(
+    fn current_token_or_error<R: LexerReader, ER: ErrorReporter<CompileError>>(
         lexer: &mut Lexer<R, ER>,
         state: <Self::Lexer as Parse18Lexer>::State,
     ) -> Option<WithRange<Token>> {
@@ -86,12 +85,10 @@ trait TokenProcessor {
         } else {
             lexer
                 .error_reporter
-                .report_error(ParseError::LexerError(LexerError {
-                    location: Location {
-                        file: lexer.file_name.clone(),
-                        start: lexer.token_start_pos,
-                        end: lexer.current_pos,
-                    },
+                .report_error(CompileError::invalid_token(Location {
+                    file: lexer.file_name.clone(),
+                    start: lexer.token_start_pos,
+                    end: lexer.current_pos,
                 }));
             lexer.text_buffer.clear();
             lexer.text_buffer.extend(lexer.acc_text.iter().copied());
@@ -107,7 +104,7 @@ trait TokenProcessor {
         }
     }
 
-    fn next_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+    fn next_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
         lexer: &mut Lexer<R, ER>,
     ) -> LexedToken {
         let mut state = Self::Lexer::INITIAL_STATE;
@@ -171,7 +168,7 @@ struct NormalTokenProcessor;
 impl TokenProcessor for NormalTokenProcessor {
     type Lexer = crate::token_lexer::TokenLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>> {
@@ -225,12 +222,10 @@ impl TokenProcessor for NormalTokenProcessor {
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
                 lexer
                     .error_reporter
-                    .report_error(ParseError::LexerError(LexerError {
-                        location: Location {
-                            file: lexer.file_name.clone(),
-                            start: lexer.token_start_pos,
-                            end: lexer.current_pos,
-                        },
+                    .report_error(CompileError::invalid_token(Location {
+                        file: lexer.file_name.clone(),
+                        start: lexer.token_start_pos,
+                        end: lexer.current_pos,
                     }));
                 Some(Token::Error {
                     invalid_text: Box::from(lexer.text_buffer.as_str()),
@@ -260,7 +255,7 @@ struct SkipNewLinesTokenProcessor;
 impl TokenProcessor for SkipNewLinesTokenProcessor {
     type Lexer = crate::token_lexer::TokenLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>> {
@@ -279,7 +274,7 @@ struct StringTokenProcessor;
 impl TokenProcessor for StringTokenProcessor {
     type Lexer = crate::double_quote_string_lexer::StringLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<ParseError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>> {
@@ -357,10 +352,9 @@ fn parse_unicode_hex_str(buffer: &mut String) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ParseError;
     use crate::lexer::{LexedToken, Lexer, LexerMode, LexerReader, TokenReader};
     use crate::token::Token;
-    use argon_util::ErrorReporter;
+    use argon_util::{CompileError, ErrorReporter};
     use num_bigint::BigUint;
     use num_traits::Num;
     use std::cell::RefCell;
@@ -369,17 +363,17 @@ mod tests {
 
     #[derive(Clone, Default)]
     struct TestErrorReporter {
-        errors: Rc<RefCell<Vec<ParseError>>>,
+        errors: Rc<RefCell<Vec<CompileError>>>,
     }
 
     impl TestErrorReporter {
-        fn errors(&self) -> Vec<ParseError> {
+        fn errors(&self) -> Vec<CompileError> {
             self.errors.borrow().clone()
         }
     }
 
-    impl ErrorReporter<ParseError> for TestErrorReporter {
-        fn report_error(&self, error: ParseError) {
+    impl ErrorReporter<CompileError> for TestErrorReporter {
+        fn report_error(&self, error: CompileError) {
             self.errors.borrow_mut().push(error);
         }
     }
@@ -408,7 +402,7 @@ mod tests {
         }
     }
 
-    fn lex_with_errors(mode: LexerMode, text: &str) -> (Vec<Token>, Vec<ParseError>) {
+    fn lex_with_errors(mode: LexerMode, text: &str) -> (Vec<Token>, Vec<CompileError>) {
         let file_name = PathBuf::from("<test>");
         let reader = TestReader::new(text);
         let error_reporter = TestErrorReporter::default();

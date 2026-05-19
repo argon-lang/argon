@@ -1,17 +1,23 @@
 [workspace]
 resolver = "3"
-members = ["argon-format","argon-parser", "argon-prover","argon-testcases","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-compiler","argon-expr","argon-format","argon-parser", "argon-prover","argon-testcases","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
 argon-util = { path = "argon-util" }
+argon-expr = { path = "argon-expr" }
+argon-parser = { path = "argon-parser" }
+argon-prover = { path = "argon-prover" }
+bitflags = "2.11.1"
 encoding_rs = "0.8.35"
+nonempty-collections = "1.3.0"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"
 parse18-lexer-gen = { path = "parse18/parse18-lexer-gen" }
 parse18-ll-gen = { path = "parse18/parse18-ll-gen" }
 parse18-runtime = { path = "parse18/parse18-runtime" }
-quick-xml = "0.40.0"
+quick-xml = "0.40.1"
 regex-syntax = "0.8.10"
+rpds = "1.2.1"
 rstest = "0.26.1"
 serde = "1.0.228"
 strum = { version = "0.28.0", features = ["derive"] }

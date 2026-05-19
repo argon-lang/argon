@@ -276,7 +276,7 @@ pub enum Expr {
     },
     BinaryOperation {
         a: Box<WithLocation<Expr>>,
-        op: BinaryOperator,
+        op: WithLocation<BinaryOperator>,
         b: Box<WithLocation<Expr>>,
     },
     Block {
@@ -331,6 +331,7 @@ pub enum Expr {
     Next {
         label: Option<WithLocation<IdentifierExpr>>,
     },
+    Paren(Box<WithLocation<Expr>>),
     Raise {
         ex: Box<WithLocation<Expr>>,
     },
@@ -351,7 +352,7 @@ pub enum Expr {
     Type,
     BigType(BigInt),
     UnaryOperation {
-        op: UnaryOperator,
+        op: WithLocation<UnaryOperator>,
         a: Box<WithLocation<Expr>>,
     },
     While {
@@ -443,6 +444,7 @@ impl BinaryOperator {
             | BinaryOperator::PropEqual
             | BinaryOperator::PropDisjunction
             | BinaryOperator::PropConjunction => false,
+
             BinaryOperator::Plus
             | BinaryOperator::Minus
             | BinaryOperator::Mul

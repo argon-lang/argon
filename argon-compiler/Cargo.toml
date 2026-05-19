@@ -1,0 +1,17 @@
+[package]
+name = "argon-compiler"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argon-expr = { workspace = true }
+argon-parser = { workspace = true }
+argon-util = { workspace = true }
+nonempty-collections = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+parse18-runtime = { workspace = true }
+rpds = { workspace = true }
+
+[lints]
+workspace = true

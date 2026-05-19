@@ -3,15 +3,14 @@ use std::io;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use argon_parser::ParseError;
 use argon_testcases::load_test_case;
-use argon_util::ErrorReporter;
+use argon_util::{CompileError, ErrorReporter};
 use rstest::rstest;
 
 #[derive(Clone, Default)]
 struct TestErrorReporter {
     io_errors: Rc<RefCell<Vec<String>>>,
-    parse_errors: Rc<RefCell<Vec<ParseError>>>,
+    parse_errors: Rc<RefCell<Vec<CompileError>>>,
 }
 
 impl ErrorReporter<io::Error> for TestErrorReporter {
@@ -20,8 +19,8 @@ impl ErrorReporter<io::Error> for TestErrorReporter {
     }
 }
 
-impl ErrorReporter<ParseError> for TestErrorReporter {
-    fn report_error(&self, error: ParseError) {
+impl ErrorReporter<CompileError> for TestErrorReporter {
+    fn report_error(&self, error: CompileError) {
         self.parse_errors.borrow_mut().push(error);
     }
 }
