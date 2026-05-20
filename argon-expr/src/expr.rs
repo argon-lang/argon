@@ -3,7 +3,7 @@ use argon_parser::ast::{IdentifierExpr, NewTraitObjectBodyStmt, Pattern};
 use nonempty_collections::NEVec;
 use num_bigint::BigInt;
 use std::convert::Infallible;
-use std::fmt::{Arguments, Debug};
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::str::FromStr;
@@ -18,7 +18,7 @@ pub trait ExprContext {
     type Trait: Clone + Debug + Eq + Hash;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Expr<EC: ExprContext + ?Sized> {
     Error,
     Hole(EC::Hole),
@@ -103,7 +103,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         label: Option<Infallible>, // TODO: Use a proper label type
     },
     Sequence(NEVec<Expr<EC>>),
-    StoreVariable(Variable),
+    StoreVariable(Variable<EC>),
     StringLiteral(Box<str>),
     Tuple {
         items: Vec<Expr<EC>>,
@@ -111,7 +111,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     AnyType,
     Type(Box<Expr<EC>>),
     BigType(BigInt),
-    Variable(Variable),
+    Variable(Variable<EC>),
     While {
         label: Option<IdentifierExpr>,
         condition: Box<Expr<EC>>,
@@ -126,6 +126,131 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Unbox {
         value: Box<Expr<EC>>,
     },
+}
+
+impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
+    fn clone(&self) -> Self {
+        match self {
+            Expr::Error => Expr::Error,
+            Expr::Hole(hole) => Expr::Hole(hole.clone()),
+            Expr::As { value, value_type } => Expr::As {
+                value: value.clone(),
+                value_type: value_type.clone(),
+            },
+            Expr::Assert { t } => Expr::Assert { t: t.clone() },
+            Expr::Block { body, finally_body } => Expr::Block {
+                body: body.clone(),
+                finally_body: finally_body.clone(),
+            },
+            Expr::BoolLiteral(value) => Expr::BoolLiteral(*value),
+            Expr::Break { label } => Expr::Break {
+                label: label.clone(),
+            },
+            Expr::Builtin { builtin, arguments } => Expr::Builtin {
+                builtin: *builtin,
+                arguments: arguments.clone(),
+            },
+            Expr::Dot { o, member } => Expr::Dot {
+                o: o.clone(),
+                member: member.clone(),
+            },
+            Expr::FunctionLiteral {
+                parameter_name,
+                body,
+            } => Expr::FunctionLiteral {
+                parameter_name: parameter_name.clone(),
+                body: body.clone(),
+            },
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => Expr::FunctionCall {
+                function: function.clone(),
+                arguments: arguments.clone(),
+            },
+            Expr::FunctionObjectCall { function, argument } => Expr::FunctionObjectCall {
+                function: function.clone(),
+                argument: argument.clone(),
+            },
+            Expr::FunctionResultValue => Expr::FunctionResultValue,
+            Expr::FunctionType { a, r } => Expr::FunctionType {
+                a: a.clone(),
+                r: r.clone(),
+            },
+            Expr::IfElse {
+                condition,
+                when_true,
+                when_false,
+            } => Expr::IfElse {
+                condition: condition.clone(),
+                when_true: when_true.clone(),
+                when_false: when_false.clone(),
+            },
+            Expr::IntLiteral(value) => Expr::IntLiteral(value.clone()),
+            Expr::Is { value, pattern } => Expr::Is {
+                value: value.clone(),
+                pattern: pattern.clone(),
+            },
+            Expr::Loop { label, body } => Expr::Loop {
+                label: label.clone(),
+                body: body.clone(),
+            },
+            Expr::Match { value, cases } => Expr::Match {
+                value: value.clone(),
+                cases: cases.clone(),
+            },
+            Expr::MethodCall {
+                method,
+                receiver,
+                arguments,
+            } => Expr::MethodCall {
+                method: method.clone(),
+                receiver: receiver.clone(),
+                arguments: arguments.clone(),
+            },
+            Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject {
+                trait_ec: trait_ec.clone(),
+                body: body.clone(),
+            },
+            Expr::Next { label } => Expr::Next {
+                label: label.clone(),
+            },
+            Expr::Raise { ex } => Expr::Raise { ex: ex.clone() },
+            Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
+                record: record.clone(),
+                fields: fields.clone(),
+            },
+            Expr::Redo { label } => Expr::Redo {
+                label: label.clone(),
+            },
+            Expr::Sequence(exprs) => Expr::Sequence(exprs.clone()),
+            Expr::StoreVariable(variable) => Expr::StoreVariable(variable.clone()),
+            Expr::StringLiteral(value) => Expr::StringLiteral(value.clone()),
+            Expr::Tuple { items } => Expr::Tuple {
+                items: items.clone(),
+            },
+            Expr::AnyType => Expr::AnyType,
+            Expr::Type(t) => Expr::Type(t.clone()),
+            Expr::BigType(value) => Expr::BigType(value.clone()),
+            Expr::Variable(variable) => Expr::Variable(variable.clone()),
+            Expr::While {
+                label,
+                condition,
+                body,
+            } => Expr::While {
+                label: label.clone(),
+                condition: condition.clone(),
+                body: body.clone(),
+            },
+            Expr::BoxedType { t } => Expr::BoxedType { t: t.clone() },
+            Expr::Box { value } => Expr::Box {
+                value: value.clone(),
+            },
+            Expr::Unbox { value } => Expr::Unbox {
+                value: value.clone(),
+            },
+        }
+    }
 }
 
 impl<EC: ExprContext + ?Sized> Expr<EC> {
@@ -296,30 +421,73 @@ impl FromStr for Builtin {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FunctionArgument<EC: ExprContext + ?Sized> {
     pub list_type: FunctionParameterListType,
     pub arg: Expr<EC>,
 }
 
-#[derive(Debug, Clone)]
+impl<EC: ExprContext + ?Sized> Clone for FunctionArgument<EC> {
+    fn clone(&self) -> Self {
+        Self {
+            list_type: self.list_type,
+            arg: self.arg.clone(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct MatchCase<EC: ExprContext + ?Sized> {
     pub pattern: Pattern,
     pub body: Expr<EC>,
 }
 
-#[derive(Debug, Clone)]
+impl<EC: ExprContext + ?Sized> Clone for MatchCase<EC> {
+    fn clone(&self) -> Self {
+        Self {
+            pattern: self.pattern.clone(),
+            body: self.body.clone(),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct RecordFieldLiteral<EC: ExprContext + ?Sized> {
     pub name: IdentifierExpr,
     pub value: Expr<EC>,
 }
 
-#[derive(Debug, Clone)]
-pub enum Variable {
-    Local(Rc<LocalVariable>),
+impl<EC: ExprContext + ?Sized> Clone for RecordFieldLiteral<EC> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            value: self.value.clone(),
+        }
+    }
 }
 
-impl PartialEq for Variable {
+#[derive(Debug)]
+pub enum Variable<EC: ExprContext + ?Sized> {
+    Local(Rc<LocalVariable<EC>>),
+}
+
+impl<EC: ExprContext + ?Sized> Clone for Variable<EC> {
+    fn clone(&self) -> Self {
+        match self {
+            Variable::Local(variable) => Variable::Local(variable.clone()),
+        }
+    }
+}
+
+impl<EC: ExprContext + ?Sized> Variable<EC> {
+    pub fn var_type(&self) -> Expr<EC> {
+        match self {
+            Variable::Local(variable) => variable.var_type.clone(),
+        }
+    }
+}
+
+impl<EC: ExprContext + ?Sized> PartialEq for Variable<EC> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Variable::Local(a), Variable::Local(b)) => Rc::ptr_eq(a, b),
@@ -327,13 +495,16 @@ impl PartialEq for Variable {
     }
 }
 
-impl Eq for Variable {}
+impl<EC: ExprContext + ?Sized> Eq for Variable<EC> {}
 
-impl Hash for Variable {
+impl<EC: ExprContext + ?Sized> Hash for Variable<EC> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         (std::ptr::from_ref(self) as usize).hash(state);
     }
 }
 
 #[derive(Debug)]
-pub struct LocalVariable {}
+pub struct LocalVariable<EC: ExprContext + ?Sized> {
+    pub name: IdentifierExpr,
+    pub var_type: Expr<EC>,
+}

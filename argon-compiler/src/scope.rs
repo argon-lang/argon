@@ -1,19 +1,22 @@
-use argon_expr::Variable;
+use argon_expr::{ExprContext, Variable};
 use argon_parser::ast::IdentifierExpr;
 
 pub trait Scope {
-    fn lookup(&mut self, name: &IdentifierExpr) -> Lookup;
-    fn lookup_assign(&mut self, name: &IdentifierExpr) -> Lookup;
+    type ExprContext: ExprContext;
+
+    fn lookup(&mut self, name: &IdentifierExpr) -> Lookup<Self::ExprContext>;
+    fn lookup_assign(&mut self, name: &IdentifierExpr) -> Lookup<Self::ExprContext>;
 }
 
 pub trait LocalScope: Scope {
-    fn add_variable(&mut self, variable: Variable);
+    fn add_variable(&mut self, variable: Variable<Self::ExprContext>);
 
-    fn has_variable(&self, variable: &Variable) -> bool;
+    fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool;
 }
 
-pub enum Lookup {
-    Variable(Variable),
+pub enum Lookup<EC: ExprContext + ?Sized> {
+    Empty,
+    Variable(Variable<EC>),
     Overloadable(OverloadLookup),
 }
 

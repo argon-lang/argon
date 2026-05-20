@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use crate::Location;
 use num_bigint::BigInt;
 use parse18_runtime::WithLocation;
@@ -381,6 +382,18 @@ pub enum IdentifierExpr {
     Update(Box<IdentifierExpr>),
 }
 
+impl Display for IdentifierExpr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IdentifierExpr::Named(name) => write!(f, "{}", name),
+            IdentifierExpr::Op(op) => write!(f, "{}", op),
+            IdentifierExpr::Extension(inner) => write!(f, "extension {}", inner),
+            IdentifierExpr::Inverse(inner) => write!(f, "inverse {}", inner),
+            IdentifierExpr::Update(inner) => write!(f, "update {}", inner),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum FunctionBody {
     ExprBody(Box<WithLocation<Expr>>),
@@ -523,6 +536,15 @@ impl Operator for UnaryOperator {
 pub enum BinaryOrUnaryOperator {
     Binary(BinaryOperator),
     Unary(UnaryOperator),
+}
+
+impl Display for BinaryOrUnaryOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BinaryOrUnaryOperator::Binary(op) => write!(f, "binary operator {}", op.symbol()),
+            BinaryOrUnaryOperator::Unary(op) => write!(f, "unary operator {}", op.symbol()),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
