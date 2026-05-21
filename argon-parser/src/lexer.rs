@@ -6,7 +6,7 @@ use parse18_runtime::{
     FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, WithRange,
 };
 use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexerMode {
@@ -31,7 +31,7 @@ pub trait TokenReader {
 pub struct Lexer<'a, R, ER> {
     reader: R,
     error_reporter: ER,
-    file_name: &'a PathBuf,
+    file_name: &'a Path,
 
     has_eof: bool,
     token_start_pos: FilePosition,
@@ -43,7 +43,7 @@ pub struct Lexer<'a, R, ER> {
 }
 
 impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> Lexer<'a, R, ER> {
-    pub fn new(file_name: &'a PathBuf, reader: R, error_reporter: ER) -> Self {
+    pub fn new(file_name: &'a Path, reader: R, error_reporter: ER) -> Self {
         Lexer {
             reader,
             error_reporter,
@@ -86,7 +86,7 @@ trait TokenProcessor {
             lexer
                 .error_reporter
                 .report_error(CompileError::invalid_token(Location {
-                    file: lexer.file_name.clone(),
+                    file: lexer.file_name.to_owned(),
                     start: lexer.token_start_pos,
                     end: lexer.current_pos,
                 }));
@@ -223,7 +223,7 @@ impl TokenProcessor for NormalTokenProcessor {
                 lexer
                     .error_reporter
                     .report_error(CompileError::invalid_token(Location {
-                        file: lexer.file_name.clone(),
+                        file: lexer.file_name.to_owned(),
                         start: lexer.token_start_pos,
                         end: lexer.current_pos,
                     }));

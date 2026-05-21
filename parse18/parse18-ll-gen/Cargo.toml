@@ -1,5 +1,6 @@
 [package]
 name = "parse18-ll-gen"
+publish = false
 edition = "2024"
 
 [lints]

@@ -471,8 +471,8 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwExtension).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_extension(id))"),
                     rule([ term(KwInverse).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_inverse(id))"),
                     rule([ term(KwUpdate).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_update(id))"),
-                    rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "(move |op| identifier_expr_op(token_unary_operator(op)))"),
-                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "(move |op| identifier_expr_op(token_binary_operator(op)))"),
+                    rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "(move |op| IdentifierExpr::UnaryOp(token_unary_operator(op)))"),
+                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "(move |op| IdentifierExpr::BinaryOp(token_binary_operator(op)))"),
                 ],
             ),
             MethodName => ruleset(

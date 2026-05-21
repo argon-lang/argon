@@ -10,7 +10,7 @@ use num_bigint::BigInt;
 use parse18_runtime::{
     FilePosition, FilePositionRange, Location, ParseResult, ParserRuntime, WithLocation, WithRange,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn merge_locations(first: Location, second: Location) -> Location {
     Location {
@@ -100,18 +100,18 @@ fn declaration_stmt_to_new_trait_object_body_stmt(decl: DeclarationStmt) -> NewT
     }
 }
 
-fn token_binary_operator(token: Token) -> BinaryOrUnaryOperator {
+fn token_binary_operator(token: Token) -> BinaryOperator {
     let op = token
         .binary_operator()
         .unwrap_or_else(|| panic!("expected binary operator token"));
-    BinaryOrUnaryOperator::Binary(convert_binary_operator(op))
+    convert_binary_operator(op)
 }
 
-fn token_unary_operator(token: Token) -> BinaryOrUnaryOperator {
+fn token_unary_operator(token: Token) -> UnaryOperator {
     let op = token
         .unary_operator()
         .unwrap_or_else(|| panic!("expected unary operator token"));
-    BinaryOrUnaryOperator::Unary(convert_unary_operator(op))
+    convert_unary_operator(op)
 }
 
 fn convert_binary_operator(op: TokenBinaryOperator) -> BinaryOperator {
@@ -767,10 +767,6 @@ fn identifier_expr_named(name: impl Into<String>) -> IdentifierExpr {
     IdentifierExpr::Named(name.into())
 }
 
-fn identifier_expr_op(op: BinaryOrUnaryOperator) -> IdentifierExpr {
-    IdentifierExpr::Op(op)
-}
-
 fn identifier_expr_extension(id: IdentifierExpr) -> IdentifierExpr {
     IdentifierExpr::Extension(Box::new(id))
 }
@@ -1111,7 +1107,7 @@ fn import_path_segment_wildcard(location: Location) -> ImportPathSegment {
 include!(concat!(env!("OUT_DIR"), "/argon_parser.rs"));
 
 pub struct ArgonParser<'a, L, ER> {
-    file_name: &'a PathBuf,
+    file_name: &'a Path,
     lex_mode: LexerMode,
 
     lexer: L,
@@ -1122,7 +1118,7 @@ pub struct ArgonParser<'a, L, ER> {
 }
 
 impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ArgonParser<'a, L, ER> {
-    pub fn new(file_name: &'a PathBuf, lexer: L, error_reporter: ER) -> ArgonParser<'a, L, ER> {
+    pub fn new(file_name: &'a Path, lexer: L, error_reporter: ER) -> ArgonParser<'a, L, ER> {
         ArgonParser {
             file_name,
             lex_mode: LexerMode::Normal,
@@ -1197,7 +1193,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ParserRuntime for Argo
     fn error<T>(&mut self, rule_name: &str, categories: &[Self::TokenCategory]) -> ParseResult<T> {
         if let ParseResult::Success(token) = self.peek() {
             self.error_reporter.report_error(CompileError::parse_error(
-                Location::from_range(self.file_name.clone(), token.range),
+                Location::from_range(self.file_name.to_owned(), token.range),
                 rule_name,
                 format!("{:?}", token.value),
                 categories.iter().map(|category| format!("{category:?}")),
@@ -1239,7 +1235,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ParserRuntime for Argo
     fn with_location<T>(&self, parse_res: ParseResult<T>) -> ParseResult<WithLocation<T>> {
         match parse_res {
             ParseResult::Success(value) => {
-                let location = Location::from_range(self.file_name.clone(), value.range);
+                let location = Location::from_range(self.file_name.to_owned(), value.range);
                 ParseResult::Success(value.map(move |value| WithLocation::new(value, location)))
             }
             ParseResult::Failure => ParseResult::Failure,

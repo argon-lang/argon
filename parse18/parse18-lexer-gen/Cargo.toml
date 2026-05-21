@@ -1,5 +1,6 @@
 [package]
 name = "parse18-lexer-gen"
+publish = false
 edition = "2024"
 
 [dependencies]

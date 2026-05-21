@@ -2,7 +2,7 @@ use crate::ast::ModuleDeclaration;
 use crate::lexer::{Lexer, LexerReader};
 use argon_util::{CompileError, ErrorReporter};
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub mod argon_parser;
 pub mod ast;
@@ -17,7 +17,7 @@ use parse18_runtime::ParseResult;
 
 pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<CompileError>>(
     reader: R,
-    file_name: &PathBuf,
+    file_name: &Path,
     error_reporter: ER,
 ) -> ModuleDeclaration {
     let lexer_reader = ReadLexerReader {

@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
@@ -468,7 +469,7 @@ impl<EC: ExprContext + ?Sized> Clone for RecordFieldLiteral<EC> {
 
 #[derive(Debug)]
 pub enum Variable<EC: ExprContext + ?Sized> {
-    Local(Rc<LocalVariable<EC>>),
+    Local(Arc<LocalVariable<EC>>),
 }
 
 impl<EC: ExprContext + ?Sized> Clone for Variable<EC> {
@@ -490,7 +491,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
 impl<EC: ExprContext + ?Sized> PartialEq for Variable<EC> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Variable::Local(a), Variable::Local(b)) => Rc::ptr_eq(a, b),
+            (Variable::Local(a), Variable::Local(b)) => Arc::ptr_eq(a, b),
         }
     }
 }

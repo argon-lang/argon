@@ -1,7 +1,7 @@
-use std::fmt::{Display, Formatter};
 use crate::Location;
 use num_bigint::BigInt;
 use parse18_runtime::WithLocation;
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone)]
 pub struct NonEmptyVec<T> {
@@ -203,7 +203,7 @@ pub struct ReturnTypeSpecifier {
     pub ensures_clauses: Vec<WithLocation<Expr>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Modifier {
     Public,
     Internal,
@@ -216,6 +216,24 @@ pub enum Modifier {
     Final,
     Override,
     Virtual,
+}
+
+impl Display for Modifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Modifier::Public => write!(f, "public"),
+            Modifier::Internal => write!(f, "internal"),
+            Modifier::Protected => write!(f, "protected"),
+            Modifier::Private => write!(f, "private"),
+            Modifier::Erased => write!(f, "erased"),
+            Modifier::Token => write!(f, "token"),
+            Modifier::Witness => write!(f, "witness"),
+            Modifier::Inline => write!(f, "inline"),
+            Modifier::Final => write!(f, "final"),
+            Modifier::Override => write!(f, "override"),
+            Modifier::Virtual => write!(f, "virtual"),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -373,10 +391,11 @@ pub enum Expr {
     Identifier(IdentifierExpr),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IdentifierExpr {
     Named(String),
-    Op(BinaryOrUnaryOperator),
+    BinaryOp(BinaryOperator),
+    UnaryOp(UnaryOperator),
     Extension(Box<IdentifierExpr>),
     Inverse(Box<IdentifierExpr>),
     Update(Box<IdentifierExpr>),
@@ -386,7 +405,8 @@ impl Display for IdentifierExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             IdentifierExpr::Named(name) => write!(f, "{}", name),
-            IdentifierExpr::Op(op) => write!(f, "{}", op),
+            IdentifierExpr::BinaryOp(op) => write!(f, "binary operator {}", op.symbol()),
+            IdentifierExpr::UnaryOp(op) => write!(f, "unary operator {}", op.symbol()),
             IdentifierExpr::Extension(inner) => write!(f, "extension {}", inner),
             IdentifierExpr::Inverse(inner) => write!(f, "inverse {}", inner),
             IdentifierExpr::Update(inner) => write!(f, "update {}", inner),
@@ -417,11 +437,11 @@ pub enum StringFragment {
     Interpolate { value: Box<WithLocation<Expr>> },
 }
 
-pub trait Operator {
-    fn symbol(&self) -> &'static str;
+pub trait Operator: Copy {
+    fn symbol(self) -> &'static str;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BinaryOperator {
     Assign,
     Plus,
@@ -479,7 +499,7 @@ impl BinaryOperator {
 }
 
 impl Operator for BinaryOperator {
-    fn symbol(&self) -> &'static str {
+    fn symbol(self) -> &'static str {
         match self {
             BinaryOperator::Assign => ":=",
             BinaryOperator::Plus => "+",
@@ -507,7 +527,7 @@ impl Operator for BinaryOperator {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnaryOperator {
     Plus,
     Minus,
@@ -522,27 +542,12 @@ impl UnaryOperator {
 }
 
 impl Operator for UnaryOperator {
-    fn symbol(&self) -> &'static str {
+    fn symbol(self) -> &'static str {
         match self {
             UnaryOperator::Plus => "+",
             UnaryOperator::Minus => "-",
             UnaryOperator::BitNot => "~~~",
             UnaryOperator::LogicalNot => "!",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BinaryOrUnaryOperator {
-    Binary(BinaryOperator),
-    Unary(UnaryOperator),
-}
-
-impl Display for BinaryOrUnaryOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BinaryOrUnaryOperator::Binary(op) => write!(f, "binary operator {}", op.symbol()),
-            BinaryOrUnaryOperator::Unary(op) => write!(f, "unary operator {}", op.symbol()),
         }
     }
 }

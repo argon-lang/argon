@@ -1,10 +1,8 @@
-use crate::scope::{LocalScope, Lookup, OverloadLookup, Overloadable, Scope};
-use crate::{Context, DefaultExprContext};
+use argon_compiler::scope::{LocalScope, Lookup, OverloadLookup, Overloadable, Scope};
+use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{Builtin, Expr, ExprContext, Variable};
 use argon_parser::ast;
-use argon_parser::ast::{
-    BinaryOrUnaryOperator, FunctionParameterListType, IdentifierExpr, StringFragment,
-};
+use argon_parser::ast::{FunctionParameterListType, IdentifierExpr, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -64,8 +62,7 @@ impl<'a> RecordingTypeCheckContext<'a> {
     }
 }
 
-impl<'a> TypeCheckContext for RecordingTypeCheckContext<'a>
-{
+impl<'a> TypeCheckContext for RecordingTypeCheckContext<'a> {
     fn scope(&self) -> &dyn LocalScope<ExprContext = TypeCheckExprContext> {
         &self.scope
     }
@@ -661,9 +658,7 @@ impl<C: Context, EC> RecordingTypeChecker<C, EC> {
         }
     }
 
-    fn infer_fixed_builtin<
-        const ARG_COUNT: usize,
-    >(
+    fn infer_fixed_builtin<const ARG_COUNT: usize>(
         &mut self,
         tc_context: &mut impl TypeCheckContext,
         location: &Location,
@@ -692,9 +687,7 @@ impl<C: Context, EC> RecordingTypeChecker<C, EC> {
         )
     }
 
-    fn infer_parameterized_builtin<
-        const REST_ARG_COUNT: usize,
-    >(
+    fn infer_parameterized_builtin<const REST_ARG_COUNT: usize>(
         &mut self,
         tc_context: &mut impl TypeCheckContext,
         location: &Location,
@@ -860,7 +853,7 @@ impl<C: Context, EC> RecordingTypeChecker<C, EC> {
             callee: self.process_lookup(
                 tc_context,
                 &op.location,
-                &IdentifierExpr::Op(BinaryOrUnaryOperator::Binary(op.value)),
+                &IdentifierExpr::BinaryOp(op.value),
             ),
             arguments: VecDeque::from([
                 ArgumentInfo {
@@ -889,7 +882,7 @@ impl<C: Context, EC> RecordingTypeChecker<C, EC> {
             callee: self.process_lookup(
                 tc_context,
                 &op.location,
-                &IdentifierExpr::Op(BinaryOrUnaryOperator::Unary(op.value)),
+                &IdentifierExpr::UnaryOp(op.value),
             ),
             arguments: VecDeque::from([ArgumentInfo {
                 call_location: location,
@@ -1004,39 +997,11 @@ fn skip_cache(expr: &WithLocation<ast::Expr>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use argon_compiler::test_utils::{TestContext, TestReporter};
     use argon_util::ErrorCode;
     use num_bigint::BigInt;
     use parse18_runtime::FilePosition;
-    use std::cell::RefCell;
     use std::path::PathBuf;
-    use std::rc::Rc;
-
-    #[derive(Clone, Default)]
-    struct TestReporter {
-        errors: Rc<RefCell<Vec<CompileError>>>,
-    }
-
-    impl ErrorReporter<CompileError> for TestReporter {
-        fn report_error(&self, error: CompileError) {
-            self.errors.borrow_mut().push(error);
-        }
-    }
-
-    impl ErrorReporter<std::io::Error> for TestReporter {
-        fn report_error(&self, _error: std::io::Error) {}
-    }
-
-    struct TestContext {
-        reporter: TestReporter,
-    }
-
-    impl Context for TestContext {
-        type Reporter = TestReporter;
-
-        fn reporter(&self) -> &Self::Reporter {
-            &self.reporter
-        }
-    }
 
     struct TestScope;
 
@@ -1065,7 +1030,6 @@ mod tests {
     }
 
     impl TypeCheckContext for TestTypeCheckContext {
-
         fn scope(&self) -> &dyn LocalScope<ExprContext = TypeCheckExprContext> {
             &self.scope
         }
@@ -1108,9 +1072,7 @@ mod tests {
         TestReporter,
     ) {
         let reporter = TestReporter::default();
-        let context = TestContext {
-            reporter: reporter.clone(),
-        };
+        let context = TestContext::new(reporter.clone());
         (
             RecordingTypeChecker::new(context, ()),
             TestTypeCheckContext { scope: TestScope },
@@ -1128,7 +1090,7 @@ mod tests {
         assert!(matches!(result.checked_expr, Expr::Error));
         assert!(matches!(result.inferred_type, Expr::Error));
 
-        let errors = reporter.errors.borrow();
+        let errors = reporter.errors();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].code, ErrorCode::InvalidBuiltin);
         assert!(errors[0].message.contains("missing"));
@@ -1145,7 +1107,7 @@ mod tests {
         assert!(matches!(result.checked_expr, Expr::Error));
         assert!(matches!(result.inferred_type, Expr::Error));
 
-        let errors = reporter.errors.borrow();
+        let errors = reporter.errors();
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].code, ErrorCode::InvalidBuiltin);
         assert!(errors[0].message.contains("int_add"));
@@ -1176,6 +1138,6 @@ mod tests {
             other => panic!("expected type expression, got {other:?}"),
         }
 
-        assert!(reporter.errors.borrow().is_empty());
+        assert!(reporter.errors().is_empty());
     }
 }

@@ -35,7 +35,7 @@ pub enum ErrorCode {
     TokenFunctionNotInline = 0x001A,
     UnknownExtern = 0x001B,
     TypeParameterIsConcrete = 0x001C,
-    DuplicateModuleDefinition = 0x001D,
+    DuplicateTubeDefinition = 0x001D,
     UnknownTube = 0x001E,
     InvalidBuiltin = 0x001F,
 }
@@ -291,10 +291,10 @@ impl CompileError {
         )
     }
 
-    pub fn duplicate_module_definition(name: impl AsRef<str>) -> Self {
+    pub fn duplicate_tube_definition(name: impl AsRef<str>) -> Self {
         Self::new(
-            ErrorCode::DuplicateModuleDefinition,
-            format!("Duplicate module definition: {}", name.as_ref()),
+            ErrorCode::DuplicateTubeDefinition,
+            format!("Duplicate tube definition: {}", name.as_ref()),
             None,
         )
     }

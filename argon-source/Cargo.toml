@@ -1,22 +1,21 @@
 [package]
-name = "argon-compiler"
+name = "argon-source"
 publish = false
 edition = "2024"
 
-[features]
-test-utils = []
-
 [dependencies]
+argon-compiler = { workspace = true }
 argon-expr = { workspace = true }
 argon-parser = { workspace = true }
 argon-util = { workspace = true }
-dashmap = { workspace = true }
 nonempty-collections = { workspace = true }
-num-bigint = { workspace = true }
-num-traits = { workspace = true }
 parse18-runtime = { workspace = true }
-rpds = { workspace = true }
+rayon = { workspace = true }
 walkdir = { workspace = true }
+
+[dev-dependencies]
+argon-compiler = { workspace = true, features = ["test-utils"] }
+num-bigint = { workspace = true }
 
 [lints]
 workspace = true
