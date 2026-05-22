@@ -1,0 +1,1014 @@
+package argon.tube;
+
+import nobleidl.core;
+
+
+@esexpr:(derive-codec)
+enum tube-file-entry {
+    @esexpr:(inline-value)
+    header {
+        header: tube-header;
+    },
+
+    @esexpr:(inline-value)
+    metadata {
+        metadata: tube-metadata;
+    },
+
+    module-reference {
+        module-id: nat;
+
+        tube-id: nat;
+        path: module-path;
+    },
+
+    @esexpr:(inline-value)
+    function-definition {
+        definition: function-definition;
+    },
+
+    function-reference {
+        function-id: nat;
+        import: import-specifier;
+    },
+
+    @esexpr:(inline-value)
+    record-definition {
+        definition: record-definition;
+    },
+
+    record-reference {
+        record-id: nat;
+        import: import-specifier;
+    },
+
+    @esexpr:(inline-value)
+    enum-definition {
+        definition: enum-definition;
+    },
+
+    enum-reference {
+        enum-id: nat;
+        import: import-specifier;
+    },
+
+    enum-variant-reference {
+        variant-id: nat;
+
+        enum-id: nat;
+        name: identifier;
+    },
+
+    record-field-reference {
+        record-field-id: nat;
+
+        record-id: nat;
+        name: identifier;
+    },
+
+    enum-variant-record-field-reference {
+        record-field-id: nat;
+
+        variant-id: nat;
+        name: identifier;
+    },
+
+    @esexpr:(inline-value)
+    trait-definition {
+        definition: trait-definition;
+    },
+
+    trait-reference {
+        trait-id: nat;
+        import: import-specifier;
+    },
+
+    trait-method-reference {
+        method-id: nat;
+        trait-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+
+    instance-method-reference {
+        method-id: nat;
+        instance-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+
+    @esexpr:(inline-value)
+    instance-definition {
+        definition: instance-definition;
+    },
+
+    instance-reference {
+        instance-id: nat;
+        import: import-specifier;
+    },
+}
+
+
+@esexpr:(derive-codec)
+@esexpr:(constructor "Ar18 Tube")
+record tube-header {
+    format-version-major: int;
+    format-version-minor: int;
+}
+
+@esexpr:(derive-codec)
+record tube-metadata {
+    name: tube-name;
+
+    @esexpr:(keyword)
+    platforms: list[supported-platform];
+
+    @esexpr:(keyword)
+    referenced-tubes: list[tube-name];
+
+    @esexpr:(keyword)
+    platform-metadata: dict[esexpr];
+
+    @esexpr:(keyword)
+    modules: list[module];
+}
+
+@esexpr:(derive-codec)
+record supported-platform {
+    id: string;
+}
+
+@esexpr:(derive-codec)
+record module {
+    path: module-path;
+
+    @esexpr:(vararg)
+    groups: list[export-group];
+}
+
+@esexpr:(derive-codec)
+record export-group {
+    name: identifier;
+
+    @esexpr:(vararg)
+    exports: list[module-export];
+}
+
+
+@esexpr:(derive-codec)
+enum module-export {
+    function {
+        function-id: nat;
+        access: access-modifier-global;
+        signature: erased-signature;
+    },
+
+    record {
+        record-id: nat;
+        access: access-modifier-global;
+        signature: erased-signature;
+    },
+
+    enum {
+        enum-id: nat;
+        access: access-modifier-global;
+        signature: erased-signature;
+    },
+
+    trait {
+        trait-id: nat;
+        access: access-modifier-global;
+        signature: erased-signature;
+    },
+
+    instance {
+        instance-id: nat;
+        access: access-modifier-global;
+        signature: erased-signature;
+    },
+
+    exported {
+        exp: module-export;
+    },
+}
+
+@esexpr:(derive-codec)
+enum access-modifier-global {
+    public,
+    internal,
+    module-private,
+}
+
+@esexpr:(derive-codec)
+enum access-modifier {
+    public,
+    private,
+    protected,
+    internal,
+    protected-or-internal,
+    protected-and-internal,
+    module-private,
+}
+
+
+
+@esexpr:(derive-codec)
+record tube-name {
+    head: string;
+    tail: list[string];
+}
+
+@esexpr:(derive-codec)
+record module-path {
+    path: list[string];
+}
+
+@esexpr:(derive-codec)
+record module-name {
+    tube: tube-name;
+    path: module-path;
+}
+
+
+@esexpr:(derive-codec)
+enum identifier {
+    named { s: string; },
+    bin-op { op: binary-operator; },
+    un-op { op: unary-operator; },
+    extension { inner: identifier; },
+    inverse { inner: identifier; },
+    update { inner: identifier; },
+}
+
+@esexpr:(derive-codec)
+simple enum binary-operator {
+    plus,
+    minus,
+    mul,
+    div,
+    equal,
+    not-equal,
+    less-than,
+    less-than-eq,
+    greater-than,
+    greater-than-eq,
+    bit-or,
+    bit-xor,
+    bit-and,
+    shift-left,
+    shift-right,
+    concat,
+}
+
+@esexpr:(derive-codec)
+simple enum unary-operator {
+    plus,
+    minus,
+    bit-not,
+    logical-not,
+}
+
+@esexpr:(derive-codec)
+record erased-signature {
+    params: list[erased-signature-type];
+    result: erased-signature-type;
+}
+
+@esexpr:(derive-codec)
+enum erased-signature-type {
+    builtin {
+        b: builtin-type;
+
+        @esexpr: (vararg)
+        args: list[erased-signature-type];
+    },
+    function {
+        input: erased-signature-type;
+        output: erased-signature-type;
+    },
+    record {
+        record-import: import-specifier;
+
+        @esexpr: (vararg)
+        args: list[erased-signature-type];
+    },
+    tuple {
+        @esexpr: (vararg)
+        elements: list[erased-signature-type];
+    },
+    erased,
+}
+
+@esexpr:(derive-codec)
+enum builtin-type {
+    int,
+    bool,
+    string,
+    never,
+    array,
+    conjunction,
+    disjunction,
+}
+
+@esexpr:(derive-codec)
+enum import-specifier {
+    @esexpr:(constructor "import-global")
+    global {
+        module-id: nat;
+        name: identifier;
+        sig: erased-signature;
+    },
+
+    @esexpr:(constructor "import-local")
+    local {
+        parent: import-specifier;
+        index: nat;
+    },
+}
+
+
+@esexpr:(derive-codec)
+record instance-parameter {
+    name: option[identifier];
+}
+
+@esexpr:(derive-codec)
+record function-signature {
+    @esexpr:(keyword)
+    parameters: list[signature-parameter];
+
+    @esexpr:(keyword)
+    return-type: expr;
+
+    @esexpr:(keyword)
+    ensures-clauses: list[expr];
+}
+
+@esexpr:(derive-codec)
+record signature-parameter {
+    @esexpr:(keyword)
+    list-type: function-parameter-list-type;
+
+    @esexpr:(keyword)
+    erasure: erasure-mode;
+
+    @esexpr:(keyword)
+    bindings: list[parameter-binding];
+
+    name: option[identifier];
+    param-type: expr;
+}
+
+@esexpr:(derive-codec)
+simple enum function-parameter-list-type {
+    normal-list,
+    inferrable-list,
+    quote-list,
+    requires-list,
+}
+
+@esexpr:(derive-codec)
+record parameter-binding {
+    name: option[identifier];
+    param-type: expr;
+}
+
+@esexpr:(derive-codec)
+enum effect-info {
+    pure,
+    effectful,
+}
+
+@esexpr:(derive-codec)
+enum erasure-mode {
+    concrete,
+    erased,
+    token,
+}
+
+
+@esexpr:(derive-codec)
+record function-definition {
+    function-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    inline: bool;
+
+    @esexpr:(keyword)
+    erasure: erasure-mode;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    witness: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (pure))
+    effects: effect-info;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    implementation: optional-field[function-implementation];
+}
+
+@esexpr:(derive-codec)
+enum function-implementation {
+    @esexpr:(inline-value)
+    expr {
+        body: expr;
+    },
+
+    @esexpr:(inline-value)
+    extern {
+        externs: extern-map;
+    },
+}
+
+@esexpr:(derive-codec)
+@esexpr:(constructor "externs")
+record extern-map {
+    @esexpr:(dict)
+    externs: dict[esexpr];
+}
+
+
+@esexpr:(derive-codec)
+record record-definition {
+    record-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    fields: list[record-field-definition];
+}
+
+
+@esexpr:(derive-codec)
+record record-field-definition {
+    name: identifier;
+    field-type: expr;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    mutable: bool;
+}
+
+@esexpr:(derive-codec)
+record enum-definition {
+    enum-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    variants: list[enum-variant-definition];
+}
+
+@esexpr:(derive-codec)
+record enum-variant-definition {
+    name: identifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    fields: list[record-field-definition];
+}
+
+@esexpr:(derive-codec)
+record trait-definition {
+    trait-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    methods: list[method-entry];
+}
+
+@esexpr:(derive-codec)
+record method-entry {
+    id: nat;
+    access: access-modifier;
+    method: method-definition;
+}
+
+@esexpr:(derive-codec)
+record method-definition {
+    name: identifier;
+    erased-signature: erased-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    inline: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    erased: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    witness: bool;
+
+    @esexpr:(keyword)
+    slot: method-slot;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (pure))
+    effects: effect-info;
+
+    @esexpr:(keyword)
+    instance-parameter: instance-parameter;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    implementation: optional-field[method-implementation];
+}
+
+@esexpr:(derive-codec)
+record instance-definition {
+    instance-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    erasure: erasure-mode;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(vararg)
+    methods: list[method-entry];
+}
+
+@esexpr:(derive-codec)
+enum method-slot {
+    abstract,
+    abstract-override,
+    virtual,
+    override,
+    final,
+    final-override,
+}
+
+@esexpr:(derive-codec)
+enum method-implementation {
+    abstract,
+
+    @esexpr:(inline-value)
+    expr {
+        body: expr;
+    },
+
+    @esexpr:(inline-value)
+    extern {
+        externs: extern-map;
+    },
+}
+
+@esexpr:(derive-codec)
+enum expr {
+    error,
+    erased-value,
+    any-type,
+    and {
+        a: expr;
+        b: expr;
+    },
+    bind-variable {
+        v: local-var;
+        value: expr;
+    },
+    bool-literal {
+        value: bool;
+    },
+    box {
+        t: expr;
+        value: expr;
+    },
+    builtin {
+        builtin: builtin;
+        
+        @esexpr:(vararg)
+        args: list[expr];
+    },
+    boxed {
+        t: expr;
+    },
+    break {
+        loop-id: nat;
+    },
+    @esexpr:(inline-value)
+    enum-type {
+        enum-type: enum-type;
+    },
+    enum-variant-literal {
+        enum-type: enum-type;
+        variant-id: nat;
+
+        @esexpr:(vararg)
+        args: list[expr];
+
+        @esexpr:(vararg)
+        fields: list[record-field-literal];
+    },
+    next {
+        loop-id: nat;
+    },
+    finally {
+        action: expr;
+        ensuring: expr;
+    },
+    function-call {
+        id: nat;
+
+        @esexpr:(vararg)
+        args: list[expr];
+    },
+    function-object-call {
+        f: expr;
+        a: expr;
+    },
+    function-type {
+        a: lambda-parameter-var;
+        r: expr;
+    },
+    if-else {
+        condition: expr;
+        true-body: expr;
+        false-body: expr;
+
+        @esexpr:(keyword)
+        @esexpr:(optional)
+        when-true-witness: optional-field[local-var];
+
+        @esexpr:(keyword)
+        @esexpr:(optional)
+        when-false-witness: optional-field[local-var];
+    },
+    instance-method-call {
+        method-id: nat;
+        instance-type: method-instance-type;
+        instance: expr;
+
+        @esexpr:(vararg)
+        args: list[expr];
+    },
+    @esexpr:(inline-value)
+    instance-singleton-type {
+        instance-singleton-type: instance-singleton-type;
+    },
+    int-literal {
+        i: int;
+    },
+    is {
+        value: expr;
+        pattern: pattern;
+    },
+    lambda {
+        v: lambda-parameter-var;
+        return-type: expr;
+        body: expr;
+    },
+    loop {
+        id: nat;
+        prelude: expr;
+        body: expr;
+        postlude: expr;
+    },
+    match {
+        value: expr;
+        cases: list[match-case];
+    },
+    new-instance {
+        instance-id: nat;
+        args: list[expr];
+    },
+    or {
+        a: expr;
+        b: expr;
+    },
+    raise {
+        ex: expr;
+    },
+    @esexpr:(inline-value)
+    record-type {
+        record-type: record-type;
+    },
+    record-field-load {
+        record: record-type;
+        field-id: nat;
+        record-value: expr;
+    },
+    record-field-store {
+        record: record-type;
+        field-id: nat;
+        record-value: expr;
+        field-value: expr;
+    },
+    record-literal {
+        record: record-type;
+
+        @esexpr:(vararg)
+        fields: list[record-field-literal];
+    },
+    redo {
+        loop-id: nat;
+    },
+    ref-cell-type {
+        element-type: expr;
+    },
+    ref-cell-create {
+        element-type: expr;
+        value: expr;
+    },
+    ref-cell-load {
+        cell: expr;
+    },
+    ref-cell-store {
+        cell: expr;
+        value: expr;
+    },
+    sequence {
+        head: expr;
+
+        @esexpr:(vararg)
+        tail: list[expr];
+    },
+    string-literal {
+        s: string;
+    },
+    @esexpr:(inline-value)
+    trait-type {
+        trait-type: trait-type;
+    },
+    tuple {
+        items: list[expr];
+    },
+    tuple-element {
+        index: nat;
+        tuple: expr;
+    },
+    type-n {
+        n: expr;
+    },
+    type-big-n {
+        n: nat;
+    },
+    unbox {
+        t: expr;
+        value: expr;
+    },
+    variable {
+        v: var;
+    },
+    variable-store {
+        v: var;
+        value: expr;
+    },
+}
+
+@esexpr:(derive-codec)
+enum pattern {
+    discard {
+        t: expr;
+    },
+    tuple {
+        @esexpr:(vararg)
+        items: list[pattern];
+    },
+    binding {
+        v: local-var;
+        pattern: pattern;
+    },
+    enum-variant {
+        enum-type: enum-type;
+        variant-id: nat;
+
+        @esexpr:(vararg)
+        args: list[pattern];
+
+        @esexpr:(vararg)
+        fields: list[record-field-pattern];
+    },
+    string {
+        s: string;
+    },
+    int {
+        i: int;
+    },
+    bool {
+        b: bool;
+    },
+}
+
+@esexpr:(derive-codec)
+record match-case {
+    pattern: pattern;
+    body: expr;
+}
+
+@esexpr:(derive-codec)
+record record-field-pattern {
+    field-id: nat;
+    pattern: pattern;
+}
+
+
+@esexpr:(derive-codec)
+simple enum builtin {
+    int-type,
+    bool-type,
+    string-type,
+    never-type, 
+    array-type,
+    
+    conjunction-type,
+    disjunction-type,
+    
+    
+    int-negate,
+    int-bit-not,
+    int-add,
+    int-sub,
+    int-mul,
+    int-bit-and,
+    int-bit-or,
+    int-bit-xor,
+    int-bit-shift-left,
+    int-bit-shift-right,
+    int-eq,
+    int-ne,
+    int-lt,
+    int-le,
+    int-gt,
+    int-ge,
+    
+    string-concat,
+    string-eq,
+    string-ne,
+    
+    bool-not,
+    bool-eq,
+    bool-ne,
+
+    array-create-unsafe-uninitialized,
+    array-length,
+    array-get,
+    array-set,
+
+    equal-to,
+    equal-to-refl,
+}
+
+@esexpr:(derive-codec)
+record local-var {
+    id: nat;
+    var-type: expr;
+    name: option[identifier];
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    mutable: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    erased: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    witness: bool;
+}
+
+@esexpr:(derive-codec)
+record lambda-parameter-var {
+    id: nat;
+    var-type: expr;
+    name: option[identifier];
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    mutable: bool;
+
+    @esexpr:(keyword)
+    erasure: erasure-mode;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    witness: bool;
+}
+
+@esexpr:(derive-codec)
+record record-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
+record trait-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
+record instance-singleton-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
+enum method-instance-type {
+    @esexpr:(inline-value)
+    trait-type {
+        trait-type: trait-type;
+    },
+
+    instance-singleton-type {
+        instance-singleton-type: instance-singleton-type;
+    },
+}
+
+
+@esexpr:(derive-codec)
+record record-field-literal {
+    field-id: nat;
+    value: expr;
+}
+
+@esexpr:(derive-codec)
+record enum-type {
+    id: nat;
+
+    @esexpr:(vararg)
+    args: list[expr];
+}
+
+@esexpr:(derive-codec)
+enum var {
+    local-var {
+        id: nat;
+    },
+    instance-parameter-var {
+        owner: expression-owner;
+        name: option[identifier];
+        var-type: expr;
+    },
+    parameter-var {
+        owner: expression-owner;
+        parameter-index: int;
+        name: option[identifier];
+        var-type: expr;
+
+        @esexpr:(keyword)
+        erasure: erasure-mode;
+
+        @esexpr:(keyword)
+        @esexpr:(default-value #false)
+        witness: bool;
+    },
+    lambda-parameter-var {
+        id: nat;
+    },
+}
+
+@esexpr:(derive-codec)
+enum expression-owner {
+    func {
+        index: nat;
+    },
+    rec {
+        index: nat;
+    },
+    enum {
+        index: nat;
+    },
+    trait {
+        index: nat;
+    },
+    instance {
+        index: nat;
+    },
+    enum-variant {
+        index: nat;
+    },
+    method {
+        index: nat;
+    },
+}
+

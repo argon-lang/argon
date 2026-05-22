@@ -4,6 +4,16 @@ publish = false
 edition = "2024"
 
 [dependencies]
+esexpr = { workspace = true }
+noble-idl-runtime = { workspace = true }
+
+[build-dependencies]
+noble-idl-compiler-rust = { workspace = true }
 
 [lints]
 workspace = true
+
+[package.metadata.noble-idl.package_mapping]
+"argon.tube" = "tube"
+"argon.vm" = "vm"
+

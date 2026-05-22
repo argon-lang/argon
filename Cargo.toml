@@ -8,6 +8,10 @@ argon-util = { path = "argon-util" }
 argon-expr = { path = "argon-expr" }
 argon-parser = { path = "argon-parser" }
 argon-prover = { path = "argon-prover" }
+esexpr = { path = "../esexpr/rust/esexpr" }
+noble-idl-compiler-rust = { path = "../noble-idl/langs/rust/backend" }
+noble-idl-runtime = { path = "../noble-idl/langs/rust/runtime" }
+
 bitflags = "2.11.1"
 dashmap = "6.2.1"
 encoding_rs = "0.8.35"
