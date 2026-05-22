@@ -28,9 +28,9 @@ pub trait TokenReader {
     fn next_token(&mut self, mode: LexerMode) -> LexedToken;
 }
 
-pub struct Lexer<'a, R, ER> {
+pub struct Lexer<'a, R, ER: ?Sized> {
     reader: R,
-    error_reporter: ER,
+    error_reporter: &'a ER,
     file_name: &'a Path,
 
     has_eof: bool,
@@ -42,8 +42,8 @@ pub struct Lexer<'a, R, ER> {
     text_buffer: String,
 }
 
-impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> Lexer<'a, R, ER> {
-    pub fn new(file_name: &'a Path, reader: R, error_reporter: ER) -> Self {
+impl<'a, R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized> Lexer<'a, R, ER> {
+    pub fn new(file_name: &'a Path, reader: R, error_reporter: &'a ER) -> Self {
         Lexer {
             reader,
             error_reporter,
@@ -59,7 +59,7 @@ impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> Lexer<'a, R, ER> {
     }
 }
 
-impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> TokenReader for Lexer<'a, R, ER> {
+impl<'a, R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized> TokenReader for Lexer<'a, R, ER> {
     fn next_token(&mut self, mode: LexerMode) -> LexedToken {
         match mode {
             LexerMode::Normal => NormalTokenProcessor::next_token(self),
@@ -71,12 +71,12 @@ impl<'a, R: LexerReader, ER: ErrorReporter<CompileError>> TokenReader for Lexer<
 
 trait TokenProcessor {
     type Lexer: Parse18Lexer;
-    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>>;
 
-    fn current_token_or_error<R: LexerReader, ER: ErrorReporter<CompileError>>(
+    fn current_token_or_error<R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized>(
         lexer: &mut Lexer<R, ER>,
         state: <Self::Lexer as Parse18Lexer>::State,
     ) -> Option<WithRange<Token>> {
@@ -104,7 +104,7 @@ trait TokenProcessor {
         }
     }
 
-    fn next_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
+    fn next_token<R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized>(
         lexer: &mut Lexer<R, ER>,
     ) -> LexedToken {
         let mut state = Self::Lexer::INITIAL_STATE;
@@ -168,7 +168,7 @@ struct NormalTokenProcessor;
 impl TokenProcessor for NormalTokenProcessor {
     type Lexer = crate::token_lexer::TokenLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>> {
@@ -255,7 +255,7 @@ struct SkipNewLinesTokenProcessor;
 impl TokenProcessor for SkipNewLinesTokenProcessor {
     type Lexer = crate::token_lexer::TokenLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>> {
@@ -274,7 +274,7 @@ struct StringTokenProcessor;
 impl TokenProcessor for StringTokenProcessor {
     type Lexer = crate::double_quote_string_lexer::StringLexer;
 
-    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError>>(
+    fn process_token<R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized>(
         lexer: &mut Lexer<R, ER>,
         lex_token: <Self::Lexer as Parse18Lexer>::Token,
     ) -> Option<WithRange<Token>> {

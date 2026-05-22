@@ -1,6 +1,6 @@
-use argon_compiler::scope::{LocalScope, Lookup, OverloadLookup, Overloadable, Scope};
+use argon_compiler::scope::{LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope};
 use argon_compiler::{Context, DefaultExprContext};
-use argon_expr::{Builtin, Expr, ExprContext, Variable};
+use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionParameterListType, IdentifierExpr, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
@@ -8,8 +8,29 @@ use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 
+
+pub struct TypeChecker<'a> {
+    pub context: Context,
+    pub scope: &'a mut dyn Scope<ExprContext = DefaultExprContext>,
+}
+
+impl<'a> TypeChecker<'a> {
+    pub fn type_check_type_expr(&mut self, e: &WithLocation<ast::Expr>) -> Expr<DefaultExprContext> {
+        let mut checker = RecordingTypeChecker::new(self.context.clone());
+        let mut shifted_scope = ShiftedScope::new(self.scope, DefaultToTypeCheckExprContextShifter);
+        let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
+        let recording_scope = RecordingScope::new(&mut local_scope);
+        let mut tc_context = RecordingTypeCheckContext::new(recording_scope);
+
+        let expr = checker.check(&mut tc_context, e, &Expr::AnyType);
+
+        TypeCheckToDefaultExprContextShifter.shift(expr)
+    }
+}
+
+
 #[derive(Debug, Clone)]
-struct TypeCheckExprContext {}
+pub struct TypeCheckExprContext {}
 
 impl ExprContext for TypeCheckExprContext {
     type Hole = Hole;
@@ -17,12 +38,35 @@ impl ExprContext for TypeCheckExprContext {
     type Method = <DefaultExprContext as ExprContext>::Method;
     type Record = <DefaultExprContext as ExprContext>::Record;
     type Enum = <DefaultExprContext as ExprContext>::Enum;
-    type EnumCase = <DefaultExprContext as ExprContext>::EnumCase;
+    type EnumVariant = <DefaultExprContext as ExprContext>::EnumVariant;
     type Trait = <DefaultExprContext as ExprContext>::Trait;
+    type Instance = <DefaultExprContext as ExprContext>::Instance;
+}
+
+pub struct TypeCheckToDefaultExprContextShifter;
+
+impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
+    type EC1 = TypeCheckExprContext;
+    type EC2 = DefaultExprContext;
+
+    fn shift_hole(&self, hole: Hole) -> Expr<DefaultExprContext> {
+        todo!()
+    }
+}
+
+pub struct DefaultToTypeCheckExprContextShifter;
+
+impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
+    type EC1 = DefaultExprContext;
+    type EC2 = TypeCheckExprContext;
+
+    fn shift_hole(&self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2> {
+        match hole {}
+    }
 }
 
 #[derive(Debug, Clone)]
-struct Hole(UniqueIdentifier, Box<Expr<TypeCheckExprContext>>);
+pub struct Hole(UniqueIdentifier, Box<Expr<TypeCheckExprContext>>);
 
 impl PartialEq for Hole {
     fn eq(&self, other: &Self) -> bool {
@@ -54,6 +98,13 @@ struct RecordingTypeCheckContext<'a> {
 }
 
 impl<'a> RecordingTypeCheckContext<'a> {
+    pub fn new(scope: RecordingScope<'a>) -> Self {
+        Self {
+            scope,
+            known_holes: ReferencedHoles::new(),
+        }
+    }
+
     fn into_captures(self) -> CapturedReferences {
         CapturedReferences {
             referenced_variables: self.scope.referenced_variables,
@@ -141,9 +192,8 @@ impl<'a> LocalScope for RecordingScope<'a> {
     }
 }
 
-struct RecordingTypeChecker<C, EC> {
+struct RecordingTypeChecker<C> {
     context: C,
-    expr_context: EC,
     known_variables: ReferencedVariables,
     known_holes: ReferencedHoles,
     check_cache: HashMap<*const WithLocation<ast::Expr>, Vec<RecordedTypeCheck>>,
@@ -210,11 +260,10 @@ fn unify(_a: &Expr<TypeCheckExprContext>, _b: &Expr<TypeCheckExprContext>) -> bo
     todo!()
 }
 
-impl<C: Context, EC> RecordingTypeChecker<C, EC> {
-    fn new(context: C, expr_context: EC) -> Self {
+impl RecordingTypeChecker<Context> {
+    fn new(context: Context) -> Self {
         Self {
             context,
-            expr_context,
             known_variables: HashSet::new(),
             known_holes: HashMap::new(),
             check_cache: HashMap::new(),
@@ -1067,12 +1116,12 @@ mod tests {
     }
 
     fn test_checker() -> (
-        RecordingTypeChecker<TestContext, ()>,
+        RecordingTypeChecker<Context, ()>,
         TestTypeCheckContext,
         TestReporter,
     ) {
         let reporter = TestReporter::default();
-        let context = TestContext::new(reporter.clone());
+        let context = Context::new(TestContext::new(reporter.clone()));
         (
             RecordingTypeChecker::new(context, ()),
             TestTypeCheckContext { scope: TestScope },

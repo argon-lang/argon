@@ -15,14 +15,14 @@ use crate::argon_parser::ArgonParser;
 pub use parse18_runtime::Location;
 use parse18_runtime::ParseResult;
 
-pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<CompileError>>(
+pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<CompileError> + ?Sized>(
     reader: R,
     file_name: &Path,
-    error_reporter: ER,
+    error_reporter: &ER,
 ) -> ModuleDeclaration {
     let lexer_reader = ReadLexerReader {
         reader,
-        error_reporter: error_reporter.clone(),
+        error_reporter,
         eof: false,
         decoder_done: false,
         decoder: encoding_rs::UTF_8.new_decoder_with_bom_removal(),
@@ -30,7 +30,7 @@ pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<CompileE
         pending_start: 0,
         pending_end: 0,
     };
-    let lexer = Lexer::new(file_name, lexer_reader, error_reporter.clone());
+    let lexer = Lexer::new(file_name, lexer_reader, error_reporter);
     let mut parser = ArgonParser::new(file_name, lexer, error_reporter);
     let ParseResult::Success(module_decl) = parser.start_0() else {
         return ModuleDeclaration {
@@ -42,9 +42,9 @@ pub fn parse<R: Read, ER: ErrorReporter<std::io::Error> + ErrorReporter<CompileE
     module_decl.value
 }
 
-struct ReadLexerReader<R, ER> {
+struct ReadLexerReader<'a, R, ER: ?Sized> {
     reader: R,
-    error_reporter: ER,
+    error_reporter: &'a ER,
     eof: bool,
     decoder_done: bool,
     decoder: encoding_rs::Decoder,
@@ -53,7 +53,7 @@ struct ReadLexerReader<R, ER> {
     pending_end: usize,
 }
 
-impl<R: Read, ER: ErrorReporter<std::io::Error>> LexerReader for ReadLexerReader<R, ER> {
+impl<'a, R: Read, ER: ErrorReporter<std::io::Error> + ?Sized> LexerReader for ReadLexerReader<'a, R, ER> {
     fn next_chunk(&mut self, chars: &mut String) {
         chars.clear();
 

@@ -1106,19 +1106,19 @@ fn import_path_segment_wildcard(location: Location) -> ImportPathSegment {
 
 include!(concat!(env!("OUT_DIR"), "/argon_parser.rs"));
 
-pub struct ArgonParser<'a, L, ER> {
+pub struct ArgonParser<'a, L, ER: ?Sized> {
     file_name: &'a Path,
     lex_mode: LexerMode,
 
     lexer: L,
-    error_reporter: ER,
+    error_reporter: &'a ER,
 
     last_token_end_position: FilePosition,
     peek_token: Option<WithRange<Token>>,
 }
 
-impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ArgonParser<'a, L, ER> {
-    pub fn new(file_name: &'a Path, lexer: L, error_reporter: ER) -> ArgonParser<'a, L, ER> {
+impl<'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ArgonParser<'a, L, ER> {
+    pub fn new(file_name: &'a Path, lexer: L, error_reporter: &'a ER) -> ArgonParser<'a, L, ER> {
         ArgonParser {
             file_name,
             lex_mode: LexerMode::Normal,
@@ -1130,7 +1130,7 @@ impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ArgonParser<'a, L, ER>
     }
 }
 
-impl<'a, L: TokenReader, ER: ErrorReporter<CompileError>> ParserRuntime for ArgonParser<'a, L, ER> {
+impl<'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ParserRuntime for ArgonParser<'a, L, ER> {
     type Token = Token;
     type TokenCategory = TokenCategory;
     type LexMode = LexerMode;

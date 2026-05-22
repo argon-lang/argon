@@ -4,3 +4,8 @@ pub enum AccessModifierGlobal {
     ModulePrivate,
     Internal,
 }
+
+pub struct AccessToken {
+    
+}
+

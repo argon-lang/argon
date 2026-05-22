@@ -10,6 +10,7 @@ mod function;
 mod modifiers;
 mod module;
 mod type_checker;
+mod signature;
 
 pub struct SourceCodeTubeOptions {
     name: TubeName,
@@ -17,10 +18,10 @@ pub struct SourceCodeTubeOptions {
     sources: Vec<PathBuf>,
 }
 
-pub fn define_source_tube<C: Context>(
-    context: &C,
+pub fn define_source_tube(
+    context: Context,
     options: SourceCodeTubeOptions,
-    tube_collection: &TubeCollectionBuilder<C>,
+    tube_collection: &TubeCollectionBuilder<'_>,
 ) {
     let tb = tube_collection.add_tube(options.name, options.referenced_tubes);
 
@@ -39,7 +40,7 @@ pub fn define_source_tube<C: Context>(
             entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("argon"))
         })
         .map(|entry| {
-            process_source_file(context, entry.path(), &tb);
+            process_source_file(context.clone(), entry.path(), &tb);
         })
         .collect::<Vec<_>>();
 }

@@ -1,19 +1,47 @@
 use crate::function::SourceFunction;
-use argon_compiler::access::AccessModifierGlobal;
-use argon_compiler::{
-    Context, Function, ModuleExportBinding, ModuleExportEntry, ModulePath, TubeBuilder,
-};
+use argon_compiler::access::{AccessModifierGlobal, AccessToken};
+use argon_compiler::{Context, DefaultExprContext, Function, ModuleExportBinding, ModuleExportEntry, ModulePath, TubeBuilder};
 use argon_parser::ast;
-use argon_parser::ast::{ExportStmt, FunctionDeclarationStmt, Stmt};
+use argon_parser::ast::{ExportStmt, FunctionDeclarationStmt, IdentifierExpr, ImportStmt, Stmt};
 use argon_util::ErrorReporter;
 use parse18_runtime::WithLocation;
 use std::path::Path;
 use std::sync::Arc;
+use argon_compiler::scope::{Lookup, Scope};
 
-pub struct GlobalScope;
+#[derive(Debug, Clone)]
+pub struct GlobalScope {
+}
 
-pub trait ScopeProvider {
-    fn make_scope(&self) -> GlobalScope;
+impl Scope for GlobalScope {
+    type ExprContext = DefaultExprContext;
+
+    fn lookup(&mut self, name: &IdentifierExpr) -> Lookup<Self::ExprContext> {
+        todo!()
+    }
+
+    fn lookup_assign(&mut self, name: &IdentifierExpr) -> Lookup<Self::ExprContext> {
+        todo!()
+    }
+}
+
+pub trait DeclarationClosure: Sync + Send {
+    fn scope(&self) -> GlobalScope;
+    fn access_token(&self) -> AccessToken;
+}
+
+struct ModuleClosure {
+    imports: Vec<ImportStmt>,
+}
+
+impl DeclarationClosure for ModuleClosure {
+    fn scope(&self) -> GlobalScope {
+        GlobalScope {}
+    }
+
+    fn access_token(&self) -> AccessToken {
+        todo!()
+    }
 }
 
 pub struct ModuleProcessResult {
@@ -22,12 +50,12 @@ pub struct ModuleProcessResult {
 }
 
 pub struct DeclarationResult<T> {
-    access: AccessModifierGlobal,
-    result: Arc<T>,
+    pub(crate) access: AccessModifierGlobal,
+    pub(crate) result: Arc<T>,
 }
 
-pub fn process_source_file<C: Context>(
-    context: &C,
+pub fn process_source_file(
+    context: Context,
     path: &Path,
     tb: &TubeBuilder,
 ) -> Option<ModuleProcessResult> {
@@ -39,23 +67,24 @@ pub fn process_source_file<C: Context>(
         }
     };
 
-    let module_decl = argon_parser::parse(&mut file, path, context.reporter().clone());
+    let module_decl = argon_parser::parse(&mut file, path, context.reporter());
 
     let path = ModulePath(module_decl.module_path);
 
     let module = tb.module(path.clone());
 
     let mut result = ModuleProcessResult {
-        path: path,
+        path,
         reexports: Vec::new(),
     };
 
     let mut imports = Vec::new();
 
+
     for stmt in module_decl.stmts {
         match stmt.value {
             Stmt::Import(import) => {
-                imports.push(import);
+                imports.push(*import);
             }
 
             Stmt::Export(export) => {
@@ -63,8 +92,12 @@ pub fn process_source_file<C: Context>(
             }
 
             Stmt::FunctionDeclaration(decl) => {
+                let closure = Box::new(ModuleClosure {
+                    imports: imports.clone(),
+                });
+
                 let name = Some(decl.name.value.clone());
-                let func_res = SourceFunction::from_ast(decl);
+                let func_res = SourceFunction::from_ast(context.clone(), closure, decl);
 
                 let entry = ModuleExportEntry {
                     access: func_res.access,

@@ -1,6 +1,6 @@
 use parse18_runtime::Location;
 
-pub trait ErrorReporter<E>: Clone {
+pub trait ErrorReporter<E> {
     fn report_error(&self, error: E);
 }
 

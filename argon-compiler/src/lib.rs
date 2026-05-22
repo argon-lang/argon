@@ -6,23 +6,34 @@ pub mod test_utils;
 
 use crate::access::AccessModifierGlobal;
 use crate::signature::FunctionSignature;
-use argon_expr::{Expr, ExprContext};
+use argon_expr::{ErasureMode, Expr, ExprContext};
 use argon_parser::ast::IdentifierExpr;
 use argon_util::{CompileError, ErrorReporter};
 use dashmap::{DashMap, Entry};
 use nonempty_collections::NEVec;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
-pub trait Context: Sync {
-    type Reporter: ErrorReporter<CompileError>
-        + ErrorReporter<std::io::Error>
-        + ErrorReporter<walkdir::Error>;
+pub trait CompileErrorReporter
+    : ErrorReporter<CompileError>
+    + ErrorReporter<std::io::Error>
+    + ErrorReporter<walkdir::Error>
+{}
 
-    fn reporter(&self) -> &Self::Reporter;
+impl<R> CompileErrorReporter for R where
+    R: ErrorReporter<CompileError>
+        + ErrorReporter<std::io::Error>
+        + ErrorReporter<walkdir::Error>
+{
 }
+
+pub trait ContextObject: Sync + Send {
+    fn reporter(&self) -> &dyn CompileErrorReporter;
+}
+
+pub type Context = Arc<dyn ContextObject>;
+
 
 pub struct DefaultExprContext;
 
@@ -32,15 +43,9 @@ impl ExprContext for DefaultExprContext {
     type Method = Arc<dyn Method>;
     type Record = Arc<dyn Record>;
     type Enum = Arc<dyn Enum>;
-    type EnumCase = Arc<dyn EnumCase>;
+    type EnumVariant = Arc<dyn EnumCase>;
     type Trait = Arc<dyn Trait>;
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ErasureMode {
-    Erased,
-    Token,
-    Concrete,
+    type Instance = Arc<dyn Instance>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -84,13 +89,13 @@ pub struct TubeCollection {
     tubes: DashMap<TubeName, Arc<Tube>>,
 }
 
-pub struct TubeCollectionBuilder<'a, C> {
-    context: &'a C,
+pub struct TubeCollectionBuilder<'a> {
+    context: &'a Context,
     tube_collection: Arc<TubeCollection>,
 }
 
-impl<'a, C: Context> TubeCollectionBuilder<'a, C> {
-    pub fn new(context: &'a C) -> Self {
+impl<'a> TubeCollectionBuilder<'a> {
+    pub fn new(context: &'a Context) -> Self {
         Self {
             context,
             tube_collection: Arc::new(TubeCollection {

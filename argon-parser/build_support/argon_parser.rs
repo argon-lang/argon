@@ -1862,7 +1862,7 @@ pub fn emit_rust_parser<W: Write>(w: &mut W) -> io::Result<()> {
         module: None,
         visibility: "pub ".to_owned(),
         impl_group:
-            "impl <'a, L: TokenReader, ER: ErrorReporter<CompileError>> ArgonParser<'a, L, ER>"
+            "impl <'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ArgonParser<'a, L, ER>"
                 .to_owned(),
         token_type: "Token".to_owned(),
         result_type: "ParseResult".to_owned(),

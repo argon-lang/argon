@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::{CompileErrorReporter, Context, ContextObject};
 use argon_util::{CompileError, ErrorReporter};
 use std::sync::{Arc, Mutex};
 
@@ -53,10 +53,14 @@ impl Default for TestContext {
     }
 }
 
-impl Context for TestContext {
-    type Reporter = TestReporter;
-
-    fn reporter(&self) -> &Self::Reporter {
+impl ContextObject for TestContext {
+    fn reporter(&self) -> &dyn CompileErrorReporter {
         &self.reporter
+    }
+}
+
+impl From<TestContext> for Context {
+    fn from(context: TestContext) -> Self {
+        Context::new(context)
     }
 }

@@ -12,12 +12,62 @@ use std::sync::Arc;
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
     type Function: Clone + Debug + Eq + Hash;
-    type Method: Clone + Debug + Eq + Hash;
     type Record: Clone + Debug + Eq + Hash;
     type Enum: Clone + Debug + Eq + Hash;
-    type EnumCase: Clone + Debug + Eq + Hash;
     type Trait: Clone + Debug + Eq + Hash;
+    type EnumVariant: Clone + Debug + Eq + Hash;
+    type Method: Clone + Debug + Eq + Hash;
+    type Instance: Clone + Debug + Eq + Hash;
 }
+
+#[derive(Debug)]
+pub enum ExpressionOwner<EC: ExprContext + ?Sized> {
+    Function(EC::Function),
+    Record(EC::Record),
+    Enum(EC::Enum),
+    Trait(EC::Trait),
+    EnumVariant(EC::EnumVariant),
+    Method(EC::Method),
+    Instance(EC::Instance),
+}
+
+impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
+    fn clone(&self) -> Self {
+        match self {
+            ExpressionOwner::Function(f) => ExpressionOwner::Function(f.clone()),
+            ExpressionOwner::Record(r) => ExpressionOwner::Record(r.clone()),
+            ExpressionOwner::Enum(e) => ExpressionOwner::Enum(e.clone()),
+            ExpressionOwner::Trait(t) => ExpressionOwner::Trait(t.clone()),
+            ExpressionOwner::EnumVariant(v) => ExpressionOwner::EnumVariant(v.clone()),
+            ExpressionOwner::Method(m) => ExpressionOwner::Method(m.clone()),
+            ExpressionOwner::Instance(i) => ExpressionOwner::Instance(i.clone()),
+        }
+    }
+}
+
+pub trait ExprContextShifter {
+    type EC1: ExprContext + ?Sized;
+    type EC2: ExprContext<
+        Function = <Self::EC1 as ExprContext>::Function,
+        Record = <Self::EC1 as ExprContext>::Record,
+        Enum = <Self::EC1 as ExprContext>::Enum,
+        Trait = <Self::EC1 as ExprContext>::Trait,
+        EnumVariant = <Self::EC1 as ExprContext>::EnumVariant,
+        Method = <Self::EC1 as ExprContext>::Method,
+        Instance = <Self::EC1 as ExprContext>::Instance,
+    > + ?Sized;
+
+    fn shift_hole(&self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2>;
+
+    fn shift(&self, expr: Expr<Self::EC1>) -> Expr<Self::EC2> {
+        todo!()
+    }
+
+    fn shift_variable(&self, v: Variable<Self::EC1>) -> Variable<Self::EC2> {
+        todo!()
+    }
+}
+
 
 #[derive(Debug)]
 pub enum Expr<EC: ExprContext + ?Sized> {
@@ -467,23 +517,49 @@ impl<EC: ExprContext + ?Sized> Clone for RecordFieldLiteral<EC> {
     }
 }
 
+
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ErasureMode {
+    Erased,
+    Token,
+    Concrete,
+}
+
 #[derive(Debug)]
 pub enum Variable<EC: ExprContext + ?Sized> {
     Local(Arc<LocalVariable<EC>>),
+    Parameter(Arc<ParameterVariable<EC>>),
+}
+
+impl <EC: ExprContext + ?Sized> Variable<EC> {
+    pub fn name(&self) -> Option<&IdentifierExpr> {
+        match self {
+            Variable::Local(variable) => Some(&variable.name),
+            Variable::Parameter(variable) => variable.name.as_ref(),
+        }
+    }
+
+    pub fn var_type(&self) -> Expr<EC> {
+        match self {
+            Variable::Local(variable) => variable.var_type.clone(),
+            Variable::Parameter(variable) => variable.var_type.clone(),
+        }
+    }
+
+    pub fn is_mutable(&self) -> bool {
+        match self {
+            Variable::Local(variable) => variable.is_mutable,
+            Variable::Parameter(_) => false,
+        }
+    }
 }
 
 impl<EC: ExprContext + ?Sized> Clone for Variable<EC> {
     fn clone(&self) -> Self {
         match self {
             Variable::Local(variable) => Variable::Local(variable.clone()),
-        }
-    }
-}
-
-impl<EC: ExprContext + ?Sized> Variable<EC> {
-    pub fn var_type(&self) -> Expr<EC> {
-        match self {
-            Variable::Local(variable) => variable.var_type.clone(),
+            Variable::Parameter(variable) => Variable::Parameter(variable.clone()),
         }
     }
 }
@@ -492,6 +568,9 @@ impl<EC: ExprContext + ?Sized> PartialEq for Variable<EC> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Variable::Local(a), Variable::Local(b)) => Arc::ptr_eq(a, b),
+            (Variable::Local(_), _) | (_, Variable::Local(_)) => false,
+
+            (Variable::Parameter(a), Variable::Parameter(b)) => Arc::ptr_eq(a, b),
         }
     }
 }
@@ -508,4 +587,17 @@ impl<EC: ExprContext + ?Sized> Hash for Variable<EC> {
 pub struct LocalVariable<EC: ExprContext + ?Sized> {
     pub name: IdentifierExpr,
     pub var_type: Expr<EC>,
+    pub erasure_mode: ErasureMode,
+    pub is_witness: bool,
+    pub is_mutable: bool,
+}
+
+#[derive(Debug)]
+pub struct ParameterVariable<EC: ExprContext + ?Sized> {
+    pub owner: ExpressionOwner<EC>,
+    pub parameter_index: usize,
+    pub var_type: Expr<EC>,
+    pub name: Option<IdentifierExpr>,
+    pub erasure_mode: ErasureMode,
+    pub is_witness: bool,
 }

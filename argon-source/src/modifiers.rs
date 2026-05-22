@@ -7,19 +7,20 @@ use nonempty_collections::NonEmptyIterator;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use argon_expr::ErasureMode;
 
-pub struct ModifierParser<'a, C> {
-    context: &'a C,
+pub struct ModifierParser<'a> {
+    context: Context,
     modifiers: HashMap<Modifier, &'a Location>,
     fallback_location: &'a Location,
 }
 
-impl<'a, C: Context> ModifierParser<'a, C> {
+impl<'a> ModifierParser<'a> {
     pub fn new(
-        context: &'a C,
+        context: Context,
         modifiers: &'a [WithLocation<Modifier>],
         fallback_location: &'a Location,
-    ) -> ModifierParser<'a, C> {
+    ) -> ModifierParser<'a> {
         let mut modifier_group = HashMap::new();
         for modifier in modifiers {
             match modifier_group.entry(modifier.value) {
@@ -101,11 +102,22 @@ pub const ACCESS_MODIFIER_GLOBAL: ModifierSpec<AccessModifierGlobal> =
     ])
     .unwrap();
 
-pub const IS_INLINE: ModifierSpec<bool> =
-    ModifierSpec::try_from_slice(&[(&[Modifier::Inline], true), (&[], false)]).unwrap();
+pub const IS_INLINE: ModifierSpec<bool> = ModifierSpec::try_from_slice(&[
+    (&[Modifier::Inline], true),
+    (&[], false),
+]).unwrap();
 
 pub const IS_WITNESS: ModifierSpec<bool> =
-    ModifierSpec::try_from_slice(&[(&[Modifier::Witness], true), (&[], false)]).unwrap();
+    ModifierSpec::try_from_slice(&[
+        (&[Modifier::Witness], true),
+        (&[], false),
+    ]).unwrap();
+
+pub const ERASURE_MODE: ModifierSpec<ErasureMode> = ModifierSpec::try_from_slice(&[
+    (&[Modifier::Erased], ErasureMode::Erased),
+    (&[Modifier::Token], ErasureMode::Token),
+    (&[], ErasureMode::Concrete),
+]).unwrap();
 
 fn spec_has_modifier<T>(spec: &ModifierSpec<T>, modifier: Modifier) -> bool {
     spec.iter()
@@ -172,9 +184,9 @@ mod tests {
         WithLocation::new(value, test_location(line, column))
     }
 
-    fn test_context() -> (TestContext, TestReporter) {
+    fn test_context() -> (Context, TestReporter) {
         let reporter = TestReporter::default();
-        (TestContext::new(reporter.clone()), reporter)
+        (Context::new(TestContext::new(reporter.clone())), reporter)
     }
 
     #[test]
