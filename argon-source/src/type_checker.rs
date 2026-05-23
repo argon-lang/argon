@@ -406,7 +406,38 @@ impl RecordingTypeChecker<Context> {
             ast::Expr::NewTraitObject { .. } => todo!(),
             ast::Expr::RecordLiteral { .. } => todo!(),
             ast::Expr::Summon { .. } => todo!(),
-            ast::Expr::Tuple { .. } => todo!(),
+            ast::Expr::Tuple { items } => {
+                let checked_items = match expected_type {
+                    Expr::AnyType | Expr::Type(_) | Expr::BigType(_) => {
+                        items.iter()
+                            .map(|item| self.check(tc_context, item, expected_type))
+                            .collect::<Vec<_>>()
+                    },
+
+                    Expr::Tuple { items: item_types } => {
+                        if item_types.len() != items.len() {
+                            self.context.reporter().report_error(CompileError::tuple_size_mismatch(
+                                expr.location.clone(),
+                                item_types.len(),
+                                items.len(),
+                            ));
+                            return Expr::Error;
+                        }
+
+                        items.iter()
+                            .zip(item_types.iter())
+                            .map(|(item, expected_item_type)| self.check(tc_context, item, expected_item_type))
+                            .collect::<Vec<_>>()
+                    }
+
+                    _ => {
+                        let infer = self.infer(tc_context, expr);
+                        return self.check_inferred_type(&expr.location, infer, expected_type)
+                    },
+                };
+
+                Expr::Tuple { items: checked_items }
+            },
             ast::Expr::BigType(_) => todo!(),
             ast::Expr::UnaryOperation { .. } => todo!(),
             ast::Expr::While { .. } => todo!(),

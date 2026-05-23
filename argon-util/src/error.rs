@@ -216,13 +216,13 @@ impl CompileError {
         Self::new(ErrorCode::CanNotMutate, "Can not mutate", Some(loc))
     }
 
-    pub fn tuple_size_mismatch(loc: Location, t: impl AsRef<str>, actual_size: usize) -> Self {
+    pub fn tuple_size_mismatch(loc: Location, t: usize, actual_size: usize) -> Self {
         Self::new(
             ErrorCode::TupleSizeMismatch,
             format!(
                 "Tuple size mismatch. Expected a tuple of size {}, Got: {}",
                 actual_size,
-                t.as_ref()
+                t
             ),
             Some(loc),
         )
