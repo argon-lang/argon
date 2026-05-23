@@ -6,8 +6,10 @@ use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
+use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::format;
 use std::hash::{Hash, Hasher};
 
 pub struct TypeChecker<'a> {
@@ -381,14 +383,21 @@ impl RecordingTypeChecker<Context> {
             ast::Expr::Next { .. } => todo!(),
             ast::Expr::Redo { .. } => todo!(),
 
+            // Call expressions.
+            ast::Expr::Builtin(_)
+            | ast::Expr::FunctionCall { .. }
+            | ast::Expr::Identifier(_)
+            | ast::Expr::Type => {
+                let call = self.process_call(tc_context, expr);
+                self.check_call(tc_context, call, expected_type)
+            }
+
             ast::Expr::Paren(_) => self.check(tc_context, expr, expected_type),
 
             ast::Expr::BinaryOperation { .. } => todo!(),
             ast::Expr::Block { .. } => todo!(),
-            ast::Expr::Builtin(_) => todo!(),
             ast::Expr::Dot { .. } => todo!(),
             ast::Expr::FunctionLiteral { .. } => todo!(),
-            ast::Expr::FunctionCall { .. } => todo!(),
             ast::Expr::FunctionResultValue => todo!(),
             ast::Expr::FunctionType { .. } => todo!(),
             ast::Expr::IfElse { .. } => todo!(),
@@ -398,14 +407,12 @@ impl RecordingTypeChecker<Context> {
             ast::Expr::RecordLiteral { .. } => todo!(),
             ast::Expr::Summon { .. } => todo!(),
             ast::Expr::Tuple { .. } => todo!(),
-            ast::Expr::Type => todo!(),
             ast::Expr::BigType(_) => todo!(),
             ast::Expr::UnaryOperation { .. } => todo!(),
             ast::Expr::While { .. } => todo!(),
             ast::Expr::BoxedType { .. } => todo!(),
             ast::Expr::Box { .. } => todo!(),
             ast::Expr::Unbox { .. } => todo!(),
-            ast::Expr::Identifier(_) => todo!(),
         }
     }
 
@@ -447,7 +454,10 @@ impl RecordingTypeChecker<Context> {
                 Expr::Hole(tc_context.create_hole()),
             ),
 
-            ast::Expr::Builtin(_) | ast::Expr::FunctionCall { .. } | ast::Expr::Identifier(_) => {
+            ast::Expr::Builtin(_)
+            | ast::Expr::FunctionCall { .. }
+            | ast::Expr::Identifier(_)
+            | ast::Expr::Type => {
                 let call = self.process_call(tc_context, expr);
                 self.infer_call(tc_context, call)
             }
@@ -537,7 +547,6 @@ impl RecordingTypeChecker<Context> {
 
                 TypeInferResult::new(str_expr, Expr::string_type())
             }
-            ast::Expr::Type => TypeInferResult::new(Expr::type_n(0), Expr::type_n(1)),
             ast::Expr::BigType(value) => {
                 TypeInferResult::new(Expr::BigType(value.clone()), Expr::BigType(value + 1))
             }
@@ -579,7 +588,18 @@ impl RecordingTypeChecker<Context> {
                 self.check_inferred_type(call.location, infer, expected_type)
             }
             CalleeInfo::Overloadable(_) => todo!(),
-            CalleeInfo::Expr(_) => todo!(),
+            CalleeInfo::Expr(f) => todo!("Unimplement function expression calls: {:?}", f),
+            CalleeInfo::TypeN => {
+                if !call.arguments.is_empty() {
+                    todo!()
+                }
+
+                self.check_inferred_type(
+                    call.location,
+                    TypeInferResult::new(Expr::type_n(0), Expr::type_n(1)),
+                    expected_type,
+                )
+            }
         }
     }
 
@@ -596,6 +616,13 @@ impl RecordingTypeChecker<Context> {
             CalleeInfo::Variable(v) => self.infer_variable(tc_context, v, call.arguments),
             CalleeInfo::Overloadable(_) => todo!(),
             CalleeInfo::Expr(_) => todo!(),
+            CalleeInfo::TypeN => {
+                if !call.arguments.is_empty() {
+                    todo!()
+                }
+
+                TypeInferResult::new(Expr::type_n(0), Expr::type_n(1))
+            }
         }
     }
 
@@ -924,6 +951,14 @@ impl RecordingTypeChecker<Context> {
 
                 ast::Expr::Dot { .. } => todo!(),
 
+                ast::Expr::Type => {
+                    return CallInfo {
+                        location: call_location,
+                        callee: CalleeInfo::TypeN,
+                        arguments,
+                    };
+                }
+
                 _ => {
                     return CallInfo {
                         location: call_location,
@@ -1016,6 +1051,21 @@ impl RecordingTypeChecker<Context> {
             inferred_type,
         } = infer;
 
+        match &inferred_type {
+            Expr::Type(n) => match expected_type {
+                Expr::AnyType | Expr::BigType(_) => return checked_expr,
+                Expr::Type(n2) => match (&**n, &**n2) {
+                    (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
+                        return checked_expr;
+                    }
+                    _ => {}
+                },
+                _ => {}
+            },
+
+            _ => {}
+        }
+
         if !unify(expected_type, &inferred_type) {
             self.context
                 .reporter()
@@ -1071,6 +1121,7 @@ enum CalleeInfo<'a> {
     Builtin(Builtin),
     Variable(Variable<TypeCheckExprContext>),
     Overloadable(OverloadLookup),
+    TypeN,
 }
 
 struct CallInfo<'a> {

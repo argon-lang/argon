@@ -14,8 +14,8 @@ use argon_format::tube as tf;
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
-use esexpr::ESExprStatic;
 use argon_util::TubeEncodingError;
+use esexpr::ESExprStatic;
 
 pub fn encode_tube(
     tube: Arc<Tube>,

@@ -431,7 +431,6 @@ impl_dyn_stub_traits!(EnumCase);
 impl_dyn_stub_traits!(Trait);
 impl_dyn_stub_traits!(Instance);
 
-
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum TypeDeclaration {
     Record(Arc<dyn Record>),
@@ -439,4 +438,3 @@ pub enum TypeDeclaration {
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
-

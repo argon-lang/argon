@@ -1,5 +1,5 @@
-use std::collections::HashSet;
 use crate::{ModulePath, TubeName, TypeDeclaration};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AccessModifierGlobal {

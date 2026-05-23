@@ -5,7 +5,6 @@ use num_bigint::BigInt;
 use std::convert::Infallible;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -60,11 +59,187 @@ pub trait ExprContextShifter {
     fn shift_hole(&self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2>;
 
     fn shift(&self, expr: Expr<Self::EC1>) -> Expr<Self::EC2> {
-        todo!()
+        match expr {
+            Expr::Error => Expr::Error,
+            Expr::Hole(hole) => self.shift_hole(hole),
+            Expr::As { value, value_type } => Expr::As {
+                value: Box::new(self.shift(*value)),
+                value_type: Box::new(self.shift(*value_type)),
+            },
+            Expr::Assert { t } => Expr::Assert {
+                t: Box::new(self.shift(*t)),
+            },
+            Expr::Block { body, finally_body } => Expr::Block {
+                body: Box::new(self.shift(*body)),
+                finally_body: finally_body.map(|body| Box::new(self.shift(*body))),
+            },
+            Expr::BoolLiteral(value) => Expr::BoolLiteral(value),
+            Expr::Break { label } => Expr::Break { label },
+            Expr::Builtin { builtin, arguments } => Expr::Builtin {
+                builtin,
+                arguments: arguments
+                    .into_iter()
+                    .map(|argument| self.shift(argument))
+                    .collect(),
+            },
+            Expr::Dot { o, member } => Expr::Dot {
+                o: Box::new(self.shift(*o)),
+                member,
+            },
+            Expr::FunctionLiteral {
+                parameter_name,
+                body,
+            } => Expr::FunctionLiteral {
+                parameter_name,
+                body: Box::new(self.shift(*body)),
+            },
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => Expr::FunctionCall {
+                function,
+                arguments: arguments
+                    .into_iter()
+                    .map(|argument| FunctionArgument {
+                        list_type: argument.list_type,
+                        arg: self.shift(argument.arg),
+                    })
+                    .collect(),
+            },
+            Expr::FunctionObjectCall { function, argument } => Expr::FunctionObjectCall {
+                function: Box::new(self.shift(*function)),
+                argument: Box::new(self.shift(*argument)),
+            },
+            Expr::FunctionResultValue => Expr::FunctionResultValue,
+            Expr::FunctionType { a, r } => Expr::FunctionType {
+                a: Box::new(self.shift(*a)),
+                r: Box::new(self.shift(*r)),
+            },
+            Expr::IfElse {
+                condition,
+                when_true,
+                when_false,
+            } => Expr::IfElse {
+                condition: Box::new(self.shift(*condition)),
+                when_true: Box::new(self.shift(*when_true)),
+                when_false: Box::new(self.shift(*when_false)),
+            },
+            Expr::IntLiteral(value) => Expr::IntLiteral(value),
+            Expr::Is { value, pattern } => Expr::Is {
+                value: Box::new(self.shift(*value)),
+                pattern,
+            },
+            Expr::Loop { label, body } => Expr::Loop {
+                label,
+                body: Box::new(self.shift(*body)),
+            },
+            Expr::Match { value, cases } => Expr::Match {
+                value: Box::new(self.shift(*value)),
+                cases: cases
+                    .into_iter()
+                    .map(|case| MatchCase {
+                        pattern: case.pattern,
+                        body: self.shift(case.body),
+                    })
+                    .collect(),
+            },
+            Expr::MethodCall {
+                method,
+                receiver,
+                arguments,
+            } => Expr::MethodCall {
+                method,
+                receiver: Box::new(self.shift(*receiver)),
+                arguments: arguments
+                    .into_iter()
+                    .map(|argument| FunctionArgument {
+                        list_type: argument.list_type,
+                        arg: self.shift(argument.arg),
+                    })
+                    .collect(),
+            },
+            Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },
+            Expr::Next { label } => Expr::Next { label },
+            Expr::Raise { ex } => Expr::Raise {
+                ex: Box::new(self.shift(*ex)),
+            },
+            Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
+                record,
+                fields: fields
+                    .into_iter()
+                    .map(|field| RecordFieldLiteral {
+                        name: field.name,
+                        value: self.shift(field.value),
+                    })
+                    .collect(),
+            },
+            Expr::Redo { label } => Expr::Redo { label },
+            Expr::Sequence(exprs) => Expr::Sequence(
+                NEVec::try_from_vec(exprs.into_iter().map(|expr| self.shift(expr)).collect())
+                    .expect("shifting a non-empty expression sequence preserves non-emptiness"),
+            ),
+            Expr::StoreVariable(variable) => Expr::StoreVariable(self.shift_variable(variable)),
+            Expr::StringLiteral(value) => Expr::StringLiteral(value),
+            Expr::Tuple { items } => Expr::Tuple {
+                items: items.into_iter().map(|item| self.shift(item)).collect(),
+            },
+            Expr::AnyType => Expr::AnyType,
+            Expr::Type(t) => Expr::Type(Box::new(self.shift(*t))),
+            Expr::BigType(value) => Expr::BigType(value),
+            Expr::Variable(variable) => Expr::Variable(self.shift_variable(variable)),
+            Expr::While {
+                label,
+                condition,
+                body,
+            } => Expr::While {
+                label,
+                condition: Box::new(self.shift(*condition)),
+                body: Box::new(self.shift(*body)),
+            },
+            Expr::BoxedType { t } => Expr::BoxedType {
+                t: Box::new(self.shift(*t)),
+            },
+            Expr::Box { value } => Expr::Box {
+                value: Box::new(self.shift(*value)),
+            },
+            Expr::Unbox { value } => Expr::Unbox {
+                value: Box::new(self.shift(*value)),
+            },
+        }
     }
 
     fn shift_variable(&self, v: Variable<Self::EC1>) -> Variable<Self::EC2> {
-        todo!()
+        match v {
+            Variable::Local(variable) => Variable::Local(Arc::new(LocalVariable {
+                name: variable.name.clone(),
+                var_type: self.shift(variable.var_type.clone()),
+                erasure_mode: variable.erasure_mode,
+                is_witness: variable.is_witness,
+                is_mutable: variable.is_mutable,
+            })),
+            Variable::Parameter(variable) => Variable::Parameter(Arc::new(ParameterVariable {
+                owner: match &variable.owner {
+                    ExpressionOwner::Function(function) => {
+                        ExpressionOwner::Function(function.clone())
+                    }
+                    ExpressionOwner::Record(record) => ExpressionOwner::Record(record.clone()),
+                    ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec.clone()),
+                    ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec.clone()),
+                    ExpressionOwner::EnumVariant(enum_variant) => {
+                        ExpressionOwner::EnumVariant(enum_variant.clone())
+                    }
+                    ExpressionOwner::Method(method) => ExpressionOwner::Method(method.clone()),
+                    ExpressionOwner::Instance(instance) => {
+                        ExpressionOwner::Instance(instance.clone())
+                    }
+                },
+                parameter_index: variable.parameter_index,
+                var_type: self.shift(variable.var_type.clone()),
+                name: variable.name.clone(),
+                erasure_mode: variable.erasure_mode,
+                is_witness: variable.is_witness,
+            })),
+        }
     }
 }
 

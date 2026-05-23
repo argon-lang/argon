@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use crate::function::SourceFunction;
 use argon_compiler::access::{AccessModifierGlobal, AccessToken};
 use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
@@ -11,6 +10,7 @@ use argon_parser::ast;
 use argon_parser::ast::{ExportStmt, FunctionDeclarationStmt, Identifier, ImportStmt, Stmt};
 use argon_util::InternalCompilerError;
 use parse18_runtime::WithLocation;
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -47,11 +47,11 @@ impl DeclarationClosure for ModuleClosure {
     }
 
     fn access_token(&self) -> AccessToken {
-       AccessToken {
-           tube: self.tube_name.clone(),
-           module: self.module_path.clone(),
-           allows_access_to: HashSet::new(),
-       }
+        AccessToken {
+            tube: self.tube_name.clone(),
+            module: self.module_path.clone(),
+            allows_access_to: HashSet::new(),
+        }
     }
 
     fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier {
@@ -131,7 +131,11 @@ pub fn process_source_file(
                 module.add_export(name, entry);
             }
 
-            _ => todo!("Top Level Statement not implemented: {:?} in {:?}", stmt.value, path),
+            _ => todo!(
+                "Top Level Statement not implemented: {:?} in {:?}",
+                stmt.value,
+                path
+            ),
         }
     }
 
