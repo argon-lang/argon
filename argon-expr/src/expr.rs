@@ -86,6 +86,13 @@ pub trait ExprContextShifter {
                 o: Box::new(self.shift(*o)),
                 member,
             },
+            Expr::EnumType(enum_ec, arguments) => Expr::EnumType(
+                enum_ec,
+                arguments
+                    .into_iter()
+                    .map(|argument| self.shift(argument))
+                    .collect(),
+            ),
             Expr::FunctionLiteral {
                 parameter_name,
                 body,
@@ -173,6 +180,13 @@ pub trait ExprContextShifter {
                     })
                     .collect(),
             },
+            Expr::RecordType(record, arguments) => Expr::RecordType(
+                record,
+                arguments
+                    .into_iter()
+                    .map(|argument| self.shift(argument))
+                    .collect(),
+            ),
             Expr::Redo { label } => Expr::Redo { label },
             Expr::Sequence(exprs) => Expr::Sequence(
                 NEVec::try_from_vec(exprs.into_iter().map(|expr| self.shift(expr)).collect())
@@ -180,6 +194,13 @@ pub trait ExprContextShifter {
             ),
             Expr::StoreVariable(variable) => Expr::StoreVariable(self.shift_variable(variable)),
             Expr::StringLiteral(value) => Expr::StringLiteral(value),
+            Expr::TraitType(trait_ec, arguments) => Expr::TraitType(
+                trait_ec,
+                arguments
+                    .into_iter()
+                    .map(|argument| self.shift(argument))
+                    .collect(),
+            ),
             Expr::Tuple { items } => Expr::Tuple {
                 items: items.into_iter().map(|item| self.shift(item)).collect(),
             },
@@ -187,6 +208,9 @@ pub trait ExprContextShifter {
             Expr::Type(t) => Expr::Type(Box::new(self.shift(*t))),
             Expr::BigType(value) => Expr::BigType(value),
             Expr::Variable(variable) => Expr::Variable(self.shift_variable(variable)),
+            Expr::VariableStore(variable, value) => {
+                Expr::VariableStore(self.shift_variable(variable), Box::new(self.shift(*value)))
+            }
             Expr::While {
                 label,
                 condition,
@@ -270,6 +294,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         o: Box<Expr<EC>>,
         member: Identifier,
     },
+    EnumType(EC::Enum, Vec<Expr<EC>>),
     FunctionLiteral {
         parameter_name: Option<Identifier>,
         body: Box<Expr<EC>>,
@@ -324,12 +349,14 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         record: EC::Record,
         fields: Vec<RecordFieldLiteral<EC>>,
     },
+    RecordType(EC::Record, Vec<Expr<EC>>),
     Redo {
         label: Option<Infallible>, // TODO: Use a proper label type
     },
     Sequence(NEVec<Expr<EC>>),
     StoreVariable(Variable<EC>),
     StringLiteral(Box<str>),
+    TraitType(EC::Trait, Vec<Expr<EC>>),
     Tuple {
         items: Vec<Expr<EC>>,
     },
@@ -337,6 +364,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Type(Box<Expr<EC>>),
     BigType(BigInt),
     Variable(Variable<EC>),
+    VariableStore(Variable<EC>, Box<Expr<EC>>),
     While {
         label: Option<Identifier>,
         condition: Box<Expr<EC>>,
@@ -379,6 +407,9 @@ impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
                 o: o.clone(),
                 member: member.clone(),
             },
+            Expr::EnumType(enum_ec, arguments) => {
+                Expr::EnumType(enum_ec.clone(), arguments.clone())
+            }
             Expr::FunctionLiteral {
                 parameter_name,
                 body,
@@ -445,12 +476,18 @@ impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
                 record: record.clone(),
                 fields: fields.clone(),
             },
+            Expr::RecordType(record, arguments) => {
+                Expr::RecordType(record.clone(), arguments.clone())
+            }
             Expr::Redo { label } => Expr::Redo {
                 label: label.clone(),
             },
             Expr::Sequence(exprs) => Expr::Sequence(exprs.clone()),
             Expr::StoreVariable(variable) => Expr::StoreVariable(variable.clone()),
             Expr::StringLiteral(value) => Expr::StringLiteral(value.clone()),
+            Expr::TraitType(trait_ec, arguments) => {
+                Expr::TraitType(trait_ec.clone(), arguments.clone())
+            }
             Expr::Tuple { items } => Expr::Tuple {
                 items: items.clone(),
             },
@@ -458,6 +495,9 @@ impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
             Expr::Type(t) => Expr::Type(t.clone()),
             Expr::BigType(value) => Expr::BigType(value.clone()),
             Expr::Variable(variable) => Expr::Variable(variable.clone()),
+            Expr::VariableStore(variable, value) => {
+                Expr::VariableStore(variable.clone(), value.clone())
+            }
             Expr::While {
                 label,
                 condition,

@@ -278,7 +278,7 @@ impl TubeEncoder {
                 output: Box::new(self.encode_erased_signature_type(output)?),
             },
 
-            ErasedSignatureType::Record(record_import, args) => tf::ErasedSignatureType::Record {
+            ErasedSignatureType::Declared(record_import, args) => tf::ErasedSignatureType::Record {
                 record_import: Box::new(self.encode_import_specifier(record_import)?),
                 args: args
                     .iter()

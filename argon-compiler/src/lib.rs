@@ -389,13 +389,22 @@ pub enum FunctionImplementation {
 
 pub trait Method: Unload + Sync + Send {}
 
-pub trait Record: Unload + Sync + Send {}
+pub trait Record: Unload + Sync + Send {
+    fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+}
 
-pub trait Enum: Unload + Sync + Send {}
+pub trait Enum: Unload + Sync + Send {
+    fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+}
 
 pub trait EnumCase: Unload + Sync + Send {}
 
-pub trait Trait: Unload + Sync + Send {}
+pub trait Trait: Unload + Sync + Send {
+    fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+}
 
 pub trait Instance: Unload + Sync + Send {}
 
