@@ -3,13 +3,15 @@ use crate::modifiers::{
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
+use crate::type_checker::TypeChecker;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::scope::{LocalScope, LocalVariableScope, ParameterScope};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
     Context, DefaultExprContext, EffectInfo, Function, FunctionImplementation, FunctionMetadata,
     Unload,
 };
-use argon_expr::ExpressionOwner;
+use argon_expr::{ExpressionOwner, ParameterVariable, Variable};
 use argon_parser::ast;
 use std::sync::{Arc, Mutex};
 
@@ -76,7 +78,7 @@ impl Function for SourceFunction {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = self.signature.lock().unwrap();
+        let mut sig_store = self.signature.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref sig) = *sig_store {
             return sig.clone();
         }
@@ -101,6 +103,39 @@ impl Function for SourceFunction {
     }
 
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
-        todo!()
+        let mut implementation_store = self.implementation.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref implementation) = *implementation_store {
+            return Some(implementation.clone());
+        }
+
+        let implementation = match &self.decl.body {
+            ast::FunctionBody::ExprBody(body) => {
+                let signature = self.clone().signature();
+                let mut scope = self.closure.scope();
+                let mut scope = ParameterScope::new(
+                    &mut scope,
+                    ExpressionOwner::<DefaultExprContext>::Function(self.clone()),
+                    &signature.parameters
+                );
+
+                let owner_ref: Arc<dyn Function> = self.clone();
+                let owner: ExpressionOwner<DefaultExprContext> =
+                    ExpressionOwner::Function(owner_ref);
+
+                let mut tc = TypeChecker {
+                    context: self.context.clone(),
+                    scope: &mut scope,
+                };
+
+                FunctionImplementation::Expr(tc.type_check_expr(body, &signature.return_type))
+            }
+            ast::FunctionBody::ExternBody(body) => {
+                FunctionImplementation::Extern(body.value.clone())
+            }
+        };
+
+        let result = Arc::new(implementation);
+        *implementation_store = Some(result.clone());
+        Some(result)
     }
 }

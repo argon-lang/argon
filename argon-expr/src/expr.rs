@@ -204,6 +204,7 @@ pub trait ExprContextShifter {
             Expr::Tuple { items } => Expr::Tuple {
                 items: items.into_iter().map(|item| self.shift(item)).collect(),
             },
+            Expr::TupleElement(value, index) => Expr::TupleElement(Box::new(self.shift(*value)), index),
             Expr::AnyType => Expr::AnyType,
             Expr::Type(t) => Expr::Type(Box::new(self.shift(*t))),
             Expr::BigType(value) => Expr::BigType(value),
@@ -360,6 +361,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Tuple {
         items: Vec<Expr<EC>>,
     },
+    TupleElement(Box<Expr<EC>>, usize),
     AnyType,
     Type(Box<Expr<EC>>),
     BigType(BigInt),
@@ -491,6 +493,7 @@ impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
             Expr::Tuple { items } => Expr::Tuple {
                 items: items.clone(),
             },
+            Expr::TupleElement(value, index) => Expr::TupleElement(value.clone(), *index),
             Expr::AnyType => Expr::AnyType,
             Expr::Type(t) => Expr::Type(t.clone()),
             Expr::BigType(value) => Expr::BigType(value.clone()),
@@ -794,6 +797,23 @@ impl<EC: ExprContext + ?Sized> Hash for Variable<EC> {
         (std::ptr::from_ref(self) as usize).hash(state);
     }
 }
+
+pub struct VariableTupleElement<EC: ExprContext + ?Sized> {
+    pub variable: Variable<EC>,
+    pub index: usize,
+    pub binding_type: Expr<EC>,
+}
+
+impl <EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
+    fn clone(&self) -> Self {
+        Self {
+            variable: self.variable.clone(),
+            index: self.index,
+            binding_type: self.binding_type.clone(),
+        }
+    }
+}
+
 
 #[derive(Debug)]
 pub struct LocalVariable<EC: ExprContext + ?Sized> {

@@ -2,7 +2,7 @@ use argon_compiler::scope::{
     LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope,
 };
 use argon_compiler::{Context, DefaultExprContext};
-use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable};
+use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable, VariableTupleElement};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
@@ -32,6 +32,23 @@ impl<'a> TypeChecker<'a> {
 
         TypeCheckToDefaultExprContextShifter.shift(expr)
     }
+
+    pub fn type_check_expr(
+        &mut self,
+        e: &WithLocation<ast::Expr>,
+        expected_type: &Expr<DefaultExprContext>,
+    ) -> Expr<DefaultExprContext> {
+        let mut checker = RecordingTypeChecker::new(self.context.clone());
+        let mut shifted_scope = ShiftedScope::new(self.scope, DefaultToTypeCheckExprContextShifter);
+        let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
+        let recording_scope = RecordingScope::new(&mut local_scope);
+        let mut tc_context = RecordingTypeCheckContext::new(recording_scope);
+
+        let expected_type = DefaultToTypeCheckExprContextShifter.shift(expected_type.clone());
+        let expr = checker.check(&mut tc_context, e, &expected_type);
+
+        TypeCheckToDefaultExprContextShifter.shift(expr)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -55,7 +72,7 @@ impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
     type EC2 = DefaultExprContext;
 
     fn shift_hole(&self, hole: Hole) -> Expr<DefaultExprContext> {
-        todo!()
+        TypeCheckToDefaultExprContextShifter.shift(*hole.1)
     }
 }
 
@@ -261,8 +278,53 @@ impl TypeInferResult {
     }
 }
 
-fn unify(_a: &Expr<TypeCheckExprContext>, _b: &Expr<TypeCheckExprContext>) -> bool {
-    todo!()
+fn unify(a: &Expr<TypeCheckExprContext>, b: &Expr<TypeCheckExprContext>) -> bool {
+    match (a, b) {
+        (Expr::Error, _) | (_, Expr::Error) => true,
+        (Expr::AnyType, _) | (_, Expr::AnyType) => true,
+        (Expr::Hole(a), Expr::Hole(b)) => a == b,
+        (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
+        (
+            Expr::Builtin {
+                builtin: a,
+                arguments: a_args,
+            },
+            Expr::Builtin {
+                builtin: b,
+                arguments: b_args,
+            },
+        ) => a == b && unify_all(a_args, b_args),
+        (Expr::EnumType(a, a_args), Expr::EnumType(b, b_args)) => {
+            a == b && unify_all(a_args, b_args)
+        }
+        (
+            Expr::FunctionType {
+                a: a_arg,
+                r: a_result,
+            },
+            Expr::FunctionType {
+                a: b_arg,
+                r: b_result,
+            },
+        ) => unify(a_arg, b_arg) && unify(a_result, b_result),
+        (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
+        (Expr::RecordType(a, a_args), Expr::RecordType(b, b_args)) => {
+            a == b && unify_all(a_args, b_args)
+        }
+        (Expr::StringLiteral(a), Expr::StringLiteral(b)) => a == b,
+        (Expr::TraitType(a, a_args), Expr::TraitType(b, b_args)) => {
+            a == b && unify_all(a_args, b_args)
+        }
+        (Expr::Tuple { items: a }, Expr::Tuple { items: b }) => unify_all(a, b),
+        (Expr::Type(a), Expr::Type(b)) => unify(a, b),
+        (Expr::BigType(a), Expr::BigType(b)) => a == b,
+        (Expr::Variable(a), Expr::Variable(b)) => a == b,
+        _ => false,
+    }
+}
+
+fn unify_all(a: &[Expr<TypeCheckExprContext>], b: &[Expr<TypeCheckExprContext>]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| unify(a, b))
 }
 
 impl RecordingTypeChecker<Context> {
@@ -392,7 +454,7 @@ impl RecordingTypeChecker<Context> {
                 self.check_call(tc_context, call, expected_type)
             }
 
-            ast::Expr::Paren(_) => self.check(tc_context, expr, expected_type),
+            ast::Expr::Paren(inner) => self.check(tc_context, inner, expected_type),
 
             ast::Expr::BinaryOperation { .. } => todo!(),
             ast::Expr::Block { .. } => todo!(),
@@ -408,36 +470,42 @@ impl RecordingTypeChecker<Context> {
             ast::Expr::Summon { .. } => todo!(),
             ast::Expr::Tuple { items } => {
                 let checked_items = match expected_type {
-                    Expr::AnyType | Expr::Type(_) | Expr::BigType(_) => {
-                        items.iter()
-                            .map(|item| self.check(tc_context, item, expected_type))
-                            .collect::<Vec<_>>()
-                    },
+                    Expr::AnyType | Expr::Type(_) | Expr::BigType(_) => items
+                        .iter()
+                        .map(|item| self.check(tc_context, item, expected_type))
+                        .collect::<Vec<_>>(),
 
                     Expr::Tuple { items: item_types } => {
                         if item_types.len() != items.len() {
-                            self.context.reporter().report_error(CompileError::tuple_size_mismatch(
-                                expr.location.clone(),
-                                item_types.len(),
-                                items.len(),
-                            ));
+                            self.context.reporter().report_error(
+                                CompileError::tuple_size_mismatch(
+                                    expr.location.clone(),
+                                    item_types.len(),
+                                    items.len(),
+                                ),
+                            );
                             return Expr::Error;
                         }
 
-                        items.iter()
+                        items
+                            .iter()
                             .zip(item_types.iter())
-                            .map(|(item, expected_item_type)| self.check(tc_context, item, expected_item_type))
+                            .map(|(item, expected_item_type)| {
+                                self.check(tc_context, item, expected_item_type)
+                            })
                             .collect::<Vec<_>>()
                     }
 
                     _ => {
                         let infer = self.infer(tc_context, expr);
-                        return self.check_inferred_type(&expr.location, infer, expected_type)
-                    },
+                        return self.check_inferred_type(&expr.location, infer, expected_type);
+                    }
                 };
 
-                Expr::Tuple { items: checked_items }
-            },
+                Expr::Tuple {
+                    items: checked_items,
+                }
+            }
             ast::Expr::BigType(_) => todo!(),
             ast::Expr::UnaryOperation { .. } => todo!(),
             ast::Expr::While { .. } => todo!(),
@@ -618,6 +686,10 @@ impl RecordingTypeChecker<Context> {
                 let infer = self.infer_variable(tc_context, v, call.arguments);
                 self.check_inferred_type(call.location, infer, expected_type)
             }
+            CalleeInfo::VariableTupleElement(vte) => {
+                let infer = self.infer_variable_tuple_element(tc_context, vte, call.arguments);
+                self.check_inferred_type(call.location, infer, expected_type)
+            }
             CalleeInfo::Overloadable(_) => todo!(),
             CalleeInfo::Expr(f) => todo!("Unimplement function expression calls: {:?}", f),
             CalleeInfo::TypeN => {
@@ -645,6 +717,7 @@ impl RecordingTypeChecker<Context> {
                 self.infer_builtin(tc_context, call.location, builtin, call.arguments)
             }
             CalleeInfo::Variable(v) => self.infer_variable(tc_context, v, call.arguments),
+            CalleeInfo::VariableTupleElement(vte) => self.infer_variable_tuple_element(tc_context, vte, call.arguments),
             CalleeInfo::Overloadable(_) => todo!(),
             CalleeInfo::Expr(_) => todo!(),
             CalleeInfo::TypeN => {
@@ -901,6 +974,20 @@ impl RecordingTypeChecker<Context> {
         self.infer_function_object_call(tc_context, expr, t, args)
     }
 
+    fn infer_variable_tuple_element(
+        &mut self,
+        tc_context: &mut impl TypeCheckContext,
+        vte: VariableTupleElement<TypeCheckExprContext>,
+        args: VecDeque<ArgumentInfo<'_>>,
+    ) -> TypeInferResult {
+        let t = vte.binding_type;
+        let expr = Expr::TupleElement(
+            Box::new(Expr::Variable(vte.variable)),
+            vte.index,
+        );
+        self.infer_function_object_call(tc_context, expr, t, args)
+    }
+
     fn infer_function_object_call(
         &mut self,
         tc_context: &mut impl TypeCheckContext,
@@ -1066,6 +1153,7 @@ impl RecordingTypeChecker<Context> {
             }
 
             Lookup::Variable(v) => CalleeInfo::Variable(v),
+            Lookup::VariableTupleElement(vte) => CalleeInfo::VariableTupleElement(vte),
 
             Lookup::Overloadable(overloadable) => CalleeInfo::Overloadable(overloadable),
         }
@@ -1153,6 +1241,7 @@ enum CalleeInfo<'a> {
     Expr(&'a WithLocation<ast::Expr>),
     Builtin(Builtin),
     Variable(Variable<TypeCheckExprContext>),
+    VariableTupleElement(VariableTupleElement<TypeCheckExprContext>),
     Overloadable(OverloadLookup),
     TypeN,
 }

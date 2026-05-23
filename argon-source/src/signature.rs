@@ -2,7 +2,7 @@ use crate::modifiers::{ERASURE_MODE, ModifierParser};
 use crate::module::GlobalScope;
 use crate::type_checker::{DefaultToTypeCheckExprContextShifter, TypeChecker};
 use argon_compiler::access::AccessToken;
-use argon_compiler::scope::{LocalScope, LocalVariableScope};
+use argon_compiler::scope::{LocalScope, LocalVariableScope, ParameterScope};
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
 use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{ErasureMode, Expr, ExprContextShifter, ExpressionOwner, Variable};
@@ -26,89 +26,82 @@ impl<'a> SignatureParser<'a> {
     ) -> FunctionSignature<DefaultExprContext> {
         let allow_concrete_params = self.allow_concrete_params();
 
-        let mut parameter_scope = LocalVariableScope::new(self.scope);
+        let mut parameters = Vec::with_capacity(params.len());
 
-        let parameters =
-            params
+        for param in params {
+            let mut mp = ModifierParser::new(
+                self.context.clone(),
+                &param.value.modifiers,
+                &param.location,
+            );
+            let erasure_mode = mp.parse(&ERASURE_MODE);
+            mp.done();
+
+            if allow_concrete_params && erasure_mode == ErasureMode::Concrete {
+                self.context.reporter().report_error(
+                    CompileError::type_parameter_is_concrete(param.location.clone()),
+                );
+            }
+
+
+            let mut parameter_scope = ParameterScope::new(self.scope, self.owner.clone(), &parameters);
+
+            let mut tc = TypeChecker {
+                context: self.context.clone(),
+                scope: &mut parameter_scope,
+            };
+
+            let bindings = param
+                .value
+                .parameters
                 .iter()
-                .enumerate()
-                .map(|(param_index, param)| {
-                    let mut mp = ModifierParser::new(
-                        self.context.clone(),
-                        &param.value.modifiers,
-                        &param.location,
-                    );
-                    let erasure_mode = mp.parse(&ERASURE_MODE);
-                    mp.done();
+                .map(|param_elem| {
+                    let t = tc.type_check_type_expr(&param_elem.value.param_type);
 
-                    if allow_concrete_params && erasure_mode == ErasureMode::Concrete {
-                        self.context.reporter().report_error(
-                            CompileError::type_parameter_is_concrete(param.location.clone()),
-                        );
+                    ParameterBinding {
+                        name: Some(param_elem.value.name.clone()),
+                        param_type: t,
                     }
-
-                    let mut tc = TypeChecker {
-                        context: self.context.clone(),
-                        scope: &mut parameter_scope,
-                    };
-
-                    let bindings = param
-                        .value
-                        .parameters
-                        .iter()
-                        .map(|param_elem| {
-                            let t = tc.type_check_type_expr(&param_elem.value.param_type);
-
-                            ParameterBinding {
-                                name: Some(param_elem.value.name.clone()),
-                                param_type: t,
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    let single_binding = match &bindings[..] {
-                        [binding] if param.value.has_trailing_comma => Some(binding),
-                        _ => None,
-                    };
-
-                    let name;
-                    let param_type;
-                    match single_binding {
-                        Some(binding) => {
-                            name = binding.name.clone();
-                            param_type = binding.param_type.clone();
-                        }
-                        None => {
-                            name = None;
-                            param_type = Expr::Tuple {
-                                items: bindings
-                                    .iter()
-                                    .map(|binding| binding.param_type.clone())
-                                    .collect::<Vec<_>>(),
-                            };
-                        }
-                    }
-
-                    let param = SignatureParameter {
-                        list_type: param.value.list_type,
-                        erasure_mode,
-                        bindings,
-                        name,
-                        param_type,
-                    };
-
-                    let param_var = Variable::Parameter(Arc::new(
-                        param
-                            .clone()
-                            .to_parameter_var(self.owner.clone(), param_index),
-                    ));
-
-                    parameter_scope.add_variable(param_var);
-
-                    param
                 })
                 .collect::<Vec<_>>();
 
+            let single_binding = match &bindings[..] {
+                [binding] if param.value.has_trailing_comma => Some(binding),
+                _ => None,
+            };
+
+            let name;
+            let param_type;
+            match single_binding {
+                Some(binding) => {
+                    name = binding.name.clone();
+                    param_type = binding.param_type.clone();
+                }
+                None => {
+                    name = None;
+                    param_type = Expr::Tuple {
+                        items: bindings
+                            .iter()
+                            .map(|binding| binding.param_type.clone())
+                            .collect::<Vec<_>>(),
+                    };
+                }
+            }
+
+            let param = SignatureParameter {
+                list_type: param.value.list_type,
+                erasure_mode,
+                bindings,
+                name,
+                param_type,
+            };
+            
+            parameters.push(param);
+        }
+
+
+        let mut parameter_scope = ParameterScope::new(self.scope, self.owner.clone(), &parameters);
+        
         let mut tc = TypeChecker {
             context: self.context.clone(),
             scope: &mut parameter_scope,

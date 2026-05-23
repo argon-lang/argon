@@ -1,8 +1,10 @@
 use crate::{Enum, Function, Instance, Method, Record, Trait};
-use argon_expr::{ExprContext, ExprContextShifter, Variable};
+use argon_expr::{ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement};
 use argon_parser::ast::Identifier;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use argon_parser::ast;
+use crate::signature::SignatureParameter;
 
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;
@@ -20,6 +22,7 @@ pub trait LocalScope: Scope {
 pub enum Lookup<EC: ExprContext + ?Sized> {
     Empty,
     Variable(Variable<EC>),
+    VariableTupleElement(VariableTupleElement<EC>),
     Overloadable(OverloadLookup),
 }
 
@@ -42,6 +45,74 @@ pub enum Overloadable {
     Enum(Arc<dyn Enum>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
+}
+
+pub struct ParameterScope<'a, EC: ExprContext + ?Sized> {
+    parent: &'a mut dyn Scope<ExprContext = EC>,
+    variable_lookup: HashMap<Identifier, Variable<EC>>,
+    binding_lookup: HashMap<Identifier, VariableTupleElement<EC>>,
+    variables: HashSet<Variable<EC>>,
+}
+
+impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
+    pub fn new(parent: &'a mut dyn Scope<ExprContext = EC>, owner: ExpressionOwner<EC>, parameters: &[SignatureParameter<EC>]) -> Self {
+        let mut variable_lookup = HashMap::new();
+        let mut binding_lookup = HashMap::new();
+
+        for (param_index, param) in parameters.iter().enumerate() {
+            let param_var = Variable::Parameter(Arc::new(
+                param.clone().to_parameter_var(owner.clone(), param_index)
+            ));
+
+            variable_lookup.insert(param.name.clone(), param_var.clone());
+
+            for (binding_index, binding) in param.bindings.iter().enumerate() {
+                let Some(name) = binding.name.clone() else {
+                    continue;
+                };
+
+                let vte = VariableTupleElement {
+                    variable: param_var.clone(),
+                    index: binding_index,
+                    binding_type: binding.param_type.clone(),
+                };
+
+                binding_lookup.insert(name, vte);
+            }
+        }
+
+        Self {
+            parent,
+            variable_lookup: HashMap::new(),
+            binding_lookup: HashMap::new(),
+            variables: HashSet::new(),
+        }
+    }
+
+    fn lookup_name(&mut self, name: &Identifier) -> Option<Lookup<EC>> {
+        self.variable_lookup
+            .get(name)
+            .map(|variable| Lookup::Variable(variable.clone()))
+            .or_else(||
+                self.binding_lookup
+                    .get(name)
+                    .map(|binding| Lookup::VariableTupleElement(binding.clone()))
+            )
+    }
+}
+
+impl<'a, EC: ExprContext + ?Sized> Scope for ParameterScope<'a, EC> {
+    type ExprContext = EC;
+
+    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+        self.lookup_name(name)
+            .unwrap_or_else(|| self.parent.lookup(name))
+    }
+
+    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+        self.lookup_name(name)
+            .unwrap_or_else(|| self.parent.lookup_assign(name))
+    }
 }
 
 pub struct LocalVariableScope<'a, EC: ExprContext + ?Sized> {
@@ -117,6 +188,12 @@ where
             Lookup::Overloadable(o) => Lookup::Overloadable(o),
 
             Lookup::Variable(v) => Lookup::Variable(self.shifter.shift_variable(v)),
+            Lookup::VariableTupleElement(vte) =>
+                Lookup::VariableTupleElement(VariableTupleElement {
+                    variable: self.shifter.shift_variable(vte.variable),
+                    index: vte.index,
+                    binding_type: self.shifter.shift(vte.binding_type),
+                }),
         }
     }
 }
