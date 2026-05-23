@@ -4,6 +4,7 @@ pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
+use std::error::Error;
 use crate::access::AccessModifierGlobal;
 use crate::signature::FunctionSignature;
 use argon_expr::{ErasureMode, Expr, ExprContext};
@@ -13,6 +14,7 @@ use dashmap::{DashMap, Entry};
 use nonempty_collections::NEVec;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 
 pub trait CompileErrorReporter
@@ -59,6 +61,52 @@ pub enum EmptyHole {}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TubeName(pub NEVec<String>);
+
+
+#[derive(Debug)]
+pub enum TubeNameParseError {
+    Empty,
+    EmptySegment,
+    InvalidSegment(std::str::Utf8Error),
+}
+
+impl Display for TubeNameParseError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TubeNameParseError::Empty => write!(f, "empty tube name"),
+            TubeNameParseError::EmptySegment => write!(f, "empty segment in tube name"),
+            TubeNameParseError::InvalidSegment(e) => write!(f, "invalid segment in tube name: {}", e),
+        }
+    }
+}
+
+impl Error for TubeNameParseError {}
+
+impl From<std::str::Utf8Error> for TubeNameParseError {
+    fn from(e: std::str::Utf8Error) -> Self {
+        TubeNameParseError::InvalidSegment(e)
+    }
+}
+
+impl FromStr for TubeName {
+    type Err = TubeNameParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s
+            .split('.')
+            .map(|s| {
+                let part = percent_encoding::percent_decode_str(s).decode_utf8()?;
+                if part.is_empty() {
+                    return Err(TubeNameParseError::EmptySegment);
+                }
+
+                Ok(part.into_owned())
+            })
+            .collect::<Result<Vec<String>, _>>()
+            .and_then(|parts| NEVec::try_from_vec(parts).ok_or(TubeNameParseError::Empty))
+            .map(TubeName)
+    }
+}
 
 impl Display for TubeName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

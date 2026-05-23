@@ -17,6 +17,7 @@ num-traits = { workspace = true }
 parse18-runtime = { workspace = true }
 rpds = { workspace = true }
 walkdir = { workspace = true }
+percent-encoding = { workspace = true }
 
 [lints]
 workspace = true

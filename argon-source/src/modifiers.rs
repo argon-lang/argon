@@ -168,6 +168,7 @@ mod tests {
     use argon_util::ErrorCode;
     use parse18_runtime::FilePosition;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     fn test_location(line: usize, column: usize) -> Location {
         Location {
@@ -186,7 +187,7 @@ mod tests {
 
     fn test_context() -> (Context, TestReporter) {
         let reporter = TestReporter::default();
-        (Context::new(TestContext::new(reporter.clone())), reporter)
+        (Arc::new(TestContext::new(reporter.clone())), reporter)
     }
 
     #[test]
@@ -194,7 +195,7 @@ mod tests {
         let (context, reporter) = test_context();
         let fallback_location = test_location(1, 1);
         let modifiers = [];
-        let mut parser = ModifierParser::new(&context, &modifiers, &fallback_location);
+        let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
         let access = parser.parse(&ACCESS_MODIFIER_GLOBAL);
         parser.done();
@@ -211,7 +212,7 @@ mod tests {
             modifier(Modifier::Public, 1, 1),
             modifier(Modifier::Inline, 1, 8),
         ];
-        let mut parser = ModifierParser::new(&context, &modifiers, &fallback_location);
+        let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
         let access = parser.parse(&ACCESS_MODIFIER_GLOBAL);
         let is_inline = parser.parse(&IS_INLINE);
@@ -231,7 +232,7 @@ mod tests {
             modifier(Modifier::Inline, 1, 8),
         ];
 
-        let mut parser = ModifierParser::new(&context, &modifiers, &fallback_location);
+        let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
         assert!(parser.parse(&IS_INLINE));
         parser.done();
 
@@ -247,7 +248,7 @@ mod tests {
         let (context, reporter) = test_context();
         let fallback_location = test_location(1, 1);
         let modifiers = [modifier(Modifier::Private, 1, 1)];
-        let mut parser = ModifierParser::new(&context, &modifiers, &fallback_location);
+        let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
         let access = parser.parse(&ACCESS_MODIFIER_GLOBAL);
         parser.done();
@@ -265,7 +266,7 @@ mod tests {
         let (context, reporter) = test_context();
         let fallback_location = test_location(1, 1);
         let modifiers = [modifier(Modifier::Inline, 2, 4)];
-        let mut parser = ModifierParser::new(&context, &modifiers, &fallback_location);
+        let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
         assert_eq!(
             parser.parse(&ACCESS_MODIFIER_GLOBAL),

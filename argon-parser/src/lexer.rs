@@ -406,7 +406,7 @@ mod tests {
         let file_name = PathBuf::from("<test>");
         let reader = TestReader::new(text);
         let error_reporter = TestErrorReporter::default();
-        let mut lexer = Lexer::new(&file_name, reader, error_reporter.clone());
+        let mut lexer = Lexer::new(&file_name, reader, &error_reporter);
         let mut tokens = Vec::new();
 
         loop {

@@ -1,0 +1,12 @@
+[package]
+name = "argon-cli"
+version = "0.1.0"
+publish = false
+edition = "2024"
+
+[dependencies]
+argon-compiler = { workspace = true }
+clap = { workspace = true }
+
+[lints]
+workspace = true

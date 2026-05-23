@@ -1051,6 +1051,7 @@ mod tests {
     use num_bigint::BigInt;
     use parse18_runtime::FilePosition;
     use std::path::PathBuf;
+    use std::sync::Arc;
 
     struct TestScope;
 
@@ -1116,14 +1117,14 @@ mod tests {
     }
 
     fn test_checker() -> (
-        RecordingTypeChecker<Context, ()>,
+        RecordingTypeChecker<Context>,
         TestTypeCheckContext,
         TestReporter,
     ) {
         let reporter = TestReporter::default();
-        let context = Context::new(TestContext::new(reporter.clone()));
+        let context: Context = Arc::new(TestContext::new(reporter.clone()));
         (
-            RecordingTypeChecker::new(context, ()),
+            RecordingTypeChecker::new(context),
             TestTypeCheckContext { scope: TestScope },
             reporter,
         )

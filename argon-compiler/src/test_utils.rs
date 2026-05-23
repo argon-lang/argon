@@ -61,6 +61,6 @@ impl ContextObject for TestContext {
 
 impl From<TestContext> for Context {
     fn from(context: TestContext) -> Self {
-        Context::new(context)
+        Arc::new(context)
     }
 }

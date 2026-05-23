@@ -41,7 +41,7 @@ mod testcases {
             let file_name = PathBuf::from(&input_source.name);
 
             let module =
-                argon_parser::parse(input_source.source.as_bytes(), &file_name, reporter.clone());
+                argon_parser::parse(input_source.source.as_bytes(), &file_name, &reporter);
 
             assert!(
                 reporter.io_errors.borrow().is_empty(),
