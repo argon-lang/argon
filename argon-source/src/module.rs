@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::function::SourceFunction;
 use argon_compiler::access::{AccessModifierGlobal, AccessToken};
 use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
@@ -46,7 +47,11 @@ impl DeclarationClosure for ModuleClosure {
     }
 
     fn access_token(&self) -> AccessToken {
-        todo!()
+       AccessToken {
+           tube: self.tube_name.clone(),
+           module: self.module_path.clone(),
+           allows_access_to: HashSet::new(),
+       }
     }
 
     fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier {
@@ -126,7 +131,7 @@ pub fn process_source_file(
                 module.add_export(name, entry);
             }
 
-            _ => todo!(),
+            _ => todo!("Top Level Statement not implemented: {:?} in {:?}", stmt.value, path),
         }
     }
 

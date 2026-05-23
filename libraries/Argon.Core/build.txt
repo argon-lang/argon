@@ -1,0 +1,6 @@
+Commands to build:
+
+dist/argon-jvm/argon compile --name Argon.Core -i libraries/Argon.Core/src -o libraries/Argon.Core/bin/Argon.Core.artube --js-externs libraries/Argon.Core/js/externs.js --platform js
+dist/argon-jvm/argon genir -i libraries/Argon.Core/bin/Argon.Core.artube -o libraries/Argon.Core/bin/Argon.Core.arvm --platform js
+dist/argon-jvm/argon codegen js -i libraries/Argon.Core/bin/Argon.Core.arvm --js-modules libraries/Argon.Core/bin/js
+

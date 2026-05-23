@@ -1,0 +1,31 @@
+module Int
+
+import ::Bool::*
+import ::String::*
+
+public token inline def Int: type = __argon_builtin int_type
+
+public inline def unary operator + (a: Int): Int = a
+public inline def unary operator - (a: Int): Int = __argon_builtin int_negate a
+public inline def unary operator ~~~ (a: Int): Int = __argon_builtin int_bitnot a
+
+public inline def operator + (a: Int) (b: Int): Int = __argon_builtin int_add a b
+public inline def operator - (a: Int) (b: Int): Int = __argon_builtin int_sub a b
+public inline def operator * (a: Int) (b: Int): Int = __argon_builtin int_mul a b
+
+public inline def operator &&& (a: Int) (b: Int): Int = __argon_builtin int_bitand a b
+public inline def operator ||| (a: Int) (b: Int): Int = __argon_builtin int_bitor a b
+public inline def operator ^^^ (a: Int) (b: Int): Int = __argon_builtin int_bitxor a b
+public inline def operator <<< (a: Int) (b: Int): Int = __argon_builtin int_bitshiftleft a b
+public inline def operator >>> (a: Int) (b: Int): Int = __argon_builtin int_bitshiftright a b
+
+public inline def operator = (a: Int) (b: Int): Bool = __argon_builtin int_eq a b
+public inline def operator != (a: Int) (b: Int): Bool = __argon_builtin int_ne a b
+public inline def operator < (a: Int) (b: Int): Bool = __argon_builtin int_lt a b
+public inline def operator <= (a: Int) (b: Int): Bool = __argon_builtin int_le a b
+public inline def operator > (a: Int) (b: Int): Bool = __argon_builtin int_gt a b
+public inline def operator >= (a: Int) (b: Int): Bool = __argon_builtin int_ge a b
+
+public def extension to_s (i: Int)(): String = extern int_to_s
+
+

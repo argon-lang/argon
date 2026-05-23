@@ -1,0 +1,5 @@
+module Puts
+
+import ::String::*
+
+public proc puts(s: String): () = extern puts

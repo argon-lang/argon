@@ -1,0 +1,17 @@
+module Bool
+
+import ::String::*
+
+public token inline def Bool: type = __argon_builtin bool_type
+
+public inline def unary operator ! (a: Bool): Bool = __argon_builtin bool_not a
+
+public inline def operator = (a: Bool) (b: Bool): Bool = __argon_builtin bool_eq a b
+public inline def operator != (a: Bool) (b: Bool): Bool = __argon_builtin bool_ne a b
+
+public def extension to_s (b: Bool)(): String =
+    if b then
+        "true"
+    else
+        "false"
+    end

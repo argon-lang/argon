@@ -1,0 +1,10 @@
+module String
+
+import ::Bool::*
+
+public token inline def String: type = __argon_builtin string_type
+
+public inline def operator ++ (a: String) (b: String): String = __argon_builtin string_concat a b
+
+public inline def operator = (a: String) (b: String): Bool = __argon_builtin string_eq a b
+public inline def operator != (a: String) (b: String): Bool = __argon_builtin string_ne a b
