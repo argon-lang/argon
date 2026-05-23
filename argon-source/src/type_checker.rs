@@ -1056,7 +1056,9 @@ impl RecordingTypeChecker<Context> {
                 Expr::AnyType | Expr::BigType(_) => return checked_expr,
                 Expr::Type(n2) => match (&**n, &**n2) {
                     (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
-                        return checked_expr;
+                        if n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2 {
+                            return checked_expr;
+                        }
                     }
                     _ => {}
                 },

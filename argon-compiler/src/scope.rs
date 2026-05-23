@@ -1,6 +1,8 @@
+use crate::{Enum, Function, Instance, Method, Record, Trait};
 use argon_expr::{ExprContext, ExprContextShifter, Variable};
 use argon_parser::ast::Identifier;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;
@@ -25,7 +27,22 @@ pub struct OverloadLookup {
     item_groups: Box<dyn Iterator<Item = Vec<Overloadable>>>,
 }
 
-pub enum Overloadable {}
+impl OverloadLookup {
+    pub fn new(item_groups: impl Iterator<Item = Vec<Overloadable>> + 'static) -> Self {
+        Self {
+            item_groups: Box::new(item_groups),
+        }
+    }
+}
+
+pub enum Overloadable {
+    Function(Arc<dyn Function>),
+    Method(Arc<dyn Method>),
+    Record(Arc<dyn Record>),
+    Enum(Arc<dyn Enum>),
+    Trait(Arc<dyn Trait>),
+    Instance(Arc<dyn Instance>),
+}
 
 pub struct LocalVariableScope<'a, EC: ExprContext + ?Sized> {
     parent: &'a mut dyn Scope<ExprContext = EC>,

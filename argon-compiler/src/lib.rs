@@ -142,6 +142,12 @@ pub struct TubeCollection {
     tubes: RwLock<HashMap<TubeName, Arc<Tube>>>,
 }
 
+impl TubeCollection {
+    pub fn tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.tubes.read().get(name).cloned()
+    }
+}
+
 pub struct TubeCollectionBuilder {
     context: Context,
     tube_collection: Arc<TubeCollection>,

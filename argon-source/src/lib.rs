@@ -52,7 +52,12 @@ pub fn define_source_tube(
             entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("argon"))
         })
         .for_each(|entry| {
-            process_source_file(context.clone(), entry.path(), &tb);
+            process_source_file(
+                context.clone(),
+                entry.path(),
+                &tb,
+                tube_collection.tube_collection(),
+            );
         });
 
     tb.tube()
