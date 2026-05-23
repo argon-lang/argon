@@ -4,7 +4,10 @@ publish = false
 edition = "2024"
 
 [dependencies]
+esexpr = { workspace = true }
+esexpr-binary = { workspace = true }
 parse18-runtime = { workspace = true }
+walkdir = { workspace = true }
 
 [lints]
 workspace = true

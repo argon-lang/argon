@@ -6,6 +6,7 @@ edition = "2024"
 
 [dependencies]
 argon-compiler = { workspace = true }
+argon-runner = { workspace = true }
 clap = { workspace = true }
 
 [lints]

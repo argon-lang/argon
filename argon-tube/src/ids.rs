@@ -22,7 +22,7 @@ impl<T: Eq + Hash + Clone> IdStore<T> {
         let (id, _) = self.get_with_new(value);
         id
     }
-    
+
     pub fn get_with_new(&mut self, value: T) -> (usize, bool) {
         if let Some(id) = self.ids.get(&value) {
             return (*id, false);

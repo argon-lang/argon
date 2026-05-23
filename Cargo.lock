@@ -81,6 +81,7 @@ name = "argon-cli"
 version = "0.1.0"
 dependencies = [
  "argon-compiler",
+ "argon-runner",
  "clap",
 ]
 
@@ -148,6 +149,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon-runner"
+version = "0.1.0"
+dependencies = [
+ "argon-compiler",
+ "argon-format",
+ "argon-source",
+ "argon-tube",
+ "argon-util",
+ "clap",
+ "esexpr",
+ "esexpr-binary",
+ "rayon",
+ "walkdir",
+]
+
+[[package]]
 name = "argon-source"
 version = "0.0.0"
 dependencies = [
@@ -187,7 +204,10 @@ dependencies = [
 name = "argon-util"
 version = "0.0.0"
 dependencies = [
+ "esexpr",
+ "esexpr-binary",
  "parse18-runtime",
+ "walkdir",
 ]
 
 [[package]]

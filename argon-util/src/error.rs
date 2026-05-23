@@ -1,4 +1,5 @@
 use parse18_runtime::Location;
+use std::path::PathBuf;
 
 pub trait ErrorReporter<E> {
     fn report_error(&self, error: E);
@@ -350,4 +351,34 @@ fn join_strings(values: impl IntoIterator<Item = impl AsRef<str>>) -> String {
         result.push_str(value.as_ref());
     }
     result
+}
+
+pub enum TubeFormatError {
+    FileError(PathBuf, std::io::Error),
+    ExprParseError(esexpr_binary::ParseError<std::io::Error>),
+    ExprDecodeError(esexpr::DecodeError),
+}
+
+impl From<esexpr_binary::ParseError<std::io::Error>> for TubeFormatError {
+    fn from(err: esexpr_binary::ParseError<std::io::Error>) -> Self {
+        Self::ExprParseError(err)
+    }
+}
+
+impl From<esexpr::DecodeError> for TubeFormatError {
+    fn from(err: esexpr::DecodeError) -> Self {
+        Self::ExprDecodeError(err)
+    }
+}
+
+#[derive(Debug)]
+pub enum TubeEncodingError {
+    GeneratorError(esexpr_binary::GeneratorError<std::io::Error>),
+}
+
+pub enum InternalCompilerError {
+    IoError(PathBuf, std::io::Error),
+    WalkDirError(walkdir::Error),
+    TubeFormatError(TubeFormatError),
+    TubeEncodingError(TubeEncodingError),
 }

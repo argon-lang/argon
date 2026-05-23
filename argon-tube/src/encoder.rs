@@ -1,7 +1,8 @@
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
     Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
-    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeName, UnaryOperatorIdentifier,
+    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeCollectionBuilder, TubeName,
+    UnaryOperatorIdentifier,
 };
 use num_bigint::{BigInt, BigUint};
 use std::collections::VecDeque;
@@ -11,9 +12,16 @@ use crate::ids::TubeIdProvider;
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use esexpr::ESExprStatic;
+use argon_util::TubeEncodingError;
+
+pub fn encode_tube(
+    tube: Arc<Tube>,
+) -> impl Iterator<Item = Result<tf::TubeFileEntry, TubeEncodingError>> {
+    TubeEncoder::new(tube)
+}
 
 pub struct TubeEncoder {
     tube: Arc<Tube>,
@@ -65,7 +73,8 @@ impl TubeEncoder {
         let (id, is_new) = self.ids.function_ids.get_with_new(function.clone());
 
         if is_new {
-            self.entry_emitters.push_back(EntryEmitter::Function(function));
+            self.entry_emitters
+                .push_back(EntryEmitter::Function(function));
         }
 
         id
@@ -125,7 +134,7 @@ impl TubeEncoder {
                         modules,
                     }),
                 }
-            },
+            }
 
             EntryEmitter::Function(function) => {
                 let function_id = BigUint::from(self.ids.function_ids.get(function.clone()));
@@ -154,7 +163,9 @@ impl TubeEncoder {
                             erasure: Box::new(encode_erasure_mode(metadata.erasure_mode)),
                             witness: metadata.is_witness,
                             effects: Box::new(encode_effect_info(metadata.effect_info)),
-                            signature: Box::new(self.emit_function_signature(&function.signature())?),
+                            signature: Box::new(
+                                self.emit_function_signature(&function.signature())?,
+                            ),
                             implementation,
                         }),
                     }
@@ -449,7 +460,7 @@ impl TubeEncoder {
                 t: Box::new(tf::Expr::AnyType {}),
                 value: Box::new(self.emit_expr(value)?),
             },
-            _ => return Err(TubeEncodingError::UnsupportedExpression),
+            _ => todo!(),
         })
     }
 }
@@ -473,12 +484,6 @@ enum EntryEmitter {
     Header,
     Metadata,
     Function(Arc<dyn Function>),
-}
-
-#[derive(Debug)]
-pub enum TubeEncodingError {
-    UnsupportedExpression,
-    UnsupportedBuiltin(Builtin),
 }
 
 fn encode_module_path(path: &argon_compiler::ModulePath) -> tf::ModulePath {
@@ -575,7 +580,9 @@ fn encode_effect_info(effect: EffectInfo) -> tf::EffectInfo {
     }
 }
 
-fn encode_parameter_list_type(list_type: FunctionParameterListType) -> tf::FunctionParameterListType {
+fn encode_parameter_list_type(
+    list_type: FunctionParameterListType,
+) -> tf::FunctionParameterListType {
     match list_type {
         FunctionParameterListType::NormalList => tf::FunctionParameterListType::NormalList,
         FunctionParameterListType::InferrableList => tf::FunctionParameterListType::InferrableList,

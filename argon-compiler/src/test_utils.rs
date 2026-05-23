@@ -1,5 +1,5 @@
 use crate::{CompileErrorReporter, Context, ContextObject};
-use argon_util::{CompileError, ErrorReporter};
+use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Default)]
@@ -29,12 +29,8 @@ impl ErrorReporter<CompileError> for TestReporter {
     }
 }
 
-impl ErrorReporter<std::io::Error> for TestReporter {
-    fn report_error(&self, _error: std::io::Error) {}
-}
-
-impl ErrorReporter<walkdir::Error> for TestReporter {
-    fn report_error(&self, _error: walkdir::Error) {}
+impl ErrorReporter<InternalCompilerError> for TestReporter {
+    fn report_error(&self, _error: InternalCompilerError) {}
 }
 
 pub struct TestContext {

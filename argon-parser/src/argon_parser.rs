@@ -97,7 +97,11 @@ fn declaration_stmt_to_new_trait_object_body_stmt(decl: DeclarationStmt) -> NewT
     }
 }
 
-fn binary_op(a: WithLocation<Expr>, op: WithLocation<BinaryOperator>, b: WithLocation<Expr>) -> Expr {
+fn binary_op(
+    a: WithLocation<Expr>,
+    op: WithLocation<BinaryOperator>,
+    b: WithLocation<Expr>,
+) -> Expr {
     Expr::BinaryOperation {
         a: Box::new(a),
         op,

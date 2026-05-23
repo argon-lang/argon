@@ -8,7 +8,7 @@ use argon_compiler::{
 };
 use argon_parser::ast;
 use argon_parser::ast::{ExportStmt, FunctionDeclarationStmt, Identifier, ImportStmt, Stmt};
-use argon_util::ErrorReporter;
+use argon_util::InternalCompilerError;
 use parse18_runtime::WithLocation;
 use std::path::Path;
 use std::sync::Arc;
@@ -77,7 +77,9 @@ pub fn process_source_file(
     let mut file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(e) => {
-            context.reporter().report_error(e);
+            context
+                .reporter()
+                .report_error(InternalCompilerError::IoError(path.to_path_buf(), e));
             return None;
         }
     };

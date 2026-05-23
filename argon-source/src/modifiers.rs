@@ -1,5 +1,6 @@
 use argon_compiler::Context;
 use argon_compiler::access::AccessModifierGlobal;
+use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::{CompileError, ErrorReporter};
 use nonempty_collections::NESlice;
@@ -7,7 +8,6 @@ use nonempty_collections::NonEmptyIterator;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use argon_expr::ErasureMode;
 
 pub struct ModifierParser<'a> {
     context: Context,
@@ -102,22 +102,18 @@ pub const ACCESS_MODIFIER_GLOBAL: ModifierSpec<AccessModifierGlobal> =
     ])
     .unwrap();
 
-pub const IS_INLINE: ModifierSpec<bool> = ModifierSpec::try_from_slice(&[
-    (&[Modifier::Inline], true),
-    (&[], false),
-]).unwrap();
+pub const IS_INLINE: ModifierSpec<bool> =
+    ModifierSpec::try_from_slice(&[(&[Modifier::Inline], true), (&[], false)]).unwrap();
 
 pub const IS_WITNESS: ModifierSpec<bool> =
-    ModifierSpec::try_from_slice(&[
-        (&[Modifier::Witness], true),
-        (&[], false),
-    ]).unwrap();
+    ModifierSpec::try_from_slice(&[(&[Modifier::Witness], true), (&[], false)]).unwrap();
 
 pub const ERASURE_MODE: ModifierSpec<ErasureMode> = ModifierSpec::try_from_slice(&[
     (&[Modifier::Erased], ErasureMode::Erased),
     (&[Modifier::Token], ErasureMode::Token),
     (&[], ErasureMode::Concrete),
-]).unwrap();
+])
+.unwrap();
 
 fn spec_has_modifier<T>(spec: &ModifierSpec<T>, modifier: Modifier) -> bool {
     spec.iter()

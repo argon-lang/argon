@@ -5,7 +5,4 @@ pub enum AccessModifierGlobal {
     Internal,
 }
 
-pub struct AccessToken {
-    
-}
-
+pub struct AccessToken {}

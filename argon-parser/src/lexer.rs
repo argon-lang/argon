@@ -59,7 +59,9 @@ impl<'a, R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized> Lexer<'a, R, 
     }
 }
 
-impl<'a, R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized> TokenReader for Lexer<'a, R, ER> {
+impl<'a, R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized> TokenReader
+    for Lexer<'a, R, ER>
+{
     fn next_token(&mut self, mode: LexerMode) -> LexedToken {
         match mode {
             LexerMode::Normal => NormalTokenProcessor::next_token(self),

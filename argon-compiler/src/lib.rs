@@ -1,11 +1,10 @@
 pub mod access;
+pub mod erased_sig;
 pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
-pub mod erased_sig;
 
-use std::collections::hash_map::Entry;
 pub use crate::access::AccessModifierGlobal;
 pub use crate::signature::FunctionSignature;
 use argon_expr::ExprContext;
@@ -14,25 +13,26 @@ pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
 };
-use argon_util::{CompileError, ErrorReporter};
+use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
 use esexpr::ESExpr;
 use nonempty_collections::NEVec;
+use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
-use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 
 pub trait CompileErrorReporter:
-    ErrorReporter<CompileError> + ErrorReporter<std::io::Error> + ErrorReporter<walkdir::Error>
+    ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
 {
 }
 
 impl<R> CompileErrorReporter for R where
-    R: ErrorReporter<CompileError> + ErrorReporter<std::io::Error> + ErrorReporter<walkdir::Error>
+    R: ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
 {
 }
 
@@ -142,13 +142,13 @@ pub struct TubeCollection {
     tubes: RwLock<HashMap<TubeName, Arc<Tube>>>,
 }
 
-pub struct TubeCollectionBuilder<'a> {
-    context: &'a Context,
+pub struct TubeCollectionBuilder {
+    context: Context,
     tube_collection: Arc<TubeCollection>,
 }
 
-impl<'a> TubeCollectionBuilder<'a> {
-    pub fn new(context: &'a Context) -> Self {
+impl TubeCollectionBuilder {
+    pub fn new(context: Context) -> Self {
         Self {
             context,
             tube_collection: Arc::new(TubeCollection {
@@ -282,13 +282,16 @@ impl Module {
         &self.path
     }
 
-    pub fn named_exports(&self, name: &Identifier) -> Option<MappedRwLockReadGuard<'_, NEVec<ModuleExportEntry>>> {
-        RwLockReadGuard::try_map(self.exports.read(), |exports| {
-            exports.get(name)
-        }).ok()
+    pub fn named_exports(
+        &self,
+        name: &Identifier,
+    ) -> Option<MappedRwLockReadGuard<'_, NEVec<ModuleExportEntry>>> {
+        RwLockReadGuard::try_map(self.exports.read(), |exports| exports.get(name)).ok()
     }
 
-    pub fn export_groups(&self) -> RwLockReadGuard<'_, HashMap<Identifier, NEVec<ModuleExportEntry>>> {
+    pub fn export_groups(
+        &self,
+    ) -> RwLockReadGuard<'_, HashMap<Identifier, NEVec<ModuleExportEntry>>> {
         self.exports.read()
     }
 }

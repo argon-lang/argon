@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["argon-cli","argon-compiler","argon-expr","argon-format","argon-parser", "argon-prover", "argon-source","argon-testcases", "argon-tube","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-cli","argon-compiler","argon-expr","argon-format","argon-parser", "argon-prover", "argon-runner", "argon-source","argon-testcases", "argon-tube","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
 argon-compiler = { path = "argon-compiler" }
@@ -9,6 +9,9 @@ argon-expr = { path = "argon-expr" }
 argon-format = { path = "argon-format" }
 argon-parser = { path = "argon-parser" }
 argon-prover = { path = "argon-prover" }
+argon-runner = { path = "argon-runner" }
+argon-source = { path = "argon-source" }
+argon-tube = { path = "argon-tube" }
 esexpr = { path = "../esexpr/rust/esexpr" }
 esexpr-binary = { path = "../esexpr/rust/esexpr-binary" }
 noble-idl-compiler-rust = { path = "../noble-idl/langs/rust/backend" }
@@ -69,4 +72,3 @@ struct_field_names = "allow"
 too_many_arguments = "allow"
 new_without_default = "allow"
 enum_glob_use = "allow"
-

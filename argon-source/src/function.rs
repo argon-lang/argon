@@ -1,17 +1,17 @@
-use crate::module::{DeclarationResult, DeclarationClosure};
 use crate::modifiers::{
     ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser,
 };
-use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use crate::module::{DeclarationClosure, DeclarationResult};
+use crate::signature::SignatureParser;
+use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
     Context, DefaultExprContext, EffectInfo, Function, FunctionImplementation, FunctionMetadata,
     Unload,
 };
+use argon_expr::ExpressionOwner;
 use argon_parser::ast;
 use std::sync::{Arc, Mutex};
-use argon_expr::ExpressionOwner;
-use crate::signature::SignatureParser;
 
 pub struct SourceFunction {
     context: Context,
@@ -28,7 +28,8 @@ impl SourceFunction {
         closure: Box<dyn DeclarationClosure>,
         decl: Box<ast::FunctionDeclarationStmt>,
     ) -> DeclarationResult<Self> {
-        let mut modifiers = ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
+        let mut modifiers =
+            ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
         let access = modifiers.parse(&ACCESS_MODIFIER_GLOBAL);
         let metadata = FunctionMetadata {
             is_inline: modifiers.parse(&IS_INLINE),
@@ -91,7 +92,8 @@ impl Function for SourceFunction {
             scope: &mut scope,
             access_token,
             owner,
-        }.parse(&self.decl.parameters, &self.decl.return_type);
+        }
+        .parse(&self.decl.parameters, &self.decl.return_type);
 
         let result = Arc::new(sig);
         *sig_store = Some(result.clone());

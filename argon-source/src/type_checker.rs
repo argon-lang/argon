@@ -470,7 +470,9 @@ impl RecordingTypeChecker<Context> {
                     ast::BinaryOperator::LessThan => ast::BinaryOperatorIdentifier::LessThan,
                     ast::BinaryOperator::LessThanEq => ast::BinaryOperatorIdentifier::LessThanEq,
                     ast::BinaryOperator::GreaterThan => ast::BinaryOperatorIdentifier::GreaterThan,
-                    ast::BinaryOperator::GreaterThanEq => ast::BinaryOperatorIdentifier::GreaterThanEq,
+                    ast::BinaryOperator::GreaterThanEq => {
+                        ast::BinaryOperatorIdentifier::GreaterThanEq
+                    }
                     ast::BinaryOperator::BitOr => ast::BinaryOperatorIdentifier::BitOr,
                     ast::BinaryOperator::BitXOr => ast::BinaryOperatorIdentifier::BitXOr,
                     ast::BinaryOperator::BitAnd => ast::BinaryOperatorIdentifier::BitAnd,
@@ -970,11 +972,7 @@ impl RecordingTypeChecker<Context> {
     ) -> CallInfo<'a> {
         CallInfo {
             location,
-            callee: self.process_lookup(
-                tc_context,
-                op_location,
-                &Identifier::UnaryOp(op),
-            ),
+            callee: self.process_lookup(tc_context, op_location, &Identifier::UnaryOp(op)),
             arguments: VecDeque::from([ArgumentInfo {
                 call_location: location,
                 arg,
