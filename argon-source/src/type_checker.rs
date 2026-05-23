@@ -1,13 +1,14 @@
-use argon_compiler::scope::{LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope};
+use argon_compiler::scope::{
+    LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope,
+};
 use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable};
 use argon_parser::ast;
-use argon_parser::ast::{FunctionParameterListType, IdentifierExpr, StringFragment};
+use argon_parser::ast::{FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
-
 
 pub struct TypeChecker<'a> {
     pub context: Context,
@@ -15,7 +16,10 @@ pub struct TypeChecker<'a> {
 }
 
 impl<'a> TypeChecker<'a> {
-    pub fn type_check_type_expr(&mut self, e: &WithLocation<ast::Expr>) -> Expr<DefaultExprContext> {
+    pub fn type_check_type_expr(
+        &mut self,
+        e: &WithLocation<ast::Expr>,
+    ) -> Expr<DefaultExprContext> {
         let mut checker = RecordingTypeChecker::new(self.context.clone());
         let mut shifted_scope = ShiftedScope::new(self.scope, DefaultToTypeCheckExprContextShifter);
         let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
@@ -27,7 +31,6 @@ impl<'a> TypeChecker<'a> {
         TypeCheckToDefaultExprContextShifter.shift(expr)
     }
 }
-
 
 #[derive(Debug, Clone)]
 pub struct TypeCheckExprContext {}
@@ -157,7 +160,7 @@ impl<'a> RecordingScope<'a> {
 impl<'a> Scope for RecordingScope<'a> {
     type ExprContext = TypeCheckExprContext;
 
-    fn lookup(&mut self, name: &IdentifierExpr) -> Lookup<TypeCheckExprContext> {
+    fn lookup(&mut self, name: &Identifier) -> Lookup<TypeCheckExprContext> {
         let lookup = self.scope.lookup(name);
 
         if let Lookup::Variable(variable) = &lookup
@@ -169,7 +172,7 @@ impl<'a> Scope for RecordingScope<'a> {
         lookup
     }
 
-    fn lookup_assign(&mut self, name: &IdentifierExpr) -> Lookup<TypeCheckExprContext> {
+    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<TypeCheckExprContext> {
         let lookup = self.scope.lookup_assign(name);
 
         if let Lookup::Variable(variable) = &lookup
@@ -450,12 +453,53 @@ impl RecordingTypeChecker<Context> {
             }
 
             ast::Expr::BinaryOperation { a, op, b } => {
-                let call = self.process_binary_operator(tc_context, &expr.location, a, op, b);
+                let op_id = match op.value {
+                    ast::BinaryOperator::Assign => todo!(),
+                    ast::BinaryOperator::LogicalOr => todo!(),
+                    ast::BinaryOperator::LogicalAnd => todo!(),
+                    ast::BinaryOperator::PropEqual => todo!(),
+                    ast::BinaryOperator::PropDisjunction => todo!(),
+                    ast::BinaryOperator::PropConjunction => todo!(),
+
+                    ast::BinaryOperator::Plus => ast::BinaryOperatorIdentifier::Plus,
+                    ast::BinaryOperator::Minus => ast::BinaryOperatorIdentifier::Minus,
+                    ast::BinaryOperator::Mul => ast::BinaryOperatorIdentifier::Mul,
+                    ast::BinaryOperator::Div => ast::BinaryOperatorIdentifier::Div,
+                    ast::BinaryOperator::Equal => ast::BinaryOperatorIdentifier::Equal,
+                    ast::BinaryOperator::NotEqual => ast::BinaryOperatorIdentifier::NotEqual,
+                    ast::BinaryOperator::LessThan => ast::BinaryOperatorIdentifier::LessThan,
+                    ast::BinaryOperator::LessThanEq => ast::BinaryOperatorIdentifier::LessThanEq,
+                    ast::BinaryOperator::GreaterThan => ast::BinaryOperatorIdentifier::GreaterThan,
+                    ast::BinaryOperator::GreaterThanEq => ast::BinaryOperatorIdentifier::GreaterThanEq,
+                    ast::BinaryOperator::BitOr => ast::BinaryOperatorIdentifier::BitOr,
+                    ast::BinaryOperator::BitXOr => ast::BinaryOperatorIdentifier::BitXOr,
+                    ast::BinaryOperator::BitAnd => ast::BinaryOperatorIdentifier::BitAnd,
+                    ast::BinaryOperator::ShiftLeft => ast::BinaryOperatorIdentifier::ShiftLeft,
+                    ast::BinaryOperator::ShiftRight => ast::BinaryOperatorIdentifier::ShiftRight,
+                    ast::BinaryOperator::Concat => ast::BinaryOperatorIdentifier::Concat,
+                };
+
+                let call = self.process_binary_operator(
+                    tc_context,
+                    &expr.location,
+                    a,
+                    op_id,
+                    &op.location,
+                    b,
+                );
                 self.infer_call(tc_context, call)
             }
 
             ast::Expr::UnaryOperation { op, a } => {
-                let call = self.process_unary_operator(tc_context, &expr.location, op, a);
+                let op_id = match op.value {
+                    ast::UnaryOperator::Plus => ast::UnaryOperatorIdentifier::Plus,
+                    ast::UnaryOperator::Minus => ast::UnaryOperatorIdentifier::Minus,
+                    ast::UnaryOperator::BitNot => ast::UnaryOperatorIdentifier::BitNot,
+                    ast::UnaryOperator::LogicalNot => ast::UnaryOperatorIdentifier::LogicalNot,
+                };
+
+                let call =
+                    self.process_unary_operator(tc_context, &expr.location, op_id, &op.location, a);
                 self.infer_call(tc_context, call)
             }
 
@@ -894,16 +938,13 @@ impl RecordingTypeChecker<Context> {
         tc_context: &mut impl TypeCheckContext,
         location: &'a Location,
         left: &'a WithLocation<ast::Expr>,
-        op: &'a WithLocation<ast::BinaryOperator>,
+        op: ast::BinaryOperatorIdentifier,
+        op_location: &'a Location,
         right: &'a WithLocation<ast::Expr>,
     ) -> CallInfo<'a> {
         CallInfo {
             location,
-            callee: self.process_lookup(
-                tc_context,
-                &op.location,
-                &IdentifierExpr::BinaryOp(op.value),
-            ),
+            callee: self.process_lookup(tc_context, op_location, &Identifier::BinaryOp(op)),
             arguments: VecDeque::from([
                 ArgumentInfo {
                     call_location: location,
@@ -923,15 +964,16 @@ impl RecordingTypeChecker<Context> {
         &mut self,
         tc_context: &mut impl TypeCheckContext,
         location: &'a Location,
-        op: &'a WithLocation<ast::UnaryOperator>,
+        op: ast::UnaryOperatorIdentifier,
+        op_location: &'a Location,
         arg: &'a WithLocation<ast::Expr>,
     ) -> CallInfo<'a> {
         CallInfo {
             location,
             callee: self.process_lookup(
                 tc_context,
-                &op.location,
-                &IdentifierExpr::UnaryOp(op.value),
+                op_location,
+                &Identifier::UnaryOp(op),
             ),
             arguments: VecDeque::from([ArgumentInfo {
                 call_location: location,
@@ -945,7 +987,7 @@ impl RecordingTypeChecker<Context> {
         &mut self,
         tc_context: &mut impl TypeCheckContext,
         location: &Location,
-        identifier: &IdentifierExpr,
+        identifier: &Identifier,
     ) -> CalleeInfo<'a> {
         match tc_context.scope_mut().lookup(identifier) {
             Lookup::Empty => {
@@ -1058,11 +1100,11 @@ mod tests {
     impl Scope for TestScope {
         type ExprContext = TypeCheckExprContext;
 
-        fn lookup(&mut self, _name: &IdentifierExpr) -> Lookup<TypeCheckExprContext> {
+        fn lookup(&mut self, _name: &Identifier) -> Lookup<TypeCheckExprContext> {
             panic!("lookup is not needed for builtin tests")
         }
 
-        fn lookup_assign(&mut self, _name: &IdentifierExpr) -> Lookup<TypeCheckExprContext> {
+        fn lookup_assign(&mut self, _name: &Identifier) -> Lookup<TypeCheckExprContext> {
             panic!("lookup_assign is not needed for builtin tests")
         }
     }

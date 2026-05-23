@@ -1,5 +1,5 @@
 use argon_parser::ast::FunctionParameterListType;
-use argon_parser::ast::{IdentifierExpr, NewTraitObjectBodyStmt, Pattern};
+use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
 use nonempty_collections::NEVec;
 use num_bigint::BigInt;
 use std::convert::Infallible;
@@ -48,14 +48,14 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
 pub trait ExprContextShifter {
     type EC1: ExprContext + ?Sized;
     type EC2: ExprContext<
-        Function = <Self::EC1 as ExprContext>::Function,
-        Record = <Self::EC1 as ExprContext>::Record,
-        Enum = <Self::EC1 as ExprContext>::Enum,
-        Trait = <Self::EC1 as ExprContext>::Trait,
-        EnumVariant = <Self::EC1 as ExprContext>::EnumVariant,
-        Method = <Self::EC1 as ExprContext>::Method,
-        Instance = <Self::EC1 as ExprContext>::Instance,
-    > + ?Sized;
+            Function = <Self::EC1 as ExprContext>::Function,
+            Record = <Self::EC1 as ExprContext>::Record,
+            Enum = <Self::EC1 as ExprContext>::Enum,
+            Trait = <Self::EC1 as ExprContext>::Trait,
+            EnumVariant = <Self::EC1 as ExprContext>::EnumVariant,
+            Method = <Self::EC1 as ExprContext>::Method,
+            Instance = <Self::EC1 as ExprContext>::Instance,
+        > + ?Sized;
 
     fn shift_hole(&self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2>;
 
@@ -67,7 +67,6 @@ pub trait ExprContextShifter {
         todo!()
     }
 }
-
 
 #[derive(Debug)]
 pub enum Expr<EC: ExprContext + ?Sized> {
@@ -94,10 +93,10 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     Dot {
         o: Box<Expr<EC>>,
-        member: IdentifierExpr,
+        member: Identifier,
     },
     FunctionLiteral {
-        parameter_name: Option<IdentifierExpr>,
+        parameter_name: Option<Identifier>,
         body: Box<Expr<EC>>,
     },
     FunctionCall {
@@ -164,7 +163,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     BigType(BigInt),
     Variable(Variable<EC>),
     While {
-        label: Option<IdentifierExpr>,
+        label: Option<Identifier>,
         condition: Box<Expr<EC>>,
         body: Box<Expr<EC>>,
     },
@@ -504,7 +503,7 @@ impl<EC: ExprContext + ?Sized> Clone for MatchCase<EC> {
 
 #[derive(Debug)]
 pub struct RecordFieldLiteral<EC: ExprContext + ?Sized> {
-    pub name: IdentifierExpr,
+    pub name: Identifier,
     pub value: Expr<EC>,
 }
 
@@ -516,8 +515,6 @@ impl<EC: ExprContext + ?Sized> Clone for RecordFieldLiteral<EC> {
         }
     }
 }
-
-
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ErasureMode {
@@ -532,8 +529,8 @@ pub enum Variable<EC: ExprContext + ?Sized> {
     Parameter(Arc<ParameterVariable<EC>>),
 }
 
-impl <EC: ExprContext + ?Sized> Variable<EC> {
-    pub fn name(&self) -> Option<&IdentifierExpr> {
+impl<EC: ExprContext + ?Sized> Variable<EC> {
+    pub fn name(&self) -> Option<&Identifier> {
         match self {
             Variable::Local(variable) => Some(&variable.name),
             Variable::Parameter(variable) => variable.name.as_ref(),
@@ -585,7 +582,7 @@ impl<EC: ExprContext + ?Sized> Hash for Variable<EC> {
 
 #[derive(Debug)]
 pub struct LocalVariable<EC: ExprContext + ?Sized> {
-    pub name: IdentifierExpr,
+    pub name: Identifier,
     pub var_type: Expr<EC>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
@@ -597,7 +594,7 @@ pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub owner: ExpressionOwner<EC>,
     pub parameter_index: usize,
     pub var_type: Expr<EC>,
-    pub name: Option<IdentifierExpr>,
+    pub name: Option<Identifier>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
 }

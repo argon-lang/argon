@@ -92,9 +92,11 @@ dependencies = [
  "argon-parser",
  "argon-util",
  "dashmap",
+ "esexpr",
  "nonempty-collections",
  "num-bigint",
  "num-traits",
+ "parking_lot",
  "parse18-runtime",
  "percent-encoding",
  "rpds",
@@ -171,7 +173,15 @@ dependencies = [
 
 [[package]]
 name = "argon-tube"
-version = "0.1.0"
+version = "0.0.0"
+dependencies = [
+ "argon-compiler",
+ "argon-format",
+ "argon-util",
+ "esexpr",
+ "esexpr-binary",
+ "num-bigint",
+]
 
 [[package]]
 name = "argon-util"
@@ -771,6 +781,16 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "parking_lot"
+version = "0.12.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+dependencies = [
+ "lock_api",
+ "parking_lot_core",
+]
 
 [[package]]
 name = "parking_lot_core"

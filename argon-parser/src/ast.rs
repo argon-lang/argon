@@ -78,7 +78,7 @@ impl DeclarationStmt {
         }
     }
 
-    pub fn name(&self) -> &WithLocation<IdentifierExpr> {
+    pub fn name(&self) -> &WithLocation<Identifier> {
         match self {
             DeclarationStmt::Function(x) => &x.name,
             DeclarationStmt::Record(x) => &x.name,
@@ -94,7 +94,7 @@ impl DeclarationStmt {
 pub struct FunctionDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
     pub purity: bool,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: WithLocation<ReturnTypeSpecifier>,
     pub body: FunctionBody,
@@ -104,7 +104,7 @@ pub struct FunctionDeclarationStmt {
 pub struct VariableDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
     pub is_mutable: bool,
-    pub name: Option<IdentifierExpr>,
+    pub name: Option<Identifier>,
     pub var_type: Option<WithLocation<Expr>>,
     pub value: WithLocation<Expr>,
 }
@@ -112,7 +112,7 @@ pub struct VariableDeclarationStmt {
 #[derive(Debug, Clone)]
 pub struct RecordDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: Option<WithLocation<Expr>>,
     pub body: Vec<WithLocation<RecordBodyStmt>>,
@@ -121,14 +121,14 @@ pub struct RecordDeclarationStmt {
 #[derive(Debug, Clone)]
 pub struct RecordField {
     pub is_mutable: bool,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub field_type: WithLocation<Expr>,
 }
 
 #[derive(Debug, Clone)]
 pub struct EnumDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: Option<WithLocation<Expr>>,
     pub body: Vec<WithLocation<EnumBodyStmt>>,
@@ -138,7 +138,7 @@ pub struct EnumDeclarationStmt {
 pub enum EnumVariant {
     Constructor {
         modifiers: Vec<WithLocation<Modifier>>,
-        name: WithLocation<IdentifierExpr>,
+        name: WithLocation<Identifier>,
         parameters: Vec<WithLocation<FunctionParameterList>>,
         return_type: Option<WithLocation<Expr>>,
     },
@@ -148,7 +148,7 @@ pub enum EnumVariant {
 #[derive(Debug, Clone)]
 pub struct TraitDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: Option<WithLocation<Expr>>,
     pub body: Vec<WithLocation<TraitBodyStmt>>,
@@ -158,9 +158,9 @@ pub struct TraitDeclarationStmt {
 pub struct MethodDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
     pub purity: bool,
-    pub instance_name: WithLocation<Option<IdentifierExpr>>,
+    pub instance_name: WithLocation<Option<Identifier>>,
     pub instance_type: Option<WithLocation<Expr>>,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: WithLocation<ReturnTypeSpecifier>,
     pub body: Option<FunctionBody>,
@@ -169,7 +169,7 @@ pub struct MethodDeclarationStmt {
 #[derive(Debug, Clone)]
 pub struct InstanceDeclarationStmt {
     pub modifiers: Vec<WithLocation<Modifier>>,
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: Option<WithLocation<Expr>>,
     pub body: Vec<WithLocation<TraitBodyStmt>>,
@@ -178,7 +178,7 @@ pub struct InstanceDeclarationStmt {
 #[derive(Debug, Clone)]
 pub struct FunctionParameter {
     pub param_type: WithLocation<Expr>,
-    pub name: IdentifierExpr,
+    pub name: Identifier,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -262,11 +262,11 @@ pub enum ImportPathSegment {
         segments: Vec<ImportPathSegment>,
     },
     Renaming {
-        importing: WithLocation<IdentifierExpr>,
-        viewed_name: WithLocation<Option<IdentifierExpr>>,
+        importing: WithLocation<Identifier>,
+        viewed_name: WithLocation<Option<Identifier>>,
     },
     Imported {
-        id: WithLocation<IdentifierExpr>,
+        id: WithLocation<Identifier>,
     },
     Wildcard {
         location: Location,
@@ -304,15 +304,15 @@ pub enum Expr {
     },
     BoolLiteral(bool),
     Break {
-        label: Option<WithLocation<IdentifierExpr>>,
+        label: Option<WithLocation<Identifier>>,
     },
     Builtin(String),
     Dot {
         o: Box<WithLocation<Expr>>,
-        member: WithLocation<IdentifierExpr>,
+        member: WithLocation<Identifier>,
     },
     FunctionLiteral {
-        parameter_name: Option<IdentifierExpr>,
+        parameter_name: Option<Identifier>,
         body: Box<WithLocation<Expr>>,
     },
     FunctionCall {
@@ -336,7 +336,7 @@ pub enum Expr {
         pattern: WithLocation<Pattern>,
     },
     Loop {
-        label: Option<WithLocation<IdentifierExpr>>,
+        label: Option<WithLocation<Identifier>>,
         body: WithLocation<Vec<WithLocation<Stmt>>>,
     },
     Match {
@@ -348,7 +348,7 @@ pub enum Expr {
         body: Vec<WithLocation<NewTraitObjectBodyStmt>>,
     },
     Next {
-        label: Option<WithLocation<IdentifierExpr>>,
+        label: Option<WithLocation<Identifier>>,
     },
     Paren(Box<WithLocation<Expr>>),
     Raise {
@@ -359,7 +359,7 @@ pub enum Expr {
         fields: WithLocation<Vec<WithLocation<RecordFieldLiteral>>>,
     },
     Redo {
-        label: Option<WithLocation<IdentifierExpr>>,
+        label: Option<WithLocation<Identifier>>,
     },
     StringLiteral(StringLiteral),
     Summon {
@@ -375,7 +375,7 @@ pub enum Expr {
         a: Box<WithLocation<Expr>>,
     },
     While {
-        label: Option<WithLocation<IdentifierExpr>>,
+        label: Option<WithLocation<Identifier>>,
         condition: WithLocation<Vec<WithLocation<Stmt>>>,
         body: WithLocation<Vec<WithLocation<Stmt>>>,
     },
@@ -388,28 +388,28 @@ pub enum Expr {
     Unbox {
         value: Box<WithLocation<Expr>>,
     },
-    Identifier(IdentifierExpr),
+    Identifier(Identifier),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum IdentifierExpr {
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Identifier {
     Named(String),
-    BinaryOp(BinaryOperator),
-    UnaryOp(UnaryOperator),
-    Extension(Box<IdentifierExpr>),
-    Inverse(Box<IdentifierExpr>),
-    Update(Box<IdentifierExpr>),
+    BinaryOp(BinaryOperatorIdentifier),
+    UnaryOp(UnaryOperatorIdentifier),
+    Extension(Box<Identifier>),
+    Inverse(Box<Identifier>),
+    Update(Box<Identifier>),
 }
 
-impl Display for IdentifierExpr {
+impl Display for Identifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            IdentifierExpr::Named(name) => write!(f, "{}", name),
-            IdentifierExpr::BinaryOp(op) => write!(f, "binary operator {}", op.symbol()),
-            IdentifierExpr::UnaryOp(op) => write!(f, "unary operator {}", op.symbol()),
-            IdentifierExpr::Extension(inner) => write!(f, "extension {}", inner),
-            IdentifierExpr::Inverse(inner) => write!(f, "inverse {}", inner),
-            IdentifierExpr::Update(inner) => write!(f, "update {}", inner),
+            Identifier::Named(name) => write!(f, "{}", name),
+            Identifier::BinaryOp(op) => write!(f, "binary operator {}", op.symbol()),
+            Identifier::UnaryOp(op) => write!(f, "unary operator {}", op.symbol()),
+            Identifier::Extension(inner) => write!(f, "extension {}", inner),
+            Identifier::Inverse(inner) => write!(f, "inverse {}", inner),
+            Identifier::Update(inner) => write!(f, "update {}", inner),
         }
     }
 }
@@ -422,7 +422,7 @@ pub enum FunctionBody {
 
 #[derive(Debug, Clone)]
 pub struct RecordFieldLiteral {
-    pub name: WithLocation<IdentifierExpr>,
+    pub name: WithLocation<Identifier>,
     pub value: WithLocation<Expr>,
 }
 
@@ -439,6 +439,122 @@ pub enum StringFragment {
 
 pub trait Operator: Copy {
     fn symbol(self) -> &'static str;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BinaryOperatorIdentifier {
+    Plus,
+    Minus,
+    Mul,
+    Div,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanEq,
+    GreaterThan,
+    GreaterThanEq,
+    BitOr,
+    BitXOr,
+    BitAnd,
+    ShiftLeft,
+    ShiftRight,
+    Concat,
+}
+
+impl TryFrom<BinaryOperator> for BinaryOperatorIdentifier {
+    type Error = ();
+
+    fn try_from(op: BinaryOperator) -> Result<Self, Self::Error> {
+        match op {
+            BinaryOperator::Plus => Ok(BinaryOperatorIdentifier::Plus),
+            BinaryOperator::Minus => Ok(BinaryOperatorIdentifier::Minus),
+            BinaryOperator::Mul => Ok(BinaryOperatorIdentifier::Mul),
+            BinaryOperator::Div => Ok(BinaryOperatorIdentifier::Div),
+            BinaryOperator::Equal => Ok(BinaryOperatorIdentifier::Equal),
+            BinaryOperator::NotEqual => Ok(BinaryOperatorIdentifier::NotEqual),
+            BinaryOperator::LessThan => Ok(BinaryOperatorIdentifier::LessThan),
+            BinaryOperator::LessThanEq => Ok(BinaryOperatorIdentifier::LessThanEq),
+            BinaryOperator::GreaterThan => Ok(BinaryOperatorIdentifier::GreaterThan),
+            BinaryOperator::GreaterThanEq => Ok(BinaryOperatorIdentifier::GreaterThanEq),
+            BinaryOperator::BitOr => Ok(BinaryOperatorIdentifier::BitOr),
+            BinaryOperator::BitXOr => Ok(BinaryOperatorIdentifier::BitXOr),
+            BinaryOperator::BitAnd => Ok(BinaryOperatorIdentifier::BitAnd),
+            BinaryOperator::ShiftLeft => Ok(BinaryOperatorIdentifier::ShiftLeft),
+            BinaryOperator::ShiftRight => Ok(BinaryOperatorIdentifier::ShiftRight),
+            BinaryOperator::Concat => Ok(BinaryOperatorIdentifier::Concat),
+            BinaryOperator::Assign
+            | BinaryOperator::LogicalOr
+            | BinaryOperator::LogicalAnd
+            | BinaryOperator::PropEqual
+            | BinaryOperator::PropDisjunction
+            | BinaryOperator::PropConjunction => Err(()),
+        }
+    }
+}
+
+impl From<BinaryOperatorIdentifier> for BinaryOperator {
+    fn from(op: BinaryOperatorIdentifier) -> Self {
+        match op {
+            BinaryOperatorIdentifier::Plus => BinaryOperator::Plus,
+            BinaryOperatorIdentifier::Minus => BinaryOperator::Minus,
+            BinaryOperatorIdentifier::Mul => BinaryOperator::Mul,
+            BinaryOperatorIdentifier::Div => BinaryOperator::Div,
+            BinaryOperatorIdentifier::Equal => BinaryOperator::Equal,
+            BinaryOperatorIdentifier::NotEqual => BinaryOperator::NotEqual,
+            BinaryOperatorIdentifier::LessThan => BinaryOperator::LessThan,
+            BinaryOperatorIdentifier::LessThanEq => BinaryOperator::LessThanEq,
+            BinaryOperatorIdentifier::GreaterThan => BinaryOperator::GreaterThan,
+            BinaryOperatorIdentifier::GreaterThanEq => BinaryOperator::GreaterThanEq,
+            BinaryOperatorIdentifier::BitOr => BinaryOperator::BitOr,
+            BinaryOperatorIdentifier::BitXOr => BinaryOperator::BitXOr,
+            BinaryOperatorIdentifier::BitAnd => BinaryOperator::BitAnd,
+            BinaryOperatorIdentifier::ShiftLeft => BinaryOperator::ShiftLeft,
+            BinaryOperatorIdentifier::ShiftRight => BinaryOperator::ShiftRight,
+            BinaryOperatorIdentifier::Concat => BinaryOperator::Concat,
+        }
+    }
+}
+
+impl Operator for BinaryOperatorIdentifier {
+    fn symbol(self) -> &'static str {
+        BinaryOperator::from(self).symbol()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum UnaryOperatorIdentifier {
+    Plus,
+    Minus,
+    BitNot,
+    LogicalNot,
+}
+
+impl From<UnaryOperator> for UnaryOperatorIdentifier {
+    fn from(op: UnaryOperator) -> Self {
+        match op {
+            UnaryOperator::Plus => UnaryOperatorIdentifier::Plus,
+            UnaryOperator::Minus => UnaryOperatorIdentifier::Minus,
+            UnaryOperator::BitNot => UnaryOperatorIdentifier::BitNot,
+            UnaryOperator::LogicalNot => UnaryOperatorIdentifier::LogicalNot,
+        }
+    }
+}
+
+impl From<UnaryOperatorIdentifier> for UnaryOperator {
+    fn from(op: UnaryOperatorIdentifier) -> Self {
+        match op {
+            UnaryOperatorIdentifier::Plus => UnaryOperator::Plus,
+            UnaryOperatorIdentifier::Minus => UnaryOperator::Minus,
+            UnaryOperatorIdentifier::BitNot => UnaryOperator::BitNot,
+            UnaryOperatorIdentifier::LogicalNot => UnaryOperator::LogicalNot,
+        }
+    }
+}
+
+impl Operator for UnaryOperatorIdentifier {
+    fn symbol(self) -> &'static str {
+        UnaryOperator::from(self).symbol()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -566,7 +682,7 @@ pub enum Pattern {
     },
     Binding {
         is_mutable: bool,
-        name: WithLocation<IdentifierExpr>,
+        name: WithLocation<Identifier>,
         pattern: Box<WithLocation<Pattern>>,
     },
     Constructor {
@@ -587,16 +703,16 @@ pub enum Pattern {
 pub enum PatternPath {
     Member {
         base: Box<WithLocation<PatternPath>>,
-        member: WithLocation<IdentifierExpr>,
+        member: WithLocation<Identifier>,
     },
     Base {
-        name: WithLocation<IdentifierExpr>,
+        name: WithLocation<Identifier>,
     },
 }
 
 #[derive(Debug, Clone)]
 pub struct RecordFieldPattern {
-    pub field_name: WithLocation<IdentifierExpr>,
+    pub field_name: WithLocation<Identifier>,
     pub pattern: WithLocation<Pattern>,
 }
 
@@ -620,8 +736,8 @@ pub struct ModulePatternMapping {
 #[derive(Debug, Clone)]
 pub enum ModulePatternSegment {
     Named { name: String },
-    Star { bound_name: IdentifierExpr },
-    DoubleStar { bound_name: IdentifierExpr },
+    Star { bound_name: Identifier },
+    DoubleStar { bound_name: Identifier },
 }
 
 #[derive(Debug, Clone)]

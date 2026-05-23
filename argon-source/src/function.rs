@@ -2,12 +2,14 @@ use crate::module::{DeclarationResult, DeclarationClosure};
 use crate::modifiers::{
     ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser,
 };
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
     Context, DefaultExprContext, EffectInfo, Function, FunctionImplementation, FunctionMetadata,
+    Unload,
 };
 use argon_parser::ast;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 use argon_expr::ExpressionOwner;
 use crate::signature::SignatureParser;
 
@@ -16,8 +18,8 @@ pub struct SourceFunction {
     decl: Box<ast::FunctionDeclarationStmt>,
     closure: Box<dyn DeclarationClosure>,
     metadata: FunctionMetadata,
-    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
-    implementation: OnceLock<Arc<FunctionImplementation>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    implementation: Mutex<Option<Arc<FunctionImplementation>>>,
 }
 
 impl SourceFunction {
@@ -47,10 +49,17 @@ impl SourceFunction {
                 decl,
                 closure,
                 metadata,
-                signature: OnceLock::new(),
-                implementation: OnceLock::new(),
+                signature: Mutex::new(None),
+                implementation: Mutex::new(None),
             }),
         }
+    }
+}
+
+impl Unload for SourceFunction {
+    fn unload(&self) {
+        *self.signature.lock().unwrap() = None;
+        *self.implementation.lock().unwrap() = None;
     }
 }
 
@@ -59,26 +68,37 @@ impl Function for SourceFunction {
         &self.metadata
     }
 
+    fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
+        let signature = erase_signature(self.clone().signature().as_ref());
+        self.closure
+            .import_specifier(self.decl.name.value.clone(), signature)
+    }
+
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        self.signature.get_or_init(|| {
-            let mut scope = self.closure.scope();
-            let access_token = self.closure.access_token();
+        let mut sig_store = self.signature.lock().unwrap();
+        if let Some(ref sig) = *sig_store {
+            return sig.clone();
+        }
 
-            let owner_ref: Arc<dyn Function> = self.clone();
-            let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Function(owner_ref);
+        let mut scope = self.closure.scope();
+        let access_token = self.closure.access_token();
 
-            let sig = SignatureParser {
-                context: self.context.clone(),
-                scope: &mut scope,
-                access_token,
-                owner,
-            }.parse(&self.decl.parameters, &self.decl.return_type);
+        let owner_ref: Arc<dyn Function> = self.clone();
+        let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Function(owner_ref);
 
-            Arc::new(sig)
-        }).clone()
+        let sig = SignatureParser {
+            context: self.context.clone(),
+            scope: &mut scope,
+            access_token,
+            owner,
+        }.parse(&self.decl.parameters, &self.decl.return_type);
+
+        let result = Arc::new(sig);
+        *sig_store = Some(result.clone());
+        result
     }
 
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
-        Some(self.implementation.get_or_init(|| todo!()).clone())
+        todo!()
     }
 }

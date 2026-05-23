@@ -1,9 +1,15 @@
 [package]
 name = "argon-tube"
-version = "0.1.0"
+publish = false
 edition = "2024"
 
 [dependencies]
+argon-compiler = { workspace = true }
+argon-format = { workspace = true }
+argon-util = { workspace = true }
+esexpr = { workspace = true }
+esexpr-binary = { workspace = true }
+num-bigint = { workspace = true }
 
 [lints]
 workspace = true

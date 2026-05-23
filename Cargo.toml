@@ -6,9 +6,11 @@ members = ["argon-cli","argon-compiler","argon-expr","argon-format","argon-parse
 argon-compiler = { path = "argon-compiler" }
 argon-util = { path = "argon-util" }
 argon-expr = { path = "argon-expr" }
+argon-format = { path = "argon-format" }
 argon-parser = { path = "argon-parser" }
 argon-prover = { path = "argon-prover" }
 esexpr = { path = "../esexpr/rust/esexpr" }
+esexpr-binary = { path = "../esexpr/rust/esexpr-binary" }
 noble-idl-compiler-rust = { path = "../noble-idl/langs/rust/backend" }
 noble-idl-runtime = { path = "../noble-idl/langs/rust/runtime" }
 
@@ -19,6 +21,7 @@ encoding_rs = "0.8.35"
 nonempty-collections = "1.3.0"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"
+parking_lot = "0.12.5"
 parse18-lexer-gen = { path = "parse18/parse18-lexer-gen" }
 parse18-ll-gen = { path = "parse18/parse18-ll-gen" }
 parse18-runtime = { path = "parse18/parse18-runtime" }

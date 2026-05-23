@@ -1,26 +1,29 @@
 use crate::function::SourceFunction;
 use argon_compiler::access::{AccessModifierGlobal, AccessToken};
-use argon_compiler::{Context, DefaultExprContext, Function, ModuleExportBinding, ModuleExportEntry, ModulePath, TubeBuilder};
+use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
+use argon_compiler::scope::{Lookup, Scope};
+use argon_compiler::{
+    Context, DefaultExprContext, Function, ModuleExportBinding, ModuleExportEntry, ModulePath,
+    TubeBuilder, TubeName,
+};
 use argon_parser::ast;
-use argon_parser::ast::{ExportStmt, FunctionDeclarationStmt, IdentifierExpr, ImportStmt, Stmt};
+use argon_parser::ast::{ExportStmt, FunctionDeclarationStmt, Identifier, ImportStmt, Stmt};
 use argon_util::ErrorReporter;
 use parse18_runtime::WithLocation;
 use std::path::Path;
 use std::sync::Arc;
-use argon_compiler::scope::{Lookup, Scope};
 
 #[derive(Debug, Clone)]
-pub struct GlobalScope {
-}
+pub struct GlobalScope {}
 
 impl Scope for GlobalScope {
     type ExprContext = DefaultExprContext;
 
-    fn lookup(&mut self, name: &IdentifierExpr) -> Lookup<Self::ExprContext> {
+    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
         todo!()
     }
 
-    fn lookup_assign(&mut self, name: &IdentifierExpr) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
         todo!()
     }
 }
@@ -28,9 +31,12 @@ impl Scope for GlobalScope {
 pub trait DeclarationClosure: Sync + Send {
     fn scope(&self) -> GlobalScope;
     fn access_token(&self) -> AccessToken;
+    fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier;
 }
 
 struct ModuleClosure {
+    tube_name: TubeName,
+    module_path: ModulePath,
     imports: Vec<ImportStmt>,
 }
 
@@ -41,6 +47,15 @@ impl DeclarationClosure for ModuleClosure {
 
     fn access_token(&self) -> AccessToken {
         todo!()
+    }
+
+    fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier {
+        ImportSpecifier::Global {
+            tube: self.tube_name.clone(),
+            module: self.module_path.clone(),
+            name,
+            signature: Box::new(signature),
+        }
     }
 }
 
@@ -74,12 +89,11 @@ pub fn process_source_file(
     let module = tb.module(path.clone());
 
     let mut result = ModuleProcessResult {
-        path,
+        path: path.clone(),
         reexports: Vec::new(),
     };
 
     let mut imports = Vec::new();
-
 
     for stmt in module_decl.stmts {
         match stmt.value {
@@ -93,10 +107,12 @@ pub fn process_source_file(
 
             Stmt::FunctionDeclaration(decl) => {
                 let closure = Box::new(ModuleClosure {
+                    tube_name: tb.tube().name().clone(),
+                    module_path: path.clone(),
                     imports: imports.clone(),
                 });
 
-                let name = Some(decl.name.value.clone());
+                let name = decl.name.value.clone();
                 let func_res = SourceFunction::from_ast(context.clone(), closure, decl);
 
                 let entry = ModuleExportEntry {

@@ -1,10 +1,7 @@
 use crate::ast;
 use crate::ast::*;
 use crate::lexer::{LexedToken, LexerMode, TokenReader};
-use crate::token::{
-    BinaryOperator as TokenBinaryOperator, Token, TokenCategory,
-    UnaryOperator as TokenUnaryOperator,
-};
+use crate::token::{Token, TokenCategory};
 use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigInt;
 use parse18_runtime::{
@@ -100,66 +97,15 @@ fn declaration_stmt_to_new_trait_object_body_stmt(decl: DeclarationStmt) -> NewT
     }
 }
 
-fn token_binary_operator(token: Token) -> BinaryOperator {
-    let op = token
-        .binary_operator()
-        .unwrap_or_else(|| panic!("expected binary operator token"));
-    convert_binary_operator(op)
-}
-
-fn token_unary_operator(token: Token) -> UnaryOperator {
-    let op = token
-        .unary_operator()
-        .unwrap_or_else(|| panic!("expected unary operator token"));
-    convert_unary_operator(op)
-}
-
-fn convert_binary_operator(op: TokenBinaryOperator) -> BinaryOperator {
-    match op {
-        TokenBinaryOperator::LogicalAnd => BinaryOperator::LogicalAnd,
-        TokenBinaryOperator::LogicalOr => BinaryOperator::LogicalOr,
-        TokenBinaryOperator::Equal => BinaryOperator::Equal,
-        TokenBinaryOperator::NotEqual => BinaryOperator::NotEqual,
-        TokenBinaryOperator::LessThanEq => BinaryOperator::LessThanEq,
-        TokenBinaryOperator::GreaterThanEq => BinaryOperator::GreaterThanEq,
-        TokenBinaryOperator::ShiftLeft => BinaryOperator::ShiftLeft,
-        TokenBinaryOperator::ShiftRight => BinaryOperator::ShiftRight,
-        TokenBinaryOperator::Plus => BinaryOperator::Plus,
-        TokenBinaryOperator::Minus => BinaryOperator::Minus,
-        TokenBinaryOperator::Mul => BinaryOperator::Mul,
-        TokenBinaryOperator::Div => BinaryOperator::Div,
-        TokenBinaryOperator::BitAnd => BinaryOperator::BitAnd,
-        TokenBinaryOperator::BitOr => BinaryOperator::BitOr,
-        TokenBinaryOperator::BitXOr => BinaryOperator::BitXOr,
-        TokenBinaryOperator::LessThan => BinaryOperator::LessThan,
-        TokenBinaryOperator::GreaterThan => BinaryOperator::GreaterThan,
-        TokenBinaryOperator::Concat => BinaryOperator::Concat,
-        TokenBinaryOperator::PropEqual => BinaryOperator::PropEqual,
-        TokenBinaryOperator::PropDisjunction => BinaryOperator::PropDisjunction,
-        TokenBinaryOperator::PropConjunction => BinaryOperator::PropConjunction,
+fn binary_op(a: WithLocation<Expr>, op: WithLocation<BinaryOperator>, b: WithLocation<Expr>) -> Expr {
+    Expr::BinaryOperation {
+        a: Box::new(a),
+        op,
+        b: Box::new(b),
     }
 }
 
-fn convert_unary_operator(op: TokenUnaryOperator) -> UnaryOperator {
-    match op {
-        TokenUnaryOperator::LogicalNot => UnaryOperator::LogicalNot,
-        TokenUnaryOperator::Plus => UnaryOperator::Plus,
-        TokenUnaryOperator::Minus => UnaryOperator::Minus,
-        TokenUnaryOperator::BitNot => UnaryOperator::BitNot,
-    }
-}
-
-fn binary_op(a: WithLocation<Expr>, token: WithLocation<Token>, b: WithLocation<Expr>) -> Expr {
-    let op = token.map(|t| {
-        convert_binary_operator(t.binary_operator().expect("expected binary operator token"))
-    });
-    expr_binary_operation(a, op, b)
-}
-
-fn unary_op(token: WithLocation<Token>, a: WithLocation<Expr>) -> Expr {
-    let op = token.map(|t| {
-        convert_unary_operator(t.unary_operator().expect("expected unary operator token"))
-    });
+fn unary_op(op: WithLocation<UnaryOperator>, a: WithLocation<Expr>) -> Expr {
     Expr::UnaryOperation { op, a: Box::new(a) }
 }
 
@@ -222,7 +168,7 @@ fn token_string_text(token: Token) -> String {
     }
 }
 
-fn identifier_expr_named_token(token: Token) -> IdentifierExpr {
+fn identifier_expr_named_token(token: Token) -> Identifier {
     identifier_expr_named(token_identifier_name(token))
 }
 
@@ -262,7 +208,7 @@ fn if_expr_after_then_elsif(
 }
 
 fn expr_while_no_body(
-    label: Option<WithLocation<IdentifierExpr>>,
+    label: Option<WithLocation<Identifier>>,
     cond: WithLocation<Vec<WithLocation<Stmt>>>,
     end_keyword: WithLocation<Token>,
 ) -> Expr {
@@ -311,7 +257,7 @@ fn pattern_int_token(token: Token) -> Pattern {
     pattern_int(token_int_bigint(token))
 }
 
-fn pattern_binding_discard(mut_spec: bool, id: WithLocation<IdentifierExpr>) -> Pattern {
+fn pattern_binding_discard(mut_spec: bool, id: WithLocation<Identifier>) -> Pattern {
     let location = id.location.clone();
     pattern_binding(mut_spec, id, WithLocation::new(pattern_discard(), location))
 }
@@ -323,7 +269,7 @@ fn pattern_argument_from_path(path: WithLocation<PatternPath>) -> PatternArgumen
 }
 
 fn variable_declaration_rest_builder(
-    binding: (bool, Option<IdentifierExpr>, Option<WithLocation<Expr>>),
+    binding: (bool, Option<Identifier>, Option<WithLocation<Expr>>),
     value: WithLocation<Expr>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
     let (is_mutable, id, type_annotation) = binding;
@@ -333,8 +279,8 @@ fn variable_declaration_rest_builder(
 }
 
 fn method_declaration_stmt_rest_from_named_instance(
-    instance_name: WithLocation<IdentifierExpr>,
-    name: WithLocation<IdentifierExpr>,
+    instance_name: WithLocation<Identifier>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
@@ -355,7 +301,7 @@ fn method_declaration_stmt_rest_from_named_instance(
 
 fn method_declaration_stmt_rest_from_discard_instance(
     instance_name: WithLocation<Token>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
@@ -375,7 +321,7 @@ fn method_declaration_stmt_rest_from_discard_instance(
 }
 
 fn method_declaration_stmt_rest_function(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: FunctionBody,
@@ -390,7 +336,7 @@ fn function_body_extern_body_token(id: WithLocation<Token>) -> FunctionBody {
 }
 
 fn record_declaration_stmt_rest_builder(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<RecordBodyStmt>>,
@@ -405,7 +351,7 @@ fn record_body_stmt_record_field(field: RecordField) -> RecordBodyStmt {
 }
 
 fn enum_declaration_stmt_rest_builder(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<EnumBodyStmt>>,
@@ -438,7 +384,7 @@ fn enum_body_stmt_from_declaration_builder(
 }
 
 fn enum_constructor_variant_builder(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> EnumBodyStmt> {
@@ -448,7 +394,7 @@ fn enum_constructor_variant_builder(
 }
 
 fn trait_declaration_stmt_rest_builder(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
@@ -459,7 +405,7 @@ fn trait_declaration_stmt_rest_builder(
 }
 
 fn instance_declaration_stmt_rest_builder(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
@@ -483,7 +429,7 @@ fn import_path_segment_imported_token(id: WithLocation<Token>) -> ImportPathSegm
 
 fn import_path_segment_renaming_token(
     id: WithLocation<Token>,
-    viewed_name: WithLocation<Option<IdentifierExpr>>,
+    viewed_name: WithLocation<Option<Identifier>>,
 ) -> ImportPathSegment {
     import_path_segment_renaming(id.map(identifier_expr_named_token), viewed_name)
 }
@@ -576,18 +522,6 @@ fn expr_assert(t: WithLocation<Expr>) -> Expr {
     Expr::Assert { t: Box::new(t) }
 }
 
-fn expr_binary_operation(
-    a: WithLocation<Expr>,
-    op: WithLocation<BinaryOperator>,
-    b: WithLocation<Expr>,
-) -> Expr {
-    Expr::BinaryOperation {
-        a: Box::new(a),
-        op,
-        b: Box::new(b),
-    }
-}
-
 fn expr_block(
     body: WithLocation<Vec<WithLocation<Stmt>>>,
     finally_body: Option<WithLocation<Vec<WithLocation<Stmt>>>>,
@@ -603,18 +537,18 @@ fn expr_builtin(value: impl Into<String>) -> Expr {
     Expr::Builtin(value.into())
 }
 
-fn expr_identifier(id: IdentifierExpr) -> Expr {
+fn expr_identifier(id: Identifier) -> Expr {
     Expr::Identifier(id)
 }
 
-fn expr_dot(o: WithLocation<Expr>, member: WithLocation<IdentifierExpr>) -> Expr {
+fn expr_dot(o: WithLocation<Expr>, member: WithLocation<Identifier>) -> Expr {
     Expr::Dot {
         o: Box::new(o),
         member,
     }
 }
 
-fn expr_function_literal(parameter_name: Option<IdentifierExpr>, body: WithLocation<Expr>) -> Expr {
+fn expr_function_literal(parameter_name: Option<Identifier>, body: WithLocation<Expr>) -> Expr {
     Expr::FunctionLiteral {
         parameter_name,
         body: Box::new(body),
@@ -667,7 +601,7 @@ fn expr_is(value: WithLocation<Expr>, pattern: WithLocation<Pattern>) -> Expr {
 }
 
 fn expr_loop(
-    label: Option<WithLocation<IdentifierExpr>>,
+    label: Option<WithLocation<Identifier>>,
     body: WithLocation<Vec<WithLocation<Stmt>>>,
 ) -> Expr {
     Expr::Loop { label, body }
@@ -690,7 +624,7 @@ fn expr_new_trait_object(
     }
 }
 
-fn expr_next(label: Option<WithLocation<IdentifierExpr>>) -> Expr {
+fn expr_next(label: Option<WithLocation<Identifier>>) -> Expr {
     Expr::Next { label }
 }
 
@@ -708,7 +642,7 @@ fn expr_record_literal(
     }
 }
 
-fn expr_redo(label: Option<WithLocation<IdentifierExpr>>) -> Expr {
+fn expr_redo(label: Option<WithLocation<Identifier>>) -> Expr {
     Expr::Redo { label }
 }
 
@@ -732,7 +666,7 @@ where
 }
 
 fn expr_while(
-    label: Option<WithLocation<IdentifierExpr>>,
+    label: Option<WithLocation<Identifier>>,
     condition: WithLocation<Vec<WithLocation<Stmt>>>,
     body: WithLocation<Vec<WithLocation<Stmt>>>,
 ) -> Expr {
@@ -759,24 +693,24 @@ fn expr_unbox(value: WithLocation<Expr>) -> Expr {
     }
 }
 
-fn expr_break(label: Option<WithLocation<IdentifierExpr>>) -> Expr {
+fn expr_break(label: Option<WithLocation<Identifier>>) -> Expr {
     Expr::Break { label }
 }
 
-fn identifier_expr_named(name: impl Into<String>) -> IdentifierExpr {
-    IdentifierExpr::Named(name.into())
+fn identifier_expr_named(name: impl Into<String>) -> Identifier {
+    Identifier::Named(name.into())
 }
 
-fn identifier_expr_extension(id: IdentifierExpr) -> IdentifierExpr {
-    IdentifierExpr::Extension(Box::new(id))
+fn identifier_expr_extension(id: Identifier) -> Identifier {
+    Identifier::Extension(Box::new(id))
 }
 
-fn identifier_expr_inverse(id: IdentifierExpr) -> IdentifierExpr {
-    IdentifierExpr::Inverse(Box::new(id))
+fn identifier_expr_inverse(id: Identifier) -> Identifier {
+    Identifier::Inverse(Box::new(id))
 }
 
-fn identifier_expr_update(id: IdentifierExpr) -> IdentifierExpr {
-    IdentifierExpr::Update(Box::new(id))
+fn identifier_expr_update(id: Identifier) -> Identifier {
+    Identifier::Update(Box::new(id))
 }
 
 fn function_body_expr_body(body: WithLocation<Expr>) -> FunctionBody {
@@ -807,7 +741,7 @@ fn pattern_tuple(elements: Vec<WithLocation<Pattern>>) -> Pattern {
 
 fn pattern_binding(
     is_mutable: bool,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     pattern: WithLocation<Pattern>,
 ) -> Pattern {
     Pattern::Binding {
@@ -836,13 +770,13 @@ fn pattern_bool(value: bool) -> Pattern {
     Pattern::Bool(value)
 }
 
-fn pattern_path_base(name: WithLocation<IdentifierExpr>) -> PatternPath {
+fn pattern_path_base(name: WithLocation<Identifier>) -> PatternPath {
     PatternPath::Base { name }
 }
 
 fn pattern_path_member(
     base: WithLocation<PatternPath>,
-    member: WithLocation<IdentifierExpr>,
+    member: WithLocation<Identifier>,
 ) -> PatternPath {
     PatternPath::Member {
         base: Box::new(base),
@@ -860,7 +794,7 @@ fn pattern_argument(
     }
 }
 
-fn function_parameter(param_type: WithLocation<Expr>, name: IdentifierExpr) -> FunctionParameter {
+fn function_parameter(param_type: WithLocation<Expr>, name: Identifier) -> FunctionParameter {
     FunctionParameter { param_type, name }
 }
 
@@ -891,7 +825,7 @@ fn return_type_specifier(
 fn variable_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     is_mutable: bool,
-    name: Option<IdentifierExpr>,
+    name: Option<Identifier>,
     var_type: Option<WithLocation<Expr>>,
     value: WithLocation<Expr>,
 ) -> Stmt {
@@ -907,7 +841,7 @@ fn variable_declaration_stmt(
 fn function_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     purity: bool,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: FunctionBody,
@@ -925,9 +859,9 @@ fn function_declaration_stmt(
 fn method_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     purity: bool,
-    instance_name: WithLocation<Option<IdentifierExpr>>,
+    instance_name: WithLocation<Option<Identifier>>,
     instance_type: Option<WithLocation<Expr>>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
@@ -946,7 +880,7 @@ fn method_declaration_stmt(
 
 fn record_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<RecordBodyStmt>>,
@@ -962,7 +896,7 @@ fn record_declaration_stmt(
 
 fn enum_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<EnumBodyStmt>>,
@@ -978,7 +912,7 @@ fn enum_declaration_stmt(
 
 fn trait_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
@@ -994,7 +928,7 @@ fn trait_declaration_stmt(
 
 fn instance_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
     body: Vec<WithLocation<TraitBodyStmt>>,
@@ -1010,7 +944,7 @@ fn instance_declaration_stmt(
 
 fn record_field(
     is_mutable: bool,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     field_type: WithLocation<Expr>,
 ) -> RecordField {
     ast::RecordField {
@@ -1022,7 +956,7 @@ fn record_field(
 
 fn enum_variant_constructor(
     modifiers: Vec<WithLocation<Modifier>>,
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     parameters: Vec<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
 ) -> EnumBodyStmt {
@@ -1039,7 +973,7 @@ fn enum_variant_record(record: RecordDeclarationStmt) -> EnumBodyStmt {
 }
 
 fn record_field_literal(
-    name: WithLocation<IdentifierExpr>,
+    name: WithLocation<Identifier>,
     value: WithLocation<Expr>,
 ) -> RecordFieldLiteral {
     ast::RecordFieldLiteral { name, value }
@@ -1087,8 +1021,8 @@ fn import_path_segment_many(segments: Vec<ImportPathSegment>) -> ImportPathSegme
 }
 
 fn import_path_segment_renaming(
-    importing: WithLocation<IdentifierExpr>,
-    viewed_name: WithLocation<Option<IdentifierExpr>>,
+    importing: WithLocation<Identifier>,
+    viewed_name: WithLocation<Option<Identifier>>,
 ) -> ImportPathSegment {
     ImportPathSegment::Renaming {
         importing,
@@ -1096,7 +1030,7 @@ fn import_path_segment_renaming(
     }
 }
 
-fn import_path_segment_imported(id: WithLocation<IdentifierExpr>) -> ImportPathSegment {
+fn import_path_segment_imported(id: WithLocation<Identifier>) -> ImportPathSegment {
     ImportPathSegment::Imported { id }
 }
 
@@ -1130,7 +1064,9 @@ impl<'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ArgonParser<'
     }
 }
 
-impl<'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ParserRuntime for ArgonParser<'a, L, ER> {
+impl<'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ParserRuntime
+    for ArgonParser<'a, L, ER>
+{
     type Token = Token;
     type TokenCategory = TokenCategory;
     type LexMode = LexerMode;

@@ -3,30 +3,36 @@ pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+pub mod erased_sig;
 
-use std::error::Error;
-use crate::access::AccessModifierGlobal;
-use crate::signature::FunctionSignature;
-use argon_expr::{ErasureMode, Expr, ExprContext};
-use argon_parser::ast::IdentifierExpr;
+use std::collections::hash_map::Entry;
+pub use crate::access::AccessModifierGlobal;
+pub use crate::signature::FunctionSignature;
+use argon_expr::ExprContext;
+pub use argon_expr::{Builtin, ErasureMode, Expr};
+pub use argon_parser::ast::{
+    BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
+    UnaryOperatorIdentifier,
+};
 use argon_util::{CompileError, ErrorReporter};
-use dashmap::{DashMap, Entry};
+use esexpr::ESExpr;
 use nonempty_collections::NEVec;
+use std::collections::HashMap;
+use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::ops::Deref;
 use std::str::FromStr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 
-pub trait CompileErrorReporter
-    : ErrorReporter<CompileError>
-    + ErrorReporter<std::io::Error>
-    + ErrorReporter<walkdir::Error>
-{}
+pub trait CompileErrorReporter:
+    ErrorReporter<CompileError> + ErrorReporter<std::io::Error> + ErrorReporter<walkdir::Error>
+{
+}
 
 impl<R> CompileErrorReporter for R where
-    R: ErrorReporter<CompileError>
-        + ErrorReporter<std::io::Error>
-        + ErrorReporter<walkdir::Error>
+    R: ErrorReporter<CompileError> + ErrorReporter<std::io::Error> + ErrorReporter<walkdir::Error>
 {
 }
 
@@ -35,7 +41,6 @@ pub trait ContextObject: Sync + Send {
 }
 
 pub type Context = Arc<dyn ContextObject>;
-
 
 pub struct DefaultExprContext;
 
@@ -62,7 +67,6 @@ pub enum EmptyHole {}
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct TubeName(pub NEVec<String>);
 
-
 #[derive(Debug)]
 pub enum TubeNameParseError {
     Empty,
@@ -75,7 +79,9 @@ impl Display for TubeNameParseError {
         match self {
             TubeNameParseError::Empty => write!(f, "empty tube name"),
             TubeNameParseError::EmptySegment => write!(f, "empty segment in tube name"),
-            TubeNameParseError::InvalidSegment(e) => write!(f, "invalid segment in tube name: {}", e),
+            TubeNameParseError::InvalidSegment(e) => {
+                write!(f, "invalid segment in tube name: {}", e)
+            }
         }
     }
 }
@@ -92,8 +98,7 @@ impl FromStr for TubeName {
     type Err = TubeNameParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s
-            .split('.')
+        s.split('.')
             .map(|s| {
                 let part = percent_encoding::percent_decode_str(s).decode_utf8()?;
                 if part.is_empty() {
@@ -109,7 +114,7 @@ impl FromStr for TubeName {
 }
 
 impl Display for TubeName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0.first())?;
         for s in self.0.iter().skip(1) {
             write!(f, ".{}", s)?;
@@ -118,7 +123,7 @@ impl Display for TubeName {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ModulePath(pub Vec<String>);
 
 impl Display for ModulePath {
@@ -134,7 +139,7 @@ impl Display for ModulePath {
 }
 
 pub struct TubeCollection {
-    tubes: DashMap<TubeName, Arc<Tube>>,
+    tubes: RwLock<HashMap<TubeName, Arc<Tube>>>,
 }
 
 pub struct TubeCollectionBuilder<'a> {
@@ -147,7 +152,7 @@ impl<'a> TubeCollectionBuilder<'a> {
         Self {
             context,
             tube_collection: Arc::new(TubeCollection {
-                tubes: DashMap::new(),
+                tubes: RwLock::new(HashMap::new()),
             }),
         }
     }
@@ -156,13 +161,20 @@ impl<'a> TubeCollectionBuilder<'a> {
         self.tube_collection.clone()
     }
 
-    pub fn add_tube(&self, name: TubeName, referenced_tubes: Vec<TubeName>) -> TubeBuilder {
+    pub fn add_tube(
+        &self,
+        name: TubeName,
+        metadata: TubeMetadata,
+        referenced_tubes: Vec<TubeName>,
+    ) -> TubeBuilder {
         let tube = Arc::new(Tube {
+            name: name.clone(),
+            metadata,
             referenced_tubes,
-            modules: DashMap::new(),
+            modules: RwLock::new(HashMap::new()),
         });
         let tb = TubeBuilder { tube: tube.clone() };
-        match self.tube_collection.tubes.entry(name) {
+        match self.tube_collection.tubes.write().entry(name) {
             Entry::Occupied(oe) => {
                 self.context
                     .reporter()
@@ -179,8 +191,58 @@ impl<'a> TubeCollectionBuilder<'a> {
 }
 
 pub struct Tube {
+    name: TubeName,
+    metadata: TubeMetadata,
     referenced_tubes: Vec<TubeName>,
-    modules: DashMap<ModulePath, Arc<Module>>,
+    modules: RwLock<HashMap<ModulePath, Arc<Module>>>,
+}
+
+impl Tube {
+    pub fn name(&self) -> &TubeName {
+        &self.name
+    }
+
+    pub fn metadata(&self) -> &TubeMetadata {
+        &self.metadata
+    }
+
+    pub fn referenced_tubes(&self) -> &[TubeName] {
+        &self.referenced_tubes
+    }
+
+    pub fn modules(&self) -> RwLockReadGuard<'_, HashMap<ModulePath, Arc<Module>>> {
+        self.modules.read()
+    }
+
+    pub fn module(&self, path: &ModulePath) -> Option<Arc<Module>> {
+        self.modules.read().get(path).map(|entry| entry.clone())
+    }
+}
+
+impl PartialEq for Tube {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for Tube {}
+
+impl Hash for Tube {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::ptr::hash(self, state);
+    }
+}
+
+impl Unload for Tube {
+    fn unload(&self) {
+        for module in self.modules.read().values() {
+            module.unload();
+        }
+    }
+}
+
+pub struct TubeMetadata {
+    pub platform: HashMap<String, ESExpr<'static>>,
 }
 
 pub struct TubeBuilder {
@@ -196,10 +258,12 @@ impl TubeBuilder {
         let module = self
             .tube
             .modules
-            .entry(path)
+            .write()
+            .entry(path.clone())
             .or_insert_with(|| {
                 Arc::new(Module {
-                    exports: DashMap::new(),
+                    path: path.clone(),
+                    exports: RwLock::new(HashMap::new()),
                 })
             })
             .clone();
@@ -209,22 +273,53 @@ impl TubeBuilder {
 }
 
 pub struct Module {
-    exports: DashMap<Option<IdentifierExpr>, RwLock<NEVec<ModuleExportEntry>>>,
+    path: ModulePath,
+    exports: RwLock<HashMap<Identifier, NEVec<ModuleExportEntry>>>,
 }
 
 impl Module {
-    pub fn named_exports(&self, name: &Option<IdentifierExpr>) -> Vec<ModuleExportEntry> {
-        self.exports
-            .get(name)
-            .map(|entries| {
-                entries
-                    .read()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .iter()
-                    .cloned()
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default()
+    pub fn path(&self) -> &ModulePath {
+        &self.path
+    }
+
+    pub fn named_exports(&self, name: &Identifier) -> Option<MappedRwLockReadGuard<'_, NEVec<ModuleExportEntry>>> {
+        RwLockReadGuard::try_map(self.exports.read(), |exports| {
+            exports.get(name)
+        }).ok()
+    }
+
+    pub fn export_groups(&self) -> RwLockReadGuard<'_, HashMap<Identifier, NEVec<ModuleExportEntry>>> {
+        self.exports.read()
+    }
+}
+
+impl PartialEq for Module {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for Module {}
+
+impl Hash for Module {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        std::ptr::hash(self, state);
+    }
+}
+
+impl Unload for Module {
+    fn unload(&self) {
+        for group in self.exports.read().values() {
+            for entry in group {
+                match &entry.binding {
+                    ModuleExportBinding::Function(f) => f.unload(),
+                    ModuleExportBinding::Record(r) => r.unload(),
+                    ModuleExportBinding::Enum(e) => e.unload(),
+                    ModuleExportBinding::Trait(t) => t.unload(),
+                    ModuleExportBinding::Instance(i) => i.unload(),
+                }
+            }
+        }
     }
 }
 
@@ -237,16 +332,13 @@ impl ModuleBuilder {
         self.module.clone()
     }
 
-    pub fn add_export(&self, name: Option<IdentifierExpr>, entry: ModuleExportEntry) {
-        match self.module.exports.entry(name) {
-            Entry::Occupied(ee) => {
-                ee.get()
-                    .write()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .push(entry);
+    pub fn add_export(&self, name: Identifier, entry: ModuleExportEntry) {
+        match self.module.exports.write().entry(name) {
+            Entry::Occupied(mut ee) => {
+                ee.get_mut().push(entry);
             }
             Entry::Vacant(ee) => {
-                ee.insert(RwLock::new(NEVec::new(entry)));
+                ee.insert(NEVec::new(entry));
             }
         }
     }
@@ -268,9 +360,14 @@ pub enum ModuleExportBinding {
     Instance(Arc<dyn Instance>),
 }
 
-pub trait Function: Sync + Send {
+pub trait Unload {
+    fn unload(&self);
+}
+
+pub trait Function: Unload + Sync + Send {
     fn metadata(&self) -> &FunctionMetadata;
 
+    fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>>;
 }
@@ -287,17 +384,17 @@ pub enum FunctionImplementation {
     Extern(String),
 }
 
-pub trait Method: Sync + Send {}
+pub trait Method: Unload + Sync + Send {}
 
-pub trait Record: Sync + Send {}
+pub trait Record: Unload + Sync + Send {}
 
-pub trait Enum: Sync + Send {}
+pub trait Enum: Unload + Sync + Send {}
 
-pub trait EnumCase: Sync + Send {}
+pub trait EnumCase: Unload + Sync + Send {}
 
-pub trait Trait: Sync + Send {}
+pub trait Trait: Unload + Sync + Send {}
 
-pub trait Instance: Sync + Send {}
+pub trait Instance: Unload + Sync + Send {}
 
 macro_rules! impl_dyn_stub_traits {
     ($trait_name:ident) => {

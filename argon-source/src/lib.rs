@@ -1,7 +1,10 @@
 use crate::module::process_source_file;
-use argon_compiler::{Context, ModulePath, TubeBuilder, TubeCollectionBuilder, TubeName};
+use argon_compiler::{
+    Context, ModulePath, TubeBuilder, TubeCollectionBuilder, TubeMetadata, TubeName,
+};
 use argon_util::ErrorReporter;
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -9,8 +12,8 @@ use walkdir::WalkDir;
 mod function;
 mod modifiers;
 mod module;
-mod type_checker;
 mod signature;
+mod type_checker;
 
 pub struct SourceCodeTubeOptions {
     name: TubeName,
@@ -23,7 +26,13 @@ pub fn define_source_tube(
     options: SourceCodeTubeOptions,
     tube_collection: &TubeCollectionBuilder<'_>,
 ) {
-    let tb = tube_collection.add_tube(options.name, options.referenced_tubes);
+    let tb = tube_collection.add_tube(
+        options.name,
+        TubeMetadata {
+            platform: HashMap::new(),
+        },
+        options.referenced_tubes,
+    );
 
     let module_results = options
         .sources

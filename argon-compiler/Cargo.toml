@@ -11,9 +11,11 @@ argon-expr = { workspace = true }
 argon-parser = { workspace = true }
 argon-util = { workspace = true }
 dashmap = { workspace = true }
+esexpr = { workspace = true }
 nonempty-collections = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
+parking_lot = { workspace = true }
 parse18-runtime = { workspace = true }
 rpds = { workspace = true }
 walkdir = { workspace = true }

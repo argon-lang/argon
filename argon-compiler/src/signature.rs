@@ -1,5 +1,5 @@
 use argon_expr::{ErasureMode, Expr, ExprContext, ExpressionOwner, ParameterVariable};
-use argon_parser::ast::{FunctionParameterListType, IdentifierExpr};
+use argon_parser::ast::{FunctionParameterListType, Identifier};
 
 pub struct FunctionSignature<EC: ExprContext + ?Sized> {
     pub parameters: Vec<SignatureParameter<EC>>,
@@ -11,12 +11,16 @@ pub struct SignatureParameter<EC: ExprContext + ?Sized> {
     pub list_type: FunctionParameterListType,
     pub erasure_mode: ErasureMode,
     pub bindings: Vec<ParameterBinding<EC>>,
-    pub name: Option<IdentifierExpr>,
+    pub name: Option<Identifier>,
     pub param_type: Expr<EC>,
 }
 
-impl <EC: ExprContext + ?Sized> SignatureParameter<EC> {
-    pub fn to_parameter_var(self, owner: ExpressionOwner<EC>, index: usize) -> ParameterVariable<EC> {
+impl<EC: ExprContext + ?Sized> SignatureParameter<EC> {
+    pub fn to_parameter_var(
+        self,
+        owner: ExpressionOwner<EC>,
+        index: usize,
+    ) -> ParameterVariable<EC> {
         ParameterVariable {
             owner,
             parameter_index: index,
@@ -28,7 +32,7 @@ impl <EC: ExprContext + ?Sized> SignatureParameter<EC> {
     }
 }
 
-impl <EC: ExprContext + ?Sized> Clone for SignatureParameter<EC> {
+impl<EC: ExprContext + ?Sized> Clone for SignatureParameter<EC> {
     fn clone(&self) -> Self {
         SignatureParameter {
             list_type: self.list_type,
@@ -41,11 +45,11 @@ impl <EC: ExprContext + ?Sized> Clone for SignatureParameter<EC> {
 }
 
 pub struct ParameterBinding<EC: ExprContext + ?Sized> {
-    pub name: Option<IdentifierExpr>,
+    pub name: Option<Identifier>,
     pub param_type: Expr<EC>,
 }
 
-impl <EC: ExprContext + ?Sized> Clone for ParameterBinding<EC> {
+impl<EC: ExprContext + ?Sized> Clone for ParameterBinding<EC> {
     fn clone(&self) -> Self {
         ParameterBinding {
             name: self.name.clone(),

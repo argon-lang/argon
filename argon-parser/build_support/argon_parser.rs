@@ -452,31 +452,31 @@ impl GrammarFactory for ParserFactory {
             ),
 
             IdentifierOptional => ruleset(
-                "Option<IdentifierExpr>",
+                "Option<Identifier>",
                 [
                     rule([ term(KwUnderscore).discard() ], "(|| None)"),
                     rule([ nonterm(Identifier) ], "Some"),
                 ],
             ),
             Identifier => ruleset(
-                "IdentifierExpr",
+                "Identifier",
                 [
                     rule([ term(IdentifierToken) ], "identifier_expr_named_token"),
                     rule([ nonterm(ComplexIdentifier) ], "identity"),
                 ],
             ),
             ComplexIdentifier => ruleset(
-                "IdentifierExpr",
+                "Identifier",
                 [
                     rule([ term(KwExtension).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_extension(id))"),
                     rule([ term(KwInverse).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_inverse(id))"),
                     rule([ term(KwUpdate).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_update(id))"),
-                    rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "(move |op| IdentifierExpr::UnaryOp(token_unary_operator(op)))"),
-                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "(move |op| IdentifierExpr::BinaryOp(token_binary_operator(op)))"),
+                    rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "Identifier::UnaryOp"),
+                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "Identifier::BinaryOp"),
                 ],
             ),
             MethodName => ruleset(
-                "IdentifierExpr",
+                "Identifier",
                 [
                     rule([ nonterm(Identifier) ], "identity"),
                     rule([ nonterm(Identifier), term(OpAssign).discard() ], "identifier_expr_update"),
@@ -484,35 +484,35 @@ impl GrammarFactory for ParserFactory {
             ),
 
             BinaryOperatorName => ruleset(
-                "Token",
+                "BinaryOperatorIdentifier",
                 [
-                    rule([ term(OpPlus) ], "identity"),
-                    rule([ term(OpMinus) ], "identity"),
-                    rule([ term(OpStar) ], "identity"),
-                    rule([ term(OpMul) ], "identity"),
-                    rule([ term(OpSlash) ], "identity"),
-                    rule([ term(OpDiv) ], "identity"),
-                    rule([ term(OpConcat) ], "identity"),
-                    rule([ term(OpEquals) ], "identity"),
-                    rule([ term(OpNotEquals) ], "identity"),
-                    rule([ term(OpLessThan) ], "identity"),
-                    rule([ term(OpLessThanEq) ], "identity"),
-                    rule([ term(OpGreaterThan) ], "identity"),
-                    rule([ term(OpGreaterThanEq) ], "identity"),
-                    rule([ term(OpBitAnd) ], "identity"),
-                    rule([ term(OpBitOr) ], "identity"),
-                    rule([ term(OpBitXor) ], "identity"),
-                    rule([ term(OpShiftLeft) ], "identity"),
-                    rule([ term(OpShiftRight) ], "identity"),
+                    binary_operator_name_rule(OpPlus, "Plus"),
+                    binary_operator_name_rule(OpMinus, "Minus"),
+                    binary_operator_name_rule(OpStar, "Mul"),
+                    binary_operator_name_rule(OpMul, "Mul"),
+                    binary_operator_name_rule(OpSlash, "Div"),
+                    binary_operator_name_rule(OpDiv, "Div"),
+                    binary_operator_name_rule(OpConcat, "Concat"),
+                    binary_operator_name_rule(OpEquals, "Equal"),
+                    binary_operator_name_rule(OpNotEquals, "NotEqual"),
+                    binary_operator_name_rule(OpLessThan, "LessThan"),
+                    binary_operator_name_rule(OpLessThanEq, "LessThanEq"),
+                    binary_operator_name_rule(OpGreaterThan, "GreaterThan"),
+                    binary_operator_name_rule(OpGreaterThanEq, "GreaterThanEq"),
+                    binary_operator_name_rule(OpBitAnd, "BitAnd"),
+                    binary_operator_name_rule(OpBitOr, "BitOr"),
+                    binary_operator_name_rule(OpBitXor, "BitXOr"),
+                    binary_operator_name_rule(OpShiftLeft, "ShiftLeft"),
+                    binary_operator_name_rule(OpShiftRight, "ShiftRight"),
                 ],
             ),
             UnaryOperatorName => ruleset(
-                "Token",
+                "UnaryOperatorIdentifier",
                 [
-                    rule([ term(OpPlus) ], "identity"),
-                    rule([ term(OpMinus) ], "identity"),
-                    rule([ term(OpLogicalNot) ], "identity"),
-                    rule([ term(OpBitNot) ], "identity"),
+                    unary_operator_name_rule(OpPlus, "Plus"),
+                    unary_operator_name_rule(OpMinus, "Minus"),
+                    unary_operator_name_rule(OpLogicalNot, "LogicalNot"),
+                    unary_operator_name_rule(OpBitNot, "BitNot"),
                 ],
             ),
 
@@ -595,7 +595,7 @@ impl GrammarFactory for ParserFactory {
             ),
 
             LoopLabel => ruleset(
-                "Option<WithLocation<IdentifierExpr>>",
+                "Option<WithLocation<Identifier>>",
                 [
                     rule([ term(SymAt).discard(), nonterm(Identifier).with_location() ], "Some"),
                     rule([], "(|| None)"),
@@ -910,10 +910,10 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ nonterm(CurryCallExpr) ], "identity"),
                     rule([ nonterm(TypeExpr) ], "identity"),
-                    rule([ term(OpBitNot).with_location(), nonterm(UnaryExpr).with_location() ], "unary_op"),
-                    rule([ term(OpLogicalNot).with_location(), nonterm(UnaryExpr).with_location() ], "unary_op"),
-                    rule([ term(OpPlus).with_location(), nonterm(UnaryExpr).with_location() ], "unary_op"),
-                    rule([ term(OpMinus).with_location(), nonterm(UnaryExpr).with_location() ], "unary_op"),
+                    unary_operator_expr_rule(OpBitNot, "BitNot"),
+                    unary_operator_expr_rule(OpLogicalNot, "LogicalNot"),
+                    unary_operator_expr_rule(OpPlus, "Plus"),
+                    unary_operator_expr_rule(OpMinus, "Minus"),
                     expr_error(),
                 ],
             ),
@@ -928,10 +928,10 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(UnaryExpr) ], "identity"),
-                    rule([ nonterm(MultiplicativeExpr).with_location(), term(OpStar).with_location(), nonterm(UnaryExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(MultiplicativeExpr).with_location(), term(OpMul).with_location(), nonterm(UnaryExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(MultiplicativeExpr).with_location(), term(OpSlash).with_location(), nonterm(UnaryExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(MultiplicativeExpr).with_location(), term(OpDiv).with_location(), nonterm(UnaryExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(MultiplicativeExpr, OpStar, UnaryExpr, "Mul"),
+                    binary_operator_expr_rule(MultiplicativeExpr, OpMul, UnaryExpr, "Mul"),
+                    binary_operator_expr_rule(MultiplicativeExpr, OpSlash, UnaryExpr, "Div"),
+                    binary_operator_expr_rule(MultiplicativeExpr, OpDiv, UnaryExpr, "Div"),
                     expr_error(),
                 ],
             ),
@@ -939,9 +939,9 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(MultiplicativeExpr) ], "identity"),
-                    rule([ nonterm(AdditiveExpr).with_location(), term(OpPlus).with_location(), nonterm(MultiplicativeExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(AdditiveExpr).with_location(), term(OpMinus).with_location(), nonterm(MultiplicativeExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(AdditiveExpr).with_location(), term(OpConcat).with_location(), nonterm(MultiplicativeExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(AdditiveExpr, OpPlus, MultiplicativeExpr, "Plus"),
+                    binary_operator_expr_rule(AdditiveExpr, OpMinus, MultiplicativeExpr, "Minus"),
+                    binary_operator_expr_rule(AdditiveExpr, OpConcat, MultiplicativeExpr, "Concat"),
                     expr_error(),
                 ],
             ),
@@ -949,8 +949,8 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(AdditiveExpr) ], "identity"),
-                    rule([ nonterm(ShiftExpr).with_location(), term(OpShiftLeft).with_location(), nonterm(AdditiveExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(ShiftExpr).with_location(), term(OpShiftRight).with_location(), nonterm(AdditiveExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(ShiftExpr, OpShiftLeft, AdditiveExpr, "ShiftLeft"),
+                    binary_operator_expr_rule(ShiftExpr, OpShiftRight, AdditiveExpr, "ShiftRight"),
                     expr_error(),
                 ],
             ),
@@ -958,7 +958,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(ShiftExpr) ], "identity"),
-                    rule([ nonterm(BitwiseAndExpr).with_location(), term(OpBitAnd).with_location(), nonterm(ShiftExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(BitwiseAndExpr, OpBitAnd, ShiftExpr, "BitAnd"),
                     expr_error(),
                 ],
             ),
@@ -966,7 +966,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(BitwiseAndExpr) ], "identity"),
-                    rule([ nonterm(BitwiseXorExpr).with_location(), term(OpBitXor).with_location(), nonterm(BitwiseAndExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(BitwiseXorExpr, OpBitXor, BitwiseAndExpr, "BitXOr"),
                     expr_error(),
                 ],
             ),
@@ -974,7 +974,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(BitwiseXorExpr) ], "identity"),
-                    rule([ nonterm(BitwiseOrExpr).with_location(), term(OpBitOr).with_location(), nonterm(BitwiseXorExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(BitwiseOrExpr, OpBitOr, BitwiseXorExpr, "BitOr"),
                     expr_error(),
                 ],
             ),
@@ -1006,10 +1006,10 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(FunctionTypeExpr) ], "identity"),
-                    rule([ nonterm(RelationalExpr).with_location(), term(OpLessThan).with_location(), nonterm(FunctionTypeExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(RelationalExpr).with_location(), term(OpLessThanEq).with_location(), nonterm(FunctionTypeExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(RelationalExpr).with_location(), term(OpGreaterThan).with_location(), nonterm(FunctionTypeExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(RelationalExpr).with_location(), term(OpGreaterThanEq).with_location(), nonterm(FunctionTypeExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(RelationalExpr, OpLessThan, FunctionTypeExpr, "LessThan"),
+                    binary_operator_expr_rule(RelationalExpr, OpLessThanEq, FunctionTypeExpr, "LessThanEq"),
+                    binary_operator_expr_rule(RelationalExpr, OpGreaterThan, FunctionTypeExpr, "GreaterThan"),
+                    binary_operator_expr_rule(RelationalExpr, OpGreaterThanEq, FunctionTypeExpr, "GreaterThanEq"),
                     expr_error(),
                 ],
             ),
@@ -1017,8 +1017,8 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(RelationalExpr) ], "identity"),
-                    rule([ nonterm(EqualityExpr).with_location(), term(OpEquals).with_location(), nonterm(RelationalExpr).with_location() ], "binary_op"),
-                    rule([ nonterm(EqualityExpr).with_location(), term(OpNotEquals).with_location(), nonterm(RelationalExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(EqualityExpr, OpEquals, RelationalExpr, "Equal"),
+                    binary_operator_expr_rule(EqualityExpr, OpNotEquals, RelationalExpr, "NotEqual"),
                     expr_error(),
                 ],
             ),
@@ -1026,7 +1026,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(EqualityExpr) ], "identity"),
-                    rule([ nonterm(LogicalAndExpr).with_location(), term(OpLogicalAnd).with_location(), nonterm(EqualityExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(LogicalAndExpr, OpLogicalAnd, EqualityExpr, "LogicalAnd"),
                     expr_error(),
                 ],
             ),
@@ -1034,7 +1034,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(LogicalAndExpr) ], "identity"),
-                    rule([ nonterm(LogicalOrExpr).with_location(), term(OpLogicalOr).with_location(), nonterm(LogicalAndExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(LogicalOrExpr, OpLogicalOr, LogicalAndExpr, "LogicalOr"),
                     expr_error(),
                 ],
             ),
@@ -1042,7 +1042,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(LogicalOrExpr) ], "identity"),
-                    rule([ nonterm(PropConjunctionExpr).with_location(), term(OpPropConjunction).with_location(), nonterm(LogicalOrExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(PropConjunctionExpr, OpPropConjunction, LogicalOrExpr, "PropConjunction"),
                     expr_error(),
                 ],
             ),
@@ -1050,7 +1050,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(PropConjunctionExpr) ], "identity"),
-                    rule([ nonterm(PropDisjunctionExpr).with_location(), term(OpPropDisjunction).with_location(), nonterm(PropConjunctionExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(PropDisjunctionExpr, OpPropDisjunction, PropConjunctionExpr, "PropDisjunction"),
                     expr_error(),
                 ],
             ),
@@ -1058,7 +1058,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(PropDisjunctionExpr) ], "identity"),
-                    rule([ nonterm(PropEqualityExpr).with_location(), term(OpPropEqual).with_location(), nonterm(PropDisjunctionExpr).with_location() ], "binary_op"),
+                    binary_operator_expr_rule(PropEqualityExpr, OpPropEqual, PropDisjunctionExpr, "PropEqual"),
                     expr_error(),
                 ],
             ),
@@ -1114,7 +1114,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(TupleExpr).with_location() ], "with_location_value"),
-                    rule([ nonterm(TupleExpr).with_location(), term(OpAssign).with_location(), nonterm(TupleExpr).with_location() ], "(move |left, op: WithLocation<_>, right| expr_binary_operation(left, WithLocation::new(BinaryOperator::Assign, op.location), right))"),
+                    rule([ nonterm(TupleExpr).with_location(), term(OpAssign).with_location(), nonterm(TupleExpr).with_location() ], "(move |left, op: WithLocation<_>, right| binary_op(left, WithLocation::new(BinaryOperator::Assign, op.location), right))"),
                 ],
             ),
             AssertExpr => ruleset(
@@ -1317,7 +1317,7 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             VariableDeclarationBinding => ruleset(
-                "(bool, Option<IdentifierExpr>, Option<WithLocation<Expr>>)",
+                "(bool, Option<Identifier>, Option<WithLocation<Expr>>)",
                 [
                     rule(
                         [
@@ -1841,6 +1841,50 @@ fn rule(
 ) -> RuleInfo<ParserFactory> {
     let symbols = symbols.into();
     base_rule(symbols, function)
+}
+
+fn binary_operator_name_rule(token: Token, op: &'static str) -> RuleInfo<ParserFactory> {
+    rule(
+        [term(token).discard()],
+        format!("(|| BinaryOperatorIdentifier::{op})"),
+    )
+}
+
+fn unary_operator_name_rule(token: Token, op: &'static str) -> RuleInfo<ParserFactory> {
+    rule(
+        [term(token).discard()],
+        format!("(|| UnaryOperatorIdentifier::{op})"),
+    )
+}
+
+fn unary_operator_expr_rule(token: Token, op: &'static str) -> RuleInfo<ParserFactory> {
+    rule(
+        [
+            term(token).with_location(),
+            nonterm(UnaryExpr).with_location(),
+        ],
+        format!(
+            "(move |op: WithLocation<_>, expr| unary_op(WithLocation::new(UnaryOperator::{op}, op.location), expr))"
+        ),
+    )
+}
+
+fn binary_operator_expr_rule(
+    left_rule: Rule,
+    token: Token,
+    right_rule: Rule,
+    op: &'static str,
+) -> RuleInfo<ParserFactory> {
+    rule(
+        [
+            nonterm(left_rule).with_location(),
+            term(token).with_location(),
+            nonterm(right_rule).with_location(),
+        ],
+        format!(
+            "(move |left, op: WithLocation<_>, right| binary_op(left, WithLocation::new(BinaryOperator::{op}, op.location), right))"
+        ),
+    )
 }
 
 fn expr_error() -> RuleInfo<ParserFactory> {
