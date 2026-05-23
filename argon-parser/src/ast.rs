@@ -27,7 +27,7 @@ pub enum Stmt {
     Import(Box<ImportStmt>),
     Export(Box<ExportStmt>),
     Assert(Box<AssertStmt>),
-    Expr(Box<Expr>),
+    Expr(WithLocation<Expr>),
 }
 
 #[derive(Debug, Clone)]

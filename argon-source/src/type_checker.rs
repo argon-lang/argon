@@ -6,6 +6,7 @@ use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable, Varia
 use argon_parser::ast;
 use argon_parser::ast::{FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
+use nonempty_collections::NEVec;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -457,12 +458,36 @@ impl RecordingTypeChecker<Context> {
             ast::Expr::Paren(inner) => self.check(tc_context, inner, expected_type),
 
             ast::Expr::BinaryOperation { .. } => todo!(),
-            ast::Expr::Block { .. } => todo!(),
+            ast::Expr::Block { body, finally_body } => {
+                let checked_body = self.check_block(tc_context, body, expected_type);
+                let checked_finally_body = finally_body.as_ref().map(|finally_body| {
+                    Box::new(self.check_block(tc_context, finally_body, &Expr::unit_type()))
+                });
+
+                Expr::Ensures {
+                    block_body: Box::new(checked_body),
+                    ensures_body: checked_finally_body,
+                }
+            }
             ast::Expr::Dot { .. } => todo!(),
             ast::Expr::FunctionLiteral { .. } => todo!(),
             ast::Expr::FunctionResultValue => todo!(),
             ast::Expr::FunctionType { .. } => todo!(),
-            ast::Expr::IfElse { .. } => todo!(),
+            ast::Expr::IfElse {
+                condition,
+                when_true,
+                when_false,
+            } => {
+                let conv_condition = self.check(tc_context, condition, &Expr::bool_type());
+                let conv_when_true = self.check_block(tc_context, when_true, expected_type);
+                let conv_when_false = self.check_block(tc_context, when_false, expected_type);
+
+                Expr::IfElse {
+                    condition: Box::new(conv_condition),
+                    when_true: Box::new(conv_when_true),
+                    when_false: Box::new(conv_when_false),
+                }
+            }
             ast::Expr::Loop { .. } => todo!(),
             ast::Expr::Match { .. } => todo!(),
             ast::Expr::NewTraitObject { .. } => todo!(),
@@ -650,11 +675,47 @@ impl RecordingTypeChecker<Context> {
                 TypeInferResult::new(Expr::BigType(value.clone()), Expr::BigType(value + 1))
             }
             ast::Expr::Assert { .. } => todo!("infer assert expressions"),
-            ast::Expr::Block { .. } => todo!("infer blocks"),
+            ast::Expr::Block { body, finally_body } => {
+                let TypeInferResult {
+                    checked_expr: checked_body,
+                    inferred_type,
+                } = self.infer_block(tc_context, body);
+                let checked_finally_body = finally_body.as_ref().map(|finally_body| {
+                    Box::new(self.check_block(tc_context, finally_body, &Expr::unit_type()))
+                });
+
+                TypeInferResult::new(
+                    Expr::Ensures {
+                        block_body: Box::new(checked_body),
+                        ensures_body: checked_finally_body,
+                    },
+                    inferred_type,
+                )
+            }
             ast::Expr::Dot { .. } => todo!("infer member access"),
             ast::Expr::FunctionLiteral { .. } => todo!("infer function literals"),
             ast::Expr::FunctionType { .. } => todo!("infer function types"),
-            ast::Expr::IfElse { .. } => todo!("infer if/else expressions"),
+            ast::Expr::IfElse {
+                condition,
+                when_true,
+                when_false,
+            } => {
+                let conv_condition = self.check(tc_context, condition, &Expr::bool_type());
+                let TypeInferResult {
+                    checked_expr: conv_when_true,
+                    inferred_type,
+                } = self.infer_block(tc_context, when_true);
+                let conv_when_false = self.check_block(tc_context, when_false, &inferred_type);
+
+                TypeInferResult::new(
+                    Expr::IfElse {
+                        condition: Box::new(conv_condition),
+                        when_true: Box::new(conv_when_true),
+                        when_false: Box::new(conv_when_false),
+                    },
+                    inferred_type,
+                )
+            }
             ast::Expr::Is { .. } => todo!("infer is expressions"),
             ast::Expr::Loop { .. } => todo!("infer loops"),
             ast::Expr::Match { .. } => todo!("infer match expressions"),
@@ -667,6 +728,92 @@ impl RecordingTypeChecker<Context> {
             ast::Expr::BoxedType { .. } => todo!("infer boxed types"),
             ast::Expr::Box { .. } => todo!("infer box expressions"),
             ast::Expr::Unbox { .. } => todo!("infer unbox expressions"),
+        }
+    }
+
+    fn check_block(
+        &mut self,
+        tc_context: &mut impl TypeCheckContext,
+        body: &WithLocation<Vec<WithLocation<ast::Stmt>>>,
+        expected_type: &Expr<TypeCheckExprContext>,
+    ) -> Expr<TypeCheckExprContext> {
+        let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
+            return self.check_inferred_type(
+                &body.location,
+                TypeInferResult::new(Expr::unit_type(), Expr::unit_type()),
+                expected_type,
+            );
+        };
+        
+        
+        
+        let checked_stmts = leading_stmts
+            .iter()
+            .map(|stmt| self.check_stmt(tc_context, stmt, &Expr::unit_type()))
+            .collect::<Vec<_>>();
+        
+        let last_stmt = self.check_stmt(tc_context, last_stmt, expected_type);
+        
+        let checked_stmts = match NEVec::try_from_vec(checked_stmts) {
+            Some(mut checked_stmts) => {
+                checked_stmts.push(last_stmt);
+                checked_stmts
+            },
+            None => NEVec::new(last_stmt),
+        };
+        
+        Expr::Sequence(checked_stmts)
+    }
+
+    fn infer_block(
+        &mut self,
+        tc_context: &mut impl TypeCheckContext,
+        body: &WithLocation<Vec<WithLocation<ast::Stmt>>>,
+    ) -> TypeInferResult {
+        let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
+            return TypeInferResult::new(Expr::unit_type(), Expr::unit_type());
+        };
+
+        let checked_stmts = leading_stmts
+            .iter()
+            .map(|stmt| self.check_stmt(tc_context, stmt, &Expr::unit_type()))
+            .collect::<Vec<_>>();
+        let TypeInferResult {
+            checked_expr,
+            inferred_type,
+        } = self.infer_stmt(tc_context, last_stmt);
+        
+        let checked_stmts = match NEVec::try_from_vec(checked_stmts) {
+            Some(mut checked_stmts) => {
+                checked_stmts.push(checked_expr);
+                checked_stmts
+            },
+            None => NEVec::new(checked_expr),
+        };
+        
+        TypeInferResult::new(Expr::Sequence(checked_stmts), inferred_type)
+    }
+
+    fn check_stmt(
+        &mut self,
+        tc_context: &mut impl TypeCheckContext,
+        stmt: &WithLocation<ast::Stmt>,
+        expected_type: &Expr<TypeCheckExprContext>,
+    ) -> Expr<TypeCheckExprContext> {
+        match &stmt.value {
+            ast::Stmt::Expr(expr) => self.check(tc_context, expr, expected_type),
+            _ => todo!("type checking non-expression statements in blocks"),
+        }
+    }
+
+    fn infer_stmt(
+        &mut self,
+        tc_context: &mut impl TypeCheckContext,
+        stmt: &WithLocation<ast::Stmt>,
+    ) -> TypeInferResult {
+        match &stmt.value {
+            ast::Stmt::Expr(expr) => self.infer(tc_context, expr),
+            _ => todo!("inferring non-expression statements in blocks"),
         }
     }
 
@@ -1329,6 +1476,21 @@ mod tests {
         WithLocation::new(ast::Expr::Builtin(name.to_owned()), test_location())
     }
 
+    fn expr_stmt(expr: ast::Expr) -> WithLocation<ast::Stmt> {
+        WithLocation::new(
+            ast::Stmt::Expr(WithLocation::new(expr, test_location())),
+            test_location(),
+        )
+    }
+
+    fn block(stmts: Vec<WithLocation<ast::Stmt>>) -> WithLocation<Vec<WithLocation<ast::Stmt>>> {
+        WithLocation::new(stmts, test_location())
+    }
+
+    fn unit_expr() -> ast::Expr {
+        ast::Expr::Tuple { items: vec![] }
+    }
+
     fn test_checker() -> (
         RecordingTypeChecker<Context>,
         TestTypeCheckContext,
@@ -1402,5 +1564,46 @@ mod tests {
         }
 
         assert!(reporter.errors().is_empty());
+    }
+
+    #[test]
+    fn empty_block_checks_as_unit() {
+        let (mut checker, mut tc_context, reporter) = test_checker();
+        let block = block(vec![]);
+
+        let result = checker.check_block(&mut tc_context, &block, &Expr::unit_type());
+
+        assert!(matches!(result, Expr::Tuple { items } if items.is_empty()));
+        assert!(reporter.errors().is_empty());
+    }
+
+    #[test]
+    fn block_infers_last_statement_type() {
+        let (mut checker, mut tc_context, reporter) = test_checker();
+        let block = block(vec![
+            expr_stmt(unit_expr()),
+            expr_stmt(ast::Expr::IntLiteral(BigInt::from(3))),
+        ]);
+
+        let result = checker.infer_block(&mut tc_context, &block);
+
+        assert!(unify(&result.inferred_type, &Expr::int_type()));
+        assert!(reporter.errors().is_empty());
+    }
+
+    #[test]
+    fn block_requires_leading_statements_to_be_unit() {
+        let (mut checker, mut tc_context, reporter) = test_checker();
+        let block = block(vec![
+            expr_stmt(ast::Expr::IntLiteral(BigInt::from(2))),
+            expr_stmt(ast::Expr::IntLiteral(BigInt::from(3))),
+        ]);
+
+        let result = checker.infer_block(&mut tc_context, &block);
+
+        assert!(unify(&result.inferred_type, &Expr::int_type()));
+        let errors = reporter.errors();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].code, ErrorCode::TypeMismatch);
     }
 }

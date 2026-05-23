@@ -205,7 +205,7 @@ fn if_expr_after_then_elsif(
 ) -> Box<dyn FnOnce(WithLocation<Expr>) -> Expr> {
     Box::new(move |cond| {
         let else_location = else_expr.location.clone();
-        let else_stmt = else_expr.map(stmt_expr);
+        let else_stmt = WithLocation::new(stmt_expr(else_expr), else_location.clone());
         let else_body = WithLocation::new(vec![else_stmt], else_location);
         expr_if_else(cond, then_body, else_body)
     })
@@ -449,8 +449,20 @@ fn import_path_segment_wildcard_token(star: WithLocation<Token>) -> ImportPathSe
     import_path_segment_wildcard(star.location)
 }
 
-fn stmt_expr(expr: Expr) -> Stmt {
-    Stmt::Expr(Box::new(expr))
+fn stmt_expr(expr: WithLocation<Expr>) -> Stmt {
+    Stmt::Expr(expr)
+}
+
+fn stmt_expr_error() -> Stmt {
+    let position = FilePosition { line: 0, column: 0 };
+    Stmt::Expr(WithLocation::new(
+        expr_error(),
+        Location {
+            file: PathBuf::new(),
+            start: position,
+            end: position,
+        },
+    ))
 }
 
 fn stmt_import(import_stmt: ImportStmt) -> Stmt {

@@ -1764,7 +1764,7 @@ impl GrammarFactory for ParserFactory {
             Statement => ruleset(
                 "Stmt",
                 [
-                    rule([ nonterm(Expression) ], "stmt_expr"),
+                    rule([ nonterm(Expression).with_location() ], "stmt_expr"),
                     rule([ nonterm(ImportStmt) ], "stmt_import"),
                     rule([ nonterm(ExportStmt) ], "stmt_export"),
                     rule([ nonterm(Modifiers), nonterm(VariableDeclarationRest) ], "statement_apply_builder"),
@@ -1892,7 +1892,7 @@ fn expr_error() -> RuleInfo<ParserFactory> {
 }
 
 fn stmt_error() -> RuleInfo<ParserFactory> {
-    rule([error()], "(|| stmt_expr(expr_error()))")
+    rule([error()], "stmt_expr_error")
 }
 
 fn build_grammar() -> Grammar<ParserFactory> {

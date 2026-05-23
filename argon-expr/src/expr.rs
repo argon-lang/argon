@@ -69,9 +69,12 @@ pub trait ExprContextShifter {
             Expr::Assert { t } => Expr::Assert {
                 t: Box::new(self.shift(*t)),
             },
-            Expr::Block { body, finally_body } => Expr::Block {
-                body: Box::new(self.shift(*body)),
-                finally_body: finally_body.map(|body| Box::new(self.shift(*body))),
+            Expr::Ensures {
+                block_body,
+                ensures_body,
+            } => Expr::Ensures {
+                block_body: Box::new(self.shift(*block_body)),
+                ensures_body: ensures_body.map(|body| Box::new(self.shift(*body))),
             },
             Expr::BoolLiteral(value) => Expr::BoolLiteral(value),
             Expr::Break { label } => Expr::Break { label },
@@ -279,10 +282,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Assert {
         t: Box<Expr<EC>>,
     },
-    Block {
-        body: Box<Expr<EC>>,
-        finally_body: Option<Box<Expr<EC>>>,
-    },
     BoolLiteral(bool),
     Break {
         label: Option<Infallible>, // TODO: Use a proper label type
@@ -296,6 +295,10 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         member: Identifier,
     },
     EnumType(EC::Enum, Vec<Expr<EC>>),
+    Ensures {
+        block_body: Box<Expr<EC>>,
+        ensures_body: Option<Box<Expr<EC>>>,
+    },
     FunctionLiteral {
         parameter_name: Option<Identifier>,
         body: Box<Expr<EC>>,
@@ -393,9 +396,12 @@ impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
                 value_type: value_type.clone(),
             },
             Expr::Assert { t } => Expr::Assert { t: t.clone() },
-            Expr::Block { body, finally_body } => Expr::Block {
-                body: body.clone(),
-                finally_body: finally_body.clone(),
+            Expr::Ensures {
+                block_body,
+                ensures_body,
+            } => Expr::Ensures {
+                block_body: block_body.clone(),
+                ensures_body: ensures_body.clone(),
             },
             Expr::BoolLiteral(value) => Expr::BoolLiteral(*value),
             Expr::Break { label } => Expr::Break {
