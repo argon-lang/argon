@@ -461,6 +461,14 @@ impl TubeEncoder {
                 t: Box::new(tf::Expr::AnyType {}),
                 value: Box::new(self.emit_expr(value)?),
             },
+            Expr::Sequence(exprs) => tf::Expr::Sequence {
+                head: Box::new(self.emit_expr(exprs.first())?),
+                tail: exprs
+                    .iter()
+                    .skip(1)
+                    .map(|expr| self.emit_expr(expr).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
             Expr::IfElse {
                 when_true_var,
                 when_false_var,

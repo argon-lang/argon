@@ -3,13 +3,13 @@ use argon_expr::{Builtin, ErasureMode, Expr};
 use argon_parser::ast::Identifier;
 use argon_util::UniqueIdentifier;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ErasedSignature {
     pub parameters: Vec<ErasedSignatureType>,
     pub result: ErasedSignatureType,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ErasedSignatureType {
     Builtin(Builtin),
     Function(Box<ErasedSignatureType>, Box<ErasedSignatureType>),
@@ -18,7 +18,7 @@ pub enum ErasedSignatureType {
     Erased,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum ImportSpecifier {
     Global {
         tube: TubeName,

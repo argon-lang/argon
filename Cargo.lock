@@ -197,8 +197,10 @@ dependencies = [
  "argon-expr",
  "argon-format",
  "argon-util",
+ "dashmap",
  "esexpr",
  "esexpr-binary",
+ "nonempty-collections",
  "num-bigint",
 ]
 

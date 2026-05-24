@@ -8,8 +8,10 @@ argon-compiler = { workspace = true }
 argon-expr = { workspace = true }
 argon-format = { workspace = true }
 argon-util = { workspace = true }
+dashmap = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
+nonempty-collections = { workspace = true }
 num-bigint = { workspace = true }
 
 [lints]
