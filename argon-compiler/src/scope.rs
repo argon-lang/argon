@@ -1,10 +1,12 @@
+use crate::signature::SignatureParameter;
 use crate::{Enum, Function, Instance, Method, Record, Trait};
-use argon_expr::{ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement};
+use argon_expr::{
+    ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
+};
+use argon_parser::ast;
 use argon_parser::ast::Identifier;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use argon_parser::ast;
-use crate::signature::SignatureParameter;
 
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;
@@ -55,13 +57,17 @@ pub struct ParameterScope<'a, EC: ExprContext + ?Sized> {
 }
 
 impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
-    pub fn new(parent: &'a mut dyn Scope<ExprContext = EC>, owner: ExpressionOwner<EC>, parameters: &[SignatureParameter<EC>]) -> Self {
+    pub fn new(
+        parent: &'a mut dyn Scope<ExprContext = EC>,
+        owner: ExpressionOwner<EC>,
+        parameters: &[SignatureParameter<EC>],
+    ) -> Self {
         let mut variable_lookup = HashMap::new();
         let mut binding_lookup = HashMap::new();
 
         for (param_index, param) in parameters.iter().enumerate() {
             let param_var = Variable::Parameter(Arc::new(
-                param.clone().to_parameter_var(owner.clone(), param_index)
+                param.clone().to_parameter_var(owner.clone(), param_index),
             ));
 
             variable_lookup.insert(param.name.clone(), param_var.clone());
@@ -93,11 +99,11 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
         self.variable_lookup
             .get(name)
             .map(|variable| Lookup::Variable(variable.clone()))
-            .or_else(||
+            .or_else(|| {
                 self.binding_lookup
                     .get(name)
                     .map(|binding| Lookup::VariableTupleElement(binding.clone()))
-            )
+            })
     }
 }
 
@@ -182,18 +188,19 @@ where
     Sc: Scope + ?Sized,
     Sh: ExprContextShifter<EC1 = Sc::ExprContext>,
 {
-    fn shift_lookup(&self, lookup: Lookup<Sh::EC1>) -> Lookup<Sh::EC2> {
+    fn shift_lookup(&mut self, lookup: Lookup<Sh::EC1>) -> Lookup<Sh::EC2> {
         match lookup {
             Lookup::Empty => Lookup::Empty,
             Lookup::Overloadable(o) => Lookup::Overloadable(o),
 
             Lookup::Variable(v) => Lookup::Variable(self.shifter.shift_variable(v)),
-            Lookup::VariableTupleElement(vte) =>
+            Lookup::VariableTupleElement(vte) => {
                 Lookup::VariableTupleElement(VariableTupleElement {
                     variable: self.shifter.shift_variable(vte.variable),
                     index: vte.index,
                     binding_type: self.shifter.shift(vte.binding_type),
-                }),
+                })
+            }
         }
     }
 }

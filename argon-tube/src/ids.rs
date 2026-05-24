@@ -1,4 +1,5 @@
 use argon_compiler::{Function, ModulePath, TubeName};
+use argon_expr::{ExprContext, LocalVariable};
 use argon_util::UniqueIdentifier;
 use esexpr::core_types::hashbrown::HashMap;
 use std::hash::Hash;
@@ -9,7 +10,17 @@ pub struct TubeIdProvider {
     pub tube_ids: IdStore<TubeName>,
     pub module_ids: IdStore<(TubeName, ModulePath)>,
     pub function_ids: IdStore<Arc<dyn Function>>,
+    pub local_variable_ids: IdStore<LocalVariableId>,
     pub local_import_ids: IdStore<UniqueIdentifier>,
+}
+
+#[derive(Clone, Copy, Eq, Hash, PartialEq)]
+pub struct LocalVariableId(*const ());
+
+impl LocalVariableId {
+    pub fn new<EC: ExprContext + ?Sized>(variable: &Arc<LocalVariable<EC>>) -> Self {
+        Self(Arc::as_ptr(variable).cast::<()>())
+    }
 }
 
 pub struct IdStore<T> {

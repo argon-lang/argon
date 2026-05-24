@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 argon-util = { workspace = true }
 argon-parser = { workspace = true }
+derivative = { workspace = true }
 num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
 nonempty-collections = { workspace = true }

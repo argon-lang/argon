@@ -1,2 +1,2 @@
 pub mod tube;
-mod vm;
+pub mod vm;

@@ -8,11 +8,12 @@ use num_bigint::{BigInt, BigUint};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use crate::ids::TubeIdProvider;
+use crate::ids::{LocalVariableId, TubeIdProvider};
+use argon_expr::{LocalVariable, Variable};
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
-    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
+    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
 };
 use argon_util::TubeEncodingError;
 use esexpr::ESExprStatic;
@@ -460,7 +461,58 @@ impl TubeEncoder {
                 t: Box::new(tf::Expr::AnyType {}),
                 value: Box::new(self.emit_expr(value)?),
             },
-            _ => todo!(),
+            Expr::IfElse {
+                when_true_var,
+                when_false_var,
+                condition,
+                when_true,
+                when_false,
+            } => tf::Expr::IfElse {
+                condition: Box::new(self.emit_expr(condition)?),
+                true_body: Box::new(self.emit_expr(when_true)?),
+                false_body: Box::new(self.emit_expr(when_false)?),
+                when_true_witness: when_true_var
+                    .as_ref()
+                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
+                    .transpose()?,
+                when_false_witness: when_false_var
+                    .as_ref()
+                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
+                    .transpose()?,
+            },
+            _ => todo!("Unimplement emit_expr for {:?}", expr),
+        })
+    }
+
+    fn emit_local_var_from_variable(
+        &mut self,
+        variable: &Variable<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::LocalVar, TubeEncodingError> {
+        match variable {
+            Variable::Local(variable) => self.emit_local_var(variable),
+            Variable::Parameter(_) => todo!("Expected local variable"),
+        }
+    }
+
+    fn emit_local_var(
+        &mut self,
+        variable: &Arc<LocalVariable<argon_compiler::DefaultExprContext>>,
+    ) -> Result<tf::LocalVar, TubeEncodingError> {
+        Ok(tf::LocalVar {
+            id: self
+                .ids
+                .local_variable_ids
+                .get(LocalVariableId::new(variable))
+                .into(),
+            var_type: Box::new(self.emit_expr(&variable.var_type)?),
+            name: variable
+                .name
+                .as_ref()
+                .map(|name| encode_identifier(name).map(Box::new))
+                .transpose()?,
+            mutable: variable.is_mutable,
+            erased: variable.erasure_mode == ErasureMode::Erased,
+            witness: variable.is_witness,
         })
     }
 }

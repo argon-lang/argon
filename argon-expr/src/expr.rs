@@ -1,5 +1,6 @@
 use argon_parser::ast::FunctionParameterListType;
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
+use derivative::Derivative;
 use nonempty_collections::NEVec;
 use num_bigint::BigInt;
 use std::convert::Infallible;
@@ -19,7 +20,8 @@ pub trait ExprContext {
     type Instance: Clone + Debug + Eq + Hash;
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub enum ExpressionOwner<EC: ExprContext + ?Sized> {
     Function(EC::Function),
     Record(EC::Record),
@@ -44,234 +46,9 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
     }
 }
 
-pub trait ExprContextShifter {
-    type EC1: ExprContext + ?Sized;
-    type EC2: ExprContext<
-            Function = <Self::EC1 as ExprContext>::Function,
-            Record = <Self::EC1 as ExprContext>::Record,
-            Enum = <Self::EC1 as ExprContext>::Enum,
-            Trait = <Self::EC1 as ExprContext>::Trait,
-            EnumVariant = <Self::EC1 as ExprContext>::EnumVariant,
-            Method = <Self::EC1 as ExprContext>::Method,
-            Instance = <Self::EC1 as ExprContext>::Instance,
-        > + ?Sized;
-
-    fn shift_hole(&self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2>;
-
-    fn shift(&self, expr: Expr<Self::EC1>) -> Expr<Self::EC2> {
-        match expr {
-            Expr::Error => Expr::Error,
-            Expr::Hole(hole) => self.shift_hole(hole),
-            Expr::As { value, value_type } => Expr::As {
-                value: Box::new(self.shift(*value)),
-                value_type: Box::new(self.shift(*value_type)),
-            },
-            Expr::Assert { t } => Expr::Assert {
-                t: Box::new(self.shift(*t)),
-            },
-            Expr::Ensures {
-                block_body,
-                ensures_body,
-            } => Expr::Ensures {
-                block_body: Box::new(self.shift(*block_body)),
-                ensures_body: ensures_body.map(|body| Box::new(self.shift(*body))),
-            },
-            Expr::BoolLiteral(value) => Expr::BoolLiteral(value),
-            Expr::Break { label } => Expr::Break { label },
-            Expr::Builtin { builtin, arguments } => Expr::Builtin {
-                builtin,
-                arguments: arguments
-                    .into_iter()
-                    .map(|argument| self.shift(argument))
-                    .collect(),
-            },
-            Expr::Dot { o, member } => Expr::Dot {
-                o: Box::new(self.shift(*o)),
-                member,
-            },
-            Expr::EnumType(enum_ec, arguments) => Expr::EnumType(
-                enum_ec,
-                arguments
-                    .into_iter()
-                    .map(|argument| self.shift(argument))
-                    .collect(),
-            ),
-            Expr::FunctionLiteral {
-                parameter_name,
-                body,
-            } => Expr::FunctionLiteral {
-                parameter_name,
-                body: Box::new(self.shift(*body)),
-            },
-            Expr::FunctionCall {
-                function,
-                arguments,
-            } => Expr::FunctionCall {
-                function,
-                arguments: arguments
-                    .into_iter()
-                    .map(|argument| FunctionArgument {
-                        list_type: argument.list_type,
-                        arg: self.shift(argument.arg),
-                    })
-                    .collect(),
-            },
-            Expr::FunctionObjectCall { function, argument } => Expr::FunctionObjectCall {
-                function: Box::new(self.shift(*function)),
-                argument: Box::new(self.shift(*argument)),
-            },
-            Expr::FunctionResultValue => Expr::FunctionResultValue,
-            Expr::FunctionType { a, r } => Expr::FunctionType {
-                a: Box::new(self.shift(*a)),
-                r: Box::new(self.shift(*r)),
-            },
-            Expr::IfElse {
-                condition,
-                when_true,
-                when_false,
-            } => Expr::IfElse {
-                condition: Box::new(self.shift(*condition)),
-                when_true: Box::new(self.shift(*when_true)),
-                when_false: Box::new(self.shift(*when_false)),
-            },
-            Expr::IntLiteral(value) => Expr::IntLiteral(value),
-            Expr::Is { value, pattern } => Expr::Is {
-                value: Box::new(self.shift(*value)),
-                pattern,
-            },
-            Expr::Loop { label, body } => Expr::Loop {
-                label,
-                body: Box::new(self.shift(*body)),
-            },
-            Expr::Match { value, cases } => Expr::Match {
-                value: Box::new(self.shift(*value)),
-                cases: cases
-                    .into_iter()
-                    .map(|case| MatchCase {
-                        pattern: case.pattern,
-                        body: self.shift(case.body),
-                    })
-                    .collect(),
-            },
-            Expr::MethodCall {
-                method,
-                receiver,
-                arguments,
-            } => Expr::MethodCall {
-                method,
-                receiver: Box::new(self.shift(*receiver)),
-                arguments: arguments
-                    .into_iter()
-                    .map(|argument| FunctionArgument {
-                        list_type: argument.list_type,
-                        arg: self.shift(argument.arg),
-                    })
-                    .collect(),
-            },
-            Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },
-            Expr::Next { label } => Expr::Next { label },
-            Expr::Raise { ex } => Expr::Raise {
-                ex: Box::new(self.shift(*ex)),
-            },
-            Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
-                record,
-                fields: fields
-                    .into_iter()
-                    .map(|field| RecordFieldLiteral {
-                        name: field.name,
-                        value: self.shift(field.value),
-                    })
-                    .collect(),
-            },
-            Expr::RecordType(record, arguments) => Expr::RecordType(
-                record,
-                arguments
-                    .into_iter()
-                    .map(|argument| self.shift(argument))
-                    .collect(),
-            ),
-            Expr::Redo { label } => Expr::Redo { label },
-            Expr::Sequence(exprs) => Expr::Sequence(
-                NEVec::try_from_vec(exprs.into_iter().map(|expr| self.shift(expr)).collect())
-                    .expect("shifting a non-empty expression sequence preserves non-emptiness"),
-            ),
-            Expr::StoreVariable(variable) => Expr::StoreVariable(self.shift_variable(variable)),
-            Expr::StringLiteral(value) => Expr::StringLiteral(value),
-            Expr::TraitType(trait_ec, arguments) => Expr::TraitType(
-                trait_ec,
-                arguments
-                    .into_iter()
-                    .map(|argument| self.shift(argument))
-                    .collect(),
-            ),
-            Expr::Tuple { items } => Expr::Tuple {
-                items: items.into_iter().map(|item| self.shift(item)).collect(),
-            },
-            Expr::TupleElement(value, index) => Expr::TupleElement(Box::new(self.shift(*value)), index),
-            Expr::AnyType => Expr::AnyType,
-            Expr::Type(t) => Expr::Type(Box::new(self.shift(*t))),
-            Expr::BigType(value) => Expr::BigType(value),
-            Expr::Variable(variable) => Expr::Variable(self.shift_variable(variable)),
-            Expr::VariableStore(variable, value) => {
-                Expr::VariableStore(self.shift_variable(variable), Box::new(self.shift(*value)))
-            }
-            Expr::While {
-                label,
-                condition,
-                body,
-            } => Expr::While {
-                label,
-                condition: Box::new(self.shift(*condition)),
-                body: Box::new(self.shift(*body)),
-            },
-            Expr::BoxedType { t } => Expr::BoxedType {
-                t: Box::new(self.shift(*t)),
-            },
-            Expr::Box { value } => Expr::Box {
-                value: Box::new(self.shift(*value)),
-            },
-            Expr::Unbox { value } => Expr::Unbox {
-                value: Box::new(self.shift(*value)),
-            },
-        }
-    }
-
-    fn shift_variable(&self, v: Variable<Self::EC1>) -> Variable<Self::EC2> {
-        match v {
-            Variable::Local(variable) => Variable::Local(Arc::new(LocalVariable {
-                name: variable.name.clone(),
-                var_type: self.shift(variable.var_type.clone()),
-                erasure_mode: variable.erasure_mode,
-                is_witness: variable.is_witness,
-                is_mutable: variable.is_mutable,
-            })),
-            Variable::Parameter(variable) => Variable::Parameter(Arc::new(ParameterVariable {
-                owner: match &variable.owner {
-                    ExpressionOwner::Function(function) => {
-                        ExpressionOwner::Function(function.clone())
-                    }
-                    ExpressionOwner::Record(record) => ExpressionOwner::Record(record.clone()),
-                    ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec.clone()),
-                    ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec.clone()),
-                    ExpressionOwner::EnumVariant(enum_variant) => {
-                        ExpressionOwner::EnumVariant(enum_variant.clone())
-                    }
-                    ExpressionOwner::Method(method) => ExpressionOwner::Method(method.clone()),
-                    ExpressionOwner::Instance(instance) => {
-                        ExpressionOwner::Instance(instance.clone())
-                    }
-                },
-                parameter_index: variable.parameter_index,
-                var_type: self.shift(variable.var_type.clone()),
-                name: variable.name.clone(),
-                erasure_mode: variable.erasure_mode,
-                is_witness: variable.is_witness,
-            })),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
 pub enum Expr<EC: ExprContext + ?Sized> {
     Error,
     Hole(EC::Hole),
@@ -317,6 +94,8 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         r: Box<Expr<EC>>,
     },
     IfElse {
+        when_true_var: Option<Variable<EC>>,
+        when_false_var: Option<Variable<EC>>,
         condition: Box<Expr<EC>>,
         when_true: Box<Expr<EC>>,
         when_false: Box<Expr<EC>>,
@@ -384,147 +163,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Unbox {
         value: Box<Expr<EC>>,
     },
-}
-
-impl<EC: ExprContext + ?Sized> Clone for Expr<EC> {
-    fn clone(&self) -> Self {
-        match self {
-            Expr::Error => Expr::Error,
-            Expr::Hole(hole) => Expr::Hole(hole.clone()),
-            Expr::As { value, value_type } => Expr::As {
-                value: value.clone(),
-                value_type: value_type.clone(),
-            },
-            Expr::Assert { t } => Expr::Assert { t: t.clone() },
-            Expr::Ensures {
-                block_body,
-                ensures_body,
-            } => Expr::Ensures {
-                block_body: block_body.clone(),
-                ensures_body: ensures_body.clone(),
-            },
-            Expr::BoolLiteral(value) => Expr::BoolLiteral(*value),
-            Expr::Break { label } => Expr::Break {
-                label: label.clone(),
-            },
-            Expr::Builtin { builtin, arguments } => Expr::Builtin {
-                builtin: *builtin,
-                arguments: arguments.clone(),
-            },
-            Expr::Dot { o, member } => Expr::Dot {
-                o: o.clone(),
-                member: member.clone(),
-            },
-            Expr::EnumType(enum_ec, arguments) => {
-                Expr::EnumType(enum_ec.clone(), arguments.clone())
-            }
-            Expr::FunctionLiteral {
-                parameter_name,
-                body,
-            } => Expr::FunctionLiteral {
-                parameter_name: parameter_name.clone(),
-                body: body.clone(),
-            },
-            Expr::FunctionCall {
-                function,
-                arguments,
-            } => Expr::FunctionCall {
-                function: function.clone(),
-                arguments: arguments.clone(),
-            },
-            Expr::FunctionObjectCall { function, argument } => Expr::FunctionObjectCall {
-                function: function.clone(),
-                argument: argument.clone(),
-            },
-            Expr::FunctionResultValue => Expr::FunctionResultValue,
-            Expr::FunctionType { a, r } => Expr::FunctionType {
-                a: a.clone(),
-                r: r.clone(),
-            },
-            Expr::IfElse {
-                condition,
-                when_true,
-                when_false,
-            } => Expr::IfElse {
-                condition: condition.clone(),
-                when_true: when_true.clone(),
-                when_false: when_false.clone(),
-            },
-            Expr::IntLiteral(value) => Expr::IntLiteral(value.clone()),
-            Expr::Is { value, pattern } => Expr::Is {
-                value: value.clone(),
-                pattern: pattern.clone(),
-            },
-            Expr::Loop { label, body } => Expr::Loop {
-                label: label.clone(),
-                body: body.clone(),
-            },
-            Expr::Match { value, cases } => Expr::Match {
-                value: value.clone(),
-                cases: cases.clone(),
-            },
-            Expr::MethodCall {
-                method,
-                receiver,
-                arguments,
-            } => Expr::MethodCall {
-                method: method.clone(),
-                receiver: receiver.clone(),
-                arguments: arguments.clone(),
-            },
-            Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject {
-                trait_ec: trait_ec.clone(),
-                body: body.clone(),
-            },
-            Expr::Next { label } => Expr::Next {
-                label: label.clone(),
-            },
-            Expr::Raise { ex } => Expr::Raise { ex: ex.clone() },
-            Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
-                record: record.clone(),
-                fields: fields.clone(),
-            },
-            Expr::RecordType(record, arguments) => {
-                Expr::RecordType(record.clone(), arguments.clone())
-            }
-            Expr::Redo { label } => Expr::Redo {
-                label: label.clone(),
-            },
-            Expr::Sequence(exprs) => Expr::Sequence(exprs.clone()),
-            Expr::StoreVariable(variable) => Expr::StoreVariable(variable.clone()),
-            Expr::StringLiteral(value) => Expr::StringLiteral(value.clone()),
-            Expr::TraitType(trait_ec, arguments) => {
-                Expr::TraitType(trait_ec.clone(), arguments.clone())
-            }
-            Expr::Tuple { items } => Expr::Tuple {
-                items: items.clone(),
-            },
-            Expr::TupleElement(value, index) => Expr::TupleElement(value.clone(), *index),
-            Expr::AnyType => Expr::AnyType,
-            Expr::Type(t) => Expr::Type(t.clone()),
-            Expr::BigType(value) => Expr::BigType(value.clone()),
-            Expr::Variable(variable) => Expr::Variable(variable.clone()),
-            Expr::VariableStore(variable, value) => {
-                Expr::VariableStore(variable.clone(), value.clone())
-            }
-            Expr::While {
-                label,
-                condition,
-                body,
-            } => Expr::While {
-                label: label.clone(),
-                condition: condition.clone(),
-                body: body.clone(),
-            },
-            Expr::BoxedType { t } => Expr::BoxedType { t: t.clone() },
-            Expr::Box { value } => Expr::Box {
-                value: value.clone(),
-            },
-            Expr::Unbox { value } => Expr::Unbox {
-                value: value.clone(),
-            },
-        }
-    }
 }
 
 impl<EC: ExprContext + ?Sized> Expr<EC> {
@@ -695,7 +333,8 @@ impl FromStr for Builtin {
     }
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct FunctionArgument<EC: ExprContext + ?Sized> {
     pub list_type: FunctionParameterListType,
     pub arg: Expr<EC>,
@@ -710,7 +349,8 @@ impl<EC: ExprContext + ?Sized> Clone for FunctionArgument<EC> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct MatchCase<EC: ExprContext + ?Sized> {
     pub pattern: Pattern,
     pub body: Expr<EC>,
@@ -725,7 +365,8 @@ impl<EC: ExprContext + ?Sized> Clone for MatchCase<EC> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct RecordFieldLiteral<EC: ExprContext + ?Sized> {
     pub name: Identifier,
     pub value: Expr<EC>,
@@ -747,7 +388,8 @@ pub enum ErasureMode {
     Concrete,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub enum Variable<EC: ExprContext + ?Sized> {
     Local(Arc<LocalVariable<EC>>),
     Parameter(Arc<ParameterVariable<EC>>),
@@ -756,7 +398,7 @@ pub enum Variable<EC: ExprContext + ?Sized> {
 impl<EC: ExprContext + ?Sized> Variable<EC> {
     pub fn name(&self) -> Option<&Identifier> {
         match self {
-            Variable::Local(variable) => Some(&variable.name),
+            Variable::Local(variable) => variable.name.as_ref(),
             Variable::Parameter(variable) => variable.name.as_ref(),
         }
     }
@@ -810,7 +452,7 @@ pub struct VariableTupleElement<EC: ExprContext + ?Sized> {
     pub binding_type: Expr<EC>,
 }
 
-impl <EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
+impl<EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
     fn clone(&self) -> Self {
         Self {
             variable: self.variable.clone(),
@@ -820,17 +462,18 @@ impl <EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
     }
 }
 
-
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct LocalVariable<EC: ExprContext + ?Sized> {
-    pub name: Identifier,
+    pub name: Option<Identifier>,
     pub var_type: Expr<EC>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
     pub is_mutable: bool,
 }
 
-#[derive(Debug)]
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
 pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub owner: ExpressionOwner<EC>,
     pub parameter_index: usize,
@@ -838,4 +481,30 @@ pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub name: Option<Identifier>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Expr, ExprContext};
+    use std::fmt::Debug;
+
+    struct ContextWithoutDebug;
+
+    impl ExprContext for ContextWithoutDebug {
+        type Hole = u8;
+        type Function = u8;
+        type Record = u8;
+        type Enum = u8;
+        type Trait = u8;
+        type EnumVariant = u8;
+        type Method = u8;
+        type Instance = u8;
+    }
+
+    fn assert_debug<T: Debug>() {}
+
+    #[test]
+    fn expr_debug_does_not_require_context_debug() {
+        assert_debug::<Expr<ContextWithoutDebug>>();
+    }
 }

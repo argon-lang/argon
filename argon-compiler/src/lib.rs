@@ -1,5 +1,6 @@
 pub mod access;
 pub mod erased_sig;
+pub mod scanner;
 pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
@@ -17,8 +18,8 @@ use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
 use esexpr::ESExpr;
 use nonempty_collections::NEVec;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};

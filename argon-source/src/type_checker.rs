@@ -2,7 +2,7 @@ use argon_compiler::scope::{
     LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope,
 };
 use argon_compiler::{Context, DefaultExprContext};
-use argon_expr::{Builtin, Expr, ExprContext, ExprContextShifter, Variable, VariableTupleElement};
+use argon_expr::{Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, FreshVariableShifter, LocalVariable, Variable, VariableTupleElement};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, ErrorReporter, UniqueIdentifier};
@@ -12,6 +12,8 @@ use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt::format;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+use argon_compiler::scanner::PurityScanner;
 
 pub struct TypeChecker<'a> {
     pub context: Context,
@@ -72,7 +74,7 @@ impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
     type EC1 = TypeCheckExprContext;
     type EC2 = DefaultExprContext;
 
-    fn shift_hole(&self, hole: Hole) -> Expr<DefaultExprContext> {
+    fn shift_hole(&mut self, hole: Hole) -> Expr<DefaultExprContext> {
         TypeCheckToDefaultExprContextShifter.shift(*hole.1)
     }
 }
@@ -83,7 +85,7 @@ impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
     type EC1 = DefaultExprContext;
     type EC2 = TypeCheckExprContext;
 
-    fn shift_hole(&self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2> {
+    fn shift_hole(&mut self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2> {
         match hole {}
     }
 }
@@ -482,7 +484,11 @@ impl RecordingTypeChecker<Context> {
                 let conv_when_true = self.check_block(tc_context, when_true, expected_type);
                 let conv_when_false = self.check_block(tc_context, when_false, expected_type);
 
+                let (when_true_var, when_false_var) = self.create_if_cond_vars(&conv_condition);
+
                 Expr::IfElse {
+                    when_true_var,
+                    when_false_var,
                     condition: Box::new(conv_condition),
                     when_true: Box::new(conv_when_true),
                     when_false: Box::new(conv_when_false),
@@ -707,8 +713,12 @@ impl RecordingTypeChecker<Context> {
                 } = self.infer_block(tc_context, when_true);
                 let conv_when_false = self.check_block(tc_context, when_false, &inferred_type);
 
+                let (when_true_var, when_false_var) = self.create_if_cond_vars(&conv_condition);
+
                 TypeInferResult::new(
                     Expr::IfElse {
+                        when_true_var,
+                        when_false_var,
                         condition: Box::new(conv_condition),
                         when_true: Box::new(conv_when_true),
                         when_false: Box::new(conv_when_false),
@@ -1347,6 +1357,33 @@ impl RecordingTypeChecker<Context> {
         }
 
         checked_expr
+    }
+
+    fn create_if_cond_vars(&mut self, cond_expr: &Expr<TypeCheckExprContext>) -> (Option<Variable<TypeCheckExprContext>>, Option<Variable<TypeCheckExprContext>>) {
+        let is_pure_cond = PurityScanner::contains_impure_function_call(cond_expr);
+
+        // TODO: Get conditional vars from pattern expressions
+        let when_true_var =
+            if is_pure_cond { Some(self.create_if_branch_var(cond_expr, true)) }
+            else { None };
+        let when_false_var =
+            if is_pure_cond { Some(self.create_if_branch_var(cond_expr, false)) }
+            else { None };
+
+        (when_true_var, when_false_var)
+    }
+
+    fn create_if_branch_var(&mut self, cond_expr: &Expr<TypeCheckExprContext>, equal_to_value: bool) -> Variable<TypeCheckExprContext> {
+        Variable::Local(Arc::new(LocalVariable {
+            name: None,
+            var_type: Expr::Builtin {
+                builtin: Builtin::EqualToType,
+                arguments: vec![cond_expr.clone(), Expr::BoolLiteral(equal_to_value)],
+            },
+            erasure_mode: ErasureMode::Erased,
+            is_witness: false,
+            is_mutable: false,
+        }))
     }
 
     fn report_invalid_builtin(&self, location: &Location, name: impl AsRef<str>) {
