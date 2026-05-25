@@ -27,7 +27,6 @@ encoding_rs = { version = "0.8.35", default-features = false, features = ["alloc
 mitsein = { version = "0.9.0", default-features = false, features = ["alloc"] }
 num-bigint = { version = "0.4.6", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
-parking_lot = "0.12.5"
 parse18-lexer-gen = { path = "parse18/parse18-lexer-gen" }
 parse18-ll-gen = { path = "parse18/parse18-ll-gen" }
 parse18-runtime = { path = "parse18/parse18-runtime" }
@@ -38,6 +37,7 @@ regex-syntax = { version = "0.8.10", default-features = false, features = ["unic
 rpds = { version = "1.2.1", default-features = false }
 rstest = "0.26.1"
 serde = { version = "1.0.228", default-features = false, features = ["alloc"] }
+spin = { version = "0.9.8", default-features = false, features = ["mutex", "once", "rwlock", "spin_mutex"] }
 strum = { version = "0.28.0", features = ["derive"] }
 unicode-general-category = "1.1.0"
 walkdir = "2.5.0"

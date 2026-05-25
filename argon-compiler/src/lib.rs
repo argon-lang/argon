@@ -17,14 +17,13 @@ pub use argon_parser::ast::{
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use esexpr::ESExpr;
 use mitsein::vec1::Vec1;
-use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 pub trait CompileErrorReporter:
     ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
@@ -34,6 +33,14 @@ pub trait CompileErrorReporter:
 impl<R> CompileErrorReporter for R where
     R: ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
 {
+}
+
+fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    lock.read().unwrap_or_else(|err| err.into_inner())
+}
+
+fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    lock.write().unwrap_or_else(|err| err.into_inner())
 }
 
 pub trait ContextObject: Sync + Send {
@@ -146,7 +153,7 @@ pub struct TubeCollection {
 
 impl TubeCollection {
     pub fn tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
-        self.tubes.read().get(name).cloned()
+        read_lock(&self.tubes).get(name).cloned()
     }
 }
 
@@ -182,7 +189,7 @@ impl TubeCollectionBuilder {
             modules: RwLock::new(HashMap::new()),
         });
         let tb = TubeBuilder { tube: tube.clone() };
-        match self.tube_collection.tubes.write().entry(name) {
+        match write_lock(&self.tube_collection.tubes).entry(name) {
             Entry::Occupied(oe) => {
                 self.context
                     .reporter()
@@ -200,7 +207,7 @@ impl TubeCollectionBuilder {
 
 impl Unload for TubeCollection {
     fn unload(&self) {
-        for (_, tube) in std::mem::take(&mut *self.tubes.write()) {
+        for (_, tube) in std::mem::take(&mut *write_lock(&self.tubes)) {
             tube.unload();
         }
     }
@@ -227,11 +234,13 @@ impl Tube {
     }
 
     pub fn modules(&self) -> RwLockReadGuard<'_, HashMap<ModulePath, Arc<Module>>> {
-        self.modules.read()
+        read_lock(&self.modules)
     }
 
     pub fn module(&self, path: &ModulePath) -> Option<Arc<Module>> {
-        self.modules.read().get(path).map(|entry| entry.clone())
+        read_lock(&self.modules)
+            .get(path)
+            .map(|entry| entry.clone())
     }
 }
 
@@ -251,7 +260,7 @@ impl Hash for Tube {
 
 impl Unload for Tube {
     fn unload(&self) {
-        for module in self.modules.read().values() {
+        for module in read_lock(&self.modules).values() {
             module.unload();
         }
     }
@@ -271,10 +280,7 @@ impl TubeBuilder {
     }
 
     pub fn module(&self, path: ModulePath) -> ModuleBuilder {
-        let module = self
-            .tube
-            .modules
-            .write()
+        let module = write_lock(&self.tube.modules)
             .entry(path.clone())
             .or_insert_with(|| {
                 Arc::new(Module {
@@ -298,17 +304,10 @@ impl Module {
         &self.path
     }
 
-    pub fn named_exports(
-        &self,
-        name: &Identifier,
-    ) -> Option<MappedRwLockReadGuard<'_, Vec1<ModuleExportEntry>>> {
-        RwLockReadGuard::try_map(self.exports.read(), |exports| exports.get(name)).ok()
-    }
-
     pub fn export_groups(
         &self,
     ) -> RwLockReadGuard<'_, HashMap<Identifier, Vec1<ModuleExportEntry>>> {
-        self.exports.read()
+        read_lock(&self.exports)
     }
 }
 
@@ -328,7 +327,7 @@ impl Hash for Module {
 
 impl Unload for Module {
     fn unload(&self) {
-        for group in self.exports.read().values() {
+        for group in read_lock(&self.exports).values() {
             for entry in group {
                 match &entry.binding {
                     ModuleExportBinding::Function(f) => f.unload(),
@@ -352,7 +351,7 @@ impl ModuleBuilder {
     }
 
     pub fn add_export(&self, name: Identifier, entry: ModuleExportEntry) {
-        match self.module.exports.write().entry(name) {
+        match write_lock(&self.module.exports).entry(name) {
             Entry::Occupied(mut ee) => {
                 ee.get_mut().push(entry);
             }

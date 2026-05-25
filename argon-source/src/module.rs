@@ -306,8 +306,9 @@ impl GlobalScopeBuilder {
         let Some(module) = self.resolve_module(&tube, module_path, location) else {
             return;
         };
-
-        let Some(exports) = module.named_exports(export_name) else {
+        
+        let export_groups = module.export_groups();
+        let Some(exports) = export_groups.get(export_name) else {
             return;
         };
 
@@ -316,6 +317,7 @@ impl GlobalScopeBuilder {
             .filter(|entry| self.can_access(&tube, module_path, entry.access))
             .cloned()
             .collect::<Vec<_>>();
+        drop(export_groups);
         if visible_exports.is_empty() {
             return;
         }

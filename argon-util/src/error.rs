@@ -1,5 +1,5 @@
-use alloc::format;
 use alloc::borrow::ToOwned;
+use alloc::format;
 use alloc::string::String;
 use parse18_runtime::Location;
 #[cfg(feature = "std")]

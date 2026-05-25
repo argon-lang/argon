@@ -5,6 +5,15 @@ extern crate alloc;
 extern crate std;
 
 mod error;
+
+#[cfg(feature = "std")]
+#[path = "sync_std.rs"]
+pub mod sync;
+
+#[cfg(not(feature = "std"))]
+#[path = "sync_no_std.rs"]
+pub mod sync;
+
 mod vec_deque_slice;
 
 use alloc::sync::Arc;

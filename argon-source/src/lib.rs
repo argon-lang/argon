@@ -225,8 +225,8 @@ public def c: type = __argon_builtin never_type
         assert!(
             tube.module(&ModulePath(vec!["A".to_string()]))
                 .unwrap()
-                .named_exports(&Identifier::Named("c".to_string()))
-                .is_some()
+                .export_groups()
+                .contains_key(&Identifier::Named("c".to_string()))
         );
 
         fs::remove_dir_all(dir).unwrap();

@@ -12,6 +12,7 @@ embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
 parse18-runtime = { workspace = true }
+spin = { workspace = true }
 walkdir = { workspace = true, optional = true }
 
 [lints]

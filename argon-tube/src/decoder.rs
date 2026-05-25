@@ -433,8 +433,10 @@ impl TubeDecoder {
                 let module = tube.module(&module).unwrap_or_else(|| {
                     panic!("function import references unknown module {module}")
                 });
-                let exports = module
-                    .named_exports(&name)
+                
+                let export_groups = module.export_groups();
+                let exports = export_groups
+                    .get(&name)
                     .unwrap_or_else(|| panic!("function import references unknown export"));
 
                 exports
