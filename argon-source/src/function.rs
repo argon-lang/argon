@@ -1,10 +1,10 @@
 use crate::modifiers::{
-    ModifierParser, ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS,
+    ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser,
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::type_check_expr;
-use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
@@ -94,7 +94,8 @@ impl Function for SourceFunction {
             scope: &mut scope,
             access_token,
             owner,
-        }.parse(&self.decl.parameters, &self.decl.return_type);
+        }
+        .parse(&self.decl.parameters, &self.decl.return_type);
 
         let result = Arc::new(sig);
         *sig_store = Some(result.clone());

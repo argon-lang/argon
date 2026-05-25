@@ -1,20 +1,25 @@
 use crate::{Expr, ExprContext, ExprScannerMut, Variable};
+use std::collections::HashMap;
 
 pub struct SubstScanner<'a, EC: ExprContext + ?Sized> {
-    variable: Variable<EC>,
-    replacement: &'a Expr<EC>,
+    substitutions: HashMap<Variable<EC>, &'a Expr<EC>>,
 }
 
 impl<'a, EC: ExprContext + ?Sized> SubstScanner<'a, EC> {
-    pub fn new(variable: Variable<EC>, replacement: &'a Expr<EC>) -> Self {
+    pub fn new() -> Self {
         Self {
-            variable,
-            replacement,
+            substitutions: HashMap::new(),
         }
     }
 
+    pub fn add_substitution(&mut self, variable: Variable<EC>, replacement: &'a Expr<EC>) {
+        self.substitutions.insert(variable, replacement);
+    }
+
     pub fn subst(variable: Variable<EC>, replacement: &'a Expr<EC>, expr: &mut Expr<EC>) -> bool {
-        Self::new(variable, replacement).scan(expr)
+        let mut scanner = Self::new();
+        scanner.add_substitution(variable, replacement);
+        scanner.scan(expr)
     }
 }
 
@@ -22,11 +27,13 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
     type EC = EC;
 
     fn scan(&mut self, expr: &mut Expr<Self::EC>) -> bool {
-        let replace = matches!(expr, Expr::Variable(variable) if variable == &self.variable);
-
-        if replace {
-            *expr = self.replacement.clone();
-            true
+        if let Expr::Variable(variable) = expr {
+            if let Some(replacement) = self.substitutions.get(variable) {
+                *expr = (*replacement).clone();
+                true
+            } else {
+                crate::default_scan_mut(self, expr)
+            }
         } else {
             crate::default_scan_mut(self, expr)
         }
@@ -36,7 +43,7 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
 #[cfg(test)]
 mod tests {
     use super::SubstScanner;
-    use crate::{ErasureMode, Expr, ExprContext, LocalVariable, Variable};
+    use crate::{ErasureMode, Expr, ExprContext, ExprScannerMut, LocalVariable, Variable};
     use std::sync::Arc;
 
     #[derive(Debug, Eq, Hash, PartialEq)]
@@ -88,6 +95,72 @@ mod tests {
                     Expr::BoolLiteral(false),
                     Expr::BoolLiteral(true),
                 ]
+            )
+        ));
+    }
+
+    #[test]
+    fn substitutes_multiple_variable_occurrences() {
+        let first_variable = variable();
+        let second_variable = variable();
+        let mut expr = Expr::Tuple {
+            items: vec![
+                Expr::Variable(first_variable.clone()),
+                Expr::Variable(second_variable.clone()),
+                Expr::Variable(first_variable.clone()),
+            ],
+        };
+        let first_replacement = Expr::BoolLiteral(true);
+        let second_replacement = Expr::IntLiteral(5.into());
+
+        let mut scanner = SubstScanner::new();
+        scanner.add_substitution(first_variable, &first_replacement);
+        scanner.add_substitution(second_variable.clone(), &second_replacement);
+        assert!(scanner.scan(&mut expr));
+
+        assert!(matches!(
+            expr,
+            Expr::Tuple {
+                items,
+            } if matches!(
+                items.as_slice(),
+                [
+                    Expr::BoolLiteral(true),
+                    Expr::IntLiteral(i),
+                    Expr::BoolLiteral(true),
+                ] if i == &5.into()
+            )
+        ));
+    }
+
+    #[test]
+    fn substitutes_multiple_variables_simultaneously() {
+        let first_variable = variable();
+        let second_variable = variable();
+        let mut expr = Expr::Tuple {
+            items: vec![
+                Expr::Variable(first_variable.clone()),
+                Expr::Variable(second_variable.clone()),
+            ],
+        };
+        let first_replacement = Expr::Variable(second_variable.clone());
+        let second_replacement = Expr::BoolLiteral(true);
+
+        let mut scanner = SubstScanner::new();
+        scanner.add_substitution(first_variable, &first_replacement);
+        scanner.add_substitution(second_variable.clone(), &second_replacement);
+        assert!(scanner.scan(&mut expr));
+
+        assert!(matches!(
+            expr,
+            Expr::Tuple {
+                items,
+            } if matches!(
+                items.as_slice(),
+                [
+                    Expr::Variable(variable),
+                    Expr::BoolLiteral(true),
+                ] if variable == &second_variable
             )
         ));
     }

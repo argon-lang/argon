@@ -41,6 +41,7 @@ fn main() {
             if !argon_runner::compile(cmd) {
                 std::process::exit(1);
             }
+            println!("Compilation succeeded.");
         }
         Command::GenIR(cmd) => {
             argon_runner::gen_ir(cmd);

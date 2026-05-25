@@ -14,7 +14,7 @@ pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
 };
-use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
+use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use esexpr::ESExpr;
 use nonempty_collections::NEVec;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
@@ -38,6 +38,8 @@ impl<R> CompileErrorReporter for R where
 
 pub trait ContextObject: Sync + Send {
     fn reporter(&self) -> &dyn CompileErrorReporter;
+
+    fn normalize_fuel(&self) -> Fuel;
 }
 
 pub type Context = Arc<dyn ContextObject>;

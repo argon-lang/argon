@@ -59,7 +59,7 @@ impl ResolvedImportGroups {
                             ModuleExportBinding::Instance(i) => Overloadable::Instance(i.clone()),
                         })
                         .collect()
-                })
+                }),
         )
     }
 }
@@ -73,9 +73,6 @@ impl Scope for GlobalScope {
     type ExprContext = DefaultExprContext;
 
     fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
-
-
-
         let mut groups = Vec::new();
         if let Some(exp_group) = self.current_module.export_groups().get(name) {
             groups.push(
@@ -88,7 +85,7 @@ impl Scope for GlobalScope {
                         ModuleExportBinding::Trait(t) => Overloadable::Trait(t.clone()),
                         ModuleExportBinding::Instance(i) => Overloadable::Instance(i.clone()),
                     })
-                    .collect()
+                    .collect(),
             );
         }
 
@@ -98,8 +95,7 @@ impl Scope for GlobalScope {
 
         if groups.is_empty() {
             Lookup::Empty
-        }
-        else {
+        } else {
             Lookup::Overloadable(OverloadLookup::new(groups))
         }
     }
@@ -194,7 +190,14 @@ impl GlobalScopeBuilder {
                     0
                 };
 
-                let module_path = self.current_module.path().0.iter().take(new_path_len).cloned().collect();
+                let module_path = self
+                    .current_module
+                    .path()
+                    .0
+                    .iter()
+                    .take(new_path_len)
+                    .cloned()
+                    .collect();
 
                 self.resolve_import_path(
                     self.current_tube.clone(),
@@ -563,8 +566,7 @@ impl<'a> SourceFileProcessor<'a> {
 
         let scope = if let Some(parent) = &self.parent_scope {
             parent.clone().with_imports(imports)
-        }
-        else {
+        } else {
             GlobalScopeBuilder::new(
                 self.context.clone(),
                 self.tube_collection.clone(),

@@ -221,8 +221,7 @@ impl CompileError {
             ErrorCode::TupleSizeMismatch,
             format!(
                 "Tuple size mismatch. Expected a tuple of size {}, Got: {}",
-                actual_size,
-                t
+                actual_size, t
             ),
             Some(loc),
         )

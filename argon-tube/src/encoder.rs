@@ -12,7 +12,7 @@ use argon_expr::{ExpressionOwner, LocalVariable, Variable};
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use argon_util::TubeEncodingError;
 use esexpr::ESExprStatic;

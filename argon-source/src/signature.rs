@@ -111,11 +111,7 @@ impl<'a> SignatureParser<'a> {
             .value
             .ensures_clauses
             .iter()
-            .map(|clause| type_check_type_expr(
-                self.context.clone(),
-                &mut parameter_scope,
-                clause,
-            ))
+            .map(|clause| type_check_type_expr(self.context.clone(), &mut parameter_scope, clause))
             .collect::<Vec<_>>();
 
         FunctionSignature {

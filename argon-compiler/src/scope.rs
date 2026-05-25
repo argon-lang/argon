@@ -33,9 +33,7 @@ pub struct OverloadLookup {
 
 impl OverloadLookup {
     pub fn new(item_groups: Vec<Vec<Overloadable>>) -> Self {
-        Self {
-            item_groups,
-        }
+        Self { item_groups }
     }
 
     pub fn into_item_groups(self) -> Vec<Vec<Overloadable>> {
@@ -58,15 +56,16 @@ impl Overloadable {
     }
 
     pub fn as_expression_owner<EC>(&self) -> ExpressionOwner<EC>
-        where EC: ExprContext<
-            Function = <DefaultExprContext as ExprContext>::Function,
-            Record = <DefaultExprContext as ExprContext>::Record,
-            Enum = <DefaultExprContext as ExprContext>::Enum,
-            Trait = <DefaultExprContext as ExprContext>::Trait,
-            EnumVariant = <DefaultExprContext as ExprContext>::EnumVariant,
-            Method = <DefaultExprContext as ExprContext>::Method,
-            Instance = <DefaultExprContext as ExprContext>::Instance,
-        > + ?Sized
+    where
+        EC: ExprContext<
+                Function = <DefaultExprContext as ExprContext>::Function,
+                Record = <DefaultExprContext as ExprContext>::Record,
+                Enum = <DefaultExprContext as ExprContext>::Enum,
+                Trait = <DefaultExprContext as ExprContext>::Trait,
+                EnumVariant = <DefaultExprContext as ExprContext>::EnumVariant,
+                Method = <DefaultExprContext as ExprContext>::Method,
+                Instance = <DefaultExprContext as ExprContext>::Instance,
+            > + ?Sized,
     {
         match self {
             Overloadable::Function(f) => ExpressionOwner::Function(f.clone()),
@@ -226,7 +225,7 @@ where
             Lookup::Variable(v) => {
                 let mut shifter = self.shifter;
                 Lookup::Variable(shifter.shift_variable(v))
-            },
+            }
             Lookup::VariableTupleElement(vte) => {
                 let mut shifter = self.shifter;
                 Lookup::VariableTupleElement(VariableTupleElement {

@@ -2,8 +2,8 @@ use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{
     LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope,
 };
-use argon_compiler::{Context, DefaultExprContext, FunctionSignature};
-use argon_expr::{Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, FunctionArgument, LocalVariable, SubstScanner, Variable, VariableTupleElement};
+use argon_compiler::{Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature};
+use argon_expr::{Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, FunctionArgument, LocalVariable, Normalizer, NormalizerScanner, SubstScanner, Variable, VariableTupleElement};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, UniqueIdentifier, VecDequeSlice};
@@ -79,6 +79,48 @@ impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
 
     fn shift_hole(&mut self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2> {
         match hole {}
+    }
+}
+
+pub struct ExprNormalizer;
+
+impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
+    fn get_function_body(
+        &mut self,
+        function: &Arc<dyn Function>,
+        arguments: &mut Vec<FunctionArgument<TypeCheckExprContext>>,
+    ) -> Option<Expr<TypeCheckExprContext>> {
+        if !function.metadata().is_inline {
+            return None;
+        }
+
+        let implementation = function.clone().implementation()?;
+        let FunctionImplementation::Expr(body) = implementation.as_ref() else {
+            return None;
+        };
+
+        let signature = function.clone().signature();
+        let owner = ExpressionOwner::Function(function.clone());
+        let mut body = DefaultToTypeCheckExprContextShifter.shift(body.clone());
+
+        let mut subst = SubstScanner::new();
+
+        let arguments = std::mem::take(arguments);
+
+        for ((parameter_index, parameter), argument) in signature.parameters.iter().enumerate().zip(&arguments) {
+            let variable = Variable::Parameter(Arc::new(
+                parameter
+                    .clone()
+                    .to_parameter_var(owner.clone(), parameter_index),
+            ));
+            let variable = DefaultToTypeCheckExprContextShifter.shift_variable(variable);
+
+            subst.add_substitution(variable, &argument.arg);
+        }
+
+        subst.scan(&mut body);
+
+        Some(body)
     }
 }
 
@@ -1156,7 +1198,7 @@ impl <'a> TypeChecker<'a> {
     ) -> InferredType {
         let inferred = self.resolve_inferred_type(infer, expected_type);
 
-        if !type_matches_expected(&inferred.inferred_type, expected_type) {
+        if !type_matches_expected(&self.context, &inferred.inferred_type, expected_type) {
             self.context
                 .reporter()
                 .report_error(CompileError::type_mismatch(
@@ -1292,16 +1334,30 @@ fn is_type(expr: &Expr<TypeCheckExprContext>) -> bool {
 
 
 fn type_matches_expected(
+    context: &Context,
     actual_type: &Expr<TypeCheckExprContext>,
     expected_type: ExpectedType<'_>,
 ) -> bool {
     match expected_type {
-        ExpectedType::AnyMetaType => is_type(actual_type),
+        ExpectedType::AnyMetaType => {
+            let mut norm = NormalizerScanner::new(context.normalize_fuel(), ExprNormalizer);
+            let mut actual_type = actual_type.clone();
+            norm.scan(&mut actual_type);
+            is_type(&actual_type)
+        },
 
         ExpectedType::Exact(expected_type) => {
+            let mut actual_type = actual_type.clone();
+            let mut expected_type = expected_type.clone();
+            {
+                let mut norm = NormalizerScanner::new(context.normalize_fuel(), ExprNormalizer);
+                norm.scan(&mut actual_type);
+                norm.scan(&mut expected_type);
+            };
+            
             'exact_check: {
                 match &actual_type {
-                    Expr::Type(n) => match expected_type {
+                    Expr::Type(n) => match &expected_type {
                         Expr::BigType(_) => break 'exact_check true,
                         Expr::Type(n2) => match (&**n, &**n2) {
                             (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
@@ -1315,18 +1371,19 @@ fn type_matches_expected(
                     _ => {}
                 }
 
-                unify(expected_type, &actual_type)
+                unify(&mut expected_type, &mut actual_type)
             }
         }
     }
 }
 
 fn partially_inferred_type_matches_expected(
+    context: &Context,
     actual_type: &PartiallyInferredType<'_>,
     expected_type: ExpectedType<'_>,
 ) -> bool {
     match actual_type {
-        PartiallyInferredType::Full(actual_type) => type_matches_expected(actual_type, expected_type),
+        PartiallyInferredType::Full(actual_type) => type_matches_expected(context, actual_type, expected_type),
         PartiallyInferredType::Closure => {
             todo!()
         }
@@ -1334,12 +1391,12 @@ fn partially_inferred_type_matches_expected(
             match expected_type {
                 ExpectedType::AnyMetaType | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) =>
                     elements.iter()
-                        .all(|e| partially_inferred_type_matches_expected(e, expected_type)),
+                        .all(|e| partially_inferred_type_matches_expected(context, e, expected_type)),
 
                 ExpectedType::Exact(Expr::Tuple { items }) =>
                     elements.iter()
                         .zip(items.iter())
-                        .all(|(actual, expected)| partially_inferred_type_matches_expected(actual, ExpectedType::Exact(expected))),
+                        .all(|(actual, expected)| partially_inferred_type_matches_expected(context, actual, ExpectedType::Exact(expected))),
 
                 _ => false,
             }
@@ -1515,7 +1572,7 @@ impl <'a, 'b> OverloadResolver<'a, 'b> {
                 Some((inferred_arg, tail_inferred_args))
             ) = (args.split_first(), inferred_args.split_first()) {
                 if param.list_type == arg.list_type {
-                    if !partially_inferred_type_matches_expected(&inferred_arg.partially_inferred_type(), ExpectedType::Exact(&param_type)) {
+                    if !partially_inferred_type_matches_expected(&self.type_checker.context, &inferred_arg.partially_inferred_type(), ExpectedType::Exact(&param_type)) {
                         return Some(OverloadRejectionReason::ParameterTypeMismatch { parameter_index });
                     }
 
@@ -1579,7 +1636,8 @@ impl <'a, 'b> OverloadResolver<'a, 'b> {
     }
 
     fn substitute_arg_in_param_types(&self, param_types: &mut VecDeque<Expr<TypeCheckExprContext>>, return_type: &mut Expr<TypeCheckExprContext>, v: Variable<TypeCheckExprContext>, arg: &Expr<TypeCheckExprContext>) {
-        let mut scanner = SubstScanner::new(v, arg);
+        let mut scanner = SubstScanner::new();
+        scanner.add_substitution(v, arg);
 
         for param_type in param_types.iter_mut() {
             scanner.scan(param_type);
@@ -1738,4 +1796,3 @@ enum OverloadRejectionReason {
         parameter_index: usize,
     },
 }
-

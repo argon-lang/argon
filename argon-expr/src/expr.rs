@@ -21,7 +21,12 @@ pub trait ExprContext {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""), PartialEq(bound = ""), Eq(bound = ""))]
+#[derivative(
+    Debug(bound = ""),
+    PartialEq(bound = ""),
+    Eq(bound = ""),
+    Hash(bound = "")
+)]
 pub enum ExpressionOwner<EC: ExprContext + ?Sized> {
     Function(EC::Function),
     Record(EC::Record),
@@ -434,8 +439,9 @@ impl<EC: ExprContext + ?Sized> PartialEq for Variable<EC> {
             (Variable::Local(a), Variable::Local(b)) => Arc::ptr_eq(a, b),
             (Variable::Local(_), _) | (_, Variable::Local(_)) => false,
 
-            (Variable::Parameter(a), Variable::Parameter(b)) =>
-                a.owner == b.owner && a.parameter_index == b.parameter_index,
+            (Variable::Parameter(a), Variable::Parameter(b)) => {
+                a.owner == b.owner && a.parameter_index == b.parameter_index
+            }
         }
     }
 }
@@ -444,7 +450,17 @@ impl<EC: ExprContext + ?Sized> Eq for Variable<EC> {}
 
 impl<EC: ExprContext + ?Sized> Hash for Variable<EC> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        (std::ptr::from_ref(self) as usize).hash(state);
+        match self {
+            Variable::Local(variable) => {
+                0usize.hash(state);
+                Arc::as_ptr(variable).hash(state);
+            }
+            Variable::Parameter(variable) => {
+                1usize.hash(state);
+                variable.owner.hash(state);
+                variable.parameter_index.hash(state);
+            }
+        }
     }
 }
 

@@ -1,8 +1,10 @@
 use crate::{Expr, ExprContext, FunctionArgument, MatchCase, RecordFieldLiteral, Variable};
 use std::sync::Arc;
 
+mod normalizer;
 mod subst;
 
+pub use normalizer::{Normalizer, NormalizerScanner};
 pub use subst::SubstScanner;
 
 pub trait ExprScanner {
