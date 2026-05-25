@@ -138,10 +138,15 @@ enum TypeInferResult<'a> {
     // Fully inferred type
     Complete(InferredType),
 
-    // A closure that needs additional type information
+    // Types that needs additional type information
     Closure {
         location: &'a Location,
         function_literal: &'a FunctionLiteral,
+    },
+
+    Tuple {
+        location: &'a Location,
+        elements: Vec<TypeInferResult<'a>>,
     },
 
     // The remaining cases are compound expressions that may have subexpressions that require additional type information
@@ -177,6 +182,12 @@ impl <'a> TypeInferResult<'a> {
         match self {
             TypeInferResult::Complete(inferred_type) => PartiallyInferredType::Full(&inferred_type.checked_expr),
             TypeInferResult::Closure { .. } => PartiallyInferredType::Closure,
+            TypeInferResult::Tuple { elements, .. } =>
+                PartiallyInferredType::Tuple(
+                    elements.iter()
+                        .map(|e| e.partially_inferred_type())
+                        .collect()
+                ),
             TypeInferResult::Finally { body_result, .. } => body_result.partially_inferred_type() ,
             TypeInferResult::IfElse { true_body, .. } => true_body.partially_inferred_type(),
             TypeInferResult::Sequence { last_result, .. } => last_result.partially_inferred_type(),
@@ -194,6 +205,7 @@ struct InferredType {
 enum PartiallyInferredType<'b> {
     Full(&'b Expr<TypeCheckExprContext>),
     Closure,
+    Tuple(Vec<PartiallyInferredType<'b>>),
 }
 
 
@@ -480,7 +492,15 @@ impl <'a> TypeChecker<'a> {
             ast::Expr::Raise { .. } => todo!("infer raise expressions"),
             ast::Expr::RecordLiteral { .. } => todo!("infer record literals"),
             ast::Expr::Summon { .. } => todo!("infer summon expressions"),
-            ast::Expr::Tuple { .. } => todo!("infer tuple expressions"),
+
+            ast::Expr::Tuple { items } =>
+                TypeInferResult::Tuple {
+                    location: &expr.location,
+                    elements: items.iter()
+                        .map(|item| self.infer(item))
+                        .collect(),
+                },
+
             ast::Expr::While { .. } => todo!("infer while expressions"),
             ast::Expr::BoxedType { .. } => todo!("infer boxed types"),
             ast::Expr::Box { .. } => todo!("infer box expressions"),
@@ -1043,6 +1063,52 @@ impl <'a> TypeChecker<'a> {
             TypeInferResult::Closure { .. } => {
                 todo!()
             }
+
+            TypeInferResult::Tuple { location, elements } => {
+                let element_expected_types: Vec<ExpectedType<'_>> = match expected_type {
+                    ExpectedType::AnyMetaType | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => {
+                        elements.iter().map(|_| expected_type).collect()
+                    },
+                    ExpectedType::Exact(Expr::Tuple { items }) => {
+                        items.iter().map(ExpectedType::Exact).collect()
+                    }
+
+                    _ => {
+                        self.context.reporter().report_error(CompileError::tuple_type_required(
+                            location.clone(),
+                            format!("{:?}", expected_type),
+                        ));
+
+                        return InferredType {
+                            checked_expr: Expr::Error,
+                            inferred_type: Expr::Error,
+                        };
+                    }
+                };
+
+                if element_expected_types.len() != elements.len() {
+                    self.context.reporter().report_error(CompileError::tuple_size_mismatch(
+                        location.clone(),
+                        element_expected_types.len(),
+                        elements.len()
+                    ));
+                }
+
+                let mut element_exprs = Vec::with_capacity(elements.len());
+                let mut element_types = Vec::with_capacity(elements.len());
+
+                for (expr, expected_type) in elements.into_iter().zip(element_expected_types) {
+                    let inferred_type = self.resolve_inferred_type(expr, expected_type);
+                    element_exprs.push(inferred_type.checked_expr);
+                    element_types.push(inferred_type.inferred_type);
+                }
+
+                InferredType {
+                    checked_expr: Expr::Tuple { items: element_exprs },
+                    inferred_type: Expr::Tuple { items: element_types },
+                }
+            }
+
             TypeInferResult::Finally { body_result, finally_body } => {
                 let body_inferred = self.resolve_inferred_type(*body_result, expected_type);
                 InferredType {
@@ -1256,13 +1322,27 @@ fn type_matches_expected(
 }
 
 fn partially_inferred_type_matches_expected(
-    actual_type: PartiallyInferredType<'_>,
+    actual_type: &PartiallyInferredType<'_>,
     expected_type: ExpectedType<'_>,
 ) -> bool {
     match actual_type {
         PartiallyInferredType::Full(actual_type) => type_matches_expected(actual_type, expected_type),
         PartiallyInferredType::Closure => {
             todo!()
+        }
+        PartiallyInferredType::Tuple(elements) => {
+            match expected_type {
+                ExpectedType::AnyMetaType | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) =>
+                    elements.iter()
+                        .all(|e| partially_inferred_type_matches_expected(e, expected_type)),
+
+                ExpectedType::Exact(Expr::Tuple { items }) =>
+                    elements.iter()
+                        .zip(items.iter())
+                        .all(|(actual, expected)| partially_inferred_type_matches_expected(actual, ExpectedType::Exact(expected))),
+
+                _ => false,
+            }
         }
     }
 }
@@ -1435,7 +1515,7 @@ impl <'a, 'b> OverloadResolver<'a, 'b> {
                 Some((inferred_arg, tail_inferred_args))
             ) = (args.split_first(), inferred_args.split_first()) {
                 if param.list_type == arg.list_type {
-                    if !partially_inferred_type_matches_expected(inferred_arg.partially_inferred_type(), ExpectedType::Exact(&param_type)) {
+                    if !partially_inferred_type_matches_expected(&inferred_arg.partially_inferred_type(), ExpectedType::Exact(&param_type)) {
                         return Some(OverloadRejectionReason::ParameterTypeMismatch { parameter_index });
                     }
 
