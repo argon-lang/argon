@@ -1,28 +1,28 @@
 use argon_compiler::{Context, Tube, TubeCollectionBuilder};
 use argon_format::tube::TubeFileEntry;
+use argon_io::{EmbeddedIoRead, InputFile};
 use argon_util::{InternalCompilerError, TubeFormatError};
 use esexpr::ESExprCodec;
 use esexpr_binary::ExprParserSync;
-use std::path::Path;
 use std::sync::Arc;
 
-pub fn load_referenced_tube(
+pub fn load_referenced_tube<F>(
     context: Context,
     tube_collection_builder: &TubeCollectionBuilder,
-    referenced_tube: &Path,
-) -> Option<Arc<Tube>> {
-    let mut file = match std::fs::File::open(referenced_tube) {
+    referenced_tube: &F,
+) -> Option<Arc<Tube>>
+where
+    F: InputFile,
+{
+    let file = match referenced_tube.open() {
         Ok(file) => file,
         Err(e) => {
-            context
-                .reporter()
-                .report_error(InternalCompilerError::TubeFormatError(
-                    TubeFormatError::FileError(referenced_tube.to_path_buf(), e),
-                ));
+            context.reporter().report_error(e);
             return None;
         }
     };
 
+    let mut file = EmbeddedIoRead::new(file);
     let mut tube_expr_stream = esexpr_binary::parse_sync(&mut file);
     let tube_entries = std::iter::from_fn(move || {
         let expr = match tube_expr_stream.try_read_next_expr() {
@@ -31,9 +31,7 @@ pub fn load_referenced_tube(
             Err(e) => {
                 context
                     .reporter()
-                    .report_error(InternalCompilerError::TubeFormatError(
-                        TubeFormatError::from(e),
-                    ));
+                    .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
                 return None;
             }
         };
@@ -43,9 +41,7 @@ pub fn load_referenced_tube(
             Err(e) => {
                 context
                     .reporter()
-                    .report_error(InternalCompilerError::TubeFormatError(
-                        TubeFormatError::from(e),
-                    ));
+                    .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
                 return None;
             }
         };
@@ -57,4 +53,16 @@ pub fn load_referenced_tube(
         tube_entries,
         tube_collection_builder,
     ))
+}
+
+fn tube_format_error<F>(file: &F, error: TubeFormatError) -> InternalCompilerError
+where
+    F: InputFile,
+{
+    match error {
+        TubeFormatError::FileError(_, err) => InternalCompilerError::TubeFormatError(
+            TubeFormatError::FileError(file.path().to_path_buf(), err),
+        ),
+        error => InternalCompilerError::TubeFormatError(error),
+    }
 }

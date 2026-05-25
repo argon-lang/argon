@@ -167,7 +167,6 @@ dependencies = [
  "argon-source",
  "argon-tube",
  "argon-util",
- "clap",
  "embedded-io",
  "esexpr",
  "esexpr-binary",

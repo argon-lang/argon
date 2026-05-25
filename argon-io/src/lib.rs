@@ -24,6 +24,7 @@ pub trait OutputFile {
 
     fn path(&self) -> &Path;
     fn open(&self) -> Result<Self::Writer, InternalCompilerError>;
+    fn delete(&self) -> Result<(), InternalCompilerError>;
 }
 
 pub trait OutputDirectory {

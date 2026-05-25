@@ -14,12 +14,12 @@ use argon_format::tube as tf;
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
-use argon_util::TubeEncodingError;
 use esexpr::ESExprStatic;
+use argon_util::InternalCompilerError;
 
 pub fn encode_tube(
     tube: Arc<Tube>,
-) -> impl Iterator<Item = Result<tf::TubeFileEntry, TubeEncodingError>> {
+) -> impl Iterator<Item = Result<tf::TubeFileEntry, InternalCompilerError>> {
     TubeEncoder::new(tube)
 }
 
@@ -83,7 +83,7 @@ impl TubeEncoder {
     fn encode_entry(
         &mut self,
         emitter: EntryEmitter,
-    ) -> Result<Option<tf::TubeFileEntry>, TubeEncodingError> {
+    ) -> Result<Option<tf::TubeFileEntry>, InternalCompilerError> {
         Ok(Some(match emitter {
             EntryEmitter::Header => tf::TubeFileEntry::Header {
                 header: Box::new(tf::TubeHeader {
@@ -174,7 +174,7 @@ impl TubeEncoder {
         }))
     }
 
-    fn emit_module(&mut self, module: Arc<Module>) -> Result<tf::Module, TubeEncodingError> {
+    fn emit_module(&mut self, module: Arc<Module>) -> Result<tf::Module, InternalCompilerError> {
         let mut export_groups = module
             .export_groups()
             .iter()
@@ -195,7 +195,7 @@ impl TubeEncoder {
                     exports,
                 }))
             })
-            .collect::<Result<Vec<_>, TubeEncodingError>>()?;
+            .collect::<Result<Vec<_>, InternalCompilerError>>()?;
 
         Ok(tf::Module {
             path: Box::new(encode_module_path(module.path())),
@@ -206,7 +206,7 @@ impl TubeEncoder {
     fn emit_module_export(
         &mut self,
         exp: ModuleExportEntry,
-    ) -> Result<tf::ModuleExport, TubeEncodingError> {
+    ) -> Result<tf::ModuleExport, InternalCompilerError> {
         let module_export = match exp.binding {
             ModuleExportBinding::Function(function) => {
                 let function_id = self.get_function_id(function.clone());
@@ -246,7 +246,7 @@ impl TubeEncoder {
     fn encode_erased_signature(
         &mut self,
         sig: &ErasedSignature,
-    ) -> Result<tf::ErasedSignature, TubeEncodingError> {
+    ) -> Result<tf::ErasedSignature, InternalCompilerError> {
         Ok(tf::ErasedSignature {
             params: sig
                 .parameters
@@ -260,7 +260,7 @@ impl TubeEncoder {
     fn encode_erased_signature_type(
         &mut self,
         t: &ErasedSignatureType,
-    ) -> Result<tf::ErasedSignatureType, TubeEncodingError> {
+    ) -> Result<tf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
             ErasedSignatureType::Builtin(builtin) => {
                 let Some(builtin_type) = encode_erased_builtin_type(*builtin) else {
@@ -300,7 +300,7 @@ impl TubeEncoder {
     fn encode_import_specifier(
         &mut self,
         import: &ImportSpecifier,
-    ) -> Result<tf::ImportSpecifier, TubeEncodingError> {
+    ) -> Result<tf::ImportSpecifier, InternalCompilerError> {
         Ok(match import {
             ImportSpecifier::Global {
                 tube,
@@ -331,7 +331,7 @@ impl TubeEncoder {
     fn emit_function_signature(
         &mut self,
         sig: &FunctionSignature<argon_compiler::DefaultExprContext>,
-    ) -> Result<tf::FunctionSignature, TubeEncodingError> {
+    ) -> Result<tf::FunctionSignature, InternalCompilerError> {
         Ok(tf::FunctionSignature {
             parameters: sig
                 .parameters
@@ -353,7 +353,7 @@ impl TubeEncoder {
                                     param_type: Box::new(self.emit_expr(&binding.param_type)?),
                                 }))
                             })
-                            .collect::<Result<Vec<_>, TubeEncodingError>>()?,
+                            .collect::<Result<Vec<_>, InternalCompilerError>>()?,
                         name: param
                             .name
                             .as_ref()
@@ -362,7 +362,7 @@ impl TubeEncoder {
                         param_type: Box::new(self.emit_expr(&param.param_type)?),
                     }))
                 })
-                .collect::<Result<Vec<_>, TubeEncodingError>>()?,
+                .collect::<Result<Vec<_>, InternalCompilerError>>()?,
             return_type: Box::new(self.emit_expr(&sig.return_type)?),
             ensures_clauses: sig
                 .ensures_clauses
@@ -375,7 +375,7 @@ impl TubeEncoder {
     fn emit_function_implementation(
         &mut self,
         implementation: &FunctionImplementation,
-    ) -> Result<tf::FunctionImplementation, TubeEncodingError> {
+    ) -> Result<tf::FunctionImplementation, InternalCompilerError> {
         Ok(match implementation {
             FunctionImplementation::Expr(expr) => tf::FunctionImplementation::Expr {
                 body: Box::new(self.emit_expr(expr)?),
@@ -398,7 +398,7 @@ impl TubeEncoder {
     fn emit_expr(
         &mut self,
         expr: &Expr<argon_compiler::DefaultExprContext>,
-    ) -> Result<tf::Expr, TubeEncodingError> {
+    ) -> Result<tf::Expr, InternalCompilerError> {
         Ok(match expr {
             Expr::Error => tf::Expr::Error {},
             Expr::BoolLiteral(value) => tf::Expr::BoolLiteral { value: *value },
@@ -500,7 +500,7 @@ impl TubeEncoder {
     fn emit_var(
         &mut self,
         variable: &Variable<argon_compiler::DefaultExprContext>,
-    ) -> Result<tf::Var, TubeEncodingError> {
+    ) -> Result<tf::Var, InternalCompilerError> {
         Ok(match variable {
             Variable::Parameter(variable) => tf::Var::ParameterVar {
                 owner: Box::new(self.emit_expression_owner(&variable.owner)?),
@@ -521,7 +521,7 @@ impl TubeEncoder {
     fn emit_expression_owner(
         &mut self,
         owner: &ExpressionOwner<argon_compiler::DefaultExprContext>,
-    ) -> Result<tf::ExpressionOwner, TubeEncodingError> {
+    ) -> Result<tf::ExpressionOwner, InternalCompilerError> {
         Ok(match owner {
             ExpressionOwner::Function(function) => tf::ExpressionOwner::Func {
                 index: self.get_function_id(function.clone()).into(),
@@ -538,7 +538,7 @@ impl TubeEncoder {
     fn emit_local_var_from_variable(
         &mut self,
         variable: &Variable<argon_compiler::DefaultExprContext>,
-    ) -> Result<tf::LocalVar, TubeEncodingError> {
+    ) -> Result<tf::LocalVar, InternalCompilerError> {
         match variable {
             Variable::Local(variable) => self.emit_local_var(variable),
             Variable::Parameter(_) => todo!("Expected local variable"),
@@ -548,7 +548,7 @@ impl TubeEncoder {
     fn emit_local_var(
         &mut self,
         variable: &Arc<LocalVariable<argon_compiler::DefaultExprContext>>,
-    ) -> Result<tf::LocalVar, TubeEncodingError> {
+    ) -> Result<tf::LocalVar, InternalCompilerError> {
         Ok(tf::LocalVar {
             id: self
                 .ids
@@ -569,7 +569,7 @@ impl TubeEncoder {
 }
 
 impl Iterator for TubeEncoder {
-    type Item = Result<tf::TubeFileEntry, TubeEncodingError>;
+    type Item = Result<tf::TubeFileEntry, InternalCompilerError>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
@@ -602,7 +602,7 @@ fn encode_tube_name(name: &TubeName) -> tf::TubeName {
     }
 }
 
-fn encode_identifier(id: &Identifier) -> Result<tf::Identifier, TubeEncodingError> {
+fn encode_identifier(id: &Identifier) -> Result<tf::Identifier, InternalCompilerError> {
     Ok(match id {
         Identifier::Named(s) => tf::Identifier::Named { s: s.clone() },
         Identifier::BinaryOp(op) => tf::Identifier::BinOp {
@@ -694,7 +694,7 @@ fn encode_parameter_list_type(
     }
 }
 
-fn encode_builtin(builtin: Builtin) -> Result<tf::Builtin, TubeEncodingError> {
+fn encode_builtin(builtin: Builtin) -> Result<tf::Builtin, InternalCompilerError> {
     Ok(match builtin {
         Builtin::IntType => tf::Builtin::IntType,
         Builtin::BoolType => tf::Builtin::BoolType,

@@ -396,24 +396,10 @@ impl From<esexpr::DecodeError> for TubeFormatError {
 }
 
 #[derive(Debug)]
-pub enum TubeEncodingError {
-    GeneratorError(esexpr_binary::GeneratorError<std::io::Error>),
-}
-
-impl std::fmt::Display for TubeEncodingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::GeneratorError(err) => write!(f, "tube encoding generator error: {err:?}"),
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum InternalCompilerError {
     IoError(PathBuf, std::io::Error),
     WalkDirError(walkdir::Error),
     TubeFormatError(TubeFormatError),
-    TubeEncodingError(TubeEncodingError),
 }
 
 impl std::fmt::Display for InternalCompilerError {
@@ -422,7 +408,6 @@ impl std::fmt::Display for InternalCompilerError {
             Self::IoError(path, err) => write!(f, "I/O error: {}: {err}", path.display()),
             Self::WalkDirError(err) => write!(f, "directory traversal error: {err}"),
             Self::TubeFormatError(err) => write!(f, "{err}"),
-            Self::TubeEncodingError(err) => write!(f, "{err}"),
         }
     }
 }
@@ -436,7 +421,7 @@ impl embedded_io::Error for InternalCompilerError {
             Self::WalkDirError(err) => err
                 .io_error()
                 .map_or(embedded_io::ErrorKind::Other, |err| err.kind().into()),
-            Self::TubeFormatError(_) | Self::TubeEncodingError(_) => embedded_io::ErrorKind::Other,
+            Self::TubeFormatError(_) => embedded_io::ErrorKind::Other,
         }
     }
 }

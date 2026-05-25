@@ -1,107 +1,43 @@
 mod context;
+pub mod local_io;
 mod tubes;
 
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
-use argon_io::InputFile;
+use argon_io::{EmbeddedIoWrite, InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
-use argon_util::{InternalCompilerError, TubeEncodingError};
-use clap::Args;
-use embedded_io::{ErrorType, Read};
+use argon_util::InternalCompilerError;
 use esexpr::ESExprCodec;
-use esexpr_binary::ExprGeneratorSync;
+use esexpr_binary::{ExprGeneratorSync, GeneratorError};
 use rayon::prelude::*;
-use std::ffi::OsStr;
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use walkdir::WalkDir;
 
-#[derive(Args, Debug)]
-pub struct CompileOptions {
-    /// The name of the tube.
-    #[arg(short = 'n', long)]
+pub struct CompileOptions<I, R, O> {
     pub tube_name: TubeName,
-
-    /// Input directories for source code
-    #[arg(short, long = "input", required = true)]
-    pub input_dirs: Vec<PathBuf>,
-
-    /// Referenced tubes
-    #[arg(short, long)]
-    pub referenced_tubes: Vec<PathBuf>,
-
-    /// Output tube file
-    #[arg(short, long)]
-    pub output_file: PathBuf,
+    pub input_dirs: Vec<I>,
+    pub referenced_tubes: Vec<R>,
+    pub output_file: O,
 }
 
-#[derive(Args, Debug)]
-pub struct GenIrOptions {
-    /// Input tube file
-    #[arg(short, long)]
-    pub input_tube: PathBuf,
-
-    /// Referenced tubes
-    #[arg(short, long)]
-    pub referenced_tubes: Vec<PathBuf>,
-
-    /// Output Argon VM IR file
-    #[arg(short, long)]
-    pub output_file: PathBuf,
+pub struct GenIrOptions<I, R, O> {
+    pub input_tube: I,
+    pub referenced_tubes: Vec<R>,
+    pub output_file: O,
 }
 
-#[derive(Args, Debug)]
-pub struct JsCodeGenOptions {
-    /// Input IR file.
-    #[arg(short, long)]
-    pub input_file: PathBuf,
-
-    /// Output directory for generated JS code.
-    #[arg(short, long)]
-    pub output_dir: PathBuf,
+pub struct JsCodeGenOptions<I, O> {
+    pub input_file: I,
+    pub output_dir: O,
 }
 
-#[derive(Clone)]
-struct SourcePath {
-    path: PathBuf,
-}
-
-struct SourceFileReader {
-    file: std::fs::File,
-    path: PathBuf,
-}
-
-impl ErrorType for SourceFileReader {
-    type Error = InternalCompilerError;
-}
-
-impl Read for SourceFileReader {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        std::io::Read::read(&mut self.file, buf)
-            .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
-    }
-}
-
-impl InputFile for SourcePath {
-    type Reader = SourceFileReader;
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-
-    fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
-        std::fs::File::open(&self.path)
-            .map(|file| SourceFileReader {
-                file,
-                path: self.path.clone(),
-            })
-            .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
-    }
-}
-
-pub fn compile(options: CompileOptions) -> bool {
+pub fn compile<I, R, O>(options: CompileOptions<I, R, O>) -> bool
+where
+    I: InputDirectory + Sync,
+    I::File: Sync,
+    R: InputFile + Sync,
+    O: OutputFile,
+{
     let context = Arc::new(RunnerContext::new());
     let tube_collection = TubeCollectionBuilder::new(context.clone());
 
@@ -127,30 +63,24 @@ pub fn compile(options: CompileOptions) -> bool {
         return false;
     }
 
-    let mut out_file = match std::fs::File::create(&options.output_file) {
+    let out_file = match options.output_file.open() {
         Ok(file) => file,
-        Err(e) => {
-            context
-                .reporter()
-                .report_error(InternalCompilerError::IoError(
-                    options.output_file.clone(),
-                    e,
-                ));
+        Err(err) => {
+            context.reporter().report_error(err);
             context.runner_reporter().print_error_messages();
             delete_output_file(&options.output_file);
             return false;
         }
     };
 
+    let mut out_file = EmbeddedIoWrite::new(out_file);
     let mut expr_gen = esexpr_binary::ExprGenerator::new(&mut out_file);
 
     for entry in argon_tube::encoder::encode_tube(tube) {
         let entry = match entry {
             Ok(entry) => entry,
             Err(e) => {
-                context
-                    .reporter()
-                    .report_error(InternalCompilerError::TubeEncodingError(e));
+                context.reporter().report_error(e);
                 context.runner_reporter().print_error_messages();
                 drop(expr_gen);
                 drop(out_file);
@@ -163,11 +93,16 @@ pub fn compile(options: CompileOptions) -> bool {
         match expr_gen.generate(&expr) {
             Ok(()) => (),
             Err(e) => {
-                context
-                    .reporter()
-                    .report_error(InternalCompilerError::TubeEncodingError(
-                        TubeEncodingError::GeneratorError(e),
-                    ));
+                match e {
+                    GeneratorError::IOError(ioe) => {
+                        context
+                            .reporter()
+                            .report_error(InternalCompilerError::IoError(
+                                options.output_file.path().to_path_buf(),
+                                ioe,
+                            ));
+                    }
+                }
                 context.runner_reporter().print_error_messages();
                 drop(expr_gen);
                 drop(out_file);
@@ -188,43 +123,48 @@ pub fn compile(options: CompileOptions) -> bool {
     }
 }
 
-pub fn gen_ir(_options: GenIrOptions) {
+fn delete_output_file<O>(output_file: &O)
+where
+    O: OutputFile,
+{
+    if let Err(err) = output_file.delete() {
+        eprintln!(
+            "failed to delete output file {}: {err}",
+            output_file.path().display()
+        );
+    }
+}
+
+pub fn gen_ir<I, R, O>(_options: GenIrOptions<I, R, O>)
+where
+    I: InputFile,
+    R: InputFile,
+    O: OutputFile,
+{
     todo!("generate Argon VM IR from a tube")
 }
 
-pub fn codegen_js(_options: JsCodeGenOptions) {
+pub fn codegen_js<I, O>(_options: JsCodeGenOptions<I, O>)
+where
+    I: InputFile,
+    O: OutputDirectory,
+{
     todo!("generate JavaScript code from Argon VM IR")
 }
 
-fn collect_source_files(context: Arc<RunnerContext>, input_dirs: &[PathBuf]) -> Vec<SourcePath> {
+fn collect_source_files<I>(context: Arc<RunnerContext>, input_dirs: &[I]) -> Vec<I::File>
+where
+    I: InputDirectory,
+{
     input_dirs
-        .par_iter()
-        .flat_map(|source_dir| WalkDir::new(source_dir).into_iter().par_bridge())
-        .filter_map(|entry| match entry {
-            Ok(entry) => Some(entry),
-            Err(e) => {
-                context
-                    .reporter()
-                    .report_error(InternalCompilerError::WalkDirError(e));
+        .iter()
+        .flat_map(|source_dir| source_dir.list_files().into_iter())
+        .filter_map(|file| match file {
+            Ok(file) => Some(file),
+            Err(err) => {
+                context.reporter().report_error(err);
                 None
             }
         })
-        .filter(|entry| {
-            entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("argon"))
-        })
-        .map(|entry| SourcePath {
-            path: entry.path().to_path_buf(),
-        })
         .collect()
-}
-
-fn delete_output_file(output_file: &Path) {
-    match std::fs::remove_file(output_file) {
-        Ok(()) => {}
-        Err(err) if err.kind() == ErrorKind::NotFound => {}
-        Err(err) => eprintln!(
-            "failed to delete output file {}: {err}",
-            output_file.display()
-        ),
-    }
 }
