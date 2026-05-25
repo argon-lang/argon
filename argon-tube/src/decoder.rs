@@ -1,11 +1,18 @@
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
-use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, DefaultExprContext, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding, ModuleExportEntry, ModulePath, Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload};
+use argon_compiler::{
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, DefaultExprContext, EffectInfo,
+    ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata,
+    FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata,
+    TubeName, UnaryOperatorIdentifier, Unload,
+};
 use argon_expr::{FunctionArgument, LocalVariable, ParameterVariable, Variable};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
+use dashmap::DashMap;
 use nonempty_collections::NEVec;
 use num_bigint::{BigInt, BigUint};
 use std::collections::HashMap;
@@ -20,7 +27,8 @@ pub fn decode_tube(
     let metadata = read_metadata_entry(tube.next());
 
     let mut decoder = TubeDecoder::new(tube_collection_builder.tube_collection(), metadata);
-    decoder.decode(tube, tube_collection_builder)
+    decoder.read_remaining_entries(tube);
+    Arc::new(decoder).create_tube(tube_collection_builder)
 }
 
 struct TubeDecoder {
@@ -37,37 +45,42 @@ struct TubeDecoder {
     trait_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     instance_entries: HashMap<BigUint, InstanceEntry>,
     instance_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
-    tube_ids: HashMap<BigUint, TubeName>,
-    module_ids: HashMap<BigUint, (TubeName, ModulePath)>,
-    functions: HashMap<BigUint, Arc<dyn Function>>,
-    local_import_ids: HashMap<BigUint, UniqueIdentifier>,
-    local_variables: HashMap<BigUint, Arc<LocalVariable<DefaultExprContext>>>,
+    tube_ids: DashMap<BigUint, TubeName>,
+    module_ids: DashMap<BigUint, (TubeName, ModulePath)>,
+    functions: DashMap<BigUint, Arc<dyn Function>>,
+    local_import_ids: DashMap<BigUint, UniqueIdentifier>,
+    local_variables: DashMap<BigUint, Arc<LocalVariable<DefaultExprContext>>>,
 }
 
+#[derive(Clone)]
 enum FunctionEntry {
     Definition(tf::FunctionDefinition),
     Reference(tf::ImportSpecifier),
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 enum RecordEntry {
     Definition(tf::RecordDefinition),
     Reference(tf::ImportSpecifier),
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 enum EnumEntry {
     Definition(tf::EnumDefinition),
     Reference(tf::ImportSpecifier),
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 enum TraitEntry {
     Definition(tf::TraitDefinition),
     Reference(tf::ImportSpecifier),
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 enum InstanceEntry {
     Definition(tf::InstanceDefinition),
     Reference(tf::ImportSpecifier),
@@ -89,17 +102,12 @@ impl TubeDecoder {
             trait_method_references: HashMap::new(),
             instance_entries: HashMap::new(),
             instance_method_references: HashMap::new(),
-            tube_ids: HashMap::new(),
-            module_ids: HashMap::new(),
-            functions: HashMap::new(),
-            local_import_ids: HashMap::new(),
-            local_variables: HashMap::new(),
+            tube_ids: DashMap::new(),
+            module_ids: DashMap::new(),
+            functions: DashMap::new(),
+            local_import_ids: DashMap::new(),
+            local_variables: DashMap::new(),
         }
-    }
-
-    fn decode(&mut self, tube: impl Iterator<Item = tf::TubeFileEntry>, tube_collection_builder: &TubeCollectionBuilder) -> Arc<Tube> {
-        self.read_remaining_entries(tube);
-        self.create_tube(tube_collection_builder)
     }
 
     fn read_remaining_entries(&mut self, tube: impl Iterator<Item = tf::TubeFileEntry>) {
@@ -275,7 +283,7 @@ impl TubeDecoder {
         }
     }
 
-    fn create_tube(&mut self, tube_collection_builder: &TubeCollectionBuilder) -> Arc<Tube> {
+    fn create_tube(self: &Arc<Self>, tube_collection_builder: &TubeCollectionBuilder) -> Arc<Tube> {
         let metadata = self.metadata.clone();
         let tube_name = decode_tube_name(*metadata.name);
 
@@ -330,7 +338,7 @@ impl TubeDecoder {
     }
 
     fn decode_module_export(
-        &mut self,
+        self: &Arc<Self>,
         module_export: tf::ModuleExport,
         is_reexport: bool,
     ) -> ModuleExportEntry {
@@ -379,60 +387,30 @@ impl TubeDecoder {
     }
 
     fn decode_function_definition(
-        &mut self,
+        self: &Arc<Self>,
         definition: tf::FunctionDefinition,
     ) -> Arc<dyn Function> {
-        let function = Arc::new(DecodedFunction::new(definition.function_id.clone()));
-
-        function
-            .metadata
-            .set(FunctionMetadata {
-                is_inline: definition.inline,
-                erasure_mode: decode_erasure_mode(*definition.erasure),
-                is_witness: definition.witness,
-                effect_info: decode_effect_info(*definition.effects),
-            })
-            .ok()
-            .expect("function defined more than once");
-
-        function
-            .import
-            .set(self.decode_import_specifier(*definition.import))
-            .ok()
-            .expect("function import set more than once");
-
-        function
-            .signature
-            .set(Arc::new(
-                self.decode_function_signature(*definition.signature),
-            ))
-            .ok()
-            .expect("function signature set more than once");
-
-        let implementation = definition
-            .implementation
-            .map(|implementation| Arc::new(self.decode_function_implementation(*implementation)));
-
-        function
-            .implementation
-            .set(implementation)
-            .ok()
-            .expect("function implementation set more than once");
-
-        function
+        Arc::new(DecodedFunction::new(self.clone(), definition))
     }
 
-    fn function(&mut self, id: BigUint) -> Arc<dyn Function> {
+    fn function(self: &Arc<Self>, id: BigUint) -> Arc<dyn Function> {
         if let Some(function) = self.functions.get(&id) {
             return function.clone();
         }
 
         let function = match self
             .function_entries
-            .remove(&id)
+            .get(&id)
             .unwrap_or_else(|| panic!("unknown function id {id}"))
+            .clone()
         {
-            FunctionEntry::Definition(definition) => self.decode_function_definition(definition),
+            FunctionEntry::Definition(definition) => {
+                return self
+                    .functions
+                    .entry(id)
+                    .or_insert_with(|| self.decode_function_definition(definition))
+                    .clone();
+            }
             FunctionEntry::Reference(import) => self.resolve_function_import(import),
         };
 
@@ -440,7 +418,7 @@ impl TubeDecoder {
         function
     }
 
-    fn resolve_function_import(&mut self, import: tf::ImportSpecifier) -> Arc<dyn Function> {
+    fn resolve_function_import(self: &Arc<Self>, import: tf::ImportSpecifier) -> Arc<dyn Function> {
         match self.decode_import_specifier(import) {
             ImportSpecifier::Global {
                 tube,
@@ -476,59 +454,64 @@ impl TubeDecoder {
         }
     }
 
-    fn record(&mut self, id: BigUint) -> Arc<dyn argon_compiler::Record> {
+    fn record(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Record> {
         match self
             .record_entries
-            .remove(&id)
+            .get(&id)
             .unwrap_or_else(|| panic!("unknown record id {id}"))
+            .clone()
         {
             RecordEntry::Definition(_) => todo!("decode record definition"),
             RecordEntry::Reference(_) => todo!("decode record reference"),
         }
     }
 
-    fn enum_decl(&mut self, id: BigUint) -> Arc<dyn argon_compiler::Enum> {
+    fn enum_decl(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Enum> {
         match self
             .enum_entries
-            .remove(&id)
+            .get(&id)
             .unwrap_or_else(|| panic!("unknown enum id {id}"))
+            .clone()
         {
             EnumEntry::Definition(_) => todo!("decode enum definition"),
             EnumEntry::Reference(_) => todo!("decode enum reference"),
         }
     }
 
-    fn trait_decl(&mut self, id: BigUint) -> Arc<dyn argon_compiler::Trait> {
+    fn trait_decl(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Trait> {
         match self
             .trait_entries
-            .remove(&id)
+            .get(&id)
             .unwrap_or_else(|| panic!("unknown trait id {id}"))
+            .clone()
         {
             TraitEntry::Definition(_) => todo!("decode trait definition"),
             TraitEntry::Reference(_) => todo!("decode trait reference"),
         }
     }
 
-    fn instance(&mut self, id: BigUint) -> Arc<dyn argon_compiler::Instance> {
+    fn instance(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Instance> {
         match self
             .instance_entries
-            .remove(&id)
+            .get(&id)
             .unwrap_or_else(|| panic!("unknown instance id {id}"))
+            .clone()
         {
             InstanceEntry::Definition(_) => todo!("decode instance definition"),
             InstanceEntry::Reference(_) => todo!("decode instance reference"),
         }
     }
 
-    fn module(&mut self, id: BigUint) -> (TubeName, ModulePath) {
+    fn module(self: &Arc<Self>, id: BigUint) -> (TubeName, ModulePath) {
         if let Some(module) = self.module_ids.get(&id) {
             return module.clone();
         }
 
         let (tube_id, path) = self
             .module_references
-            .remove(&id)
-            .unwrap_or_else(|| panic!("unknown module id {id}"));
+            .get(&id)
+            .unwrap_or_else(|| panic!("unknown module id {id}"))
+            .clone();
         let tube_name = self
             .tube_ids
             .get(&tube_id)
@@ -539,14 +522,14 @@ impl TubeDecoder {
         module
     }
 
-    fn local_import_id(&mut self, id: BigUint) -> UniqueIdentifier {
+    fn local_import_id(self: &Arc<Self>, id: BigUint) -> UniqueIdentifier {
         self.local_import_ids
             .entry(id)
             .or_insert_with(UniqueIdentifier::new)
             .clone()
     }
 
-    fn decode_import_specifier(&mut self, import: tf::ImportSpecifier) -> ImportSpecifier {
+    fn decode_import_specifier(self: &Arc<Self>, import: tf::ImportSpecifier) -> ImportSpecifier {
         match import {
             tf::ImportSpecifier::Global {
                 module_id,
@@ -569,7 +552,7 @@ impl TubeDecoder {
         }
     }
 
-    fn decode_erased_signature(&mut self, sig: tf::ErasedSignature) -> ErasedSignature {
+    fn decode_erased_signature(self: &Arc<Self>, sig: tf::ErasedSignature) -> ErasedSignature {
         ErasedSignature {
             parameters: sig
                 .params
@@ -581,7 +564,7 @@ impl TubeDecoder {
     }
 
     fn decode_erased_signature_type(
-        &mut self,
+        self: &Arc<Self>,
         sig_type: tf::ErasedSignatureType,
     ) -> ErasedSignatureType {
         match sig_type {
@@ -615,7 +598,7 @@ impl TubeDecoder {
     }
 
     fn decode_function_signature(
-        &mut self,
+        self: &Arc<Self>,
         sig: tf::FunctionSignature,
     ) -> FunctionSignature<DefaultExprContext> {
         FunctionSignature {
@@ -634,7 +617,7 @@ impl TubeDecoder {
     }
 
     fn decode_signature_parameter(
-        &mut self,
+        self: &Arc<Self>,
         param: tf::SignatureParameter,
     ) -> SignatureParameter<DefaultExprContext> {
         SignatureParameter {
@@ -654,7 +637,7 @@ impl TubeDecoder {
     }
 
     fn decode_function_implementation(
-        &mut self,
+        self: &Arc<Self>,
         implementation: tf::FunctionImplementation,
     ) -> FunctionImplementation {
         match implementation {
@@ -668,7 +651,7 @@ impl TubeDecoder {
         }
     }
 
-    fn decode_expr(&mut self, expr: tf::Expr) -> Expr<DefaultExprContext> {
+    fn decode_expr(self: &Arc<Self>, expr: tf::Expr) -> Expr<DefaultExprContext> {
         match expr {
             tf::Expr::Error {} => Expr::Error,
             tf::Expr::ErasedValue {} => todo!("decode erased-value expression"),
@@ -777,12 +760,12 @@ impl TubeDecoder {
         }
     }
 
-    fn decode_var(&mut self, var: tf::Var) -> Variable<DefaultExprContext> {
+    fn decode_var(self: &Arc<Self>, var: tf::Var) -> Variable<DefaultExprContext> {
         match var {
             tf::Var::LocalVar { id } => Variable::Local(
                 self.local_variables
                     .get(&id)
-                    .cloned()
+                    .map(|variable| variable.clone())
                     .expect("local variable reference has unknown id"),
             ),
             tf::Var::ParameterVar {
@@ -807,7 +790,7 @@ impl TubeDecoder {
     }
 
     fn decode_expression_owner(
-        &mut self,
+        self: &Arc<Self>,
         owner: tf::ExpressionOwner,
     ) -> argon_expr::ExpressionOwner<DefaultExprContext> {
         match owner {
@@ -827,7 +810,7 @@ impl TubeDecoder {
     }
 
     fn decode_local_var(
-        &mut self,
+        self: &Arc<Self>,
         variable: tf::LocalVar,
     ) -> Arc<LocalVariable<DefaultExprContext>> {
         let id = variable.id;
@@ -849,18 +832,27 @@ impl TubeDecoder {
 }
 
 struct DecodedFunction {
-    id: BigUint,
-    metadata: OnceLock<FunctionMetadata>,
+    decoder: Arc<TubeDecoder>,
+    definition: tf::FunctionDefinition,
+    metadata: FunctionMetadata,
     import: OnceLock<ImportSpecifier>,
     signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
     implementation: OnceLock<Option<Arc<FunctionImplementation>>>,
 }
 
 impl DecodedFunction {
-    fn new(id: BigUint) -> Self {
+    fn new(decoder: Arc<TubeDecoder>, definition: tf::FunctionDefinition) -> Self {
+        let metadata = FunctionMetadata {
+            is_inline: definition.inline,
+            erasure_mode: decode_erasure_mode((*definition.erasure).clone()),
+            is_witness: definition.witness,
+            effect_info: decode_effect_info((*definition.effects).clone()),
+        };
+
         Self {
-            id,
-            metadata: OnceLock::new(),
+            decoder,
+            definition,
+            metadata,
             import: OnceLock::new(),
             signature: OnceLock::new(),
             implementation: OnceLock::new(),
@@ -874,34 +866,42 @@ impl Unload for DecodedFunction {
 
 impl Function for DecodedFunction {
     fn metadata(&self) -> &FunctionMetadata {
-        self.metadata.get().unwrap_or(&DEFAULT_FUNCTION_METADATA)
+        &self.metadata
     }
 
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
         self.import
-            .get()
-            .unwrap_or_else(|| panic!("decoded function {} has no import specifier", self.id))
+            .get_or_init(|| {
+                self.decoder
+                    .decode_import_specifier((*self.definition.import).clone())
+            })
             .clone()
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
         self.signature
-            .get()
-            .unwrap_or_else(|| todo!("decoded function reference has no full signature"))
+            .get_or_init(|| {
+                Arc::new(
+                    self.decoder
+                        .decode_function_signature((*self.definition.signature).clone()),
+                )
+            })
             .clone()
     }
 
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
-        self.implementation.get().cloned().flatten()
+        self.implementation
+            .get_or_init(|| {
+                self.definition
+                    .implementation
+                    .clone()
+                    .map(|implementation| {
+                        Arc::new(self.decoder.decode_function_implementation(*implementation))
+                    })
+            })
+            .clone()
     }
 }
-
-static DEFAULT_FUNCTION_METADATA: FunctionMetadata = FunctionMetadata {
-    is_inline: false,
-    erasure_mode: ErasureMode::Concrete,
-    is_witness: false,
-    effect_info: EffectInfo::Pure,
-};
 
 fn read_version_entry(entry: Option<tf::TubeFileEntry>) {
     let Some(tf::TubeFileEntry::Header { header }) = entry else {

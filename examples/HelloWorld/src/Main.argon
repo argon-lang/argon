@@ -1,0 +1,7 @@
+module _
+
+import Argon.Core::*
+
+proc main(): () do
+    puts "Hello World"
+end

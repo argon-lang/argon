@@ -6,7 +6,7 @@ use parse18_runtime::{
     FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, WithRange,
 };
 use std::collections::VecDeque;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexerMode {

@@ -1,4 +1,4 @@
-use argon_compiler::{Context, Tube, TubeCollection, TubeCollectionBuilder};
+use argon_compiler::{Context, Tube, TubeCollectionBuilder};
 use argon_format::tube::TubeFileEntry;
 use argon_util::{InternalCompilerError, TubeFormatError};
 use esexpr::ESExprCodec;

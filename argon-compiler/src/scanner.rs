@@ -1,6 +1,6 @@
-use std::sync::Arc;
-use crate::{DefaultExprContext, EffectInfo, Function};
+use crate::{EffectInfo, Function};
 use argon_expr::{Expr, ExprContext, ExprScanner, FunctionArgument};
+use std::sync::Arc;
 
 pub struct PurityScanner<EC: ?Sized> {
     found_impure_function_call: bool,
@@ -8,9 +8,8 @@ pub struct PurityScanner<EC: ?Sized> {
 }
 
 impl<EC> PurityScanner<EC>
-    where EC: ExprContext<
-        Function=Arc<dyn Function>,
-    > + ?Sized
+where
+    EC: ExprContext<Function = Arc<dyn Function>> + ?Sized,
 {
     pub fn new() -> Self {
         Self {
@@ -31,9 +30,8 @@ impl<EC> PurityScanner<EC>
 }
 
 impl<EC> ExprScanner for PurityScanner<EC>
-    where EC: ExprContext<
-        Function=Arc<dyn Function>,
-    > + ?Sized
+where
+    EC: ExprContext<Function = Arc<dyn Function>> + ?Sized,
 {
     type EC = EC;
 

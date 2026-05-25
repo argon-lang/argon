@@ -43,7 +43,7 @@ impl ResolvedImportGroups {
         }
     }
 
-    fn overload_groups(&self) -> impl Iterator<Item = Vec<Overloadable>> + '_ {
+    fn overload_groups(&self) -> Vec<Vec<Overloadable>> {
         [&self.same_module, &self.same_tube, &self.other]
             .into_iter()
             .filter(|exports| !exports.is_empty())
@@ -59,6 +59,7 @@ impl ResolvedImportGroups {
                     })
                     .collect()
             })
+            .collect()
     }
 }
 
@@ -69,17 +70,17 @@ pub struct GlobalScope {
 impl Scope for GlobalScope {
     type ExprContext = DefaultExprContext;
 
-    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         let Some(exports) = self.resolved_imports.get(name) else {
             return Lookup::Empty;
         };
 
-        let overload_groups = exports.overload_groups().collect::<Vec<_>>();
+        let overload_groups = exports.overload_groups();
 
-        Lookup::Overloadable(OverloadLookup::new(overload_groups.into_iter()))
+        Lookup::Overloadable(OverloadLookup::new(overload_groups))
     }
 
-    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         self.lookup(&Identifier::Update(Box::new(name.clone())))
     }
 }
@@ -100,6 +101,7 @@ impl GlobalScopeBuilder {
         tube_collection: Arc<TubeCollection>,
         current_tube: Arc<Tube>,
         current_module: ModulePath,
+        imports: Vec<WithLocation<ImportStmt>>,
     ) -> Arc<Self> {
         Arc::new(Self {
             context,
@@ -107,7 +109,7 @@ impl GlobalScopeBuilder {
             current_tube,
             current_module,
             parent: None,
-            imports: Vec::new(),
+            imports,
             resolved_imports: OnceLock::new(),
         })
     }
@@ -525,23 +527,26 @@ impl<'a> SourceFileProcessor<'a> {
     }
 
     fn get_scope(&mut self) -> Arc<GlobalScopeBuilder> {
-        match (&self.current_scope, &self.parent_scope) {
-            (Some(scope), _) => scope.clone(),
-            (None, Some(parent)) => {
-                let scope = parent.clone().with_imports(self.imports.clone());
-                self.current_scope = Some(scope.clone());
-                scope
-            }
-            (None, None) => {
-                let scope = GlobalScopeBuilder::new(
-                    self.context.clone(),
-                    self.tube_collection.clone(),
-                    self.tb.tube().clone(),
-                    self.result.path.clone(),
-                );
-                self.current_scope = Some(scope.clone());
-                scope
-            }
+        if let Some(scope) = &self.current_scope {
+            return scope.clone();
         }
+
+        let imports = std::mem::take(&mut self.imports);
+
+        let scope = if let Some(parent) = &self.parent_scope {
+            parent.clone().with_imports(imports)
+        }
+        else {
+            GlobalScopeBuilder::new(
+                self.context.clone(),
+                self.tube_collection.clone(),
+                self.tb.tube().clone(),
+                self.result.path.clone(),
+                imports,
+            )
+        };
+
+        self.current_scope = Some(scope.clone());
+        scope
     }
 }

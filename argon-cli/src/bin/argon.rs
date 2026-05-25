@@ -38,7 +38,9 @@ fn main() {
     let options = CommandLineOptions::parse();
     match options.command {
         Command::Compile(cmd) => {
-            argon_runner::compile(cmd);
+            if !argon_runner::compile(cmd) {
+                std::process::exit(1);
+            }
         }
         Command::GenIR(cmd) => {
             argon_runner::gen_ir(cmd);

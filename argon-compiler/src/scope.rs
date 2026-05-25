@@ -3,7 +3,6 @@ use crate::{Enum, Function, Instance, Method, Record, Trait};
 use argon_expr::{
     ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
 };
-use argon_parser::ast;
 use argon_parser::ast::Identifier;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -11,8 +10,8 @@ use std::sync::Arc;
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;
 
-    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext>;
-    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext>;
+    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext>;
+    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext>;
 }
 
 pub trait LocalScope: Scope {
@@ -29,14 +28,18 @@ pub enum Lookup<EC: ExprContext + ?Sized> {
 }
 
 pub struct OverloadLookup {
-    item_groups: Box<dyn Iterator<Item = Vec<Overloadable>>>,
+    item_groups: Vec<Vec<Overloadable>>,
 }
 
 impl OverloadLookup {
-    pub fn new(item_groups: impl Iterator<Item = Vec<Overloadable>> + 'static) -> Self {
+    pub fn new(item_groups: Vec<Vec<Overloadable>>) -> Self {
         Self {
-            item_groups: Box::new(item_groups),
+            item_groups,
         }
+    }
+
+    pub fn into_item_groups(self) -> Vec<Vec<Overloadable>> {
+        self.item_groups
     }
 }
 
@@ -53,7 +56,6 @@ pub struct ParameterScope<'a, EC: ExprContext + ?Sized> {
     parent: &'a mut dyn Scope<ExprContext = EC>,
     variable_lookup: HashMap<Identifier, Variable<EC>>,
     binding_lookup: HashMap<Identifier, VariableTupleElement<EC>>,
-    variables: HashSet<Variable<EC>>,
 }
 
 impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
@@ -91,11 +93,10 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
             parent,
             variable_lookup: HashMap::new(),
             binding_lookup: HashMap::new(),
-            variables: HashSet::new(),
         }
     }
 
-    fn lookup_name(&mut self, name: &Identifier) -> Option<Lookup<EC>> {
+    fn lookup_name(&self, name: &Identifier) -> Option<Lookup<EC>> {
         self.variable_lookup
             .get(name)
             .map(|variable| Lookup::Variable(variable.clone()))
@@ -110,12 +111,12 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
 impl<'a, EC: ExprContext + ?Sized> Scope for ParameterScope<'a, EC> {
     type ExprContext = EC;
 
-    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         self.lookup_name(name)
             .unwrap_or_else(|| self.parent.lookup(name))
     }
 
-    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         self.lookup_name(name)
             .unwrap_or_else(|| self.parent.lookup_assign(name))
     }
@@ -136,7 +137,7 @@ impl<'a, EC: ExprContext + ?Sized> LocalVariableScope<'a, EC> {
         }
     }
 
-    fn lookup_variable(&mut self, name: &Identifier) -> Option<Lookup<EC>> {
+    fn lookup_variable(&self, name: &Identifier) -> Option<Lookup<EC>> {
         self.variable_lookup
             .get(name)
             .map(|variable| Lookup::Variable(variable.clone()))
@@ -146,12 +147,12 @@ impl<'a, EC: ExprContext + ?Sized> LocalVariableScope<'a, EC> {
 impl<'a, EC: ExprContext + ?Sized> Scope for LocalVariableScope<'a, EC> {
     type ExprContext = EC;
 
-    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         self.lookup_variable(name)
             .unwrap_or_else(|| self.parent.lookup(name))
     }
 
-    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         self.lookup_variable(name)
             .unwrap_or_else(|| self.parent.lookup_assign(name))
     }
@@ -186,19 +187,23 @@ impl<'a, Sc: ?Sized, Sh> ShiftedScope<'a, Sc, Sh> {
 impl<'a, Sc, Sh> ShiftedScope<'a, Sc, Sh>
 where
     Sc: Scope + ?Sized,
-    Sh: ExprContextShifter<EC1 = Sc::ExprContext>,
+    Sh: ExprContextShifter<EC1 = Sc::ExprContext> + Copy,
 {
-    fn shift_lookup(&mut self, lookup: Lookup<Sh::EC1>) -> Lookup<Sh::EC2> {
+    fn shift_lookup(&self, lookup: Lookup<Sh::EC1>) -> Lookup<Sh::EC2> {
         match lookup {
             Lookup::Empty => Lookup::Empty,
             Lookup::Overloadable(o) => Lookup::Overloadable(o),
 
-            Lookup::Variable(v) => Lookup::Variable(self.shifter.shift_variable(v)),
+            Lookup::Variable(v) => {
+                let mut shifter = self.shifter;
+                Lookup::Variable(shifter.shift_variable(v))
+            },
             Lookup::VariableTupleElement(vte) => {
+                let mut shifter = self.shifter;
                 Lookup::VariableTupleElement(VariableTupleElement {
-                    variable: self.shifter.shift_variable(vte.variable),
+                    variable: shifter.shift_variable(vte.variable),
                     index: vte.index,
-                    binding_type: self.shifter.shift(vte.binding_type),
+                    binding_type: shifter.shift(vte.binding_type),
                 })
             }
         }
@@ -208,16 +213,16 @@ where
 impl<'a, Sc, Sh> Scope for ShiftedScope<'a, Sc, Sh>
 where
     Sc: Scope + ?Sized,
-    Sh: ExprContextShifter<EC1 = Sc::ExprContext>,
+    Sh: ExprContextShifter<EC1 = Sc::ExprContext> + Copy,
 {
     type ExprContext = Sh::EC2;
 
-    fn lookup(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         let lookup = self.inner.lookup(name);
         self.shift_lookup(lookup)
     }
 
-    fn lookup_assign(&mut self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
         let lookup = self.inner.lookup_assign(name);
         self.shift_lookup(lookup)
     }

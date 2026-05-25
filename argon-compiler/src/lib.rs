@@ -18,12 +18,11 @@ use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
 use esexpr::ESExpr;
 use nonempty_collections::NEVec;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
-use std::ops::Deref;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -194,6 +193,14 @@ impl TubeCollectionBuilder {
             }
         }
         tb
+    }
+}
+
+impl Unload for TubeCollection {
+    fn unload(&self) {
+        for (_, tube) in std::mem::take(&mut *self.tubes.write()) {
+            tube.unload();
+        }
     }
 }
 

@@ -1,12 +1,12 @@
 use crate::module::process_source_file;
 use argon_compiler::{
-    Context, ModulePath, Tube, TubeBuilder, TubeCollectionBuilder, TubeMetadata, TubeName,
+    Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName,
 };
 use argon_util::InternalCompilerError;
 use rayon::prelude::*;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use walkdir::WalkDir;
 

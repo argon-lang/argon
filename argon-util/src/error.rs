@@ -353,10 +353,23 @@ fn join_strings(values: impl IntoIterator<Item = impl AsRef<str>>) -> String {
     result
 }
 
+#[derive(Debug)]
 pub enum TubeFormatError {
     FileError(PathBuf, std::io::Error),
     ExprParseError(esexpr_binary::ParseError<std::io::Error>),
     ExprDecodeError(esexpr::DecodeError),
+}
+
+impl std::fmt::Display for TubeFormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::FileError(path, err) => {
+                write!(f, "tube format file error: {}: {err}", path.display())
+            }
+            Self::ExprParseError(err) => write!(f, "tube format parse error: {err:?}"),
+            Self::ExprDecodeError(err) => write!(f, "tube format decode error: {err:?}"),
+        }
+    }
 }
 
 impl From<esexpr_binary::ParseError<std::io::Error>> for TubeFormatError {
@@ -376,9 +389,31 @@ pub enum TubeEncodingError {
     GeneratorError(esexpr_binary::GeneratorError<std::io::Error>),
 }
 
+impl std::fmt::Display for TubeEncodingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GeneratorError(err) => write!(f, "tube encoding generator error: {err:?}"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum InternalCompilerError {
     IoError(PathBuf, std::io::Error),
     WalkDirError(walkdir::Error),
     TubeFormatError(TubeFormatError),
     TubeEncodingError(TubeEncodingError),
 }
+
+impl std::fmt::Display for InternalCompilerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::IoError(path, err) => write!(f, "I/O error: {}: {err}", path.display()),
+            Self::WalkDirError(err) => write!(f, "directory traversal error: {err}"),
+            Self::TubeFormatError(err) => write!(f, "{err}"),
+            Self::TubeEncodingError(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for InternalCompilerError {}

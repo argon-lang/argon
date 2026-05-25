@@ -1,7 +1,7 @@
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
     Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
-    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeCollectionBuilder, TubeName,
+    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeName,
     UnaryOperatorIdentifier,
 };
 use num_bigint::{BigInt, BigUint};
@@ -13,7 +13,7 @@ use argon_expr::{LocalVariable, Variable};
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use argon_util::TubeEncodingError;
 use esexpr::ESExprStatic;

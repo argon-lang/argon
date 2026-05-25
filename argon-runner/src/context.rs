@@ -52,6 +52,43 @@ impl RunnerErrorReporter {
         }
     }
 
+    pub fn print_error_messages(&self) {
+        match self.internal_compiler_errors.lock() {
+            Ok(errors) => {
+                if !errors.is_empty() {
+                    for error in errors.iter() {
+                        eprintln!("internal compiler error: {error}");
+                    }
+
+                    return;
+                }
+            }
+            Err(poisoned) => {
+                let errors = poisoned.into_inner();
+                if !errors.is_empty() {
+                    for error in errors.iter() {
+                        eprintln!("internal compiler error: {error}");
+                    }
+
+                    return;
+                }
+            }
+        }
+
+        match self.compile_errors.lock() {
+            Ok(errors) => {
+                for error in errors.iter() {
+                    eprintln!("compile error: {error}");
+                }
+            }
+            Err(poisoned) => {
+                for error in poisoned.into_inner().iter() {
+                    eprintln!("compile error: {error}");
+                }
+            }
+        }
+    }
+
     pub fn has_errors(&self) -> bool {
         !is_empty(&self.compile_errors) || !is_empty(&self.internal_compiler_errors)
     }

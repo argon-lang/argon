@@ -2,7 +2,7 @@ use argon_compiler::Context;
 use argon_compiler::access::AccessModifierGlobal;
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
-use argon_util::{CompileError, ErrorReporter};
+use argon_util::CompileError;
 use nonempty_collections::NESlice;
 use nonempty_collections::NonEmptyIterator;
 use parse18_runtime::{Location, WithLocation};

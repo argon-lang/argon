@@ -1,15 +1,14 @@
 use crate::modifiers::{ERASURE_MODE, ModifierParser};
 use crate::module::GlobalScope;
-use crate::type_checker::{DefaultToTypeCheckExprContextShifter, TypeChecker};
+use crate::type_checker::type_check_type_expr;
 use argon_compiler::access::AccessToken;
-use argon_compiler::scope::{LocalScope, LocalVariableScope, ParameterScope};
+use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
 use argon_compiler::{Context, DefaultExprContext};
-use argon_expr::{ErasureMode, Expr, ExprContextShifter, ExpressionOwner, Variable};
+use argon_expr::{ErasureMode, Expr, ExpressionOwner};
 use argon_parser::ast;
 use argon_util::CompileError;
 use parse18_runtime::WithLocation;
-use std::sync::Arc;
 
 pub struct SignatureParser<'a> {
     pub context: Context,
@@ -37,26 +36,27 @@ impl<'a> SignatureParser<'a> {
             let erasure_mode = mp.parse(&ERASURE_MODE);
             mp.done();
 
-            if allow_concrete_params && erasure_mode == ErasureMode::Concrete {
-                self.context.reporter().report_error(
-                    CompileError::type_parameter_is_concrete(param.location.clone()),
-                );
+            if !allow_concrete_params && erasure_mode == ErasureMode::Concrete {
+                self.context
+                    .reporter()
+                    .report_error(CompileError::type_parameter_is_concrete(
+                        param.location.clone(),
+                    ));
             }
 
-
-            let mut parameter_scope = ParameterScope::new(self.scope, self.owner.clone(), &parameters);
-
-            let mut tc = TypeChecker {
-                context: self.context.clone(),
-                scope: &mut parameter_scope,
-            };
+            let mut parameter_scope =
+                ParameterScope::new(self.scope, self.owner.clone(), &parameters);
 
             let bindings = param
                 .value
                 .parameters
                 .iter()
                 .map(|param_elem| {
-                    let t = tc.type_check_type_expr(&param_elem.value.param_type);
+                    let t = type_check_type_expr(
+                        self.context.clone(),
+                        &mut parameter_scope,
+                        &param_elem.value.param_type,
+                    );
 
                     ParameterBinding {
                         name: Some(param_elem.value.name.clone()),
@@ -95,24 +95,27 @@ impl<'a> SignatureParser<'a> {
                 name,
                 param_type,
             };
-            
+
             parameters.push(param);
         }
 
-
         let mut parameter_scope = ParameterScope::new(self.scope, self.owner.clone(), &parameters);
-        
-        let mut tc = TypeChecker {
-            context: self.context.clone(),
-            scope: &mut parameter_scope,
-        };
 
-        let conv_return_type = tc.type_check_type_expr(&return_type.value.return_type);
+        let conv_return_type = type_check_type_expr(
+            self.context.clone(),
+            &mut parameter_scope,
+            &return_type.value.return_type,
+        );
+
         let ensures_clauses = return_type
             .value
             .ensures_clauses
             .iter()
-            .map(|clause| tc.type_check_type_expr(clause))
+            .map(|clause| type_check_type_expr(
+                self.context.clone(),
+                &mut parameter_scope,
+                clause,
+            ))
             .collect::<Vec<_>>();
 
         FunctionSignature {

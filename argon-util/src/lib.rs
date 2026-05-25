@@ -1,8 +1,10 @@
 mod error;
+mod vec_deque_slice;
 
 pub use error::*;
 use std::hash::Hash;
 use std::sync::Arc;
+pub use vec_deque_slice::*;
 
 #[derive(Debug, Clone)]
 pub struct UniqueIdentifier(Arc<()>);
