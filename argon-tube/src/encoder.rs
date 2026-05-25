@@ -1,19 +1,18 @@
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
     Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
-    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeName,
-    UnaryOperatorIdentifier,
+    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use num_bigint::{BigInt, BigUint};
 use std::collections::VecDeque;
 use std::sync::Arc;
 
 use crate::ids::{LocalVariableId, TubeIdProvider};
-use argon_expr::{LocalVariable, Variable};
+use argon_expr::{ExpressionOwner, LocalVariable, Variable};
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
-    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
+    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
 };
 use argon_util::TubeEncodingError;
 use esexpr::ESExprStatic;
@@ -411,6 +410,10 @@ impl TubeEncoder {
                     .map(|item| self.emit_expr(item).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
+            Expr::TupleElement(tuple, index) => tf::Expr::TupleElement {
+                index: BigUint::from(*index),
+                tuple: Box::new(self.emit_expr(tuple)?),
+            },
             Expr::Builtin { builtin, arguments } => tf::Expr::Builtin {
                 builtin: encode_builtin(*builtin)?,
                 args: arguments
@@ -487,7 +490,48 @@ impl TubeEncoder {
                     .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
                     .transpose()?,
             },
+            Expr::Variable(variable) => tf::Expr::Variable {
+                v: Box::new(self.emit_var(variable)?),
+            },
             _ => todo!("Unimplement emit_expr for {:?}", expr),
+        })
+    }
+
+    fn emit_var(
+        &mut self,
+        variable: &Variable<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::Var, TubeEncodingError> {
+        Ok(match variable {
+            Variable::Parameter(variable) => tf::Var::ParameterVar {
+                owner: Box::new(self.emit_expression_owner(&variable.owner)?),
+                parameter_index: BigInt::from(variable.parameter_index),
+                name: variable
+                    .name
+                    .as_ref()
+                    .map(|name| encode_identifier(name).map(Box::new))
+                    .transpose()?,
+                var_type: Box::new(self.emit_expr(&variable.var_type)?),
+                erasure: Box::new(encode_erasure_mode(variable.erasure_mode)),
+                witness: variable.is_witness,
+            },
+            Variable::Local(_) => todo!("emit variable expressions for local variables"),
+        })
+    }
+
+    fn emit_expression_owner(
+        &mut self,
+        owner: &ExpressionOwner<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::ExpressionOwner, TubeEncodingError> {
+        Ok(match owner {
+            ExpressionOwner::Function(function) => tf::ExpressionOwner::Func {
+                index: self.get_function_id(function.clone()).into(),
+            },
+            ExpressionOwner::Record(_) => todo!("emit record expression owners"),
+            ExpressionOwner::Enum(_) => todo!("emit enum expression owners"),
+            ExpressionOwner::Trait(_) => todo!("emit trait expression owners"),
+            ExpressionOwner::EnumVariant(_) => todo!("emit enum variant expression owners"),
+            ExpressionOwner::Method(_) => todo!("emit method expression owners"),
+            ExpressionOwner::Instance(_) => todo!("emit instance expression owners"),
         })
     }
 
