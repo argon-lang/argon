@@ -39,6 +39,7 @@ pub enum ErrorCode {
     DuplicateTubeDefinition = 0x001D,
     UnknownTube = 0x001E,
     InvalidBuiltin = 0x001F,
+    CircularReexport = 0x0020,
 }
 
 impl ErrorCode {
@@ -312,6 +313,17 @@ impl CompileError {
             ErrorCode::InvalidBuiltin,
             format!("Invalid builtin: {}", name.as_ref()),
             loc,
+        )
+    }
+
+    pub fn circular_reexport(loc: Location, module_path: impl AsRef<str>) -> Self {
+        Self::new(
+            ErrorCode::CircularReexport,
+            format!(
+                "Circular reexport involving module: {}",
+                module_path.as_ref()
+            ),
+            Some(loc),
         )
     }
 }

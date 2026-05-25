@@ -1,5 +1,5 @@
 use crate::{CompileErrorReporter, Context, ContextObject};
-use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
+use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Default)]
@@ -52,6 +52,10 @@ impl Default for TestContext {
 impl ContextObject for TestContext {
     fn reporter(&self) -> &dyn CompileErrorReporter {
         &self.reporter
+    }
+
+    fn normalize_fuel(&self) -> Fuel {
+        Fuel::new(5)
     }
 }
 

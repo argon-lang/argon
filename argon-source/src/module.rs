@@ -441,9 +441,221 @@ impl DeclarationClosure for ModuleClosure {
     }
 }
 
-pub struct ModuleProcessResult {
+pub struct ModuleProcessResult<'a> {
     path: ModulePath,
     reexports: Vec<ExportStmt>,
+    context: Context,
+    tb: &'a TubeBuilder,
+    tube_collection: Arc<TubeCollection>,
+}
+
+pub(crate) fn register_module_reexports(results: Vec<ModuleProcessResult<'_>>) {
+    let mut registrar = ReexportRegistrar::new(results);
+    registrar.register_all();
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReexportState {
+    Pending,
+    Visiting,
+    Done,
+    Failed,
+}
+
+struct ReexportRegistrar<'a> {
+    results: HashMap<ModulePath, ModuleProcessResult<'a>>,
+    states: HashMap<ModulePath, ReexportState>,
+}
+
+impl<'a> ReexportRegistrar<'a> {
+    fn new(results: Vec<ModuleProcessResult<'a>>) -> Self {
+        let mut states = HashMap::new();
+        let mut results_by_path = HashMap::new();
+
+        for result in results {
+            states.insert(result.path.clone(), ReexportState::Pending);
+            results_by_path.insert(result.path.clone(), result);
+        }
+
+        Self {
+            results: results_by_path,
+            states,
+        }
+    }
+
+    fn register_all(&mut self) {
+        for path in self.results.keys().cloned().collect::<Vec<_>>() {
+            self.register_path(&path, None);
+        }
+    }
+
+    fn register_path(&mut self, path: &ModulePath, location: Option<Location>) -> bool {
+        match self
+            .states
+            .get(path)
+            .copied()
+            .unwrap_or(ReexportState::Done)
+        {
+            ReexportState::Done => return true,
+            ReexportState::Failed => return false,
+            ReexportState::Visiting => {
+                if let Some(location) = location {
+                    if let Some(result) = self.results.get(path) {
+                        result
+                            .context
+                            .reporter()
+                            .report_error(CompileError::circular_reexport(
+                                location,
+                                path.to_string(),
+                            ));
+                    }
+                }
+                return false;
+            }
+            ReexportState::Pending => {}
+        }
+
+        self.states.insert(path.clone(), ReexportState::Visiting);
+
+        let dependencies = self
+            .results
+            .get(path)
+            .map(|result| result.local_reexport_dependencies())
+            .unwrap_or_default();
+        for (dependency, location) in dependencies {
+            if !self.register_path(&dependency, Some(location)) {
+                self.states.insert(path.clone(), ReexportState::Failed);
+                return false;
+            }
+        }
+
+        self.register_path_reexports(path);
+        self.states.insert(path.clone(), ReexportState::Done);
+        true
+    }
+
+    fn register_path_reexports(&mut self, path: &ModulePath) {
+        let Some(result) = self.results.get(path) else {
+            return;
+        };
+
+        let module = result.tb.module(result.path.clone());
+        let scope = GlobalScopeBuilder::new(
+            result.context.clone(),
+            result.tube_collection.clone(),
+            result.tb.tube(),
+            module.module(),
+            Vec::new(),
+        );
+
+        for reexport in &result.reexports {
+            let mut resolved = ResolvedImports::new();
+            scope.resolve_import(&reexport.from_import, &mut resolved);
+
+            for (name, groups) in resolved {
+                for mut entry in [&groups.same_module, &groups.same_tube, &groups.other]
+                    .into_iter()
+                    .flat_map(|entries| entries.iter().cloned())
+                {
+                    entry.is_reexport = true;
+                    module.add_export(name.clone(), entry);
+                }
+            }
+        }
+    }
+}
+
+impl<'a> ModuleProcessResult<'a> {
+    fn local_reexport_dependencies(&self) -> Vec<(ModulePath, Location)> {
+        self.reexports
+            .iter()
+            .flat_map(|reexport| self.local_import_dependencies(&reexport.from_import))
+            .collect()
+    }
+
+    fn local_import_dependencies(
+        &self,
+        import: &WithLocation<ImportStmt>,
+    ) -> Vec<(ModulePath, Location)> {
+        match &import.value {
+            ImportStmt::Absolute(path) => {
+                let mut dependencies = Vec::new();
+                Self::collect_import_path_dependencies(Vec::new(), path, &mut dependencies);
+                dependencies
+            }
+
+            ImportStmt::Relative { up_count, path } => {
+                let current_path = &self.path.0;
+                let new_path_len = if *up_count <= current_path.len() {
+                    current_path.len() - *up_count
+                } else {
+                    0
+                };
+
+                let module_path = current_path.iter().take(new_path_len).cloned().collect();
+                let mut dependencies = Vec::new();
+                Self::collect_import_path_dependencies(module_path, path, &mut dependencies);
+                dependencies
+            }
+
+            ImportStmt::Tube { tube_name, path } => {
+                let tube_name = TubeName(
+                    NEVec::try_from_vec(
+                        std::iter::once(tube_name.head.clone())
+                            .chain(tube_name.tail.iter().cloned())
+                            .collect(),
+                    )
+                    .expect("parser tube names are non-empty"),
+                );
+
+                if &tube_name != self.tb.tube().name() {
+                    return Vec::new();
+                }
+
+                let mut dependencies = Vec::new();
+                Self::collect_import_path_dependencies(Vec::new(), path, &mut dependencies);
+                dependencies
+            }
+
+            ImportStmt::Member { .. } => Vec::new(),
+        }
+    }
+
+    fn collect_import_path_dependencies(
+        module_path: Vec<String>,
+        path: &ImportPathSegment,
+        dependencies: &mut Vec<(ModulePath, Location)>,
+    ) {
+        match path {
+            ImportPathSegment::Cons { id, sub_path } => {
+                let mut module_path = module_path;
+                module_path.push(id.clone());
+                Self::collect_import_path_dependencies(module_path, sub_path, dependencies);
+            }
+
+            ImportPathSegment::Many { segments } => {
+                for segment in segments {
+                    Self::collect_import_path_dependencies(
+                        module_path.clone(),
+                        segment,
+                        dependencies,
+                    );
+                }
+            }
+
+            ImportPathSegment::Renaming { importing, .. } => {
+                dependencies.push((ModulePath(module_path), importing.location.clone()));
+            }
+
+            ImportPathSegment::Imported { id } => {
+                dependencies.push((ModulePath(module_path), id.location.clone()));
+            }
+
+            ImportPathSegment::Wildcard { location } => {
+                dependencies.push((ModulePath(module_path), location.clone()));
+            }
+        }
+    }
 }
 
 pub struct DeclarationResult<T> {
@@ -451,12 +663,12 @@ pub struct DeclarationResult<T> {
     pub(crate) result: Arc<T>,
 }
 
-pub fn process_source_file(
+pub fn process_source_file<'a>(
     context: Context,
     path: &Path,
-    tb: &TubeBuilder,
+    tb: &'a TubeBuilder,
     tube_collection: Arc<TubeCollection>,
-) -> Option<ModuleProcessResult> {
+) -> Option<ModuleProcessResult<'a>> {
     let mut file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(e) => {
@@ -475,13 +687,16 @@ pub fn process_source_file(
 
     let mut processor = SourceFileProcessor {
         context: context.clone(),
-        tube_collection,
+        tube_collection: tube_collection.clone(),
         tb,
         module,
 
         result: ModuleProcessResult {
             path,
             reexports: Vec::new(),
+            context: context.clone(),
+            tb,
+            tube_collection: tube_collection.clone(),
         },
 
         parent_scope: None,
@@ -502,7 +717,7 @@ struct SourceFileProcessor<'a> {
     tb: &'a TubeBuilder,
     module: ModuleBuilder,
 
-    result: ModuleProcessResult,
+    result: ModuleProcessResult<'a>,
 
     parent_scope: Option<Arc<GlobalScopeBuilder>>,
     current_scope: Option<Arc<GlobalScopeBuilder>>,
