@@ -402,7 +402,6 @@ impl TubeEncoder {
     ) -> Result<tf::Expr, TubeEncodingError> {
         Ok(match expr {
             Expr::Error => tf::Expr::Error {},
-            Expr::AnyType => tf::Expr::AnyType {},
             Expr::BoolLiteral(value) => tf::Expr::BoolLiteral { value: *value },
             Expr::IntLiteral(i) => tf::Expr::IntLiteral { i: i.clone() },
             Expr::StringLiteral(s) => tf::Expr::StringLiteral { s: s.to_string() },
@@ -453,12 +452,12 @@ impl TubeEncoder {
             Expr::BoxedType { t } => tf::Expr::Boxed {
                 t: Box::new(self.emit_expr(t)?),
             },
-            Expr::Box { value } => tf::Expr::Box {
-                t: Box::new(tf::Expr::AnyType {}),
+            Expr::Box { t, value } => tf::Expr::Box {
+                t: Box::new(self.emit_expr(t)?),
                 value: Box::new(self.emit_expr(value)?),
             },
-            Expr::Unbox { value } => tf::Expr::Unbox {
-                t: Box::new(tf::Expr::AnyType {}),
+            Expr::Unbox { t, value } => tf::Expr::Unbox {
+                t: Box::new(self.emit_expr(t)?),
                 value: Box::new(self.emit_expr(value)?),
             },
             Expr::Sequence(exprs) => tf::Expr::Sequence {

@@ -3,21 +3,17 @@ use argon_compiler::scope::{
     LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope,
 };
 use argon_compiler::{Context, DefaultExprContext, FunctionSignature};
-use argon_expr::{
-    Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter,
-    LocalVariable, Variable, VariableTupleElement,
-};
+use argon_expr::{Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, FunctionArgument, LocalVariable, SubstScanner, Variable, VariableTupleElement};
 use argon_parser::ast;
-use argon_parser::ast::{FunctionParameterListType, Identifier, StringFragment};
+use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, UniqueIdentifier, VecDequeSlice};
-use nonempty_collections::{IntoNonEmptyIterator, NEVec, NonEmptyIterator};
+use nonempty_collections::NEVec;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
-use std::collections::{btree_map, BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::fmt::{Debug, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-
-
 
 pub fn type_check_type_expr(
     context: Context,
@@ -70,7 +66,7 @@ impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
     type EC2 = DefaultExprContext;
 
     fn shift_hole(&mut self, hole: Hole) -> Expr<DefaultExprContext> {
-        TypeCheckToDefaultExprContextShifter.shift(*hole.1)
+        todo!()
     }
 }
 
@@ -86,12 +82,33 @@ impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct Hole(UniqueIdentifier, Box<Expr<TypeCheckExprContext>>);
+
+struct HoleInfo {
+    hole_type: Expr<TypeCheckExprContext>,
+}
+
+#[derive(Clone)]
+pub struct Hole {
+    hole_info: Arc<HoleInfo>
+}
+
+impl Hole {
+    pub fn new(hole_type: Expr<TypeCheckExprContext>) -> Self {
+        Self {
+            hole_info: Arc::new(HoleInfo { hole_type })
+        }
+    }
+}
+
+impl Debug for Hole {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Hole({})", self.hole_info.as_ref() as *const HoleInfo as usize)
+    }
+}
 
 impl PartialEq for Hole {
     fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
+        std::ptr::eq(self.hole_info.as_ref(), other.hole_info.as_ref())
     }
 }
 
@@ -99,7 +116,7 @@ impl Eq for Hole {}
 
 impl Hash for Hole {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
+        std::ptr::hash(self.hole_info.as_ref(), state);
     }
 }
 
@@ -116,27 +133,74 @@ impl Model {
     }
 }
 
-enum TypeInferResult {
-    Complete {
-        inferred_type: Expr<TypeCheckExprContext>,
-        checked_expr: Expr<TypeCheckExprContext>,
+#[derive(Clone)]
+enum TypeInferResult<'a> {
+    // Fully inferred type
+    Complete(InferredType),
+
+    // A closure that needs additional type information
+    Closure {
+        location: &'a Location,
+        function_literal: &'a FunctionLiteral,
+    },
+
+    // The remaining cases are compound expressions that may have subexpressions that require additional type information
+    Finally {
+        body_result: Box<TypeInferResult<'a>>,
+        finally_body: Box<Expr<TypeCheckExprContext>>,
+    },
+
+    IfElse {
+        condition: Box<Expr<TypeCheckExprContext>>,
+        when_true_var: Option<Variable<TypeCheckExprContext>>,
+        when_false_var: Option<Variable<TypeCheckExprContext>>,
+        true_body: Box<TypeInferResult<'a>>,
+        false_body_location: &'a Location,
+        false_body: Box<TypeInferResult<'a>>,
+    },
+
+    Sequence {
+        init_exprs: NEVec<Expr<TypeCheckExprContext>>,
+        last_result: Box<TypeInferResult<'a>>,
     },
 }
 
-impl TypeInferResult {
-    fn complete(
-        checked_expr: Expr<TypeCheckExprContext>,
-        inferred_type: Expr<TypeCheckExprContext>,
-    ) -> Self {
-        Self::Complete {
-            inferred_type,
-            checked_expr,
-        }
+impl <'a> TypeInferResult<'a> {
+    fn error() -> Self {
+        Self::Complete(InferredType {
+            inferred_type: Expr::Error,
+            checked_expr: Expr::Error,
+        })
     }
 
-    fn error() -> Self {
-        Self::complete(Expr::Error, Expr::Error)
+    fn partially_inferred_type<'b>(&'b self) -> PartiallyInferredType<'b> {
+        match self {
+            TypeInferResult::Complete(inferred_type) => PartiallyInferredType::Full(&inferred_type.checked_expr),
+            TypeInferResult::Closure { .. } => PartiallyInferredType::Closure,
+            TypeInferResult::Finally { body_result, .. } => body_result.partially_inferred_type() ,
+            TypeInferResult::IfElse { true_body, .. } => true_body.partially_inferred_type(),
+            TypeInferResult::Sequence { last_result, .. } => last_result.partially_inferred_type(),
+        }
     }
+}
+
+#[derive(Clone)]
+struct InferredType {
+    inferred_type: Expr<TypeCheckExprContext>,
+    checked_expr: Expr<TypeCheckExprContext>,
+}
+
+#[derive(Debug)]
+enum PartiallyInferredType<'b> {
+    Full(&'b Expr<TypeCheckExprContext>),
+    Closure,
+}
+
+
+#[derive(Debug, Clone, Copy)]
+enum ExpectedType<'a> {
+    AnyMetaType,
+    Exact(&'a Expr<TypeCheckExprContext>),
 }
 
 
@@ -168,24 +232,32 @@ impl <'a> TypeChecker<'a> {
 
     fn check(
         &mut self,
-        expr: &WithLocation<ast::Expr>,
+        expr: &'a WithLocation<ast::Expr>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
         let infer = self.infer(expr);
-        self.check_inferred_type(&expr.location, infer, expected_type)
+        self.check_inferred_type(&expr.location, infer, ExpectedType::Exact(expected_type)).checked_expr
     }
 
     fn check_type(
         &mut self,
-        expr: &WithLocation<ast::Expr>,
+        expr: &'a WithLocation<ast::Expr>,
     ) -> Expr<TypeCheckExprContext> {
-        self.check(expr, &Expr::AnyType)
+        self.check_type_with_meta_type(expr).checked_expr
+    }
+
+    fn check_type_with_meta_type(
+        &mut self,
+        expr: &'a WithLocation<ast::Expr>,
+    ) -> InferredType {
+        let infer = self.infer(expr);
+        self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType)
     }
 
     fn infer(
         &mut self,
-        expr: &WithLocation<ast::Expr>,
-    ) -> TypeInferResult {
+        expr: &'a WithLocation<ast::Expr>,
+    ) -> TypeInferResult<'a> {
         match &expr.value {
             ast::Expr::Error => TypeInferResult::error(),
 
@@ -193,31 +265,40 @@ impl <'a> TypeChecker<'a> {
                 let t = self.check_type(value_type);
                 let e = self.check(value, &t);
 
-                TypeInferResult::complete(e, t)
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: e,
+                    inferred_type: t,
+                })
             }
 
             ast::Expr::BoolLiteral(value) => {
-                TypeInferResult::complete(Expr::BoolLiteral(*value), Expr::bool_type())
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::BoolLiteral(*value),
+                    inferred_type: Expr::bool_type(),
+                })
             }
             ast::Expr::IntLiteral(value) => {
-                TypeInferResult::complete(Expr::IntLiteral(value.clone()), Expr::int_type())
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::IntLiteral(value.clone()),
+                    inferred_type: Expr::int_type(),
+                })
             }
 
             ast::Expr::Break { label: Some(_) } => todo!(),
-            ast::Expr::Break { label: None } => TypeInferResult::complete(
-                Expr::Break { label: None },
-                Expr::never_type(),
-            ),
+            ast::Expr::Break { label: None } => TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::Break { label: None },
+                inferred_type: Expr::never_type(),
+            }),
             ast::Expr::Next { label: Some(_) } => todo!(),
-            ast::Expr::Next { label: None } => TypeInferResult::complete(
-                Expr::Next { label: None },
-                Expr::never_type(),
-            ),
+            ast::Expr::Next { label: None } => TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::Next { label: None },
+                inferred_type: Expr::never_type(),
+            }),
             ast::Expr::Redo { label: Some(_) } => todo!(),
-            ast::Expr::Redo { label: None } => TypeInferResult::complete(
-                Expr::Redo { label: None },
-                Expr::never_type(),
-            ),
+            ast::Expr::Redo { label: None } => TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::Redo { label: None },
+                inferred_type: Expr::never_type(),
+            }),
 
             ast::Expr::Builtin(_)
             | ast::Expr::FunctionCall { .. }
@@ -309,31 +390,49 @@ impl <'a> TypeChecker<'a> {
                     }
                 };
 
-                TypeInferResult::complete(str_expr, Expr::string_type())
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: str_expr,
+                    inferred_type: Expr::string_type(),
+                })
             }
             ast::Expr::BigType(value) => {
-                TypeInferResult::complete(Expr::BigType(value.clone()), Expr::BigType(value + 1))
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::BigType(value.clone()),
+                    inferred_type: Expr::BigType(value + 1),
+                })
             }
             ast::Expr::Assert { .. } => todo!("infer assert expressions"),
             ast::Expr::Block { body, finally_body } => {
-                let TypeInferResult::Complete {
-                    checked_expr: checked_body,
-                    inferred_type,
-                } = self.infer_block(body);
-                let checked_finally_body = finally_body.as_ref().map(|finally_body| {
-                    Box::new(self.check_block(finally_body, &Expr::unit_type()))
-                });
+                let mut result = self.infer_block(body);
 
-                TypeInferResult::complete(
-                    Expr::Ensures {
-                        block_body: Box::new(checked_body),
-                        ensures_body: checked_finally_body,
-                    },
-                    inferred_type,
-                )
+                if let Some(finally_body) = finally_body {
+                    let checked_finally_body = self.check_block(finally_body, &Expr::unit_type());
+
+                    result = match result {
+                        TypeInferResult::Complete(InferredType {
+                            checked_expr,
+                            inferred_type,
+                        }) => {
+                            TypeInferResult::Complete(InferredType {
+                                checked_expr: Expr::Finally {
+                                    block_body: Box::new(checked_expr),
+                                    finally_body: Box::new(checked_finally_body),
+                                },
+                                inferred_type,
+                            })
+                        }
+
+                        _ => TypeInferResult::Finally {
+                            body_result: Box::new(result),
+                            finally_body: Box::new(checked_finally_body),
+                        },
+                    };
+                }
+
+                result
             }
             ast::Expr::Dot { .. } => todo!("infer member access"),
-            ast::Expr::FunctionLiteral { .. } => todo!("infer function literals"),
+            ast::Expr::FunctionLiteral(_) => todo!("infer function literals"),
             ast::Expr::FunctionType { .. } => todo!("infer function types"),
             ast::Expr::IfElse {
                 condition,
@@ -341,24 +440,38 @@ impl <'a> TypeChecker<'a> {
                 when_false,
             } => {
                 let conv_condition = self.check(condition, &Expr::bool_type());
-                let TypeInferResult::Complete {
-                    checked_expr: conv_when_true,
-                    inferred_type,
-                } = self.infer_block(when_true);
-                let conv_when_false = self.check_block(when_false, &inferred_type);
+                let true_body_result = self.infer_block(when_true);
+                let false_body_result = self.infer_block(when_false);
 
                 let (when_true_var, when_false_var) = self.create_if_cond_vars(&conv_condition);
 
-                TypeInferResult::complete(
-                    Expr::IfElse {
+                if let TypeInferResult::Complete(InferredType {
+                    checked_expr: checked_true_body,
+                    inferred_type: inferred_true_body_type,
+                }) = true_body_result {
+                    let checked_false_body = self.check_inferred_type(&when_false.location, false_body_result, ExpectedType::Exact(&inferred_true_body_type)).checked_expr;
+
+                    TypeInferResult::Complete(InferredType {
+                        checked_expr: Expr::IfElse {
+                            when_true_var,
+                            when_false_var,
+                            condition: Box::new(conv_condition),
+                            when_true: Box::new(checked_true_body),
+                            when_false: Box::new(checked_false_body),
+                        },
+                        inferred_type: inferred_true_body_type,
+                    })
+                }
+                else {
+                    TypeInferResult::IfElse {
+                        condition: Box::new(conv_condition),
                         when_true_var,
                         when_false_var,
-                        condition: Box::new(conv_condition),
-                        when_true: Box::new(conv_when_true),
-                        when_false: Box::new(conv_when_false),
-                    },
-                    inferred_type,
-                )
+                        true_body: Box::new(true_body_result),
+                        false_body_location: &when_false.location,
+                        false_body: Box::new(false_body_result),
+                    }
+                }
             }
             ast::Expr::Is { .. } => todo!("infer is expressions"),
             ast::Expr::Loop { .. } => todo!("infer loops"),
@@ -377,54 +490,67 @@ impl <'a> TypeChecker<'a> {
 
     fn infer_block(
         &mut self,
-        body: &WithLocation<Vec<WithLocation<ast::Stmt>>>,
-    ) -> TypeInferResult {
+        body: &'a WithLocation<Vec<WithLocation<ast::Stmt>>>,
+    ) -> TypeInferResult<'a> {
         let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
-            return TypeInferResult::complete(Expr::unit_type(), Expr::unit_type());
+            return TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::unit_type(),
+                inferred_type: Expr::unit_type(),
+            });
         };
 
         let checked_stmts = leading_stmts
             .iter()
             .map(|stmt| self.check_stmt(stmt, &Expr::unit_type()))
             .collect::<Vec<_>>();
-        let TypeInferResult::Complete {
-            checked_expr,
-            inferred_type,
-        } = self.infer_stmt(last_stmt);
 
-        let checked_stmts = match NEVec::try_from_vec(checked_stmts) {
-            Some(mut checked_stmts) => {
-                checked_stmts.push(checked_expr);
-                checked_stmts
-            }
-            None => NEVec::new(checked_expr),
+        let Some(mut checked_stmts) = NEVec::try_from_vec(checked_stmts) else {
+            return self.infer_stmt(last_stmt);
         };
 
-        TypeInferResult::complete(Expr::Sequence(checked_stmts), inferred_type)
+        match self.infer_stmt(last_stmt) {
+            TypeInferResult::Complete(InferredType {
+                checked_expr,
+                inferred_type,
+            }) => {
+                checked_stmts.push(checked_expr);
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Sequence(checked_stmts),
+                    inferred_type,
+                })
+            }
+
+            last_result => {
+                TypeInferResult::Sequence {
+                   init_exprs: checked_stmts,
+                    last_result: Box::new(last_result),
+                }
+            }
+        }
     }
 
     fn check_block(
         &mut self,
-        body: &WithLocation<Vec<WithLocation<ast::Stmt>>>,
+        body: &'a WithLocation<Vec<WithLocation<ast::Stmt>>>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
         let infer = self.infer_block(body);
-        self.check_inferred_type(&body.location, infer, expected_type)
+        self.check_inferred_type(&body.location, infer, ExpectedType::Exact(expected_type)).checked_expr
     }
 
     fn check_stmt(
         &mut self,
-        stmt: &WithLocation<ast::Stmt>,
+        stmt: &'a WithLocation<ast::Stmt>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
         let infer = self.infer_stmt(stmt);
-        self.check_inferred_type(&stmt.location, infer, expected_type)
+        self.check_inferred_type(&stmt.location, infer, ExpectedType::Exact(expected_type)).checked_expr
     }
 
     fn infer_stmt(
         &mut self,
-        stmt: &WithLocation<ast::Stmt>,
-    ) -> TypeInferResult {
+        stmt: &'a WithLocation<ast::Stmt>,
+    ) -> TypeInferResult<'a> {
         match &stmt.value {
             ast::Stmt::Expr(expr) => self.infer(expr),
             _ => todo!("inferring non-expression statements in blocks"),
@@ -433,8 +559,8 @@ impl <'a> TypeChecker<'a> {
 
     fn infer_call(
         &mut self,
-        call: CallInfo<'_>,
-    ) -> TypeInferResult {
+        call: CallInfo<'a>,
+    ) -> TypeInferResult<'a> {
         match call.callee {
             CalleeInfo::Error => TypeInferResult::error(),
             CalleeInfo::Builtin(builtin) => {
@@ -444,24 +570,33 @@ impl <'a> TypeChecker<'a> {
             CalleeInfo::VariableTupleElement(vte) => {
                 self.infer_variable_tuple_element(vte, call.arguments)
             }
-            CalleeInfo::Overloadable(_) => todo!(),
+            CalleeInfo::Overloadable(overloads) => {
+                OverloadResolver::new(self).resolve_overload_lookup(
+                    call.location,
+                    overloads,
+                    call.arguments,
+                )
+            },
             CalleeInfo::Expr(_) => todo!(),
             CalleeInfo::TypeN => {
                 if !call.arguments.is_empty() {
                     todo!()
                 }
 
-                TypeInferResult::complete(Expr::type_n(0), Expr::type_n(1))
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::type_n(0),
+                    inferred_type: Expr::type_n(1),
+                })
             }
         }
     }
 
     fn infer_builtin(
         &mut self,
-        location: &Location,
+        location: &'a Location,
         builtin: Builtin,
-        args: VecDeque<ArgumentInfo<'_>>,
-    ) -> TypeInferResult {
+        args: VecDeque<ArgumentInfo<'a>>,
+    ) -> TypeInferResult<'a> {
         match builtin {
             Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
                 self.infer_fixed_builtin(location, builtin, args, [], Expr::type_n(0))
@@ -517,13 +652,13 @@ impl <'a> TypeChecker<'a> {
                     .map(|arg| self.check(arg.arg, &Expr::string_type()))
                     .collect();
 
-                TypeInferResult::complete(
-                    Expr::Builtin {
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Builtin {
                         builtin,
                         arguments: checked_args,
                     },
-                    Expr::string_type(),
-                )
+                    inferred_type: Expr::string_type(),
+                })
             }
 
             Builtin::StringEq | Builtin::StringNe => self.infer_fixed_builtin(
@@ -602,10 +737,10 @@ impl <'a> TypeChecker<'a> {
         &mut self,
         location: &Location,
         builtin: Builtin,
-        args: VecDeque<ArgumentInfo<'_>>,
+        args: VecDeque<ArgumentInfo<'a>>,
         expected_arg_types: [Expr<TypeCheckExprContext>; ARG_COUNT],
         inferred_type: Expr<TypeCheckExprContext>,
-    ) -> TypeInferResult {
+    ) -> TypeInferResult<'a> {
         if args.len() != ARG_COUNT {
             self.report_builtin_arity_error(location, builtin, ARG_COUNT, args.len());
             return TypeInferResult::error();
@@ -617,20 +752,20 @@ impl <'a> TypeChecker<'a> {
             .map(|(arg, expected_type)| self.check(arg.arg, &expected_type))
             .collect();
 
-        TypeInferResult::complete(
-            Expr::Builtin {
+        TypeInferResult::Complete(InferredType {
+            checked_expr: Expr::Builtin {
                 builtin,
                 arguments: checked_args,
             },
             inferred_type,
-        )
+        })
     }
 
     fn infer_parameterized_builtin<const REST_ARG_COUNT: usize>(
         &mut self,
-        location: &Location,
+        location: &'a Location,
         builtin: Builtin,
-        mut args: VecDeque<ArgumentInfo<'_>>,
+        mut args: VecDeque<ArgumentInfo<'a>>,
         create_rest_arg_types: impl FnOnce(
             &Expr<TypeCheckExprContext>,
         ) -> [Expr<TypeCheckExprContext>; REST_ARG_COUNT],
@@ -638,7 +773,7 @@ impl <'a> TypeChecker<'a> {
             &Expr<TypeCheckExprContext>,
             Expr<TypeCheckExprContext>,
         ) -> Expr<TypeCheckExprContext>,
-    ) -> TypeInferResult {
+    ) -> TypeInferResult<'a> {
         let expected_arg_count = REST_ARG_COUNT + 1;
         let total_arg_count = args.len();
 
@@ -647,10 +782,12 @@ impl <'a> TypeChecker<'a> {
             return TypeInferResult::error();
         };
 
-        let TypeInferResult::Complete {
+
+
+        let InferredType {
             checked_expr: element_type,
             inferred_type: element_type_type,
-        } = self.infer(element_type_arg.arg);
+        } = self.check_type_with_meta_type(element_type_arg.arg);
 
         let expected_rest_arg_types = create_rest_arg_types(&element_type);
         if args.len() != REST_ARG_COUNT {
@@ -666,20 +803,20 @@ impl <'a> TypeChecker<'a> {
                 .map(|(arg, expected_type)| self.check(arg.arg, &expected_type)),
         );
 
-        TypeInferResult::complete(
-            Expr::Builtin {
+        TypeInferResult::Complete(InferredType {
+            checked_expr: Expr::Builtin {
                 builtin,
                 arguments: checked_args,
             },
-            create_result_type(&element_type, element_type_type),
-        )
+            inferred_type: create_result_type(&element_type, element_type_type),
+        })
     }
 
     fn infer_variable(
         &mut self,
         v: Variable<TypeCheckExprContext>,
-        args: VecDeque<ArgumentInfo<'_>>,
-    ) -> TypeInferResult {
+        args: VecDeque<ArgumentInfo<'a>>,
+    ) -> TypeInferResult<'a> {
         let t = v.var_type();
         let expr = Expr::Variable(v);
         self.infer_function_object_call(expr, t, args)
@@ -688,40 +825,75 @@ impl <'a> TypeChecker<'a> {
     fn infer_variable_tuple_element(
         &mut self,
         vte: VariableTupleElement<TypeCheckExprContext>,
-        args: VecDeque<ArgumentInfo<'_>>,
-    ) -> TypeInferResult {
+        args: VecDeque<ArgumentInfo<'a>>,
+    ) -> TypeInferResult<'a> {
         let t = vte.binding_type;
         let expr = Expr::TupleElement(Box::new(Expr::Variable(vte.variable)), vte.index);
         self.infer_function_object_call(expr, t, args)
     }
 
-    fn infer_function_object_call(
+    fn infer_function_object_call<'b>(
         &mut self,
-        mut expr: Expr<TypeCheckExprContext>,
-        mut t: Expr<TypeCheckExprContext>,
-        args: VecDeque<ArgumentInfo<'_>>,
-    ) -> TypeInferResult {
-        for arg in args {
-            if let Expr::FunctionType { a, r } = t {
-                let arg = self.check(arg.arg, &a);
-                expr = Expr::FunctionObjectCall {
-                    function: Box::new(expr),
-                    argument: Box::new(arg),
-                };
-                t = *r;
-            } else {
-                self.context
-                    .reporter()
-                    .report_error(CompileError::function_type_required(
-                        arg.call_location.clone(),
-                        format!("{:?}", t),
-                    ));
+        expr: Expr<TypeCheckExprContext>,
+        t: Expr<TypeCheckExprContext>,
+        args: VecDeque<ArgumentInfo<'a>>,
+    ) -> TypeInferResult<'a> {
+        let expr_result = TypeInferResult::Complete(InferredType {
+            checked_expr: expr,
+            inferred_type: t,
+        });
 
-                return TypeInferResult::error();
+        let args = args.iter()
+            .map(|arg| (self.infer(arg.arg), arg))
+            .collect::<Vec<_>>();
+
+        self.infer_function_object_call_inferred(
+            expr_result,
+            args.into_iter(),
+        )
+    }
+
+    fn infer_function_object_call_inferred<'b>(
+        &mut self,
+        mut expr_result: TypeInferResult<'a>,
+        args: impl Iterator<Item=(TypeInferResult<'a>, &'b ArgumentInfo<'a>)>,
+    ) -> TypeInferResult<'a>
+        where 'a : 'b
+    {
+        for (arg_result, arg) in args {
+            match expr_result.partially_inferred_type() {
+                PartiallyInferredType::Full(func_type @ Expr::FunctionType { a, r }) => {
+                    let func_type = func_type.clone();
+                    let r = (**r).clone();
+
+                    let checked_arg = self.check_inferred_type(&arg.arg.location, arg_result, ExpectedType::Exact(a));
+                    let f = self.check_inferred_type(&arg.arg.location, expr_result, ExpectedType::Exact(&func_type));
+
+                    expr_result = TypeInferResult::Complete(InferredType {
+                        checked_expr: Expr::FunctionObjectCall {
+                            function: Box::new(f.checked_expr),
+                            argument: Box::new(checked_arg.checked_expr),
+                        },
+                        inferred_type: r,
+                    });
+                }
+
+                PartiallyInferredType::Closure => todo!(),
+
+                t => {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::function_type_required(
+                            arg.call_location.clone(),
+                            format!("{:?}", t),
+                        ));
+
+                    return TypeInferResult::error();
+                }
             }
         }
 
-        TypeInferResult::complete(expr, t)
+        expr_result
     }
 
     fn process_call<'b>(
@@ -861,47 +1033,74 @@ impl <'a> TypeChecker<'a> {
         }
     }
 
+    fn resolve_inferred_type(
+        &mut self,
+        infer: TypeInferResult,
+        expected_type: ExpectedType<'_>,
+    ) -> InferredType {
+        match infer {
+            TypeInferResult::Complete(inferred_type) => inferred_type,
+            TypeInferResult::Closure { .. } => {
+                todo!()
+            }
+            TypeInferResult::Finally { body_result, finally_body } => {
+                let body_inferred = self.resolve_inferred_type(*body_result, expected_type);
+                InferredType {
+                    checked_expr: Expr::Finally {
+                        block_body: Box::new(body_inferred.checked_expr),
+                        finally_body,
+                    },
+                    inferred_type: body_inferred.inferred_type,
+                }
+            }
+            TypeInferResult::IfElse { when_true_var, when_false_var, condition, true_body, false_body_location, false_body } => {
+                let true_body_inferred = self.resolve_inferred_type(*true_body, expected_type);
+                let checked_false_body = self.check_inferred_type(false_body_location, *false_body, ExpectedType::Exact(&true_body_inferred.inferred_type)).checked_expr;
+
+                InferredType {
+                    checked_expr: Expr::IfElse {
+                        when_true_var,
+                        when_false_var,
+                        condition,
+                        when_true: Box::new(true_body_inferred.checked_expr),
+                        when_false: Box::new(checked_false_body),
+                    },
+                    inferred_type: true_body_inferred.inferred_type,
+                }
+            }
+            TypeInferResult::Sequence {
+                init_exprs: mut exprs,
+                last_result,
+            } => {
+                let last_inferred = self.resolve_inferred_type(*last_result, expected_type);
+                exprs.push(last_inferred.checked_expr);
+                InferredType {
+                    checked_expr: Expr::Sequence(exprs),
+                    inferred_type: last_inferred.inferred_type,
+                }
+            }
+        }
+    }
+
     fn check_inferred_type(
         &mut self,
         location: &Location,
         infer: TypeInferResult,
-        expected_type: &Expr<TypeCheckExprContext>,
-    ) -> Expr<TypeCheckExprContext> {
-        let TypeInferResult::Complete {
-            checked_expr,
-            inferred_type,
-        } = infer;
+        expected_type: ExpectedType<'_>,
+    ) -> InferredType {
+        let inferred = self.resolve_inferred_type(infer, expected_type);
 
-        match &inferred_type {
-            Expr::Type(n) => match expected_type {
-                Expr::AnyType | Expr::BigType(_) => return checked_expr,
-                Expr::Type(n2) => match (&**n, &**n2) {
-                    (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
-                        if n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2 {
-                            return checked_expr;
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {}
-            },
-
-            _ => {}
-        }
-
-        if !unify(expected_type, &inferred_type) {
+        if !type_matches_expected(&inferred.inferred_type, expected_type) {
             self.context
                 .reporter()
                 .report_error(CompileError::type_mismatch(
                     location.clone(),
+                    format!("{:?}", inferred.inferred_type),
                     format!("{:?}", expected_type),
-                    format!("{:?}", inferred_type),
                 ));
-
-            return Expr::Error;
         }
 
-        checked_expr
+        inferred
     }
 
     fn create_if_cond_vars(
@@ -971,7 +1170,6 @@ impl <'a> TypeChecker<'a> {
 fn unify(a: &Expr<TypeCheckExprContext>, b: &Expr<TypeCheckExprContext>) -> bool {
     match (a, b) {
         (Expr::Error, _) | (_, Expr::Error) => true,
-        (Expr::AnyType, _) | (_, Expr::AnyType) => true,
         (Expr::Hole(a), Expr::Hole(b)) => a == b,
         (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
         (
@@ -1017,6 +1215,59 @@ fn unify_all(a: &[Expr<TypeCheckExprContext>], b: &[Expr<TypeCheckExprContext>])
     a.len() == b.len() && a.iter().zip(b).all(|(a, b)| unify(a, b))
 }
 
+fn is_type(expr: &Expr<TypeCheckExprContext>) -> bool {
+    match expr {
+        Expr::Type(_) => true,
+        Expr::BigType(_) => true,
+        Expr::Tuple { items } => items.iter().all(is_type),
+        _ => false,
+    }
+}
+
+
+fn type_matches_expected(
+    actual_type: &Expr<TypeCheckExprContext>,
+    expected_type: ExpectedType<'_>,
+) -> bool {
+    match expected_type {
+        ExpectedType::AnyMetaType => is_type(actual_type),
+
+        ExpectedType::Exact(expected_type) => {
+            'exact_check: {
+                match &actual_type {
+                    Expr::Type(n) => match expected_type {
+                        Expr::BigType(_) => break 'exact_check true,
+                        Expr::Type(n2) => match (&**n, &**n2) {
+                            (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
+                                break 'exact_check n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2;
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    },
+
+                    _ => {}
+                }
+
+                unify(expected_type, &actual_type)
+            }
+        }
+    }
+}
+
+fn partially_inferred_type_matches_expected(
+    actual_type: PartiallyInferredType<'_>,
+    expected_type: ExpectedType<'_>,
+) -> bool {
+    match actual_type {
+        PartiallyInferredType::Full(actual_type) => type_matches_expected(actual_type, expected_type),
+        PartiallyInferredType::Closure => {
+            todo!()
+        }
+    }
+}
+
+
 struct ArgumentInfo<'a> {
     call_location: &'a Location,
     arg: &'a WithLocation<ast::Expr>,
@@ -1042,67 +1293,77 @@ struct CallInfo<'a> {
 
 struct OverloadResolver<'a, 'b> {
     type_checker: &'b mut TypeChecker<'a>,
-    rejected_overloads: Vec<Overloadable>,
+    rejected_overloads: Vec<(Overloadable, OverloadRejectionReason)>,
 }
 
 impl <'a, 'b> OverloadResolver<'a, 'b> {
 
-    fn resolve_overload_lookup(mut self, call_location: &Location, overload_lookup: OverloadLookup, args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> TypeInferResult {
-        for group in overload_lookup.into_item_groups() {
-            if let Some(result) = self.resolve_overload(call_location, group, args) {
-                return result;
+    fn new(type_checker: &'b mut TypeChecker<'a>) -> Self {
+        Self {
+            type_checker,
+            rejected_overloads: Vec::new(),
+        }
+    }
+
+    fn resolve_overload_lookup(mut self, call_location: &'a Location, overload_lookup: OverloadLookup, args: VecDeque<ArgumentInfo<'a>>) -> TypeInferResult<'a> {
+        let inferred_args = args.iter()
+            .map(|arg| self.type_checker.infer(arg.arg))
+            .collect::<VecDeque<_>>();
+
+        let overload = 'find_overload: {
+            for group in overload_lookup.into_item_groups() {
+                for mut group in self.group_overloads_by_arity(group, VecDequeSlice::new(&args)) {
+                    let mut i = 0;
+                    while i < group.len() {
+                        if let Some(reason) = self.is_overload_applicable(&group[i], VecDequeSlice::new(&args), VecDequeSlice::new(&inferred_args)) {
+                            let overload = group.swap_remove(i);
+                            self.rejected_overloads.push((overload, reason));
+                        }
+                        else {
+                            i += 1;
+                        }
+                    }
+
+                    let Some(selected_overload) = group.pop() else {
+                        continue;
+                    };
+
+                    if !group.is_empty() {
+                        self.type_checker.context.reporter().report_error(CompileError::ambiguous_overload(
+                            call_location.clone(),
+                        ));
+                    }
+
+                    break 'find_overload selected_overload;
+                }
             }
-        }
 
-        todo!()
+            self.type_checker.context.reporter().report_error(CompileError::invalid_overload(
+                call_location.clone(),
+            ));
+
+            return TypeInferResult::error();
+        };
+
+        self.select_overload(overload, VecDequeSlice::new(&args), inferred_args)
     }
 
-    fn resolve_overload(&mut self, call_location: &Location, mut overloads: Vec<Overloadable>, args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> Option<TypeInferResult> {
-        if overloads.len() == 1 && let Some(overload) = overloads.pop() {
-            return Some(self.attempt_single_overload(call_location, overload, args));
-        }
-
-        for group in self.group_overloads_by_arity(overloads, args) {
-            if group.len().get() == 1 {
-                let (overload, _) = group.into_nonempty_iter().next();
-                return Some(self.attempt_single_overload(call_location, overload, args));
-            }
-
-            todo!("Implement overload resolution")
-        }
-
-        None
-    }
-
-    fn attempt_single_overload(&mut self, call_location: &Location, overload: Overloadable, args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> TypeInferResult {
-        todo!()
-    }
-
-    fn group_overloads_by_arity(&mut self, overloads: Vec<Overloadable>, args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> impl Iterator<Item=NEVec<Overloadable>> + 'static {
-        let mut groups: BTreeMap<OverloadArityRank, NEVec<Overloadable>> =
+    fn group_overloads_by_arity(&mut self, overloads: Vec<Overloadable>, args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> impl Iterator<Item=Vec<Overloadable>> + 'static {
+        let mut groups: BTreeMap<OverloadArityRank, Vec<Overloadable>> =
             BTreeMap::new();
 
         for overload in overloads {
-            let Some(rank) = self.rank_by_arity(&overload, args) else {
-                self.rejected_overloads.push(overload);
-                continue;
-            };
-
-            match groups.entry(rank) {
-                btree_map::Entry::Occupied(mut entry) => {
-                    entry.get_mut().push(overload);
-                }
-                btree_map::Entry::Vacant(entry) => {
-                    entry.insert(NEVec::new(overload));
-                }
+            match self.rank_by_arity(&overload, args) {
+                Some(rank) => groups.entry(rank).or_default().push(overload),
+                None => self.rejected_overloads.push((overload, OverloadRejectionReason::ParameterListTypeMismatch)),
             }
         }
 
         groups.into_values()
     }
 
-    fn rank_by_arity(&mut self, overload: &Overloadable, mut args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> Option<OverloadArityRank> {
-        let sig = self.get_overload_params(overload);
+    fn rank_by_arity(&self, overload: &Overloadable, mut args: VecDequeSlice<'_, ArgumentInfo<'_>>) -> Option<OverloadArityRank> {
+        let sig = self.get_overload_sig(overload);
 
         let mut params = &sig.parameters[..];
 
@@ -1118,31 +1379,247 @@ impl <'a, 'b> OverloadResolver<'a, 'b> {
                 }
             };
 
-            let Some((arg, tail_args)) = args.split_first() else {
-                return Some(OverloadArityRank::Less(params.len()));
-            };
-
-            if param.list_type == arg.list_type {
-                args = tail_args;
-                params = tail_params;
+            if let Some((arg, tail_args)) = args.split_first() {
+                if param.list_type == arg.list_type {
+                    args = tail_args;
+                }
+                else if param.list_type == FunctionParameterListType::NormalList {
+                    return None;
+                }
+                else {
+                    num_inferred += 1;
+                }
             }
             else if param.list_type == FunctionParameterListType::NormalList {
-                return None;
+                return Some(OverloadArityRank::Less(params.len()));
             }
             else {
-                params = tail_params;
                 num_inferred += 1;
             }
+
+
+            params = tail_params;
         }
     }
 
-    fn get_overload_params(
+    fn is_overload_applicable(&self, overload: &Overloadable, mut args: VecDequeSlice<'_, ArgumentInfo<'a>>, mut inferred_args: VecDequeSlice<'_, TypeInferResult<'a>>) -> Option<OverloadRejectionReason> {
+        let sig = self.get_overload_sig(overload);
+
+        let mut param_types = sig.parameters
+            .iter()
+            .map(|p| DefaultToTypeCheckExprContextShifter.shift(p.param_type.clone()))
+            .collect::<VecDeque<_>>();
+
+        let mut return_type = DefaultToTypeCheckExprContextShifter.shift(sig.return_type.clone());
+
+        let mut params = &sig.parameters[..];
+        let mut parameter_index = overload.initial_parameter_index();
+
+        loop {
+            let Some((param, tail_params)) = params.split_first() else {
+                break;
+            };
+
+            let Some(param_type) = param_types.pop_front() else {
+                break;
+            };
+
+            let v: Variable<TypeCheckExprContext> = DefaultToTypeCheckExprContextShifter.shift_variable(
+                Variable::Parameter(Arc::new(
+                    param.clone().to_parameter_var(overload.as_expression_owner(), parameter_index))
+                )
+            );
+
+            if let (
+                Some((arg, tail_args)),
+                Some((inferred_arg, tail_inferred_args))
+            ) = (args.split_first(), inferred_args.split_first()) {
+                if param.list_type == arg.list_type {
+                    if !partially_inferred_type_matches_expected(inferred_arg.partially_inferred_type(), ExpectedType::Exact(&param_type)) {
+                        return Some(OverloadRejectionReason::ParameterTypeMismatch { parameter_index });
+                    }
+
+                    self.substitute_inferred_arg_in_param_types(&mut param_types, &mut return_type, v, inferred_arg);
+
+                    args = tail_args;
+                    inferred_args = tail_inferred_args;
+                }
+                else {
+                    match param.list_type {
+                        FunctionParameterListType::NormalList => {
+                            return Some(OverloadRejectionReason::ParameterListTypeMismatch);
+                        }
+                        FunctionParameterListType::InferrableList | FunctionParameterListType::QuoteList => {
+                            let hole = Hole::new(param_type);
+                            self.substitute_arg_in_param_types(&mut param_types, &mut return_type, v, &Expr::Hole(hole));
+                        }
+                        FunctionParameterListType::RequiresList => {
+                            todo!("implicit resolution")
+                        }
+                    }
+                }
+            }
+            else {
+                match param.list_type {
+                    FunctionParameterListType::NormalList => {
+                        return Some(OverloadRejectionReason::ParameterListTypeMismatch);
+                    }
+                    FunctionParameterListType::InferrableList | FunctionParameterListType::QuoteList => {
+                        let hole = Hole::new(param_type);
+                        self.substitute_arg_in_param_types(&mut param_types, &mut return_type, v, &Expr::Hole(hole));
+                    }
+                    FunctionParameterListType::RequiresList => {
+                        todo!("implicit resolution")
+                    }
+                }
+            }
+
+            parameter_index += 1;
+            params = tail_params;
+        }
+
+        // Process extra arguments by comparing argument types to return type
+        while let (
+            Some((arg, tail_args)),
+            Some((inferred_arg, tail_inferred_args))
+        ) = (args.split_first(), inferred_args.split_first()) {
+            todo!()
+        }
+
+        None
+    }
+
+    fn substitute_inferred_arg_in_param_types(&self, param_types: &mut VecDeque<Expr<TypeCheckExprContext>>, return_type: &mut Expr<TypeCheckExprContext>, v: Variable<TypeCheckExprContext>, arg: &TypeInferResult<'a>) {
+        if let TypeInferResult::Complete(inferred_type) = arg {
+            self.substitute_arg_in_param_types(param_types, return_type, v, &inferred_type.checked_expr);
+        }
+        else {
+            self.substitute_arg_in_param_types(param_types, return_type, v, &Expr::Error);
+        }
+    }
+
+    fn substitute_arg_in_param_types(&self, param_types: &mut VecDeque<Expr<TypeCheckExprContext>>, return_type: &mut Expr<TypeCheckExprContext>, v: Variable<TypeCheckExprContext>, arg: &Expr<TypeCheckExprContext>) {
+        let mut scanner = SubstScanner::new(v, arg);
+
+        for param_type in param_types.iter_mut() {
+            scanner.scan(param_type);
+        }
+
+        scanner.scan(return_type);
+    }
+
+    fn select_overload(&mut self, overload: Overloadable, mut args: VecDequeSlice<'_, ArgumentInfo<'a>>, mut inferred_args: VecDeque<TypeInferResult<'a>>) -> TypeInferResult<'a> {
+        let sig = self.get_overload_sig(&overload);
+
+        let mut param_types = sig.parameters
+            .iter()
+            .map(|p| DefaultToTypeCheckExprContextShifter.shift(p.param_type.clone()))
+            .collect::<VecDeque<_>>();
+
+        let mut return_type = DefaultToTypeCheckExprContextShifter.shift(sig.return_type.clone());
+
+        let mut params = &sig.parameters[..];
+        let mut parameter_index = overload.initial_parameter_index();
+
+        let mut selected_args = Vec::with_capacity(inferred_args.len());
+
+        loop {
+            let Some((param, tail_params)) = params.split_first() else {
+                break;
+            };
+
+            let Some(param_type) = param_types.pop_front() else {
+                break;
+            };
+
+            let v: Variable<TypeCheckExprContext> = DefaultToTypeCheckExprContextShifter.shift_variable(
+                Variable::Parameter(Arc::new(
+                    param.clone().to_parameter_var(overload.as_expression_owner(), parameter_index))
+                )
+            );
+
+            if let Some((arg, tail_args)) = args.split_first() {
+                if param.list_type == arg.list_type {
+                    let arg_result = inferred_args.pop_front().expect("inferred_args should not be empty when args is not empty");
+
+                    let arg_expr = self.type_checker.check_inferred_type(
+                        &arg.arg.location,
+                        arg_result,
+                        ExpectedType::Exact(&param_type),
+                    );
+
+                    self.substitute_arg_in_param_types(&mut param_types, &mut return_type, v, &arg_expr.checked_expr);
+
+                    selected_args.push(FunctionArgument {
+                        list_type: param.list_type,
+                        arg: arg_expr.checked_expr,
+                    });
+
+                    args = tail_args;
+                }
+                else {
+                    match param.list_type {
+                        FunctionParameterListType::NormalList => {
+                            unreachable!("Parameter list type mismatch should have been caught earlier");
+                        }
+                        FunctionParameterListType::InferrableList | FunctionParameterListType::QuoteList => {
+                            let hole = Hole::new(param_type);
+                            self.substitute_arg_in_param_types(&mut param_types, &mut return_type, v, &Expr::Hole(hole));
+                        }
+                        FunctionParameterListType::RequiresList => {
+                            todo!("implicit resolution")
+                        }
+                    }
+                }
+            }
+            else {
+                match param.list_type {
+                    FunctionParameterListType::NormalList => {
+                        unreachable!("Parameter list type mismatch should have been caught earlier");
+                    }
+                    FunctionParameterListType::InferrableList | FunctionParameterListType::QuoteList => {
+                        let hole = Hole::new(param_type);
+                        self.substitute_arg_in_param_types(&mut param_types, &mut return_type, v, &Expr::Hole(hole));
+                    }
+                    FunctionParameterListType::RequiresList => {
+                        todo!("implicit resolution")
+                    }
+                }
+            }
+
+            parameter_index += 1;
+            params = tail_params;
+        };
+
+        let expr = match overload {
+            Overloadable::Function(f) => Expr::FunctionCall {
+                function: f,
+                arguments: selected_args,
+            },
+            _ => todo!(),
+        };
+
+
+        self.type_checker.infer_function_object_call_inferred(
+            TypeInferResult::Complete(InferredType {
+                checked_expr: expr,
+                inferred_type: return_type,
+            }),
+            inferred_args.into_iter().zip(args)
+        )
+    }
+
+    fn get_overload_sig(
         &self,
         overload: &Overloadable,
-    ) -> Arc<FunctionSignature<TypeCheckExprContext>> {
-        todo!()
+    ) -> Arc<FunctionSignature<DefaultExprContext>> {
+        match overload {
+            Overloadable::Function(f) => f.clone().signature(),
+            _ => todo!()
+        }
     }
 }
+
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1177,6 +1654,8 @@ impl PartialOrd for OverloadArityRank {
 
 enum OverloadRejectionReason {
     ParameterListTypeMismatch,
-
+    ParameterTypeMismatch {
+        parameter_index: usize,
+    },
 }
 

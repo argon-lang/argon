@@ -52,3 +52,13 @@ impl <'a, T> Clone for VecDequeSlice<'a, T> {
 }
 
 impl <'a, T> Copy for VecDequeSlice<'a, T> {}
+
+impl <'a, T> IntoIterator for VecDequeSlice<'a, T> {
+    type Item = &'a T;
+    type IntoIter = std::iter::Chain<std::slice::Iter<'a, T>, std::slice::Iter<'a, T>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.first.iter().chain(self.second.iter())
+    }
+}
+

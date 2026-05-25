@@ -1,5 +1,5 @@
 use crate::signature::SignatureParameter;
-use crate::{Enum, Function, Instance, Method, Record, Trait};
+use crate::{DefaultExprContext, Enum, Function, Instance, Method, Record, Trait};
 use argon_expr::{
     ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
 };
@@ -50,6 +50,33 @@ pub enum Overloadable {
     Enum(Arc<dyn Enum>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
+}
+
+impl Overloadable {
+    pub fn initial_parameter_index(&self) -> usize {
+        0
+    }
+
+    pub fn as_expression_owner<EC>(&self) -> ExpressionOwner<EC>
+        where EC: ExprContext<
+            Function = <DefaultExprContext as ExprContext>::Function,
+            Record = <DefaultExprContext as ExprContext>::Record,
+            Enum = <DefaultExprContext as ExprContext>::Enum,
+            Trait = <DefaultExprContext as ExprContext>::Trait,
+            EnumVariant = <DefaultExprContext as ExprContext>::EnumVariant,
+            Method = <DefaultExprContext as ExprContext>::Method,
+            Instance = <DefaultExprContext as ExprContext>::Instance,
+        > + ?Sized
+    {
+        match self {
+            Overloadable::Function(f) => ExpressionOwner::Function(f.clone()),
+            Overloadable::Method(m) => ExpressionOwner::Method(m.clone()),
+            Overloadable::Record(r) => ExpressionOwner::Record(r.clone()),
+            Overloadable::Enum(e) => ExpressionOwner::Enum(e.clone()),
+            Overloadable::Trait(t) => ExpressionOwner::Trait(t.clone()),
+            Overloadable::Instance(i) => ExpressionOwner::Instance(i.clone()),
+        }
+    }
 }
 
 pub struct ParameterScope<'a, EC: ExprContext + ?Sized> {

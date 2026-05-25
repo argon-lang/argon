@@ -311,10 +311,7 @@ pub enum Expr {
         o: Box<WithLocation<Expr>>,
         member: WithLocation<Identifier>,
     },
-    FunctionLiteral {
-        parameter_name: Option<Identifier>,
-        body: Box<WithLocation<Expr>>,
-    },
+    FunctionLiteral(FunctionLiteral),
     FunctionCall {
         func: Box<WithLocation<Expr>>,
         list_type: FunctionParameterListType,
@@ -424,6 +421,12 @@ pub enum FunctionBody {
 pub struct RecordFieldLiteral {
     pub name: WithLocation<Identifier>,
     pub value: WithLocation<Expr>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionLiteral {
+    pub parameter_name: Option<Identifier>,
+    pub body: Box<WithLocation<Expr>>,
 }
 
 #[derive(Debug, Clone)]

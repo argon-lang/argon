@@ -565,10 +565,10 @@ fn expr_dot(o: WithLocation<Expr>, member: WithLocation<Identifier>) -> Expr {
 }
 
 fn expr_function_literal(parameter_name: Option<Identifier>, body: WithLocation<Expr>) -> Expr {
-    Expr::FunctionLiteral {
+    Expr::FunctionLiteral(ast::FunctionLiteral {
         parameter_name,
         body: Box::new(body),
-    }
+    })
 }
 
 fn expr_function_call(

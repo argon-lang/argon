@@ -580,7 +580,6 @@ enum method-implementation {
 enum expr {
     error,
     erased-value,
-    any-type,
     and {
         a: expr;
         b: expr;

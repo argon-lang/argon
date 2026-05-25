@@ -655,11 +655,11 @@ impl TubeDecoder {
         match expr {
             tf::Expr::Error {} => Expr::Error,
             tf::Expr::ErasedValue {} => todo!("decode erased-value expression"),
-            tf::Expr::AnyType {} => Expr::AnyType,
             tf::Expr::And { .. } => todo!("decode and expression"),
             tf::Expr::BindVariable { .. } => todo!("decode bind-variable expression"),
             tf::Expr::BoolLiteral { value } => Expr::BoolLiteral(value),
-            tf::Expr::Box { value, .. } => Expr::Box {
+            tf::Expr::Box { t, value } => Expr::Box {
+                t: Box::new(self.decode_expr(*t)),
                 value: Box::new(self.decode_expr(*value)),
             },
             tf::Expr::Builtin { builtin, args } => Expr::Builtin {
@@ -750,7 +750,8 @@ impl TubeDecoder {
             }
             tf::Expr::TypeN { n } => Expr::Type(Box::new(self.decode_expr(*n))),
             tf::Expr::TypeBigN { n } => Expr::BigType(n.into()),
-            tf::Expr::Unbox { value, .. } => Expr::Unbox {
+            tf::Expr::Unbox { t, value } => Expr::Unbox {
+                t: Box::new(self.decode_expr(*t)),
                 value: Box::new(self.decode_expr(*value)),
             },
             tf::Expr::Variable { v } => Expr::Variable(self.decode_var(*v)),

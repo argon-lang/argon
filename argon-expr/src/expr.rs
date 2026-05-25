@@ -21,7 +21,7 @@ pub trait ExprContext {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
+#[derivative(Debug(bound = ""), PartialEq(bound = ""), Eq(bound = ""))]
 pub enum ExpressionOwner<EC: ExprContext + ?Sized> {
     Function(EC::Function),
     Record(EC::Record),
@@ -72,9 +72,9 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         member: Identifier,
     },
     EnumType(EC::Enum, Vec<Expr<EC>>),
-    Ensures {
+    Finally {
         block_body: Box<Expr<EC>>,
-        ensures_body: Option<Box<Expr<EC>>>,
+        finally_body: Box<Expr<EC>>,
     },
     FunctionLiteral {
         parameter_name: Option<Identifier>,
@@ -144,7 +144,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         items: Vec<Expr<EC>>,
     },
     TupleElement(Box<Expr<EC>>, usize),
-    AnyType,
     Type(Box<Expr<EC>>),
     BigType(BigInt),
     Variable(Variable<EC>),
@@ -158,9 +157,11 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         t: Box<Expr<EC>>,
     },
     Box {
+        t: Box<Expr<EC>>,
         value: Box<Expr<EC>>,
     },
     Unbox {
+        t: Box<Expr<EC>>,
         value: Box<Expr<EC>>,
     },
 }
@@ -433,7 +434,8 @@ impl<EC: ExprContext + ?Sized> PartialEq for Variable<EC> {
             (Variable::Local(a), Variable::Local(b)) => Arc::ptr_eq(a, b),
             (Variable::Local(_), _) | (_, Variable::Local(_)) => false,
 
-            (Variable::Parameter(a), Variable::Parameter(b)) => Arc::ptr_eq(a, b),
+            (Variable::Parameter(a), Variable::Parameter(b)) =>
+                a.owner == b.owner && a.parameter_index == b.parameter_index,
         }
     }
 }
@@ -472,6 +474,18 @@ pub struct LocalVariable<EC: ExprContext + ?Sized> {
     pub is_mutable: bool,
 }
 
+impl<EC: ExprContext + ?Sized> Clone for LocalVariable<EC> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            var_type: self.var_type.clone(),
+            erasure_mode: self.erasure_mode,
+            is_witness: self.is_witness,
+            is_mutable: self.is_mutable,
+        }
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct ParameterVariable<EC: ExprContext + ?Sized> {
@@ -481,6 +495,19 @@ pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub name: Option<Identifier>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
+}
+
+impl<EC: ExprContext + ?Sized> Clone for ParameterVariable<EC> {
+    fn clone(&self) -> Self {
+        Self {
+            owner: self.owner.clone(),
+            parameter_index: self.parameter_index,
+            var_type: self.var_type.clone(),
+            name: self.name.clone(),
+            erasure_mode: self.erasure_mode,
+            is_witness: self.is_witness,
+        }
+    }
 }
 
 #[cfg(test)]

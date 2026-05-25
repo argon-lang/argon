@@ -46,12 +46,12 @@ where
         Expr::Assert { t } => Expr::Assert {
             t: Box::new(shifter.shift(*t)),
         },
-        Expr::Ensures {
+        Expr::Finally {
             block_body,
-            ensures_body,
-        } => Expr::Ensures {
+            finally_body: ensures_body,
+        } => Expr::Finally {
             block_body: Box::new(shifter.shift(*block_body)),
-            ensures_body: ensures_body.map(|body| Box::new(shifter.shift(*body))),
+            finally_body: Box::new(shifter.shift(*ensures_body)),
         },
         Expr::BoolLiteral(value) => Expr::BoolLiteral(value),
         Expr::Break { label } => Expr::Break { label },
@@ -191,7 +191,6 @@ where
         Expr::TupleElement(value, index) => {
             Expr::TupleElement(Box::new(shifter.shift(*value)), index)
         }
-        Expr::AnyType => Expr::AnyType,
         Expr::Type(t) => Expr::Type(Box::new(shifter.shift(*t))),
         Expr::BigType(value) => Expr::BigType(value),
         Expr::Variable(variable) => Expr::Variable(shifter.shift_variable(variable)),
@@ -211,10 +210,12 @@ where
         Expr::BoxedType { t } => Expr::BoxedType {
             t: Box::new(shifter.shift(*t)),
         },
-        Expr::Box { value } => Expr::Box {
+        Expr::Box { t, value } => Expr::Box {
+            t: Box::new(shifter.shift(*t)),
             value: Box::new(shifter.shift(*value)),
         },
-        Expr::Unbox { value } => Expr::Unbox {
+        Expr::Unbox { t, value } => Expr::Unbox {
+            t: Box::new(shifter.shift(*t)),
             value: Box::new(shifter.shift(*value)),
         },
     }
