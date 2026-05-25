@@ -1,4 +1,8 @@
+use alloc::format;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
 use parse18_runtime::Location;
+#[cfg(feature = "std")]
 use std::path::PathBuf;
 
 pub trait ErrorReporter<E> {
@@ -328,8 +332,8 @@ impl CompileError {
     }
 }
 
-impl std::fmt::Display for CompileError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "[AR{:04X}] ", self.code.code())?;
 
         if let Some(loc) = &self.location {
@@ -348,6 +352,7 @@ impl std::fmt::Display for CompileError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for CompileError {}
 
 fn join_strings(values: impl IntoIterator<Item = impl AsRef<str>>) -> String {
@@ -366,18 +371,22 @@ fn join_strings(values: impl IntoIterator<Item = impl AsRef<str>>) -> String {
 
 #[derive(Debug)]
 pub enum TubeFormatError {
+    #[cfg(feature = "std")]
     FileError(PathBuf, std::io::Error),
+    #[cfg(feature = "std")]
     ExprParseError(esexpr_binary::ParseError<std::io::Error>),
     ExprParseErrorNoIo(esexpr_binary::ParseError<core::convert::Infallible>),
     ExprDecodeError(esexpr::DecodeError),
 }
 
-impl std::fmt::Display for TubeFormatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for TubeFormatError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            #[cfg(feature = "std")]
             Self::FileError(path, err) => {
                 write!(f, "tube format file error: {}: {err}", path.display())
             }
+            #[cfg(feature = "std")]
             Self::ExprParseError(err) => write!(f, "tube format parse error: {err:?}"),
             Self::ExprParseErrorNoIo(err) => write!(f, "tube format parse error: {err:?}"),
             Self::ExprDecodeError(err) => write!(f, "tube format decode error: {err:?}"),
@@ -385,6 +394,7 @@ impl std::fmt::Display for TubeFormatError {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<esexpr_binary::ParseError<std::io::Error>> for TubeFormatError {
     fn from(err: esexpr_binary::ParseError<std::io::Error>) -> Self {
         Self::ExprParseError(err)
@@ -399,27 +409,34 @@ impl From<esexpr::DecodeError> for TubeFormatError {
 
 #[derive(Debug)]
 pub enum InternalCompilerError {
+    #[cfg(feature = "std")]
     IoError(PathBuf, std::io::Error),
+    #[cfg(feature = "std")]
     WalkDirError(walkdir::Error),
     TubeFormatError(TubeFormatError),
 }
 
-impl std::fmt::Display for InternalCompilerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for InternalCompilerError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            #[cfg(feature = "std")]
             Self::IoError(path, err) => write!(f, "I/O error: {}: {err}", path.display()),
+            #[cfg(feature = "std")]
             Self::WalkDirError(err) => write!(f, "directory traversal error: {err}"),
             Self::TubeFormatError(err) => write!(f, "{err}"),
         }
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for InternalCompilerError {}
 
 impl embedded_io::Error for InternalCompilerError {
     fn kind(&self) -> embedded_io::ErrorKind {
         match self {
+            #[cfg(feature = "std")]
             Self::IoError(_, err) => err.kind().into(),
+            #[cfg(feature = "std")]
             Self::WalkDirError(err) => err
                 .io_error()
                 .map_or(embedded_io::ErrorKind::Other, |err| err.kind().into()),

@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VecDequeSlice<'a, T> {
@@ -53,7 +53,7 @@ impl<'a, T> Copy for VecDequeSlice<'a, T> {}
 
 impl<'a, T> IntoIterator for VecDequeSlice<'a, T> {
     type Item = &'a T;
-    type IntoIter = std::iter::Chain<std::slice::Iter<'a, T>, std::slice::Iter<'a, T>>;
+    type IntoIter = core::iter::Chain<core::slice::Iter<'a, T>, core::slice::Iter<'a, T>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.first.iter().chain(self.second.iter())

@@ -1,9 +1,15 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
 mod error;
 mod vec_deque_slice;
 
+use alloc::sync::Arc;
+use core::hash::Hash;
 pub use error::*;
-use std::hash::Hash;
-use std::sync::Arc;
 pub use vec_deque_slice::*;
 
 #[derive(Debug, Clone)]
@@ -24,7 +30,7 @@ impl PartialEq for UniqueIdentifier {
 impl Eq for UniqueIdentifier {}
 
 impl Hash for UniqueIdentifier {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         Arc::as_ptr(&self.0).hash(state);
     }
 }

@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 argon-util = { workspace = true }
-embedded-io = { workspace = true }
+embedded-io = { workspace = true, features = ["std"] }
 esexpr-binary = { workspace = true }
 
 [lints]

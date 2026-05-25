@@ -3,12 +3,16 @@ name = "argon-util"
 publish = false
 edition = "2024"
 
+[features]
+default = ["std"]
+std = ["dep:walkdir", "embedded-io/std"]
+
 [dependencies]
 embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
 parse18-runtime = { workspace = true }
-walkdir = { workspace = true }
+walkdir = { workspace = true, optional = true }
 
 [lints]
 workspace = true

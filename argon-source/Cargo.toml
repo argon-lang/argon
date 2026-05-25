@@ -16,7 +16,7 @@ rayon = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }
-embedded-io = { workspace = true }
+embedded-io = { workspace = true, features = ["std"] }
 num-bigint = { workspace = true }
 walkdir = { workspace = true }
 

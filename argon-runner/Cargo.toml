@@ -10,7 +10,7 @@ argon-io = { workspace = true }
 argon-source = { workspace = true }
 argon-tube = { workspace = true }
 argon-util = { workspace = true }
-embedded-io = { workspace = true }
+embedded-io = { workspace = true, features = ["std"] }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
 rayon = { workspace = true }
