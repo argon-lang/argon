@@ -99,7 +99,9 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
                 param.clone().to_parameter_var(owner.clone(), param_index),
             ));
 
-            variable_lookup.insert(param.name.clone(), param_var.clone());
+            if let Some(name) = param.name.as_ref() {
+                variable_lookup.insert(name.clone(), param_var.clone());
+            }
 
             for (binding_index, binding) in param.bindings.iter().enumerate() {
                 let Some(name) = binding.name.clone() else {
@@ -118,8 +120,8 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
 
         Self {
             parent,
-            variable_lookup: HashMap::new(),
-            binding_lookup: HashMap::new(),
+            variable_lookup,
+            binding_lookup,
         }
     }
 

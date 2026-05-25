@@ -94,8 +94,7 @@ impl Function for SourceFunction {
             scope: &mut scope,
             access_token,
             owner,
-        }
-        .parse(&self.decl.parameters, &self.decl.return_type);
+        }.parse(&self.decl.parameters, &self.decl.return_type);
 
         let result = Arc::new(sig);
         *sig_store = Some(result.clone());
