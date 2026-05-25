@@ -6,12 +6,12 @@ use argon_compiler::{
     Context, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding, ModuleExportEntry,
     ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
 };
+use argon_io::{EmbeddedIoRead, InputFile};
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
-use argon_util::{CompileError, InternalCompilerError};
+use argon_util::CompileError;
 use nonempty_collections::NEVec;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 type ResolvedImports = HashMap<Identifier, ResolvedImportGroups>;
@@ -663,23 +663,25 @@ pub struct DeclarationResult<T> {
     pub(crate) result: Arc<T>,
 }
 
-pub fn process_source_file<'a>(
+pub fn process_source_file<'a, F>(
     context: Context,
-    path: &Path,
+    source: &F,
     tb: &'a TubeBuilder,
     tube_collection: Arc<TubeCollection>,
-) -> Option<ModuleProcessResult<'a>> {
-    let mut file = match std::fs::File::open(path) {
+) -> Option<ModuleProcessResult<'a>>
+where
+    F: InputFile,
+{
+    let file = match source.open() {
         Ok(file) => file,
         Err(e) => {
-            context
-                .reporter()
-                .report_error(InternalCompilerError::IoError(path.to_path_buf(), e));
+            context.reporter().report_error(e);
             return None;
         }
     };
 
-    let module_decl = argon_parser::parse(&mut file, path, context.reporter());
+    let module_decl =
+        argon_parser::parse(EmbeddedIoRead::new(file), source.path(), context.reporter());
 
     let path = ModulePath(module_decl.module_path);
 

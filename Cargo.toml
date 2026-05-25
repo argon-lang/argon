@@ -1,12 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["argon-cli","argon-compiler","argon-expr","argon-format","argon-parser", "argon-prover", "argon-runner", "argon-source","argon-testcases", "argon-tube","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-cli","argon-compiler","argon-expr","argon-format", "argon-io","argon-parser", "argon-prover", "argon-runner", "argon-source","argon-testcases", "argon-tube","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
 argon-compiler = { path = "argon-compiler" }
 argon-util = { path = "argon-util" }
 argon-expr = { path = "argon-expr" }
 argon-format = { path = "argon-format" }
+argon-io = { path = "argon-io" }
 argon-parser = { path = "argon-parser" }
 argon-prover = { path = "argon-prover" }
 argon-runner = { path = "argon-runner" }
@@ -21,6 +22,7 @@ bitflags = "2.11.1"
 clap = { version = "4.6.1", features = ["derive"] }
 dashmap = "6.2.1"
 derivative = "2.2.0"
+embedded-io = { version = "0.6.1", features = ["std"] }
 encoding_rs = "0.8.35"
 nonempty-collections = "1.3.0"
 num-bigint = "0.4.6"

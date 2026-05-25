@@ -1,12 +1,9 @@
 use crate::module::{process_source_file, register_module_reexports};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
-use argon_util::InternalCompilerError;
+use argon_io::InputFile;
 use rayon::prelude::*;
 use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::path::PathBuf;
 use std::sync::Arc;
-use walkdir::WalkDir;
 
 mod function;
 mod modifiers;
@@ -14,17 +11,20 @@ mod module;
 mod signature;
 mod type_checker;
 
-pub struct SourceCodeTubeOptions {
+pub struct SourceCodeTubeOptions<S> {
     pub name: TubeName,
     pub referenced_tubes: Vec<TubeName>,
-    pub sources: Vec<PathBuf>,
+    pub sources: Vec<S>,
 }
 
-pub fn define_source_tube(
+pub fn define_source_tube<S>(
     context: Context,
-    options: SourceCodeTubeOptions,
+    options: SourceCodeTubeOptions<S>,
     tube_collection: &TubeCollectionBuilder,
-) -> Arc<Tube> {
+) -> Arc<Tube>
+where
+    S: InputFile + Sync,
+{
     let tb = tube_collection.add_tube(
         options.name,
         TubeMetadata {
@@ -36,23 +36,10 @@ pub fn define_source_tube(
     let parse_results = options
         .sources
         .par_iter()
-        .flat_map(|source_dir| WalkDir::new(source_dir).into_iter().par_bridge())
-        .filter_map(|entry| match entry {
-            Ok(entry) => Some(entry),
-            Err(e) => {
-                context
-                    .reporter()
-                    .report_error(InternalCompilerError::WalkDirError(e));
-                None
-            }
-        })
-        .filter(|entry| {
-            entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("argon"))
-        })
-        .filter_map(|entry| {
+        .filter_map(|source| {
             process_source_file(
                 context.clone(),
-                entry.path(),
+                source,
                 &tb,
                 tube_collection.tube_collection(),
             )
@@ -70,13 +57,16 @@ mod tests {
     use argon_compiler::{
         CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder, TubeName,
     };
+    use argon_io::InputFile;
     use argon_parser::ast::Identifier;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
+    use embedded_io::{ErrorType, Read};
     use nonempty_collections::NEVec;
     use std::fs;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use walkdir::WalkDir;
 
     #[derive(Default)]
     struct TestReporter {
@@ -142,6 +132,55 @@ mod tests {
         dir
     }
 
+    #[derive(Clone)]
+    struct TestSourcePath {
+        path: std::path::PathBuf,
+    }
+
+    struct TestSourceFileReader {
+        file: std::fs::File,
+        path: std::path::PathBuf,
+    }
+
+    impl ErrorType for TestSourceFileReader {
+        type Error = InternalCompilerError;
+    }
+
+    impl Read for TestSourceFileReader {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            std::io::Read::read(&mut self.file, buf)
+                .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
+        }
+    }
+
+    impl InputFile for TestSourcePath {
+        type Reader = TestSourceFileReader;
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+
+        fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
+            std::fs::File::open(&self.path)
+                .map(|file| TestSourceFileReader {
+                    file,
+                    path: self.path.clone(),
+                })
+                .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
+        }
+    }
+
+    fn source_files(dir: &Path) -> Vec<TestSourcePath> {
+        WalkDir::new(dir)
+            .into_iter()
+            .map(Result::unwrap)
+            .filter(|entry| entry.file_type().is_file())
+            .map(|entry| TestSourcePath {
+                path: entry.path().to_path_buf(),
+            })
+            .collect()
+    }
+
     #[test]
     fn transitive_wildcard_reexports_are_registered() {
         let dir = temp_source_dir("transitive-reexports");
@@ -177,7 +216,7 @@ public def c: type = __argon_builtin never_type
             SourceCodeTubeOptions {
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
-                sources: vec![dir.clone()],
+                sources: source_files(&dir),
             },
             &tube_collection,
         );
@@ -220,7 +259,7 @@ export ::A::*
             SourceCodeTubeOptions {
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
-                sources: vec![dir.clone()],
+                sources: source_files(&dir),
             },
             &tube_collection,
         );

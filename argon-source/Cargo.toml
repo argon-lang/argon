@@ -6,17 +6,19 @@ edition = "2024"
 [dependencies]
 argon-compiler = { workspace = true }
 argon-expr = { workspace = true }
+argon-io = { workspace = true }
 argon-parser = { workspace = true }
 argon-util = { workspace = true }
 nonempty-collections = { workspace = true }
 num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
 rayon = { workspace = true }
-walkdir = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }
+embedded-io = { workspace = true }
 num-bigint = { workspace = true }
+walkdir = { workspace = true }
 
 [lints]
 workspace = true

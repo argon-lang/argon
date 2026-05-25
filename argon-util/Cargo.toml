@@ -4,6 +4,7 @@ publish = false
 edition = "2024"
 
 [dependencies]
+embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
 parse18-runtime = { workspace = true }

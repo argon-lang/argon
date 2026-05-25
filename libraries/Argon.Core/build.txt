@@ -1,5 +1,6 @@
 Commands to build:
 
-RUST_BACKTRACE=1 cargo run --bin argon compile --tube-name Argon.Core --input libraries/Argon.Core/src/ -o Argon.Core.artube
+mkdir -p libraries/Argon.Core/bin
+RUST_BACKTRACE=1 cargo run --bin argon compile --tube-name Argon.Core --input libraries/Argon.Core/src/ -o libraries/Argon.Core/bin/Argon.Core.artube
 
 

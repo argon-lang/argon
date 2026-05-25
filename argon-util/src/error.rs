@@ -428,3 +428,15 @@ impl std::fmt::Display for InternalCompilerError {
 }
 
 impl std::error::Error for InternalCompilerError {}
+
+impl embedded_io::Error for InternalCompilerError {
+    fn kind(&self) -> embedded_io::ErrorKind {
+        match self {
+            Self::IoError(_, err) => err.kind().into(),
+            Self::WalkDirError(err) => err
+                .io_error()
+                .map_or(embedded_io::ErrorKind::Other, |err| err.kind().into()),
+            Self::TubeFormatError(_) | Self::TubeEncodingError(_) => embedded_io::ErrorKind::Other,
+        }
+    }
+}

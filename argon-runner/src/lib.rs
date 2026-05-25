@@ -4,15 +4,19 @@ mod tubes;
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
+use argon_io::InputFile;
 use argon_source::SourceCodeTubeOptions;
 use argon_util::{InternalCompilerError, TubeEncodingError};
 use clap::Args;
+use embedded_io::{ErrorType, Read};
 use esexpr::ESExprCodec;
 use esexpr_binary::ExprGeneratorSync;
 use rayon::prelude::*;
+use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use walkdir::WalkDir;
 
 #[derive(Args, Debug)]
 pub struct CompileOptions {
@@ -59,6 +63,44 @@ pub struct JsCodeGenOptions {
     pub output_dir: PathBuf,
 }
 
+#[derive(Clone)]
+struct SourcePath {
+    path: PathBuf,
+}
+
+struct SourceFileReader {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+impl ErrorType for SourceFileReader {
+    type Error = InternalCompilerError;
+}
+
+impl Read for SourceFileReader {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        std::io::Read::read(&mut self.file, buf)
+            .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
+    }
+}
+
+impl InputFile for SourcePath {
+    type Reader = SourceFileReader;
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
+        std::fs::File::open(&self.path)
+            .map(|file| SourceFileReader {
+                file,
+                path: self.path.clone(),
+            })
+            .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
+    }
+}
+
 pub fn compile(options: CompileOptions) -> bool {
     let context = Arc::new(RunnerContext::new());
     let tube_collection = TubeCollectionBuilder::new(context.clone());
@@ -70,10 +112,12 @@ pub fn compile(options: CompileOptions) -> bool {
         .map(|tube| tube.name().clone())
         .collect::<Vec<_>>();
 
+    let source_files = collect_source_files(context.clone(), &options.input_dirs);
+
     let source_options = SourceCodeTubeOptions {
         name: options.tube_name,
         referenced_tubes: referenced_tube_names,
-        sources: options.input_dirs,
+        sources: source_files,
     };
 
     let tube = argon_source::define_source_tube(context.clone(), source_options, &tube_collection);
@@ -150,6 +194,28 @@ pub fn gen_ir(_options: GenIrOptions) {
 
 pub fn codegen_js(_options: JsCodeGenOptions) {
     todo!("generate JavaScript code from Argon VM IR")
+}
+
+fn collect_source_files(context: Arc<RunnerContext>, input_dirs: &[PathBuf]) -> Vec<SourcePath> {
+    input_dirs
+        .par_iter()
+        .flat_map(|source_dir| WalkDir::new(source_dir).into_iter().par_bridge())
+        .filter_map(|entry| match entry {
+            Ok(entry) => Some(entry),
+            Err(e) => {
+                context
+                    .reporter()
+                    .report_error(InternalCompilerError::WalkDirError(e));
+                None
+            }
+        })
+        .filter(|entry| {
+            entry.file_type().is_file() && entry.path().extension() == Some(OsStr::new("argon"))
+        })
+        .map(|entry| SourcePath {
+            path: entry.path().to_path_buf(),
+        })
+        .collect()
 }
 
 fn delete_output_file(output_file: &Path) {

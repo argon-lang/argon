@@ -126,6 +126,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon-io"
+version = "0.1.0"
+dependencies = [
+ "argon-util",
+ "embedded-io",
+]
+
+[[package]]
 name = "argon-parser"
 version = "0.0.0"
 dependencies = [
@@ -155,10 +163,12 @@ version = "0.1.0"
 dependencies = [
  "argon-compiler",
  "argon-format",
+ "argon-io",
  "argon-source",
  "argon-tube",
  "argon-util",
  "clap",
+ "embedded-io",
  "esexpr",
  "esexpr-binary",
  "rayon",
@@ -171,8 +181,10 @@ version = "0.0.0"
 dependencies = [
  "argon-compiler",
  "argon-expr",
+ "argon-io",
  "argon-parser",
  "argon-util",
+ "embedded-io",
  "nonempty-collections",
  "num-bigint",
  "parse18-runtime",
@@ -208,6 +220,7 @@ dependencies = [
 name = "argon-util"
 version = "0.0.0"
 dependencies = [
+ "embedded-io",
  "esexpr",
  "esexpr-binary",
  "parse18-runtime",
@@ -444,6 +457,12 @@ name = "either"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
+
+[[package]]
+name = "embedded-io"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 
 [[package]]
 name = "encoding_rs"

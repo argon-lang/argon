@@ -1,0 +1,11 @@
+[package]
+name = "argon-io"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+argon-util = { workspace = true }
+embedded-io = { workspace = true }
+
+[lints]
+workspace = true
