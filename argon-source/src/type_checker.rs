@@ -7,7 +7,7 @@ use argon_expr::{Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, Ex
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, UniqueIdentifier, VecDequeSlice};
-use nonempty_collections::NEVec;
+use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -207,7 +207,7 @@ enum TypeInferResult<'a> {
     },
 
     Sequence {
-        init_exprs: NEVec<Expr<TypeCheckExprContext>>,
+        init_exprs: Vec1<Expr<TypeCheckExprContext>>,
         last_result: Box<TypeInferResult<'a>>,
     },
 }
@@ -566,7 +566,7 @@ impl <'a> TypeChecker<'a> {
             .map(|stmt| self.check_stmt(stmt, &Expr::unit_type()))
             .collect::<Vec<_>>();
 
-        let Some(mut checked_stmts) = NEVec::try_from_vec(checked_stmts) else {
+        let Ok(mut checked_stmts) = Vec1::try_from(checked_stmts) else {
             return self.infer_stmt(last_stmt);
         };
 

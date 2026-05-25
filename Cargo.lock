@@ -94,7 +94,7 @@ dependencies = [
  "argon-util",
  "dashmap",
  "esexpr",
- "nonempty-collections",
+ "mitsein",
  "num-bigint",
  "num-traits",
  "parking_lot",
@@ -111,7 +111,7 @@ dependencies = [
  "argon-parser",
  "argon-util",
  "derivative",
- "nonempty-collections",
+ "mitsein",
  "num-bigint",
  "parse18-runtime",
 ]
@@ -131,6 +131,7 @@ version = "0.1.0"
 dependencies = [
  "argon-util",
  "embedded-io",
+ "esexpr-binary",
 ]
 
 [[package]]
@@ -184,7 +185,7 @@ dependencies = [
  "argon-parser",
  "argon-util",
  "embedded-io",
- "nonempty-collections",
+ "mitsein",
  "num-bigint",
  "parse18-runtime",
  "rayon",
@@ -211,7 +212,7 @@ dependencies = [
  "dashmap",
  "esexpr",
  "esexpr-binary",
- "nonempty-collections",
+ "mitsein",
  "num-bigint",
 ]
 
@@ -725,6 +726,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
+name = "mitsein"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a49aef75c004fb496a23f175395415ecfe2a630e4c6175ae6f7d9cc1a19332e"
+dependencies = [
+ "itertools",
+ "serde",
+]
+
+[[package]]
 name = "noble-idl-api"
 version = "0.1.0"
 dependencies = [
@@ -788,12 +799,6 @@ checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "nonempty-collections"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d127e00b37b19c36c28ac00e874240a61faeea14c7b759b1d9c77efa048322a"
 
 [[package]]
 name = "num-bigint"

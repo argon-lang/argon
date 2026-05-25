@@ -11,7 +11,7 @@ argon-util = { workspace = true }
 dashmap = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
-nonempty-collections = { workspace = true }
+mitsein = { workspace = true }
 num-bigint = { workspace = true }
 
 [lints]

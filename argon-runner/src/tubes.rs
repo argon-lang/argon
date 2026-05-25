@@ -3,6 +3,7 @@ use argon_format::tube::TubeFileEntry;
 use argon_io::{EmbeddedIoRead, InputFile};
 use argon_util::{InternalCompilerError, TubeFormatError};
 use esexpr::ESExprCodec;
+use esexpr_binary::ParseError;
 use esexpr_binary::ExprParserSync;
 use std::sync::Arc;
 
@@ -31,7 +32,7 @@ where
             Err(e) => {
                 context
                     .reporter()
-                    .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
+                    .report_error(tube_parse_error(referenced_tube, e));
                 return None;
             }
         };
@@ -64,5 +65,62 @@ where
             TubeFormatError::FileError(file.path().to_path_buf(), err),
         ),
         error => InternalCompilerError::TubeFormatError(error),
+    }
+}
+
+fn tube_parse_error<F>(
+    file: &F,
+    error: ParseError<InternalCompilerError>,
+) -> InternalCompilerError
+where
+    F: InputFile,
+{
+    match error {
+        ParseError::IOError(err) => match err {
+            InternalCompilerError::IoError(_, io_err) => {
+                InternalCompilerError::IoError(file.path().to_path_buf(), io_err)
+            }
+            err => err,
+        },
+        ParseError::InvalidTokenByte(value) => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::InvalidTokenByte(value),
+            ))
+        }
+        ParseError::InvalidStringTableIndex => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::InvalidStringTableIndex,
+            ))
+        }
+        ParseError::InvalidLength => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::InvalidLength,
+            ))
+        }
+        ParseError::UnexpectedKeywordToken => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::UnexpectedKeywordToken,
+            ))
+        }
+        ParseError::UnexpectedConstructorEnd => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::UnexpectedConstructorEnd,
+            ))
+        }
+        ParseError::UnexpectedEndOfFile => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::UnexpectedEndOfFile,
+            ))
+        }
+        ParseError::InvalidStringPool(err) => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::InvalidStringPool(err),
+            ))
+        }
+        ParseError::Utf8Error(err) => {
+            InternalCompilerError::TubeFormatError(TubeFormatError::ExprParseErrorNoIo(
+                ParseError::Utf8Error(err),
+            ))
+        }
     }
 }

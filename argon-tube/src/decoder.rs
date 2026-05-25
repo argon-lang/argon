@@ -13,7 +13,7 @@ use argon_expr::{FunctionArgument, LocalVariable, ParameterVariable, Variable};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
 use dashmap::DashMap;
-use nonempty_collections::NEVec;
+use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -734,7 +734,7 @@ impl TubeDecoder {
                     .chain(tail.into_iter().map(|expr| self.decode_expr(*expr)))
                     .collect::<Vec<_>>();
                 Expr::Sequence(
-                    NEVec::try_from_vec(exprs).expect("tube sequence expression is non-empty"),
+                    Vec1::try_from(exprs).expect("tube sequence expression is non-empty"),
                 )
             }
             tf::Expr::StringLiteral { s } => Expr::StringLiteral(s.into_boxed_str()),
@@ -942,7 +942,9 @@ fn decode_module_path(path: tf::ModulePath) -> ModulePath {
 }
 
 fn decode_tube_name(name: tf::TubeName) -> TubeName {
-    TubeName(NEVec::try_from_vec(std::iter::once(name.head).chain(name.tail).collect()).unwrap())
+    TubeName(
+        Vec1::try_from(std::iter::once(name.head).chain(name.tail).collect::<Vec<_>>()).unwrap(),
+    )
 }
 
 fn decode_identifier(id: tf::Identifier) -> Identifier {

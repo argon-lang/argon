@@ -9,7 +9,7 @@ use argon_compiler::{
 use argon_io::{EmbeddedIoRead, InputFile};
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
-use nonempty_collections::NEVec;
+use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock};
@@ -210,10 +210,10 @@ impl GlobalScopeBuilder {
 
             ImportStmt::Tube { tube_name, path } => {
                 let tube_name = TubeName(
-                    NEVec::try_from_vec(
+                    Vec1::try_from(
                         std::iter::once(tube_name.head.clone())
                             .chain(tube_name.tail.iter().cloned())
-                            .collect(),
+                            .collect::<Vec<_>>(),
                     )
                     .expect("parser tube names are non-empty"),
                 );
@@ -600,10 +600,10 @@ impl<'a> ModuleProcessResult<'a> {
 
             ImportStmt::Tube { tube_name, path } => {
                 let tube_name = TubeName(
-                    NEVec::try_from_vec(
+                    Vec1::try_from(
                         std::iter::once(tube_name.head.clone())
                             .chain(tube_name.tail.iter().cloned())
-                            .collect(),
+                            .collect::<Vec<_>>(),
                     )
                     .expect("parser tube names are non-empty"),
                 );

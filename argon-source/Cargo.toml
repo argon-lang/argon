@@ -9,7 +9,7 @@ argon-expr = { workspace = true }
 argon-io = { workspace = true }
 argon-parser = { workspace = true }
 argon-util = { workspace = true }
-nonempty-collections = { workspace = true }
+mitsein = { workspace = true }
 num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
 rayon = { workspace = true }

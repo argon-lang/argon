@@ -1,7 +1,7 @@
 use argon_parser::ast::FunctionParameterListType;
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
 use derivative::Derivative;
-use nonempty_collections::NEVec;
+use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use std::convert::Infallible;
 use std::fmt::Debug;
@@ -141,7 +141,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Redo {
         label: Option<Infallible>, // TODO: Use a proper label type
     },
-    Sequence(NEVec<Expr<EC>>),
+    Sequence(Vec1<Expr<EC>>),
     StoreVariable(Variable<EC>),
     StringLiteral(Box<str>),
     TraitType(EC::Trait, Vec<Expr<EC>>),

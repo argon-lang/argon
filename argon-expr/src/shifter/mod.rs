@@ -2,7 +2,7 @@ use crate::{
     Expr, ExprContext, ExpressionOwner, FunctionArgument, LocalVariable, MatchCase,
     ParameterVariable, RecordFieldLiteral, Variable,
 };
-use nonempty_collections::NEVec;
+use mitsein::vec1::Vec1;
 use std::sync::Arc;
 
 mod fresh_var;
@@ -173,8 +173,13 @@ where
         ),
         Expr::Redo { label } => Expr::Redo { label },
         Expr::Sequence(exprs) => Expr::Sequence(
-            NEVec::try_from_vec(exprs.into_iter().map(|expr| shifter.shift(expr)).collect())
-                .expect("shifting a non-empty expression sequence preserves non-emptiness"),
+            Vec1::try_from(
+                exprs
+                    .into_iter()
+                    .map(|expr| shifter.shift(expr))
+                    .collect::<Vec<_>>(),
+            )
+            .expect("shifting a non-empty expression sequence preserves non-emptiness"),
         ),
         Expr::StoreVariable(variable) => Expr::StoreVariable(shifter.shift_variable(variable)),
         Expr::StringLiteral(value) => Expr::StringLiteral(value),

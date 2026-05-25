@@ -61,7 +61,7 @@ mod tests {
     use argon_parser::ast::Identifier;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
     use embedded_io::{ErrorType, Read};
-    use nonempty_collections::NEVec;
+    use mitsein::vec1::Vec1;
     use std::fs;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
@@ -115,7 +115,7 @@ mod tests {
     }
 
     fn tube_name() -> TubeName {
-        TubeName(NEVec::new("Test".to_string()))
+        TubeName(Vec1::from_one("Test".to_string()))
     }
 
     fn write_source(dir: &Path, name: &str, contents: &str) {

@@ -368,6 +368,7 @@ fn join_strings(values: impl IntoIterator<Item = impl AsRef<str>>) -> String {
 pub enum TubeFormatError {
     FileError(PathBuf, std::io::Error),
     ExprParseError(esexpr_binary::ParseError<std::io::Error>),
+    ExprParseErrorNoIo(esexpr_binary::ParseError<core::convert::Infallible>),
     ExprDecodeError(esexpr::DecodeError),
 }
 
@@ -378,6 +379,7 @@ impl std::fmt::Display for TubeFormatError {
                 write!(f, "tube format file error: {}: {err}", path.display())
             }
             Self::ExprParseError(err) => write!(f, "tube format parse error: {err:?}"),
+            Self::ExprParseErrorNoIo(err) => write!(f, "tube format parse error: {err:?}"),
             Self::ExprDecodeError(err) => write!(f, "tube format decode error: {err:?}"),
         }
     }

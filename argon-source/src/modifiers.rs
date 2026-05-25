@@ -3,8 +3,8 @@ use argon_compiler::access::AccessModifierGlobal;
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::CompileError;
-use nonempty_collections::NESlice;
-use nonempty_collections::NonEmptyIterator;
+use mitsein::slice1;
+use mitsein::slice1::Slice1;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -45,7 +45,7 @@ impl<'a> ModifierParser<'a> {
         }
     }
 
-    pub fn parse<T: Clone>(&mut self, spec: &ModifierSpec<T>) -> T {
+    pub fn parse<T: Clone>(&mut self, spec: ModifierSpec<T>) -> T {
         let mut relevant_modifiers = HashMap::new();
         self.modifiers.retain(|modifier, location| {
             let relevant = spec_has_modifier(spec, *modifier);
@@ -88,40 +88,47 @@ impl<'a> ModifierParser<'a> {
     }
 }
 
-type ModifierSpec<T> = NESlice<'static, (&'static [Modifier], T)>;
+type ModifierSpec<T> = &'static Slice1<(&'static [Modifier], T)>;
 
-pub const ACCESS_MODIFIER_GLOBAL: ModifierSpec<AccessModifierGlobal> =
-    ModifierSpec::try_from_slice(&[
-        (&[], AccessModifierGlobal::ModulePrivate),
-        (&[Modifier::Public], AccessModifierGlobal::Public),
-        (&[Modifier::Internal], AccessModifierGlobal::Internal),
-        (
-            &[Modifier::Private, Modifier::Internal],
-            AccessModifierGlobal::ModulePrivate,
-        ),
-    ])
-    .unwrap();
+macro_rules! modifier_spec_entry {
+    ($modifiers:expr, $value:expr) => {
+        ($modifiers as &'static [Modifier], $value)
+    };
+}
 
-pub const IS_INLINE: ModifierSpec<bool> =
-    ModifierSpec::try_from_slice(&[(&[Modifier::Inline], true), (&[], false)]).unwrap();
+pub const ACCESS_MODIFIER_GLOBAL: ModifierSpec<AccessModifierGlobal> = slice1![
+    modifier_spec_entry!(&[], AccessModifierGlobal::ModulePrivate),
+    modifier_spec_entry!(&[Modifier::Public], AccessModifierGlobal::Public),
+    modifier_spec_entry!(&[Modifier::Internal], AccessModifierGlobal::Internal),
+    modifier_spec_entry!(
+        &[Modifier::Private, Modifier::Internal],
+        AccessModifierGlobal::ModulePrivate
+    ),
+];
 
-pub const IS_WITNESS: ModifierSpec<bool> =
-    ModifierSpec::try_from_slice(&[(&[Modifier::Witness], true), (&[], false)]).unwrap();
+pub const IS_INLINE: ModifierSpec<bool> = slice1![
+    modifier_spec_entry!(&[Modifier::Inline], true),
+    modifier_spec_entry!(&[], false),
+];
 
-pub const ERASURE_MODE: ModifierSpec<ErasureMode> = ModifierSpec::try_from_slice(&[
-    (&[Modifier::Erased], ErasureMode::Erased),
-    (&[Modifier::Token], ErasureMode::Token),
-    (&[], ErasureMode::Concrete),
-])
-.unwrap();
+pub const IS_WITNESS: ModifierSpec<bool> = slice1![
+    modifier_spec_entry!(&[Modifier::Witness], true),
+    modifier_spec_entry!(&[], false),
+];
 
-fn spec_has_modifier<T>(spec: &ModifierSpec<T>, modifier: Modifier) -> bool {
+pub const ERASURE_MODE: ModifierSpec<ErasureMode> = slice1![
+    modifier_spec_entry!(&[Modifier::Erased], ErasureMode::Erased),
+    modifier_spec_entry!(&[Modifier::Token], ErasureMode::Token),
+    modifier_spec_entry!(&[], ErasureMode::Concrete),
+];
+
+fn spec_has_modifier<T>(spec: ModifierSpec<T>, modifier: Modifier) -> bool {
     spec.iter()
         .any(|&(modifiers, _)| modifiers.contains(&modifier))
 }
 
 fn find_exact_match<T: Clone>(
-    spec: &ModifierSpec<T>,
+    spec: ModifierSpec<T>,
     modifiers: &HashMap<Modifier, &Location>,
 ) -> Option<T> {
     spec.iter()
@@ -139,11 +146,8 @@ fn find_exact_match<T: Clone>(
         .next()
 }
 
-fn find_best_match<T: Clone>(
-    spec: &ModifierSpec<T>,
-    modifiers: &HashMap<Modifier, &Location>,
-) -> T {
-    spec.nonempty_iter()
+fn find_best_match<T: Clone>(spec: ModifierSpec<T>, modifiers: &HashMap<Modifier, &Location>) -> T {
+    spec.iter1()
         .max_by_key(|(spec_modifiers, _)| {
             let common_modifiers = spec_modifiers
                 .iter()
@@ -193,7 +197,7 @@ mod tests {
         let modifiers = [];
         let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
-        let access = parser.parse(&ACCESS_MODIFIER_GLOBAL);
+        let access = parser.parse(ACCESS_MODIFIER_GLOBAL);
         parser.done();
 
         assert_eq!(access, AccessModifierGlobal::ModulePrivate);
@@ -210,8 +214,8 @@ mod tests {
         ];
         let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
-        let access = parser.parse(&ACCESS_MODIFIER_GLOBAL);
-        let is_inline = parser.parse(&IS_INLINE);
+        let access = parser.parse(ACCESS_MODIFIER_GLOBAL);
+        let is_inline = parser.parse(IS_INLINE);
         parser.done();
 
         assert_eq!(access, AccessModifierGlobal::Public);
@@ -229,7 +233,7 @@ mod tests {
         ];
 
         let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
-        assert!(parser.parse(&IS_INLINE));
+        assert!(parser.parse(IS_INLINE));
         parser.done();
 
         let errors = reporter.errors();
@@ -246,7 +250,7 @@ mod tests {
         let modifiers = [modifier(Modifier::Private, 1, 1)];
         let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
-        let access = parser.parse(&ACCESS_MODIFIER_GLOBAL);
+        let access = parser.parse(ACCESS_MODIFIER_GLOBAL);
         parser.done();
 
         assert_eq!(access, AccessModifierGlobal::ModulePrivate);
@@ -265,7 +269,7 @@ mod tests {
         let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
 
         assert_eq!(
-            parser.parse(&ACCESS_MODIFIER_GLOBAL),
+            parser.parse(ACCESS_MODIFIER_GLOBAL),
             AccessModifierGlobal::ModulePrivate
         );
         parser.done();

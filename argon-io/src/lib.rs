@@ -58,6 +58,15 @@ where
     }
 }
 
+impl<R> esexpr_binary::io::Read<InternalCompilerError> for EmbeddedIoRead<R>
+where
+    R: Read<Error = InternalCompilerError>,
+{
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize, InternalCompilerError> {
+        self.inner.read(buf)
+    }
+}
+
 pub struct EmbeddedIoWrite<W> {
     inner: W,
 }
@@ -86,5 +95,25 @@ where
         self.inner
             .flush()
             .map_err(|err| io::Error::new(io::ErrorKind::from(err.kind()), err.to_string()))
+    }
+}
+
+impl<W> esexpr_binary::io::Write<InternalCompilerError> for EmbeddedIoWrite<W>
+where
+    W: Write<Error = InternalCompilerError>,
+{
+    fn write(&mut self, mut buf: &[u8]) -> Result<(), InternalCompilerError> {
+        while !buf.is_empty() {
+            let count = self.inner.write(buf)?;
+            if count == 0 {
+                return Err(InternalCompilerError::IoError(
+                    std::path::PathBuf::new(),
+                    io::ErrorKind::WriteZero.into(),
+                ));
+            }
+            buf = &buf[count..];
+        }
+
+        Ok(())
     }
 }

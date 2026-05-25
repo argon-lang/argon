@@ -7,7 +7,6 @@ use crate::tubes::load_referenced_tube;
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
 use argon_io::{EmbeddedIoWrite, InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
-use argon_util::InternalCompilerError;
 use esexpr::ESExprCodec;
 use esexpr_binary::{ExprGeneratorSync, GeneratorError};
 use rayon::prelude::*;
@@ -95,12 +94,7 @@ where
             Err(e) => {
                 match e {
                     GeneratorError::IOError(ioe) => {
-                        context
-                            .reporter()
-                            .report_error(InternalCompilerError::IoError(
-                                options.output_file.path().to_path_buf(),
-                                ioe,
-                            ));
+                        context.reporter().report_error(ioe);
                     }
                 }
                 context.runner_reporter().print_error_messages();

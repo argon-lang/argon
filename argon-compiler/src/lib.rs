@@ -16,7 +16,7 @@ pub use argon_parser::ast::{
 };
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use esexpr::ESExpr;
-use nonempty_collections::NEVec;
+use mitsein::vec1::Vec1;
 use parking_lot::{MappedRwLockReadGuard, RwLock, RwLockReadGuard};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -67,7 +67,7 @@ pub enum EffectInfo {
 pub enum EmptyHole {}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct TubeName(pub NEVec<String>);
+pub struct TubeName(pub Vec1<String>);
 
 #[derive(Debug)]
 pub enum TubeNameParseError {
@@ -110,7 +110,7 @@ impl FromStr for TubeName {
                 Ok(part.into_owned())
             })
             .collect::<Result<Vec<String>, _>>()
-            .and_then(|parts| NEVec::try_from_vec(parts).ok_or(TubeNameParseError::Empty))
+            .and_then(|parts| Vec1::try_from(parts).map_err(|_| TubeNameParseError::Empty))
             .map(TubeName)
     }
 }
@@ -290,7 +290,7 @@ impl TubeBuilder {
 
 pub struct Module {
     path: ModulePath,
-    exports: RwLock<HashMap<Identifier, NEVec<ModuleExportEntry>>>,
+    exports: RwLock<HashMap<Identifier, Vec1<ModuleExportEntry>>>,
 }
 
 impl Module {
@@ -301,13 +301,13 @@ impl Module {
     pub fn named_exports(
         &self,
         name: &Identifier,
-    ) -> Option<MappedRwLockReadGuard<'_, NEVec<ModuleExportEntry>>> {
+    ) -> Option<MappedRwLockReadGuard<'_, Vec1<ModuleExportEntry>>> {
         RwLockReadGuard::try_map(self.exports.read(), |exports| exports.get(name)).ok()
     }
 
     pub fn export_groups(
         &self,
-    ) -> RwLockReadGuard<'_, HashMap<Identifier, NEVec<ModuleExportEntry>>> {
+    ) -> RwLockReadGuard<'_, HashMap<Identifier, Vec1<ModuleExportEntry>>> {
         self.exports.read()
     }
 }
@@ -357,7 +357,7 @@ impl ModuleBuilder {
                 ee.get_mut().push(entry);
             }
             Entry::Vacant(ee) => {
-                ee.insert(NEVec::new(entry));
+                ee.insert(Vec1::from_one(entry));
             }
         }
     }
