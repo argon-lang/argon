@@ -43,12 +43,43 @@ impl ResolvedImportGroups {
         }
     }
 
-    fn overload_groups(&self) -> Vec<Vec<Overloadable>> {
-        [&self.same_module, &self.same_tube, &self.other]
-            .into_iter()
-            .filter(|exports| !exports.is_empty())
-            .map(|exports| {
-                exports
+    fn overload_groups(&self, groups: &mut Vec<Vec<Overloadable>>) {
+        groups.extend(
+            [&self.same_module, &self.same_tube, &self.other]
+                .into_iter()
+                .filter(|exports| !exports.is_empty())
+                .map(|exports| {
+                    exports
+                        .iter()
+                        .map(|entry| match &entry.binding {
+                            ModuleExportBinding::Function(f) => Overloadable::Function(f.clone()),
+                            ModuleExportBinding::Record(r) => Overloadable::Record(r.clone()),
+                            ModuleExportBinding::Enum(e) => Overloadable::Enum(e.clone()),
+                            ModuleExportBinding::Trait(t) => Overloadable::Trait(t.clone()),
+                            ModuleExportBinding::Instance(i) => Overloadable::Instance(i.clone()),
+                        })
+                        .collect()
+                })
+        )
+    }
+}
+
+pub struct GlobalScope {
+    current_module: Arc<Module>,
+    resolved_imports: ResolvedImports,
+}
+
+impl Scope for GlobalScope {
+    type ExprContext = DefaultExprContext;
+
+    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
+
+
+
+        let mut groups = Vec::new();
+        if let Some(exp_group) = self.current_module.export_groups().get(name) {
+            groups.push(
+                exp_group
                     .iter()
                     .map(|entry| match &entry.binding {
                         ModuleExportBinding::Function(f) => Overloadable::Function(f.clone()),
@@ -58,26 +89,19 @@ impl ResolvedImportGroups {
                         ModuleExportBinding::Instance(i) => Overloadable::Instance(i.clone()),
                     })
                     .collect()
-            })
-            .collect()
-    }
-}
+            );
+        }
 
-pub struct GlobalScope {
-    resolved_imports: ResolvedImports,
-}
-
-impl Scope for GlobalScope {
-    type ExprContext = DefaultExprContext;
-
-    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
-        let Some(exports) = self.resolved_imports.get(name) else {
-            return Lookup::Empty;
+        if let Some(exports) = self.resolved_imports.get(name) {
+            exports.overload_groups(&mut groups);
         };
 
-        let overload_groups = exports.overload_groups();
-
-        Lookup::Overloadable(OverloadLookup::new(overload_groups))
+        if groups.is_empty() {
+            Lookup::Empty
+        }
+        else {
+            Lookup::Overloadable(OverloadLookup::new(groups))
+        }
     }
 
     fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
@@ -89,7 +113,7 @@ pub struct GlobalScopeBuilder {
     context: Context,
     tube_collection: Arc<TubeCollection>,
     current_tube: Arc<Tube>,
-    current_module: ModulePath,
+    current_module: Arc<Module>,
     parent: Option<Arc<GlobalScopeBuilder>>,
     imports: Vec<WithLocation<ImportStmt>>,
     resolved_imports: OnceLock<ResolvedImports>,
@@ -100,7 +124,7 @@ impl GlobalScopeBuilder {
         context: Context,
         tube_collection: Arc<TubeCollection>,
         current_tube: Arc<Tube>,
-        current_module: ModulePath,
+        current_module: Arc<Module>,
         imports: Vec<WithLocation<ImportStmt>>,
     ) -> Arc<Self> {
         Arc::new(Self {
@@ -116,6 +140,7 @@ impl GlobalScopeBuilder {
 
     fn build(&self) -> GlobalScope {
         GlobalScope {
+            current_module: self.current_module.clone(),
             resolved_imports: self.resolved_imports().clone(),
         }
     }
@@ -161,12 +186,15 @@ impl GlobalScopeBuilder {
             }
 
             ImportStmt::Relative { up_count, path } => {
-                let mut module_path = self.current_module.0.clone();
-                if *up_count <= module_path.len() {
-                    module_path.truncate(module_path.len() - *up_count);
+                let current_path = &self.current_module.path().0;
+
+                let new_path_len = if *up_count <= current_path.len() {
+                    current_path.len() - *up_count
                 } else {
-                    module_path.clear();
-                }
+                    0
+                };
+
+                let module_path = self.current_module.path().0.iter().take(new_path_len).cloned().collect();
 
                 self.resolve_import_path(
                     self.current_tube.clone(),
@@ -355,7 +383,7 @@ impl GlobalScopeBuilder {
             AccessModifierGlobal::Public => true,
             AccessModifierGlobal::Internal => tube.name() == self.current_tube.name(),
             AccessModifierGlobal::ModulePrivate => {
-                tube.name() == self.current_tube.name() && module_path == &self.current_module
+                tube.name() == self.current_tube.name() && module_path == self.current_module.path()
             }
         }
     }
@@ -367,7 +395,7 @@ impl GlobalScopeBuilder {
     ) -> ResolvedImportGroup {
         if tube.name() != self.current_tube.name() {
             ResolvedImportGroup::Other
-        } else if module_path == &self.current_module {
+        } else if module_path == self.current_module.path() {
             ResolvedImportGroup::SameModule
         } else {
             ResolvedImportGroup::SameTube
@@ -541,7 +569,7 @@ impl<'a> SourceFileProcessor<'a> {
                 self.context.clone(),
                 self.tube_collection.clone(),
                 self.tb.tube().clone(),
-                self.result.path.clone(),
+                self.module.module(),
                 imports,
             )
         };
