@@ -1,13 +1,20 @@
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
 use argon_util::InternalCompilerError;
+#[cfg(feature = "std")]
 use embedded_io::Error;
-use std::io;
-use std::path::Path;
+#[cfg(feature = "std")]
+use std::{io, path::Path, string::ToString};
 
 pub use embedded_io::{Read, Write};
 
 pub trait InputFile {
     type Reader: Read<Error = InternalCompilerError>;
 
+    #[cfg(feature = "std")]
     fn path(&self) -> &Path;
     fn open(&self) -> Result<Self::Reader, InternalCompilerError>;
 }
@@ -22,6 +29,7 @@ pub trait InputDirectory {
 pub trait OutputFile {
     type Writer: Write<Error = InternalCompilerError>;
 
+    #[cfg(feature = "std")]
     fn path(&self) -> &Path;
     fn open(&self) -> Result<Self::Writer, InternalCompilerError>;
     fn delete(&self) -> Result<(), InternalCompilerError>;
@@ -47,6 +55,7 @@ impl<R> EmbeddedIoRead<R> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<R> io::Read for EmbeddedIoRead<R>
 where
     R: Read<Error = InternalCompilerError>,
@@ -81,6 +90,7 @@ impl<W> EmbeddedIoWrite<W> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<W> io::Write for EmbeddedIoWrite<W>
 where
     W: Write<Error = InternalCompilerError>,
@@ -98,6 +108,7 @@ where
     }
 }
 
+#[cfg(feature = "std")]
 impl<W> esexpr_binary::io::Write<InternalCompilerError> for EmbeddedIoWrite<W>
 where
     W: Write<Error = InternalCompilerError>,

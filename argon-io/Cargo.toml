@@ -3,9 +3,13 @@ name = "argon-io"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["std"]
+std = ["argon-util/std", "embedded-io/std"]
+
 [dependencies]
-argon-util = { workspace = true }
-embedded-io = { workspace = true, features = ["std"] }
+argon-util = { path = "../argon-util", default-features = false }
+embedded-io = { workspace = true }
 esexpr-binary = { workspace = true }
 
 [lints]
