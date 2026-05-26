@@ -1,7 +1,9 @@
-use std::collections::HashSet;
-use std::convert::identity;
-use std::hash::Hash;
-use std::rc::Rc;
+use alloc::boxed::Box;
+use alloc::rc::Rc;
+use alloc::vec::Vec;
+use core::convert::identity;
+use core::hash::Hash;
+use hashbrown::HashSet;
 
 use crate::{
     PartialProofResult, Predicate, Proof, ProofResult, Prover, ProverContext, ProverSyntax,
@@ -98,14 +100,14 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         model: Rc<C::Model>,
     ) -> Box<dyn Iterator<Item = PartialProofResult<C>> + 'a> {
         if self.fuel.is_empty() || self.seen_predicates.contains(&goal) {
-            return Box::new(std::iter::empty());
+            return Box::new(core::iter::empty());
         }
 
         Rc::make_mut(&mut self.seen_predicates).insert(goal.clone());
 
         let goal = goal.clone();
         let inferred = self.clone().infer(goal.clone(), model.clone());
-        let derived = std::iter::once_with(move || self.solve_derived(goal, model)).flatten();
+        let derived = core::iter::once_with(move || self.solve_derived(goal, model)).flatten();
 
         Box::new(inferred.chain(derived))
     }
@@ -127,7 +129,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                             let proof = Proof::DeMorganOrPullNotOut(Box::new(
                                 Proof::DisjunctIntroLeft(Box::new(not_proof)),
                             ));
-                            Box::new(std::iter::once(PartialProofResult::No(proof, model)))
+                            Box::new(core::iter::once(PartialProofResult::No(proof, model)))
                                 as Box<dyn Iterator<Item = PartialProofResult<C>>>
                         }
 
@@ -182,7 +184,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
 
                 let prove_a_model = model.clone();
                 let prove_a_prover = self.clone();
-                let prove_a = std::iter::once_with(move || {
+                let prove_a = core::iter::once_with(move || {
                     prove_a_prover
                         .clone()
                         .consume_fuel()
@@ -197,7 +199,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                 })
                 .flatten();
 
-                let prove_b = std::iter::once_with(move || {
+                let prove_b = core::iter::once_with(move || {
                     self.consume_fuel()
                         .solve(b.clone(), model)
                         .filter_map(|result| match result {
@@ -294,7 +296,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                     ))
                 }
 
-                _ => Box::new(std::iter::empty()),
+                _ => Box::new(core::iter::empty()),
             },
 
             Predicate::Implies(a, b) => {
@@ -318,12 +320,12 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                 )
             }
 
-            Predicate::True => Box::new(std::iter::once(PartialProofResult::Yes(
+            Predicate::True => Box::new(core::iter::once(PartialProofResult::Yes(
                 Proof::TrueIsTrue,
                 model,
             ))),
 
-            Predicate::False => Box::new(std::iter::empty()),
+            Predicate::False => Box::new(core::iter::empty()),
 
             Predicate::PredicateExpression(predicate) => {
                 let mut model = (*model).clone();
@@ -345,7 +347,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         'a: 'b,
     {
         if self.fuel.is_empty() {
-            return Box::new(std::iter::empty());
+            return Box::new(core::iter::empty());
         }
 
         let assertions: Vec<_> = self
@@ -378,17 +380,17 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         model: Rc<C::Model>,
     ) -> Box<dyn Iterator<Item = InferOneResult<'a, C>> + 'a> {
         if let Predicate::Implies(..) = *goal {
-            return Box::new(std::iter::empty());
+            return Box::new(core::iter::empty());
         }
 
         let unify_assertion = self
             .unify_as_iterator(goal.clone(), assertion.clone(), model.clone())
             .map(|model| InferOneResult::Yes(Rc::new(identity), model));
 
-        let assertion_specific = std::iter::once_with(move || match &*assertion {
+        let assertion_specific = core::iter::once_with(move || match &*assertion {
             Predicate::Implies(premise, conclusion) => {
                 if matches!(**premise, Predicate::False) {
-                    Box::new(std::iter::empty()) as Box<dyn Iterator<Item = _>>
+                    Box::new(core::iter::empty()) as Box<dyn Iterator<Item = _>>
                 } else if matches!(**conclusion, Predicate::False) {
                     Box::new(
                         self.unify_as_iterator(goal, assertion, model.clone())
@@ -410,7 +412,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                                             let not_proof_builder = not_proof_builder.clone();
                                             match proof_res {
                                                 PartialProofResult::Yes(premise_proof, model) => {
-                                                    Box::new(std::iter::once(InferOneResult::No(
+                                                    Box::new(core::iter::once(InferOneResult::No(
                                                         Rc::new(move |proof| Proof::ModusPonens {
                                                             implication: Box::new(
                                                                 not_proof_builder(proof),
@@ -424,7 +426,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                                                         as Box<dyn Iterator<Item = _>>
                                                 }
 
-                                                _ => Box::new(std::iter::empty()),
+                                                _ => Box::new(core::iter::empty()),
                                             }
                                         }),
                                 )
@@ -437,7 +439,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                                             let proof_builder = proof_builder.clone();
                                             match proof_res {
                                                 PartialProofResult::Yes(premise_proof, model) => {
-                                                    Box::new(std::iter::once(InferOneResult::Yes(
+                                                    Box::new(core::iter::once(InferOneResult::Yes(
                                                         Rc::new(move |proof| Proof::ModusPonens {
                                                             implication: Box::new(proof_builder(
                                                                 proof,
@@ -451,7 +453,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                                                         as Box<dyn Iterator<Item = _>>
                                                 }
 
-                                                _ => Box::new(std::iter::empty()),
+                                                _ => Box::new(core::iter::empty()),
                                             }
                                         }),
                                 )
@@ -460,7 +462,7 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
                     ) as Box<dyn Iterator<Item = _>>
                 }
             }
-            _ => Box::new(std::iter::empty()),
+            _ => Box::new(core::iter::empty()),
         })
         .flatten();
 
@@ -474,9 +476,9 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         mut model: Rc<C::Model>,
     ) -> Box<dyn Iterator<Item = Rc<C::Model>> + 'a> {
         if self.try_unify(goal, rule, &mut model) {
-            Box::new(std::iter::once(model))
+            Box::new(core::iter::once(model))
         } else {
-            Box::new(std::iter::empty())
+            Box::new(core::iter::empty())
         }
     }
 

@@ -1,8 +1,14 @@
+#![no_std]
+
 mod prolog;
 
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::rc::Rc;
+use alloc::vec::Vec;
 use argon_util::{Fuel, UniqueIdentifier};
-use std::hash::Hash;
-use std::rc::Rc;
+use core::hash::Hash;
 
 pub use prolog::*;
 
@@ -144,12 +150,12 @@ where
     }
 }
 
-impl<S> std::fmt::Debug for Predicate<S>
+impl<S> core::fmt::Debug for Predicate<S>
 where
     S: ProverSyntax,
-    S::PredicateExpr: std::fmt::Debug,
+    S::PredicateExpr: core::fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Predicate::PredicateExpression(predicate) => f
                 .debug_tuple("PredicateExpression")
@@ -188,34 +194,34 @@ where
 {
 }
 
-impl<S> std::hash::Hash for Predicate<S>
+impl<S> core::hash::Hash for Predicate<S>
 where
     S: ProverSyntax,
-    S::PredicateExpr: std::hash::Hash,
+    S::PredicateExpr: core::hash::Hash,
 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         match self {
             Predicate::PredicateExpression(predicate) => {
-                std::hash::Hash::hash(&0_u8, state);
-                std::hash::Hash::hash(predicate, state);
+                core::hash::Hash::hash(&0_u8, state);
+                core::hash::Hash::hash(predicate, state);
             }
             Predicate::And(a, b) => {
-                std::hash::Hash::hash(&1_u8, state);
-                std::hash::Hash::hash(a, state);
-                std::hash::Hash::hash(b, state);
+                core::hash::Hash::hash(&1_u8, state);
+                core::hash::Hash::hash(a, state);
+                core::hash::Hash::hash(b, state);
             }
             Predicate::Or(a, b) => {
-                std::hash::Hash::hash(&2_u8, state);
-                std::hash::Hash::hash(a, state);
-                std::hash::Hash::hash(b, state);
+                core::hash::Hash::hash(&2_u8, state);
+                core::hash::Hash::hash(a, state);
+                core::hash::Hash::hash(b, state);
             }
             Predicate::Implies(a, b) => {
-                std::hash::Hash::hash(&3_u8, state);
-                std::hash::Hash::hash(a, state);
-                std::hash::Hash::hash(b, state);
+                core::hash::Hash::hash(&3_u8, state);
+                core::hash::Hash::hash(a, state);
+                core::hash::Hash::hash(b, state);
             }
-            Predicate::True => std::hash::Hash::hash(&4_u8, state),
-            Predicate::False => std::hash::Hash::hash(&5_u8, state),
+            Predicate::True => core::hash::Hash::hash(&4_u8, state),
+            Predicate::False => core::hash::Hash::hash(&5_u8, state),
         }
     }
 }
