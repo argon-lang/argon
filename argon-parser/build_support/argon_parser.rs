@@ -1892,7 +1892,7 @@ fn expr_error() -> RuleInfo<ParserFactory> {
 }
 
 fn stmt_error() -> RuleInfo<ParserFactory> {
-    rule([error()], "stmt_expr_error")
+    rule([error()], "stmt_error")
 }
 
 fn build_grammar() -> Grammar<ParserFactory> {

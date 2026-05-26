@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::convert::Infallible;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -24,6 +25,12 @@ impl ErrorReporter<CompileError> for TestErrorReporter {
     }
 }
 
+impl ErrorReporter<Infallible> for TestErrorReporter {
+    fn report_error(&self, error: Infallible) {
+        match error {}
+    }
+}
+
 mod testcases {
     use super::*;
 
@@ -39,7 +46,7 @@ mod testcases {
             let reporter = TestErrorReporter::default();
             let file_name = PathBuf::from(&input_source.name);
 
-            let module = argon_parser::parse(input_source.source.as_bytes(), &file_name, &reporter);
+            let module = argon_parser::parse(input_source.source.as_bytes(), file_name, &reporter);
 
             assert!(
                 reporter.internal_errors.borrow().is_empty(),

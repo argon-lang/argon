@@ -2,12 +2,12 @@ use crate::ast;
 use crate::ast::*;
 use crate::lexer::{LexedToken, LexerMode, TokenReader};
 use crate::token::{Token, TokenCategory};
+use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
 use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigInt;
-use parse18_runtime::{
-    FilePosition, FilePositionRange, Location, ParseResult, ParserRuntime, WithLocation, WithRange,
-};
-use std::path::{Path, PathBuf};
+use parse18_runtime::{FilePosition, FilePositionRange, Location, LocationFileView, ParseResult, ParserRuntime, WithLocation, WithRange};
+use alloc::borrow::ToOwned;
+
 
 fn merge_locations(first: Location, second: Location) -> Location {
     Location {
@@ -453,16 +453,8 @@ fn stmt_expr(expr: WithLocation<Expr>) -> Stmt {
     Stmt::Expr(expr)
 }
 
-fn stmt_expr_error() -> Stmt {
-    let position = FilePosition { line: 0, column: 0 };
-    Stmt::Expr(WithLocation::new(
-        expr_error(),
-        Location {
-            file: PathBuf::new(),
-            start: position,
-            end: position,
-        },
-    ))
+fn stmt_error() -> Stmt {
+    Stmt::Error
 }
 
 fn stmt_import(import_stmt: ImportStmt) -> Stmt {
@@ -1057,7 +1049,7 @@ fn import_path_segment_wildcard(location: Location) -> ImportPathSegment {
 include!(concat!(env!("OUT_DIR"), "/argon_parser.rs"));
 
 pub struct ArgonParser<'a, L, ER: ?Sized> {
-    file_name: &'a Path,
+    file_name: &'a LocationFileView,
     lex_mode: LexerMode,
 
     lexer: L,
@@ -1068,7 +1060,11 @@ pub struct ArgonParser<'a, L, ER: ?Sized> {
 }
 
 impl<'a, L: TokenReader, ER: ErrorReporter<CompileError> + ?Sized> ArgonParser<'a, L, ER> {
-    pub fn new(file_name: &'a Path, lexer: L, error_reporter: &'a ER) -> ArgonParser<'a, L, ER> {
+    pub fn new(
+        file_name: &'a LocationFileView,
+        lexer: L,
+        error_reporter: &'a ER,
+    ) -> ArgonParser<'a, L, ER> {
         ArgonParser {
             file_name,
             lex_mode: LexerMode::Normal,

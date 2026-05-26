@@ -1,8 +1,16 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
 use crate::ast::ModuleDeclaration;
 use crate::lexer::{Lexer, LexerReader};
+use alloc::{string::String, vec};
 use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
-use std::io::Read;
-use std::path::{Path, PathBuf};
+use embedded_io::Read;
+use parse18_runtime::LocationFileView;
+use alloc::borrow::ToOwned;
 
 pub mod argon_parser;
 pub mod ast;
@@ -17,15 +25,18 @@ use parse18_runtime::ParseResult;
 
 pub fn parse<
     R: Read,
-    ER: ErrorReporter<InternalCompilerError> + ErrorReporter<CompileError> + ?Sized,
+    ER: ErrorReporter<R::Error>
+        + ErrorReporter<InternalCompilerError>
+        + ErrorReporter<CompileError>
+        + ?Sized,
 >(
     reader: R,
-    file_name: &Path,
+    file_name: &LocationFileView,
     error_reporter: &ER,
 ) -> ModuleDeclaration {
     let lexer_reader = ReadLexerReader {
         reader,
-        file_name: file_name.to_path_buf(),
+        file_name: file_name.clone(),
         error_reporter,
         eof: false,
         decoder_done: false,
@@ -48,7 +59,7 @@ pub fn parse<
 
 struct ReadLexerReader<'a, R, ER: ?Sized> {
     reader: R,
-    file_name: PathBuf,
+    file_name: &'a LocationFileView,
     error_reporter: &'a ER,
     eof: bool,
     decoder_done: bool,
@@ -58,8 +69,8 @@ struct ReadLexerReader<'a, R, ER: ?Sized> {
     pending_end: usize,
 }
 
-impl<'a, R: Read, ER: ErrorReporter<InternalCompilerError> + ?Sized> LexerReader
-    for ReadLexerReader<'a, R, ER>
+impl<'a, R: Read, ER: ErrorReporter<R::Error> + ErrorReporter<InternalCompilerError> + ?Sized>
+    LexerReader for ReadLexerReader<'a, R, ER>
 {
     fn next_chunk(&mut self, chars: &mut String) {
         chars.clear();
@@ -72,8 +83,7 @@ impl<'a, R: Read, ER: ErrorReporter<InternalCompilerError> + ?Sized> LexerReader
             let bytes_read = match self.reader.read(&mut self.buffer) {
                 Ok(count) => count,
                 Err(err) => {
-                    self.error_reporter
-                        .report_error(InternalCompilerError::IoError(self.file_name.clone(), err));
+                    self.error_reporter.report_error(err);
                     self.eof = true;
                     self.decoder_done = true;
                     return;
@@ -99,13 +109,7 @@ impl<'a, R: Read, ER: ErrorReporter<InternalCompilerError> + ?Sized> LexerReader
 
         if had_errors {
             self.error_reporter
-                .report_error(InternalCompilerError::IoError(
-                    self.file_name.clone(),
-                    std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "input was not valid UTF-8",
-                    ),
-                ));
+                .report_error(InternalCompilerError::InvalidUtf8(self.file_name.to_owned()));
             self.eof = true;
             self.pending_start = 0;
             self.pending_end = 0;

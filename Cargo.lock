@@ -139,6 +139,7 @@ version = "0.0.0"
 dependencies = [
  "argon-testcases",
  "argon-util",
+ "embedded-io",
  "encoding_rs",
  "num-bigint",
  "num-traits",

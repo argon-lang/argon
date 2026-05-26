@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use num_bigint::BigUint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

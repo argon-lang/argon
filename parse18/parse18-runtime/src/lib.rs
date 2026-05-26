@@ -4,15 +4,30 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
 #[cfg(feature = "std")]
-use std::path::PathBuf;
+pub type LocationFile = std::path::PathBuf;
+#[cfg(not(feature = "std"))]
+pub type LocationFile = alloc::string::String;
 
 #[cfg(feature = "std")]
-pub type LocationFile = PathBuf;
+pub type LocationFileView = std::path::Path;
+
 #[cfg(not(feature = "std"))]
-pub type LocationFile = String;
+pub type LocationFileView = str;
+
+pub fn write_location_file(
+    f: &mut core::fmt::Formatter<'_>,
+    file: &LocationFileView,
+) -> core::fmt::Result {
+    #[cfg(feature = "std")]
+    {
+        write!(f, "{}", file.display())
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        write!(f, "{file}")
+    }
+}
 
 pub fn is_alphabetic(c: char) -> bool {
     c.is_alphabetic()

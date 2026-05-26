@@ -1,7 +1,8 @@
 use crate::Location;
+use alloc::{boxed::Box, string::String, vec::Vec};
+use core::fmt::{Display, Formatter};
 use num_bigint::BigInt;
 use parse18_runtime::WithLocation;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Clone)]
 pub struct NonEmptyVec<T> {
@@ -17,6 +18,7 @@ impl<T> NonEmptyVec<T> {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
+    Error,
     FunctionDeclaration(Box<FunctionDeclarationStmt>),
     VariableDeclaration(Box<VariableDeclarationStmt>),
     RecordDeclaration(Box<RecordDeclarationStmt>),
@@ -219,7 +221,7 @@ pub enum Modifier {
 }
 
 impl Display for Modifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Modifier::Public => write!(f, "public"),
             Modifier::Internal => write!(f, "internal"),
@@ -399,7 +401,7 @@ pub enum Identifier {
 }
 
 impl Display for Identifier {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             Identifier::Named(name) => write!(f, "{}", name),
             Identifier::BinaryOp(op) => write!(f, "binary operator {}", op.symbol()),

@@ -6,7 +6,7 @@ use argon_compiler::{
     Context, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding, ModuleExportEntry,
     ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
 };
-use argon_io::{EmbeddedIoRead, InputFile};
+use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
 use argon_util::sync::OnceLock;
@@ -683,8 +683,7 @@ where
         }
     };
 
-    let module_decl =
-        argon_parser::parse(EmbeddedIoRead::new(file), source.path(), context.reporter());
+    let module_decl = argon_parser::parse(file, source.path(), context.reporter());
 
     let path = ModulePath(module_decl.module_path);
 

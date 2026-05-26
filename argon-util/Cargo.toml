@@ -5,13 +5,13 @@ edition = "2024"
 
 [features]
 default = ["std"]
-std = ["dep:rayon", "dep:walkdir", "embedded-io/std"]
+std = ["dep:rayon", "dep:walkdir", "embedded-io/std", "parse18-runtime/std"]
 
 [dependencies]
 embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
-parse18-runtime = { workspace = true }
+parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
 rayon = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 

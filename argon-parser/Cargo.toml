@@ -4,10 +4,15 @@ publish = false
 edition = "2024"
 build = "build.rs"
 
+[features]
+default = ["std"]
+std = ["argon-util/std", "parse18-runtime/std"]
+
 [dependencies]
-argon-util = { workspace = true }
+argon-util = { path = "../argon-util", default-features = false }
+embedded-io = { workspace = true }
 encoding_rs = { workspace = true }
-parse18-runtime = { workspace = true }
+parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
 unicode-general-category = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }

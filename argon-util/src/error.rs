@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
-use parse18_runtime::Location;
+use parse18_runtime::{Location, LocationFile, write_location_file};
 #[cfg(feature = "std")]
 use std::path::PathBuf;
 
@@ -337,14 +337,11 @@ impl core::fmt::Display for CompileError {
         write!(f, "[AR{:04X}] ", self.code.code())?;
 
         if let Some(loc) = &self.location {
+            write_location_file(f, &loc.file)?;
             write!(
                 f,
-                "{}:{}:{}-{}:{} ",
-                loc.file.display(),
-                loc.start.line,
-                loc.start.column,
-                loc.end.line,
-                loc.end.column
+                ":{}:{}-{}:{} ",
+                loc.start.line, loc.start.column, loc.end.line, loc.end.column
             )?;
         }
 
@@ -411,6 +408,7 @@ impl From<esexpr::DecodeError> for TubeFormatError {
 pub enum InternalCompilerError {
     #[cfg(feature = "std")]
     IoError(PathBuf, std::io::Error),
+    InvalidUtf8(LocationFile),
     #[cfg(feature = "std")]
     WalkDirError(walkdir::Error),
     TubeFormatError(TubeFormatError),
@@ -421,6 +419,10 @@ impl core::fmt::Display for InternalCompilerError {
         match self {
             #[cfg(feature = "std")]
             Self::IoError(path, err) => write!(f, "I/O error: {}: {err}", path.display()),
+            Self::InvalidUtf8(path) => {
+                write!(f, "invalid UTF-8 in ")?;
+                write_location_file(f, path)
+            }
             #[cfg(feature = "std")]
             Self::WalkDirError(err) => write!(f, "directory traversal error: {err}"),
             Self::TubeFormatError(err) => write!(f, "{err}"),
@@ -436,6 +438,7 @@ impl embedded_io::Error for InternalCompilerError {
         match self {
             #[cfg(feature = "std")]
             Self::IoError(_, err) => err.kind().into(),
+            Self::InvalidUtf8(_) => embedded_io::ErrorKind::InvalidData,
             #[cfg(feature = "std")]
             Self::WalkDirError(err) => err
                 .io_error()

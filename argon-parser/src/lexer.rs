@@ -1,12 +1,10 @@
 use crate::token::{StringTokenType, Token, TokenType};
+use alloc::{boxed::Box, collections::VecDeque, string::String};
 use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigUint;
 use num_traits::Num;
-use parse18_runtime::{
-    FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, WithRange,
-};
-use std::collections::VecDeque;
-use std::path::Path;
+use parse18_runtime::{FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, LocationFileView, WithRange};
+use alloc::borrow::ToOwned;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexerMode {
@@ -31,7 +29,7 @@ pub trait TokenReader {
 pub struct Lexer<'a, R, ER: ?Sized> {
     reader: R,
     error_reporter: &'a ER,
-    file_name: &'a Path,
+    file_name: &'a LocationFileView,
 
     has_eof: bool,
     token_start_pos: FilePosition,
@@ -43,7 +41,7 @@ pub struct Lexer<'a, R, ER: ?Sized> {
 }
 
 impl<'a, R: LexerReader, ER: ErrorReporter<CompileError> + ?Sized> Lexer<'a, R, ER> {
-    pub fn new(file_name: &'a Path, reader: R, error_reporter: &'a ER) -> Self {
+    pub fn new(file_name: &'a LocationFileView, reader: R, error_reporter: &'a ER) -> Self {
         Lexer {
             reader,
             error_reporter,
@@ -356,6 +354,7 @@ fn parse_unicode_hex_str(buffer: &mut String) -> Option<&str> {
 mod tests {
     use crate::lexer::{LexedToken, Lexer, LexerMode, LexerReader, TokenReader};
     use crate::token::Token;
+    use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
     use argon_util::{CompileError, ErrorReporter};
     use num_bigint::BigUint;
     use num_traits::Num;
