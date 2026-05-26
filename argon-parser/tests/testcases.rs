@@ -46,7 +46,7 @@ mod testcases {
             let reporter = TestErrorReporter::default();
             let file_name = PathBuf::from(&input_source.name);
 
-            let module = argon_parser::parse(input_source.source.as_bytes(), file_name, &reporter);
+            let module = argon_parser::parse(input_source.source.as_bytes(), &file_name, &reporter);
 
             assert!(
                 reporter.internal_errors.borrow().is_empty(),

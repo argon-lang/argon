@@ -5,8 +5,8 @@ publish = false
 edition = "2024"
 
 [dependencies]
-argon-compiler = { workspace = true }
-argon-runner = { workspace = true }
+argon-compiler = { workspace = true, features = ["std"] }
+argon-runner = { workspace = true, features = ["std"] }
 clap = { workspace = true }
 
 [lints]
