@@ -1,9 +1,9 @@
+use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Function, ModulePath, TubeName};
 use argon_expr::{ExprContext, LocalVariable};
 use argon_util::UniqueIdentifier;
+use core::hash::Hash;
 use esexpr::core_types::hashbrown::HashMap;
-use std::hash::Hash;
-use std::sync::Arc;
 
 #[derive(Default)]
 pub struct TubeIdProvider {

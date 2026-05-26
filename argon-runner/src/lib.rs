@@ -71,7 +71,8 @@ where
     };
 
     let mut out_file = EmbeddedIoWrite::new(out_file);
-    let mut expr_gen = esexpr_binary::ExprGenerator::new(&mut out_file);
+    let mut expr_gen =
+        esexpr_binary::ExprGenerator::<_, argon_util::InternalCompilerError>::new(&mut out_file);
 
     for entry in argon_tube::encoder::encode_tube(tube) {
         let entry = match entry {

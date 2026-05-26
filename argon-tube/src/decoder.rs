@@ -1,5 +1,6 @@
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
@@ -11,13 +12,12 @@ use argon_compiler::{
 };
 use argon_expr::{FunctionArgument, LocalVariable, ParameterVariable, Variable};
 use argon_format::tube as tf;
-use argon_util::sync::OnceLock;
 use argon_util::UniqueIdentifier;
-use dashmap::DashMap;
+use argon_util::sync::{OnceLock, RwLock, rwlock_read, rwlock_write};
+use core::iter;
+use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
-use std::collections::HashMap;
-use std::sync::Arc;
 
 pub fn decode_tube(
     mut tube: impl Iterator<Item = tf::TubeFileEntry>,
@@ -45,11 +45,11 @@ struct TubeDecoder {
     trait_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     instance_entries: HashMap<BigUint, InstanceEntry>,
     instance_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
-    tube_ids: DashMap<BigUint, TubeName>,
-    module_ids: DashMap<BigUint, (TubeName, ModulePath)>,
-    functions: DashMap<BigUint, Arc<dyn Function>>,
-    local_import_ids: DashMap<BigUint, UniqueIdentifier>,
-    local_variables: DashMap<BigUint, Arc<LocalVariable<DefaultExprContext>>>,
+    tube_ids: RwLock<HashMap<BigUint, TubeName>>,
+    module_ids: RwLock<HashMap<BigUint, (TubeName, ModulePath)>>,
+    functions: RwLock<HashMap<BigUint, Arc<dyn Function>>>,
+    local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
+    local_variables: RwLock<HashMap<BigUint, Arc<LocalVariable<DefaultExprContext>>>>,
 }
 
 #[derive(Clone)]
@@ -102,11 +102,11 @@ impl TubeDecoder {
             trait_method_references: HashMap::new(),
             instance_entries: HashMap::new(),
             instance_method_references: HashMap::new(),
-            tube_ids: DashMap::new(),
-            module_ids: DashMap::new(),
-            functions: DashMap::new(),
-            local_import_ids: DashMap::new(),
-            local_variables: DashMap::new(),
+            tube_ids: RwLock::new(HashMap::new()),
+            module_ids: RwLock::new(HashMap::new()),
+            functions: RwLock::new(HashMap::new()),
+            local_import_ids: RwLock::new(HashMap::new()),
+            local_variables: RwLock::new(HashMap::new()),
         }
     }
 
@@ -287,15 +287,14 @@ impl TubeDecoder {
         let metadata = self.metadata.clone();
         let tube_name = decode_tube_name(*metadata.name);
 
-        self.tube_ids.insert(BigUint::from(0u32), tube_name.clone());
+        rwlock_write(&self.tube_ids).insert(BigUint::from(0u32), tube_name.clone());
         let referenced_tubes = metadata
             .referenced_tubes
             .iter()
             .enumerate()
             .map(|(index, name)| {
                 let tube_name = decode_tube_name((**name).clone());
-                self.tube_ids
-                    .insert(BigUint::from(index + 1), tube_name.clone());
+                rwlock_write(&self.tube_ids).insert(BigUint::from(index + 1), tube_name.clone());
                 tube_name
             })
             .collect::<Vec<_>>();
@@ -315,10 +314,9 @@ impl TubeDecoder {
 
         for module in &modules {
             let path = decode_module_path((*module.path).clone());
-            self.module_ids.insert(
-                BigUint::from(self.module_ids.len()),
-                (tube_name.clone(), path.clone()),
-            );
+            let mut module_ids = rwlock_write(&self.module_ids);
+            let id = BigUint::from(module_ids.len());
+            module_ids.insert(id, (tube_name.clone(), path.clone()));
             tb.module(path);
         }
 
@@ -394,8 +392,8 @@ impl TubeDecoder {
     }
 
     fn function(self: &Arc<Self>, id: BigUint) -> Arc<dyn Function> {
-        if let Some(function) = self.functions.get(&id) {
-            return function.clone();
+        if let Some(function) = rwlock_read(&self.functions).get(&id).cloned() {
+            return function;
         }
 
         let function = match self
@@ -405,16 +403,19 @@ impl TubeDecoder {
             .clone()
         {
             FunctionEntry::Definition(definition) => {
-                return self
-                    .functions
-                    .entry(id)
-                    .or_insert_with(|| self.decode_function_definition(definition))
-                    .clone();
+                let mut functions = rwlock_write(&self.functions);
+                if let Some(function) = functions.get(&id) {
+                    return function.clone();
+                }
+
+                let function = self.decode_function_definition(definition);
+                functions.insert(id, function.clone());
+                return function;
             }
             FunctionEntry::Reference(import) => self.resolve_function_import(import),
         };
 
-        self.functions.insert(id, function.clone());
+        rwlock_write(&self.functions).insert(id, function.clone());
         function
     }
 
@@ -433,7 +434,7 @@ impl TubeDecoder {
                 let module = tube.module(&module).unwrap_or_else(|| {
                     panic!("function import references unknown module {module}")
                 });
-                
+
                 let export_groups = module.export_groups();
                 let exports = export_groups
                     .get(&name)
@@ -505,8 +506,8 @@ impl TubeDecoder {
     }
 
     fn module(self: &Arc<Self>, id: BigUint) -> (TubeName, ModulePath) {
-        if let Some(module) = self.module_ids.get(&id) {
-            return module.clone();
+        if let Some(module) = rwlock_read(&self.module_ids).get(&id).cloned() {
+            return module;
         }
 
         let (tube_id, path) = self
@@ -514,18 +515,22 @@ impl TubeDecoder {
             .get(&id)
             .unwrap_or_else(|| panic!("unknown module id {id}"))
             .clone();
-        let tube_name = self
-            .tube_ids
+        let tube_name = rwlock_read(&self.tube_ids)
             .get(&tube_id)
             .unwrap_or_else(|| panic!("module reference has unknown tube id {tube_id}"))
             .clone();
         let module = (tube_name, decode_module_path(path));
-        self.module_ids.insert(id, module.clone());
+        rwlock_write(&self.module_ids).insert(id, module.clone());
         module
     }
 
     fn local_import_id(self: &Arc<Self>, id: BigUint) -> UniqueIdentifier {
-        self.local_import_ids
+        if let Some(unique_id) = rwlock_read(&self.local_import_ids).get(&id).cloned() {
+            return unique_id;
+        }
+
+        let mut local_import_ids = rwlock_write(&self.local_import_ids);
+        local_import_ids
             .entry(id)
             .or_insert_with(UniqueIdentifier::new)
             .clone()
@@ -732,7 +737,7 @@ impl TubeDecoder {
             | tf::Expr::RefCellLoad { .. }
             | tf::Expr::RefCellStore { .. } => todo!("decode ref-cell expressions"),
             tf::Expr::Sequence { head, tail } => {
-                let exprs = std::iter::once(self.decode_expr(*head))
+                let exprs = iter::once(self.decode_expr(*head))
                     .chain(tail.into_iter().map(|expr| self.decode_expr(*expr)))
                     .collect::<Vec<_>>();
                 Expr::Sequence(
@@ -766,7 +771,7 @@ impl TubeDecoder {
     fn decode_var(self: &Arc<Self>, var: tf::Var) -> Variable<DefaultExprContext> {
         match var {
             tf::Var::LocalVar { id } => Variable::Local(
-                self.local_variables
+                rwlock_read(&self.local_variables)
                     .get(&id)
                     .map(|variable| variable.clone())
                     .expect("local variable reference has unknown id"),
@@ -829,7 +834,7 @@ impl TubeDecoder {
             is_mutable: variable.mutable,
         });
 
-        self.local_variables.insert(id, local_variable.clone());
+        rwlock_write(&self.local_variables).insert(id, local_variable.clone());
         local_variable
     }
 }
@@ -944,9 +949,7 @@ fn decode_module_path(path: tf::ModulePath) -> ModulePath {
 }
 
 fn decode_tube_name(name: tf::TubeName) -> TubeName {
-    TubeName(
-        Vec1::try_from(std::iter::once(name.head).chain(name.tail).collect::<Vec<_>>()).unwrap(),
-    )
+    TubeName(Vec1::try_from(iter::once(name.head).chain(name.tail).collect::<Vec<_>>()).unwrap())
 }
 
 fn decode_identifier(id: tf::Identifier) -> Identifier {

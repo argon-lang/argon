@@ -1,11 +1,12 @@
+use alloc::collections::{BTreeMap, VecDeque};
+use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
     Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
     Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeName, UnaryOperatorIdentifier,
 };
+use core::mem;
 use num_bigint::{BigInt, BigUint};
-use std::collections::VecDeque;
-use std::sync::Arc;
 
 use crate::ids::{LocalVariableId, TubeIdProvider};
 use argon_expr::{ExpressionOwner, LocalVariable, Variable};
@@ -14,8 +15,8 @@ use argon_format::tube as tf;
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
-use esexpr::ESExprStatic;
 use argon_util::InternalCompilerError;
+use esexpr::ESExprStatic;
 
 pub fn encode_tube(
     tube: Arc<Tube>,
@@ -93,7 +94,7 @@ impl TubeEncoder {
             },
 
             EntryEmitter::Metadata => {
-                let modules = std::mem::take(&mut self.modules)
+                let modules = mem::take(&mut self.modules)
                     .into_iter()
                     .map(|module| self.emit_module(module).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?;
@@ -382,7 +383,7 @@ impl TubeEncoder {
             },
 
             FunctionImplementation::Extern(name) => {
-                let mut externs = std::collections::BTreeMap::new();
+                let mut externs = BTreeMap::new();
                 externs.insert(
                     "default".to_string(),
                     ESExprStatic::new(esexpr::ESExpr::Str(name.clone().into())),
