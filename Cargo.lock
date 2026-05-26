@@ -170,7 +170,6 @@ dependencies = [
  "embedded-io",
  "esexpr",
  "esexpr-binary",
- "rayon",
  "walkdir",
 ]
 
@@ -187,7 +186,6 @@ dependencies = [
  "mitsein",
  "num-bigint",
  "parse18-runtime",
- "rayon",
  "walkdir",
 ]
 
@@ -223,6 +221,7 @@ dependencies = [
  "esexpr",
  "esexpr-binary",
  "parse18-runtime",
+ "rayon",
  "walkdir",
 ]
 

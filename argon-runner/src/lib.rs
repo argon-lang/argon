@@ -7,9 +7,9 @@ use crate::tubes::load_referenced_tube;
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
 use argon_io::{EmbeddedIoWrite, InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
+use argon_util::sync::parallel::*;
 use esexpr::ESExprCodec;
 use esexpr_binary::{ExprGeneratorSync, GeneratorError};
-use rayon::prelude::*;
 use std::sync::Arc;
 
 pub struct CompileOptions<I, R, O> {
@@ -33,7 +33,7 @@ pub struct JsCodeGenOptions<I, O> {
 pub fn compile<I, R, O>(options: CompileOptions<I, R, O>) -> bool
 where
     I: InputDirectory + Sync,
-    I::File: Sync,
+    I::File: Send + Sync,
     R: InputFile + Sync,
     O: OutputFile,
 {
@@ -47,12 +47,10 @@ where
         .map(|tube| tube.name().clone())
         .collect::<Vec<_>>();
 
-    let source_files = collect_source_files(context.clone(), &options.input_dirs);
-
     let source_options = SourceCodeTubeOptions {
         name: options.tube_name,
         referenced_tubes: referenced_tube_names,
-        sources: source_files,
+        input_dirs: options.input_dirs,
     };
 
     let tube = argon_source::define_source_tube(context.clone(), source_options, &tube_collection);
@@ -144,21 +142,4 @@ where
     O: OutputDirectory,
 {
     todo!("generate JavaScript code from Argon VM IR")
-}
-
-fn collect_source_files<I>(context: Arc<RunnerContext>, input_dirs: &[I]) -> Vec<I::File>
-where
-    I: InputDirectory,
-{
-    input_dirs
-        .iter()
-        .flat_map(|source_dir| source_dir.list_files().into_iter())
-        .filter_map(|file| match file {
-            Ok(file) => Some(file),
-            Err(err) => {
-                context.reporter().report_error(err);
-                None
-            }
-        })
-        .collect()
 }

@@ -8,8 +8,8 @@ use argon_compiler::{
 };
 use argon_io::{EmbeddedIoRead, InputFile};
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
-use argon_util::sync::OnceLock;
 use argon_util::CompileError;
+use argon_util::sync::OnceLock;
 use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet};

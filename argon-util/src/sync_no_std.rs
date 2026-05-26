@@ -74,3 +74,44 @@ impl<T: fmt::Debug> fmt::Debug for RwLock<T> {
 }
 
 pub type OnceLock<T> = OnceCell<T>;
+
+pub mod parallel {
+    use alloc::vec::Vec;
+
+    pub trait ParallelIteratorExt: Iterator + Sized {
+        fn flat_map_iter<U, F>(self, f: F) -> core::iter::FlatMap<Self, U, F>
+        where
+            U: IntoIterator,
+            F: FnMut(Self::Item) -> U,
+        {
+            self.flat_map(f)
+        }
+    }
+
+    impl<I> ParallelIteratorExt for I where I: Iterator {}
+
+    pub trait IntoParallelRefIterator<'data> {
+        type Item;
+        type Iter: Iterator<Item = Self::Item>;
+
+        fn par_iter(&'data self) -> Self::Iter;
+    }
+
+    impl<'data, T: 'data> IntoParallelRefIterator<'data> for [T] {
+        type Item = &'data T;
+        type Iter = core::slice::Iter<'data, T>;
+
+        fn par_iter(&'data self) -> Self::Iter {
+            self.iter()
+        }
+    }
+
+    impl<'data, T: 'data> IntoParallelRefIterator<'data> for Vec<T> {
+        type Item = &'data T;
+        type Iter = core::slice::Iter<'data, T>;
+
+        fn par_iter(&'data self) -> Self::Iter {
+            self.iter()
+        }
+    }
+}

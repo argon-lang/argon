@@ -1,7 +1,7 @@
 use crate::module::{process_source_file, register_module_reexports};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
-use argon_io::InputFile;
-use rayon::prelude::*;
+use argon_io::InputDirectory;
+use argon_util::sync::parallel::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -11,19 +11,20 @@ mod module;
 mod signature;
 mod type_checker;
 
-pub struct SourceCodeTubeOptions<S> {
+pub struct SourceCodeTubeOptions<I> {
     pub name: TubeName,
     pub referenced_tubes: Vec<TubeName>,
-    pub sources: Vec<S>,
+    pub input_dirs: Vec<I>,
 }
 
-pub fn define_source_tube<S>(
+pub fn define_source_tube<I>(
     context: Context,
-    options: SourceCodeTubeOptions<S>,
+    options: SourceCodeTubeOptions<I>,
     tube_collection: &TubeCollectionBuilder,
 ) -> Arc<Tube>
 where
-    S: InputFile + Sync,
+    I: InputDirectory + Sync,
+    I::File: Send + Sync,
 {
     let tb = tube_collection.add_tube(
         options.name,
@@ -34,12 +35,21 @@ where
     );
 
     let parse_results = options
-        .sources
+        .input_dirs
         .par_iter()
+        .flat_map_iter(|source_dir| source_dir.list_files().into_iter())
         .filter_map(|source| {
+            let source = match source {
+                Ok(source) => source,
+                Err(err) => {
+                    context.reporter().report_error(err);
+                    return None;
+                }
+            };
+
             process_source_file(
                 context.clone(),
-                source,
+                &source,
                 &tb,
                 tube_collection.tube_collection(),
             )
@@ -57,7 +67,7 @@ mod tests {
     use argon_compiler::{
         CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder, TubeName,
     };
-    use argon_io::InputFile;
+    use argon_io::{InputDirectory, InputFile};
     use argon_parser::ast::Identifier;
     use argon_util::sync::Mutex;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
@@ -138,6 +148,11 @@ mod tests {
         path: std::path::PathBuf,
     }
 
+    #[derive(Clone)]
+    struct TestSourceDir {
+        path: std::path::PathBuf,
+    }
+
     struct TestSourceFileReader {
         file: std::fs::File,
         path: std::path::PathBuf,
@@ -171,15 +186,28 @@ mod tests {
         }
     }
 
-    fn source_files(dir: &Path) -> Vec<TestSourcePath> {
-        WalkDir::new(dir)
-            .into_iter()
-            .map(Result::unwrap)
-            .filter(|entry| entry.file_type().is_file())
-            .map(|entry| TestSourcePath {
-                path: entry.path().to_path_buf(),
-            })
-            .collect()
+    impl InputDirectory for TestSourceDir {
+        type File = TestSourcePath;
+        type Files = Vec<Result<TestSourcePath, InternalCompilerError>>;
+
+        fn list_files(&self) -> Self::Files {
+            WalkDir::new(&self.path)
+                .into_iter()
+                .map(Result::unwrap)
+                .filter(|entry| entry.file_type().is_file())
+                .map(|entry| {
+                    Ok(TestSourcePath {
+                        path: entry.path().to_path_buf(),
+                    })
+                })
+                .collect()
+        }
+    }
+
+    fn source_dir(dir: &Path) -> TestSourceDir {
+        TestSourceDir {
+            path: dir.to_path_buf(),
+        }
     }
 
     #[test]
@@ -217,7 +245,7 @@ public def c: type = __argon_builtin never_type
             SourceCodeTubeOptions {
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
-                sources: source_files(&dir),
+                input_dirs: vec![source_dir(&dir)],
             },
             &tube_collection,
         );
@@ -260,7 +288,7 @@ export ::A::*
             SourceCodeTubeOptions {
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
-                sources: source_files(&dir),
+                input_dirs: vec![source_dir(&dir)],
             },
             &tube_collection,
         );

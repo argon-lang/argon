@@ -12,7 +12,6 @@ argon-util = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
-rayon = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }
