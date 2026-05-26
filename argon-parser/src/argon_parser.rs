@@ -2,12 +2,14 @@ use crate::ast;
 use crate::ast::*;
 use crate::lexer::{LexedToken, LexerMode, TokenReader};
 use crate::token::{Token, TokenCategory};
+use alloc::borrow::ToOwned;
 use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
 use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigInt;
-use parse18_runtime::{FilePosition, FilePositionRange, Location, LocationFileView, ParseResult, ParserRuntime, WithLocation, WithRange};
-use alloc::borrow::ToOwned;
-
+use parse18_runtime::{
+    FilePosition, FilePositionRange, Location, LocationFileView, ParseResult, ParserRuntime,
+    WithLocation, WithRange,
+};
 
 fn merge_locations(first: Location, second: Location) -> Location {
     Location {

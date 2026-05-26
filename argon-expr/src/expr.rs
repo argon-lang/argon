@@ -1,13 +1,13 @@
+use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 use argon_parser::ast::FunctionParameterListType;
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
+use core::convert::Infallible;
+use core::fmt::Debug;
+use core::hash::{Hash, Hasher};
+use core::str::FromStr;
 use derivative::Derivative;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
-use std::convert::Infallible;
-use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
-use std::sync::Arc;
 
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
@@ -529,7 +529,7 @@ impl<EC: ExprContext + ?Sized> Clone for ParameterVariable<EC> {
 #[cfg(test)]
 mod tests {
     use super::{Expr, ExprContext};
-    use std::fmt::Debug;
+    use core::fmt::Debug;
 
     struct ContextWithoutDebug;
 

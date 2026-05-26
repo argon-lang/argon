@@ -1,5 +1,5 @@
 use crate::{Expr, ExprContext, FunctionArgument, MatchCase, RecordFieldLiteral, Variable};
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 mod normalizer;
 mod subst;
@@ -255,6 +255,8 @@ where
 mod tests {
     use super::{ExprScanner, ExprScannerMut};
     use crate::{Builtin, Expr, ExprContext};
+    use alloc::vec;
+    use alloc::vec::Vec;
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;

@@ -1,5 +1,5 @@
 use crate::{Expr, ExprContext, ExprScannerMut, Variable};
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 pub struct SubstScanner<'a, EC: ExprContext + ?Sized> {
     substitutions: HashMap<Variable<EC>, &'a Expr<EC>>,
@@ -44,7 +44,7 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
 mod tests {
     use super::SubstScanner;
     use crate::{ErasureMode, Expr, ExprContext, ExprScannerMut, LocalVariable, Variable};
-    use std::sync::Arc;
+    use alloc::{sync::Arc, vec};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;

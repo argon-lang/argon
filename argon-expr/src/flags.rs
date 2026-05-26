@@ -45,11 +45,11 @@ impl Flags {
     }
 
     pub fn get_mode(&self) -> Mode {
-        unsafe { std::mem::transmute::<u8, Mode>(self.0 & MODE_MASK) }
+        unsafe { core::mem::transmute::<u8, Mode>(self.0 & MODE_MASK) }
     }
 
     pub fn get_type_index_kind(&self) -> TypeIndexKind {
-        unsafe { std::mem::transmute::<u8, TypeIndexKind>(self.0 & TYPE_INDEX_KIND_MASK) }
+        unsafe { core::mem::transmute::<u8, TypeIndexKind>(self.0 & TYPE_INDEX_KIND_MASK) }
     }
 
     pub fn set_mode(&mut self, mode: Mode) {

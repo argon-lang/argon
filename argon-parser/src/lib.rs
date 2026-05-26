@@ -6,11 +6,11 @@ extern crate std;
 
 use crate::ast::ModuleDeclaration;
 use crate::lexer::{Lexer, LexerReader};
+use alloc::borrow::ToOwned;
 use alloc::{string::String, vec};
 use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
 use embedded_io::Read;
 use parse18_runtime::LocationFileView;
-use alloc::borrow::ToOwned;
 
 pub mod argon_parser;
 pub mod ast;
@@ -36,7 +36,7 @@ pub fn parse<
 ) -> ModuleDeclaration {
     let lexer_reader = ReadLexerReader {
         reader,
-        file_name: file_name.clone(),
+        file_name,
         error_reporter,
         eof: false,
         decoder_done: false,
@@ -109,7 +109,9 @@ impl<'a, R: Read, ER: ErrorReporter<R::Error> + ErrorReporter<InternalCompilerEr
 
         if had_errors {
             self.error_reporter
-                .report_error(InternalCompilerError::InvalidUtf8(self.file_name.to_owned()));
+                .report_error(InternalCompilerError::InvalidUtf8(
+                    self.file_name.to_owned(),
+                ));
             self.eof = true;
             self.pending_start = 0;
             self.pending_end = 0;

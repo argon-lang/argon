@@ -2,8 +2,8 @@ use crate::{
     Expr, ExprContext, ExpressionOwner, FunctionArgument, LocalVariable, MatchCase,
     ParameterVariable, RecordFieldLiteral, Variable,
 };
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use mitsein::vec1::Vec1;
-use std::sync::Arc;
 
 mod fresh_var;
 

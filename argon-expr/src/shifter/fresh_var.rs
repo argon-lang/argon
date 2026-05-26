@@ -1,5 +1,5 @@
 use crate::{Expr, ExprContext, ExprContextShifter, Variable};
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 pub struct FreshVariableShifter<EC: ExprContext + ?Sized> {
     var_mapping: HashMap<Variable<EC>, Variable<EC>>,

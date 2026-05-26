@@ -1,10 +1,13 @@
 use crate::token::{StringTokenType, Token, TokenType};
+use alloc::borrow::ToOwned;
 use alloc::{boxed::Box, collections::VecDeque, string::String};
 use argon_util::{CompileError, ErrorReporter};
 use num_bigint::BigUint;
 use num_traits::Num;
-use parse18_runtime::{FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location, LocationFileView, WithRange};
-use alloc::borrow::ToOwned;
+use parse18_runtime::{
+    FilePosition, FilePositionRange, Lexer as Parse18Lexer, LexerAcceptance, Location,
+    LocationFileView, WithRange,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LexerMode {

@@ -21,10 +21,10 @@ noble-idl-runtime = { path = "../noble-idl/langs/rust/runtime" }
 bitflags = "2.11.1"
 clap = { version = "4.6.1", features = ["derive"] }
 dashmap = "6.2.1"
-derivative = "2.2.0"
-embedded-io = { version = "0.6.1", default-features = false }
+derivative = { version = "2.2.0", features = ["use_core"] }
+embedded-io = { version = "0.7.1", default-features = false }
 encoding_rs = { version = "0.8.35", default-features = false, features = ["alloc"] }
-hashbrown = { version = "0.16.1", default-features = false, features = ["default-hasher"] }
+hashbrown = { version = "0.17.1", default-features = false, features = ["default-hasher"] }
 mitsein = { version = "0.9.0", default-features = false, features = ["alloc"] }
 num-bigint = { version = "0.4.6", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }

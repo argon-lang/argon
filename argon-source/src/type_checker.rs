@@ -103,11 +103,12 @@ impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
         let owner = ExpressionOwner::Function(function.clone());
         let mut body = DefaultToTypeCheckExprContextShifter.shift(body.clone());
 
+        let arguments = std::mem::take(arguments);
         let mut subst = SubstScanner::new();
 
-        let arguments = std::mem::take(arguments);
-
-        for ((parameter_index, parameter), argument) in signature.parameters.iter().enumerate().zip(&arguments) {
+        for ((parameter_index, parameter), argument) in
+            signature.parameters.iter().enumerate().zip(&arguments)
+        {
             let variable = Variable::Parameter(Arc::new(
                 parameter
                     .clone()

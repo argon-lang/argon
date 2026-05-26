@@ -1,6 +1,7 @@
 use crate::{Expr, ExprContext, ExprScannerMut, FunctionArgument, default_scan_mut};
+use alloc::vec::Vec;
 use argon_util::Fuel;
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 pub struct NormalizerScanner<EC: ?Sized, S> {
     fuel: Fuel,
