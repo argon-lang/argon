@@ -68,15 +68,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "archery"
-version = "1.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "70e0a5f99dfebb87bb342d0f53bb92c81842e100bbb915223e38349580e5441d"
-dependencies = [
- "triomphe",
-]
-
-[[package]]
 name = "argon-cli"
 version = "0.1.0"
 dependencies = [
@@ -92,15 +83,11 @@ dependencies = [
  "argon-expr",
  "argon-parser",
  "argon-util",
- "dashmap",
  "esexpr",
+ "hashbrown 0.17.1",
  "mitsein",
- "num-bigint",
- "num-traits",
  "parse18-runtime",
  "percent-encoding",
- "rpds",
- "walkdir",
 ]
 
 [[package]]
@@ -186,6 +173,7 @@ dependencies = [
  "argon-parser",
  "argon-util",
  "embedded-io",
+ "hashbrown 0.17.1",
  "mitsein",
  "num-bigint",
  "parse18-runtime",
@@ -1000,16 +988,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
-name = "rpds"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e025feb26210bc196b908e72deb063b1b4000754304341cbc168a1e72c857ebc"
-dependencies = [
- "archery",
- "smallvec",
-]
-
-[[package]]
 name = "rstest"
 version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1231,12 +1209,6 @@ checksum = "a2abe9b86193656635d2411dc43050282ca48aa31c2451210f4202550afb7526"
 dependencies = [
  "winnow",
 ]
-
-[[package]]
-name = "triomphe"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd69c5aa8f924c7519d6372789a74eac5b94fb0f8fcf0d4a97eb0bfc3e785f39"
 
 [[package]]
 name = "unicode-general-category"

@@ -1,11 +1,11 @@
 use crate::signature::SignatureParameter;
 use crate::{DefaultExprContext, Enum, Function, Instance, Method, Record, Trait};
+use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
     ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
 };
 use argon_parser::ast::Identifier;
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use hashbrown::{HashMap, HashSet};
 
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;

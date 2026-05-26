@@ -1,3 +1,9 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
 pub mod access;
 pub mod erased_sig;
 pub mod scanner;
@@ -8,6 +14,7 @@ pub mod test_utils;
 
 pub use crate::access::AccessModifierGlobal;
 pub use crate::signature::FunctionSignature;
+use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};
 use argon_expr::ExprContext;
 pub use argon_expr::{Builtin, ErasureMode, Expr};
 pub use argon_parser::ast::{
@@ -16,15 +23,14 @@ pub use argon_parser::ast::{
 };
 use argon_util::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
+use core::error::Error;
+use core::fmt::{Debug, Display, Formatter};
+use core::hash::{Hash, Hasher};
+use core::str::FromStr;
 use esexpr::ESExpr;
+use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use mitsein::vec1::Vec1;
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
-use std::sync::Arc;
 
 pub trait CompileErrorReporter:
     ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
@@ -37,11 +43,13 @@ impl<R> CompileErrorReporter for R where
 }
 
 fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
-    lock.read().unwrap_or_else(|err| err.into_inner())
+    lock.read()
+        .unwrap_or_else(|_| panic!("RwLock already mutably borrowed"))
 }
 
 fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
-    lock.write().unwrap_or_else(|err| err.into_inner())
+    lock.write()
+        .unwrap_or_else(|_| panic!("RwLock already borrowed"))
 }
 
 pub trait ContextObject: Sync + Send {
@@ -81,11 +89,11 @@ pub struct TubeName(pub Vec1<String>);
 pub enum TubeNameParseError {
     Empty,
     EmptySegment,
-    InvalidSegment(std::str::Utf8Error),
+    InvalidSegment(core::str::Utf8Error),
 }
 
 impl Display for TubeNameParseError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
             TubeNameParseError::Empty => write!(f, "empty tube name"),
             TubeNameParseError::EmptySegment => write!(f, "empty segment in tube name"),
@@ -98,8 +106,8 @@ impl Display for TubeNameParseError {
 
 impl Error for TubeNameParseError {}
 
-impl From<std::str::Utf8Error> for TubeNameParseError {
-    fn from(e: std::str::Utf8Error) -> Self {
+impl From<core::str::Utf8Error> for TubeNameParseError {
+    fn from(e: core::str::Utf8Error) -> Self {
         TubeNameParseError::InvalidSegment(e)
     }
 }
@@ -124,7 +132,7 @@ impl FromStr for TubeName {
 }
 
 impl Display for TubeName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", self.0.first())?;
         for s in self.0.iter().skip(1) {
             write!(f, ".{}", s)?;
@@ -137,7 +145,7 @@ impl Display for TubeName {
 pub struct ModulePath(pub Vec<String>);
 
 impl Display for ModulePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         for (i, s) in self.0.iter().enumerate() {
             if i > 0 {
                 write!(f, "/")?;
@@ -208,7 +216,7 @@ impl TubeCollectionBuilder {
 
 impl Unload for TubeCollection {
     fn unload(&self) {
-        for (_, tube) in std::mem::take(&mut *write_lock(&self.tubes)) {
+        for (_, tube) in core::mem::take(&mut *write_lock(&self.tubes)) {
             tube.unload();
         }
     }
@@ -247,7 +255,7 @@ impl Tube {
 
 impl PartialEq for Tube {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+        core::ptr::eq(self, other)
     }
 }
 
@@ -255,7 +263,7 @@ impl Eq for Tube {}
 
 impl Hash for Tube {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        std::ptr::hash(self, state);
+        core::ptr::hash(self, state);
     }
 }
 
@@ -314,7 +322,7 @@ impl Module {
 
 impl PartialEq for Module {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+        core::ptr::eq(self, other)
     }
 }
 
@@ -322,7 +330,7 @@ impl Eq for Module {}
 
 impl Hash for Module {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        std::ptr::hash(self, state);
+        core::ptr::hash(self, state);
     }
 }
 
@@ -427,14 +435,14 @@ pub trait Instance: Unload + Sync + Send {}
 macro_rules! impl_dyn_stub_traits {
     ($trait_name:ident) => {
         impl Debug for dyn $trait_name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
                 f.debug_struct(stringify!($trait_name)).finish()
             }
         }
 
         impl PartialEq for dyn $trait_name {
             fn eq(&self, other: &Self) -> bool {
-                std::ptr::addr_eq(self, other)
+                core::ptr::addr_eq(self, other)
             }
         }
 
@@ -442,7 +450,7 @@ macro_rules! impl_dyn_stub_traits {
 
         impl Hash for dyn $trait_name {
             fn hash<H: Hasher>(&self, state: &mut H) {
-                std::ptr::from_ref(self).hash(state);
+                core::ptr::from_ref(self).hash(state);
             }
         }
     };

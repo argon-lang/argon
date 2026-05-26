@@ -10,9 +10,9 @@ use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
 use argon_util::sync::OnceLock;
+use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 type ResolvedImports = HashMap<Identifier, ResolvedImportGroups>;

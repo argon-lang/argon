@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use argon_expr::{ErasureMode, Expr, ExprContext, ExpressionOwner, ParameterVariable};
 use argon_parser::ast::{FunctionParameterListType, Identifier};
 

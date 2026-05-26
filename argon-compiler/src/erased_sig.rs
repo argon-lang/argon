@@ -1,4 +1,5 @@
 use crate::{DefaultExprContext, FunctionSignature, ModulePath, TubeName};
+use alloc::{boxed::Box, vec::Vec};
 use argon_expr::{Builtin, ErasureMode, Expr};
 use argon_parser::ast::Identifier;
 use argon_util::UniqueIdentifier;

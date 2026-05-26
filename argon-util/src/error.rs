@@ -430,8 +430,7 @@ impl core::fmt::Display for InternalCompilerError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for InternalCompilerError {}
+impl core::error::Error for InternalCompilerError {}
 
 impl embedded_io::Error for InternalCompilerError {
     fn kind(&self) -> embedded_io::ErrorKind {

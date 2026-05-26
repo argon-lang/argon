@@ -2,7 +2,7 @@ use crate::module::{process_source_file, register_module_reexports};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
 use argon_io::InputDirectory;
 use argon_util::sync::parallel::*;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::sync::Arc;
 
 mod function;

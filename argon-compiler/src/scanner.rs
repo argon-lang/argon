@@ -1,10 +1,11 @@
 use crate::{EffectInfo, Function};
+use alloc::sync::Arc;
 use argon_expr::{Expr, ExprContext, ExprScanner, FunctionArgument};
-use std::sync::Arc;
+use core::marker::PhantomData;
 
 pub struct PurityScanner<EC: ?Sized> {
     found_impure_function_call: bool,
-    _phantom: std::marker::PhantomData<*const EC>,
+    _phantom: PhantomData<*const EC>,
 }
 
 impl<EC> PurityScanner<EC>
@@ -14,7 +15,7 @@ where
     pub fn new() -> Self {
         Self {
             found_impure_function_call: false,
-            _phantom: std::marker::PhantomData,
+            _phantom: PhantomData,
         }
     }
 
