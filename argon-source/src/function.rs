@@ -13,7 +13,7 @@ use argon_compiler::{
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
-use argon_util::sync::Mutex;
+use argon_util::sync::{Mutex, mutex_lock};
 use std::sync::Arc;
 
 pub struct SourceFunction {
@@ -79,7 +79,7 @@ impl Function for SourceFunction {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = self.signature.lock().unwrap_or_else(|e| e.into_inner());
+        let mut sig_store = mutex_lock(&self.signature);
         if let Some(ref sig) = *sig_store {
             return sig.clone();
         }
@@ -104,10 +104,7 @@ impl Function for SourceFunction {
     }
 
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
-        let mut implementation_store = self
-            .implementation
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut implementation_store = mutex_lock(&self.implementation);
         if let Some(ref implementation) = *implementation_store {
             return Some(implementation.clone());
         }

@@ -21,7 +21,7 @@ pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
 };
-use argon_util::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use argon_util::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, rwlock_read, rwlock_write};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
@@ -43,13 +43,11 @@ impl<R> CompileErrorReporter for R where
 }
 
 fn read_lock<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
-    lock.read()
-        .unwrap_or_else(|_| panic!("RwLock already mutably borrowed"))
+    rwlock_read(lock)
 }
 
 fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
-    lock.write()
-        .unwrap_or_else(|_| panic!("RwLock already borrowed"))
+    rwlock_write(lock)
 }
 
 pub trait ContextObject: Sync + Send {

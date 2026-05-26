@@ -1,6 +1,6 @@
 use crate::{CompileErrorReporter, Context, ContextObject};
 use alloc::{sync::Arc, vec::Vec};
-use argon_util::sync::Mutex;
+use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 
 #[derive(Clone, Default)]
@@ -10,17 +10,11 @@ pub struct TestReporter {
 
 impl TestReporter {
     pub fn errors(&self) -> Vec<CompileError> {
-        match self.errors.lock() {
-            Ok(errors) => errors.clone(),
-            Err(_) => panic!("test reporter mutex already borrowed"),
-        }
+        mutex_lock(&self.errors).clone()
     }
 
     fn push_error(&self, error: CompileError) {
-        match self.errors.lock() {
-            Ok(mut errors) => errors.push(error),
-            Err(_) => panic!("test reporter mutex already borrowed"),
-        }
+        mutex_lock(&self.errors).push(error);
     }
 }
 

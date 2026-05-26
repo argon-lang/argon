@@ -37,6 +37,11 @@ impl<T: fmt::Debug> fmt::Debug for Mutex<T> {
     }
 }
 
+pub fn mutex_lock<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
+    lock.lock()
+        .unwrap_or_else(|_| panic!("Mutex already borrowed"))
+}
+
 pub struct RwLock<T>(RefCell<T>);
 
 impl<T> RwLock<T> {
@@ -71,6 +76,16 @@ impl<T: fmt::Debug> fmt::Debug for RwLock<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
+}
+
+pub fn rwlock_read<T>(lock: &RwLock<T>) -> RwLockReadGuard<'_, T> {
+    lock.read()
+        .unwrap_or_else(|_| panic!("RwLock already mutably borrowed"))
+}
+
+pub fn rwlock_write<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
+    lock.write()
+        .unwrap_or_else(|_| panic!("RwLock already borrowed"))
 }
 
 pub type OnceLock<T> = OnceCell<T>;
