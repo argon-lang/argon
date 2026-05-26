@@ -409,6 +409,7 @@ pub enum InternalCompilerError {
     #[cfg(feature = "std")]
     IoError(PathBuf, std::io::Error),
     InvalidUtf8(LocationFile),
+    WriteZero,
     #[cfg(feature = "std")]
     WalkDirError(walkdir::Error),
     TubeFormatError(TubeFormatError),
@@ -423,6 +424,7 @@ impl core::fmt::Display for InternalCompilerError {
                 write!(f, "invalid UTF-8 in ")?;
                 write_location_file(f, path)
             }
+            Self::WriteZero => write!(f, "failed to write whole buffer"),
             #[cfg(feature = "std")]
             Self::WalkDirError(err) => write!(f, "directory traversal error: {err}"),
             Self::TubeFormatError(err) => write!(f, "{err}"),
@@ -438,6 +440,7 @@ impl embedded_io::Error for InternalCompilerError {
             #[cfg(feature = "std")]
             Self::IoError(_, err) => err.kind().into(),
             Self::InvalidUtf8(_) => embedded_io::ErrorKind::InvalidData,
+            Self::WriteZero => embedded_io::ErrorKind::WriteZero,
             #[cfg(feature = "std")]
             Self::WalkDirError(err) => err
                 .io_error()

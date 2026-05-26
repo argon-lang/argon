@@ -3,17 +3,31 @@ name = "argon-runner"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = ["std"]
+std = [
+    "argon-compiler/std",
+    "argon-io/std",
+    "argon-source/std",
+    "argon-tube/std",
+    "argon-util/std",
+    "embedded-io/std",
+    "esexpr/std",
+    "esexpr-binary/std",
+    "dep:walkdir",
+]
+
 [dependencies]
-argon-compiler = { workspace = true }
+argon-compiler = { path = "../argon-compiler", default-features = false }
 argon-format = { workspace = true }
-argon-io = { workspace = true }
-argon-source = { workspace = true }
-argon-tube = { workspace = true }
-argon-util = { workspace = true }
-embedded-io = { workspace = true, features = ["std"] }
+argon-io = { path = "../argon-io", default-features = false }
+argon-source = { path = "../argon-source", default-features = false }
+argon-tube = { path = "../argon-tube", default-features = false }
+argon-util = { path = "../argon-util", default-features = false }
+embedded-io = { workspace = true }
 esexpr = { workspace = true }
-esexpr-binary = { workspace = true }
-walkdir = { workspace = true }
+esexpr-binary = { workspace = true, default-features = false }
+walkdir = { workspace = true, optional = true }
 
 [lints]
 workspace = true

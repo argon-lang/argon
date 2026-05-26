@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_util::InternalCompilerError;
 use embedded_io::{ErrorType, Read, Write};
@@ -59,6 +60,37 @@ impl From<PathBuf> for LocalOutputFile {
 #[derive(Clone, Debug)]
 pub struct LocalOutputDirectory {
     path: PathBuf,
+}
+
+pub struct StdIoWrite<W> {
+    inner: W,
+}
+
+impl<W> StdIoWrite<W> {
+    pub fn new(inner: W) -> Self {
+        Self { inner }
+    }
+
+    pub fn into_inner(self) -> W {
+        self.inner
+    }
+}
+
+impl<W> ErrorType for StdIoWrite<W> {
+    type Error = std::io::Error;
+}
+
+impl<W> Write for StdIoWrite<W>
+where
+    W: std::io::Write,
+{
+    fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
+        std::io::Write::write(&mut self.inner, buf)
+    }
+
+    fn flush(&mut self) -> Result<(), Self::Error> {
+        std::io::Write::flush(&mut self.inner)
+    }
 }
 
 impl LocalOutputDirectory {

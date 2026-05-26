@@ -1,7 +1,8 @@
+use alloc::{sync::Arc, vec, vec::Vec};
 use argon_compiler::{CompileErrorReporter, Context, ContextObject};
-use argon_util::sync::Mutex;
+use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
-use std::sync::Arc;
+use embedded_io::{Write, WriteFmtError};
 
 pub struct RunnerContext {
     reporter: RunnerErrorReporter,
@@ -51,47 +52,14 @@ pub struct RunnerErrorReporter {
 
 impl RunnerErrorReporter {
     pub fn compile_errors(&self) -> Vec<CompileError> {
-        match self.compile_errors.lock() {
-            Ok(errors) => errors.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        }
+        mutex_lock(&self.compile_errors).clone()
     }
 
-    pub fn print_error_messages(&self) {
-        match self.internal_compiler_errors.lock() {
-            Ok(errors) => {
-                if !errors.is_empty() {
-                    for error in errors.iter() {
-                        eprintln!("internal compiler error: {error}");
-                    }
-
-                    return;
-                }
-            }
-            Err(poisoned) => {
-                let errors = poisoned.into_inner();
-                if !errors.is_empty() {
-                    for error in errors.iter() {
-                        eprintln!("internal compiler error: {error}");
-                    }
-
-                    return;
-                }
-            }
-        }
-
-        match self.compile_errors.lock() {
-            Ok(errors) => {
-                for error in errors.iter() {
-                    eprintln!("compile error: {error}");
-                }
-            }
-            Err(poisoned) => {
-                for error in poisoned.into_inner().iter() {
-                    eprintln!("compile error: {error}");
-                }
-            }
-        }
+    pub fn print_error_messages<W>(&self, writer: &mut W) -> Result<(), WriteFmtError<W::Error>>
+    where
+        W: Write,
+    {
+        print_error_messages(self, writer)
     }
 
     pub fn has_errors(&self) -> bool {
@@ -112,15 +80,34 @@ impl ErrorReporter<InternalCompilerError> for RunnerErrorReporter {
 }
 
 fn is_empty<E>(errors: &Mutex<Vec<E>>) -> bool {
-    match errors.lock() {
-        Ok(errors) => errors.is_empty(),
-        Err(poisoned) => poisoned.into_inner().is_empty(),
-    }
+    mutex_lock(errors).is_empty()
 }
 
 fn push_error<E>(errors: &Mutex<Vec<E>>, error: E) {
-    match errors.lock() {
-        Ok(mut errors) => errors.push(error),
-        Err(poisoned) => poisoned.into_inner().push(error),
+    mutex_lock(errors).push(error);
+}
+
+fn print_error_messages<W>(
+    reporter: &RunnerErrorReporter,
+    writer: &mut W,
+) -> Result<(), WriteFmtError<W::Error>>
+where
+    W: Write,
+{
+    let internal_errors = mutex_lock(&reporter.internal_compiler_errors);
+    if !internal_errors.is_empty() {
+        for error in internal_errors.iter() {
+            writer.write_fmt(format_args!("internal compiler error: {error}\n"))?;
+        }
+
+        return Ok(());
     }
+    drop(internal_errors);
+
+    let compile_errors = mutex_lock(&reporter.compile_errors);
+    for error in compile_errors.iter() {
+        writer.write_fmt(format_args!("compile error: {error}\n"))?;
+    }
+
+    Ok(())
 }

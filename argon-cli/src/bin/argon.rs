@@ -1,6 +1,6 @@
 use argon_compiler::TubeName;
 use argon_runner::local_io::{
-    LocalInputFile, LocalOutputDirectory, LocalOutputFile, LocalSourceDirectory,
+    LocalInputFile, LocalOutputDirectory, LocalOutputFile, LocalSourceDirectory, StdIoWrite,
 };
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
@@ -103,10 +103,10 @@ fn main() {
                 output_file: output_file.clone(),
             };
 
-            if !argon_runner::compile(runner_options) {
+            let mut stderr = StdIoWrite::new(std::io::stderr());
+            if !argon_runner::compile(runner_options, &mut stderr) {
                 std::process::exit(1);
             }
-            println!("Compilation succeeded.");
         }
         Command::GenIR(cmd) => {
             argon_runner::gen_ir(argon_runner::GenIrOptions {

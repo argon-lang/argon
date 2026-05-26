@@ -118,7 +118,6 @@ where
     }
 }
 
-#[cfg(feature = "std")]
 impl<W> esexpr_binary::io::Write<InternalCompilerError> for EmbeddedIoWrite<W>
 where
     W: Write<Error = InternalCompilerError>,
@@ -127,10 +126,7 @@ where
         while !buf.is_empty() {
             let count = self.inner.write(buf)?;
             if count == 0 {
-                return Err(InternalCompilerError::IoError(
-                    std::path::PathBuf::new(),
-                    io::ErrorKind::WriteZero.into(),
-                ));
+                return Err(InternalCompilerError::WriteZero);
             }
             buf = &buf[count..];
         }
