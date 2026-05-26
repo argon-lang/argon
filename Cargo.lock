@@ -119,6 +119,7 @@ dependencies = [
  "argon-util",
  "embedded-io",
  "esexpr-binary",
+ "parse18-runtime",
 ]
 
 [[package]]

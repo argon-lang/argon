@@ -21,7 +21,9 @@ pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
 };
-use argon_util::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard, rwlock_read, rwlock_write};
+use argon_util::sync::{
+    RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe, rwlock_read, rwlock_write,
+};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
@@ -50,7 +52,7 @@ fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
     rwlock_write(lock)
 }
 
-pub trait ContextObject: Sync + Send {
+pub trait ContextObject: ThreadSafe {
     fn reporter(&self) -> &dyn CompileErrorReporter;
 
     fn normalize_fuel(&self) -> Fuel;
@@ -389,7 +391,7 @@ pub trait Unload {
     fn unload(&self);
 }
 
-pub trait Function: Unload + Sync + Send {
+pub trait Function: Unload + ThreadSafe {
     fn metadata(&self) -> &FunctionMetadata;
 
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
@@ -409,26 +411,26 @@ pub enum FunctionImplementation {
     Extern(String),
 }
 
-pub trait Method: Unload + Sync + Send {}
+pub trait Method: Unload + ThreadSafe {}
 
-pub trait Record: Unload + Sync + Send {
+pub trait Record: Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait Enum: Unload + Sync + Send {
+pub trait Enum: Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait EnumCase: Unload + Sync + Send {}
+pub trait EnumCase: Unload + ThreadSafe {}
 
-pub trait Trait: Unload + Sync + Send {
+pub trait Trait: Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait Instance: Unload + Sync + Send {}
+pub trait Instance: Unload + ThreadSafe {}
 
 macro_rules! impl_dyn_stub_traits {
     ($trait_name:ident) => {

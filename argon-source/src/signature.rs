@@ -8,6 +8,7 @@ use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{ErasureMode, Expr, ExpressionOwner};
 use argon_parser::ast;
 use argon_util::CompileError;
+use alloc::vec::Vec;
 use parse18_runtime::WithLocation;
 
 pub struct SignatureParser<'a> {

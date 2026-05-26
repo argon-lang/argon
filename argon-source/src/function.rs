@@ -13,8 +13,8 @@ use argon_compiler::{
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
+use alloc::{boxed::Box, sync::Arc};
 use argon_util::sync::{Mutex, mutex_lock};
-use std::sync::Arc;
 
 pub struct SourceFunction {
     context: Context,

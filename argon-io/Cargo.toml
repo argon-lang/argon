@@ -5,12 +5,13 @@ edition = "2024"
 
 [features]
 default = ["std"]
-std = ["argon-util/std", "embedded-io/std"]
+std = ["argon-util/std", "embedded-io/std", "parse18-runtime/std"]
 
 [dependencies]
 argon-util = { path = "../argon-util", default-features = false }
 embedded-io = { workspace = true }
 esexpr-binary = { workspace = true }
+parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
 
 [lints]
 workspace = true

@@ -1,9 +1,15 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(any(test, feature = "std"))]
+extern crate std;
+
 use crate::module::{process_source_file, register_module_reexports};
+use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
 use argon_io::InputDirectory;
-use argon_util::sync::parallel::*;
+use argon_util::sync::{ThreadSafe, parallel::*};
 use hashbrown::HashMap;
-use std::sync::Arc;
 
 mod function;
 mod modifiers;
@@ -23,8 +29,8 @@ pub fn define_source_tube<I>(
     tube_collection: &TubeCollectionBuilder,
 ) -> Arc<Tube>
 where
-    I: InputDirectory + Sync,
-    I::File: Send + Sync,
+    I: InputDirectory + ThreadSafe,
+    I::File: ThreadSafe,
 {
     let tb = tube_collection.add_tube(
         options.name,
@@ -71,6 +77,7 @@ mod tests {
     use argon_parser::ast::Identifier;
     use argon_util::sync::Mutex;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
+    use alloc::{format, string::ToString, vec, vec::Vec};
     use embedded_io::{ErrorType, Read};
     use mitsein::vec1::Vec1;
     use std::fs;

@@ -32,7 +32,7 @@ pub struct JsCodeGenOptions<I, O> {
 
 pub fn compile<I, R, O>(options: CompileOptions<I, R, O>) -> bool
 where
-    I: InputDirectory + Sync,
+    I: InputDirectory + Send + Sync,
     I::File: Send + Sync,
     R: InputFile + Sync,
     O: OutputFile,

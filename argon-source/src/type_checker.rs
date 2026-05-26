@@ -7,13 +7,16 @@ use argon_expr::{Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, Ex
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, UniqueIdentifier, VecDequeSlice};
+use alloc::collections::{BTreeMap, VecDeque};
+use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
+use core::cmp::Ordering;
+use core::fmt::{Debug, Formatter};
+use core::hash::{Hash, Hasher};
+use core::{mem, ptr};
+use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::fmt::{Debug, Formatter};
-use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 
 pub fn type_check_type_expr(
     context: Context,
@@ -103,7 +106,7 @@ impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
         let owner = ExpressionOwner::Function(function.clone());
         let mut body = DefaultToTypeCheckExprContextShifter.shift(body.clone());
 
-        let arguments = std::mem::take(arguments);
+        let arguments = mem::take(arguments);
         let mut subst = SubstScanner::new();
 
         for ((parameter_index, parameter), argument) in
@@ -144,14 +147,14 @@ impl Hole {
 }
 
 impl Debug for Hole {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "Hole({})", self.hole_info.as_ref() as *const HoleInfo as usize)
     }
 }
 
 impl PartialEq for Hole {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self.hole_info.as_ref(), other.hole_info.as_ref())
+        ptr::eq(self.hole_info.as_ref(), other.hole_info.as_ref())
     }
 }
 
@@ -159,7 +162,7 @@ impl Eq for Hole {}
 
 impl Hash for Hole {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        std::ptr::hash(self.hole_info.as_ref(), state);
+        ptr::hash(self.hole_info.as_ref(), state);
     }
 }
 
@@ -1769,7 +1772,7 @@ enum OverloadArityRank {
 }
 
 impl Ord for OverloadArityRank {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         use OverloadArityRank::*;
 
         match (self, other) {
@@ -1777,16 +1780,16 @@ impl Ord for OverloadArityRank {
             | (More(left), More(right))
             | (Less(left), Less(right)) => left.cmp(right),
 
-            (Exact(_), _) => std::cmp::Ordering::Less,
-            (_, Exact(_)) => std::cmp::Ordering::Greater,
-            (More(_), Less(_)) => std::cmp::Ordering::Less,
-            (Less(_), More(_)) => std::cmp::Ordering::Greater,
+            (Exact(_), _) => Ordering::Less,
+            (_, Exact(_)) => Ordering::Greater,
+            (More(_), Less(_)) => Ordering::Less,
+            (Less(_), More(_)) => Ordering::Greater,
         }
     }
 }
 
 impl PartialOrd for OverloadArityRank {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }

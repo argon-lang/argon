@@ -5,6 +5,10 @@ pub type MutexGuard<'a, T> = RefMut<'a, T>;
 pub type RwLockReadGuard<'a, T> = Ref<'a, T>;
 pub type RwLockWriteGuard<'a, T> = RefMut<'a, T>;
 
+pub trait ThreadSafe {}
+
+impl<T: ?Sized> ThreadSafe for T {}
+
 pub struct Mutex<T>(RefCell<T>);
 
 impl<T> Mutex<T> {
@@ -88,7 +92,32 @@ pub fn rwlock_write<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
         .unwrap_or_else(|_| panic!("RwLock already borrowed"))
 }
 
-pub type OnceLock<T> = OnceCell<T>;
+pub struct OnceLock<T>(OnceCell<T>);
+
+impl<T> OnceLock<T> {
+    pub const fn new() -> Self {
+        Self(OnceCell::new())
+    }
+
+    pub fn get_or_init<F>(&self, f: F) -> &T
+    where
+        F: FnOnce() -> T,
+    {
+        self.0.get_or_init(f)
+    }
+}
+
+impl<T> Default for OnceLock<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for OnceLock<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
 
 pub mod parallel {
     use alloc::vec::Vec;

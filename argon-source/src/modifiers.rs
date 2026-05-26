@@ -3,11 +3,12 @@ use argon_compiler::access::AccessModifierGlobal;
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::CompileError;
+use alloc::string::ToString;
+use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use mitsein::slice1;
 use mitsein::slice1::Slice1;
 use parse18_runtime::{Location, WithLocation};
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 pub struct ModifierParser<'a> {
     context: Context,
@@ -151,7 +152,7 @@ fn find_best_match<T: Clone>(spec: ModifierSpec<T>, modifiers: &HashMap<Modifier
         .max_by_key(|(spec_modifiers, _)| {
             let common_modifiers = spec_modifiers
                 .iter()
-                .filter(|modifier| modifiers.contains_key(modifier))
+                .filter(|modifier| modifiers.contains_key(*modifier))
                 .count();
             let extra_modifiers = spec_modifiers.len() - common_modifiers;
 

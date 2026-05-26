@@ -3,16 +3,27 @@ name = "argon-source"
 publish = false
 edition = "2024"
 
+[features]
+default = ["std"]
+std = [
+    "argon-compiler/std",
+    "argon-expr/std",
+    "argon-io/std",
+    "argon-parser/std",
+    "argon-util/std",
+    "parse18-runtime/std",
+]
+
 [dependencies]
-argon-compiler = { workspace = true }
-argon-expr = { workspace = true }
-argon-io = { workspace = true }
-argon-parser = { workspace = true }
-argon-util = { workspace = true }
+argon-compiler = { path = "../argon-compiler", default-features = false }
+argon-expr = { path = "../argon-expr", default-features = false }
+argon-io = { path = "../argon-io", default-features = false }
+argon-parser = { path = "../argon-parser", default-features = false }
+argon-util = { path = "../argon-util", default-features = false }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }
-parse18-runtime = { workspace = true }
+parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }

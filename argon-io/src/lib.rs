@@ -6,6 +6,7 @@ extern crate std;
 use argon_util::InternalCompilerError;
 #[cfg(feature = "std")]
 use embedded_io::Error;
+use parse18_runtime::LocationFileView;
 #[cfg(feature = "std")]
 use std::{io, path::Path, string::ToString};
 
@@ -16,6 +17,15 @@ pub trait InputFile {
 
     #[cfg(feature = "std")]
     fn path(&self) -> &Path;
+
+    #[cfg(feature = "std")]
+    fn location_file(&self) -> &LocationFileView {
+        self.path()
+    }
+
+    #[cfg(not(feature = "std"))]
+    fn location_file(&self) -> &LocationFileView;
+
     fn open(&self) -> Result<Self::Reader, InternalCompilerError>;
 }
 

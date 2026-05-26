@@ -9,11 +9,12 @@ use argon_compiler::{
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
-use argon_util::sync::OnceLock;
+use argon_util::sync::{OnceLock, ThreadSafe};
+use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
+use core::{iter, mem};
 use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
-use std::sync::Arc;
 
 type ResolvedImports = HashMap<Identifier, ResolvedImportGroups>;
 
@@ -212,7 +213,7 @@ impl GlobalScopeBuilder {
             ImportStmt::Tube { tube_name, path } => {
                 let tube_name = TubeName(
                     Vec1::try_from(
-                        std::iter::once(tube_name.head.clone())
+                        iter::once(tube_name.head.clone())
                             .chain(tube_name.tail.iter().cloned())
                             .collect::<Vec<_>>(),
                     )
@@ -409,7 +410,7 @@ impl GlobalScopeBuilder {
     }
 }
 
-pub trait DeclarationClosure: Sync + Send {
+pub trait DeclarationClosure: ThreadSafe {
     fn scope(&self) -> GlobalScope;
     fn access_token(&self) -> AccessToken;
     fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier;
@@ -604,7 +605,7 @@ impl<'a> ModuleProcessResult<'a> {
             ImportStmt::Tube { tube_name, path } => {
                 let tube_name = TubeName(
                     Vec1::try_from(
-                        std::iter::once(tube_name.head.clone())
+                        iter::once(tube_name.head.clone())
                             .chain(tube_name.tail.iter().cloned())
                             .collect::<Vec<_>>(),
                     )
@@ -683,7 +684,7 @@ where
         }
     };
 
-    let module_decl = argon_parser::parse(file, source.path(), context.reporter());
+    let module_decl = argon_parser::parse(file, source.location_file(), context.reporter());
 
     let path = ModulePath(module_decl.module_path);
 
@@ -781,7 +782,7 @@ impl<'a> SourceFileProcessor<'a> {
             return scope.clone();
         }
 
-        let imports = std::mem::take(&mut self.imports);
+        let imports = mem::take(&mut self.imports);
 
         let scope = if let Some(parent) = &self.parent_scope {
             parent.clone().with_imports(imports)

@@ -1,5 +1,9 @@
 pub use std::sync::{Mutex, MutexGuard, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+pub trait ThreadSafe: Send + Sync {}
+
+impl<T: Send + Sync + ?Sized> ThreadSafe for T {}
+
 pub fn mutex_lock<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
     lock.lock().unwrap_or_else(|err| err.into_inner())
 }
