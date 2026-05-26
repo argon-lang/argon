@@ -1,4 +1,18 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+#[cfg(feature = "std")]
 use std::path::PathBuf;
+
+#[cfg(feature = "std")]
+pub type LocationFile = PathBuf;
+#[cfg(not(feature = "std"))]
+pub type LocationFile = String;
 
 pub fn is_alphabetic(c: char) -> bool {
     c.is_alphabetic()
@@ -53,7 +67,7 @@ pub struct FilePositionRange {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Location {
-    pub file: PathBuf,
+    pub file: LocationFile,
     pub start: FilePosition,
     pub end: FilePosition,
 }
@@ -68,7 +82,7 @@ impl Location {
         }
     }
 
-    pub fn from_range(file: PathBuf, range: FilePositionRange) -> Location {
+    pub fn from_range(file: LocationFile, range: FilePositionRange) -> Location {
         Location {
             file,
             start: range.start,
@@ -114,7 +128,7 @@ impl<T> WithLocation<T> {
         }
     }
 
-    pub fn from_range(file_name: PathBuf, range: WithRange<T>) -> WithLocation<T> {
+    pub fn from_range(file_name: LocationFile, range: WithRange<T>) -> WithLocation<T> {
         WithLocation {
             value: range.value,
             location: Location::from_range(file_name, range.range),

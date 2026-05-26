@@ -3,6 +3,10 @@ name = "parse18-runtime"
 publish = false
 edition = "2024"
 
+[features]
+default = ["std"]
+std = []
+
 [dependencies]
 unicode-general-category = "1.0"
 
