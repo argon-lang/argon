@@ -1,10 +1,10 @@
 use crate::modifiers::{
-    ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser,
+    ModifierParser, ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS,
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::type_check_expr;
-use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
@@ -13,7 +13,8 @@ use argon_compiler::{
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
-use std::sync::{Arc, Mutex};
+use argon_util::sync::Mutex;
+use std::sync::Arc;
 
 pub struct SourceFunction {
     context: Context,

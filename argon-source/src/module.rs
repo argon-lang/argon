@@ -8,11 +8,12 @@ use argon_compiler::{
 };
 use argon_io::{EmbeddedIoRead, InputFile};
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
+use argon_util::sync::OnceLock;
 use argon_util::CompileError;
 use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 type ResolvedImports = HashMap<Identifier, ResolvedImportGroups>;
 

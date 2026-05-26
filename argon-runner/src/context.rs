@@ -1,6 +1,7 @@
 use argon_compiler::{CompileErrorReporter, Context, ContextObject};
+use argon_util::sync::Mutex;
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct RunnerContext {
     reporter: RunnerErrorReporter,

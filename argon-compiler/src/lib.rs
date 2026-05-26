@@ -14,16 +14,17 @@ pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
 };
+use argon_util::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use esexpr::ESExpr;
 use mitsein::vec1::Vec1;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 
 pub trait CompileErrorReporter:
     ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>

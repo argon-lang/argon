@@ -1,6 +1,7 @@
 use crate::{CompileErrorReporter, Context, ContextObject};
+use argon_util::sync::Mutex;
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[derive(Clone, Default)]
 pub struct TestReporter {

@@ -1,5 +1,5 @@
 use argon_compiler::erased_sig::{
-    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
+    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
 };
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
@@ -11,13 +11,13 @@ use argon_compiler::{
 };
 use argon_expr::{FunctionArgument, LocalVariable, ParameterVariable, Variable};
 use argon_format::tube as tf;
+use argon_util::sync::OnceLock;
 use argon_util::UniqueIdentifier;
 use dashmap::DashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::OnceLock;
 
 pub fn decode_tube(
     mut tube: impl Iterator<Item = tf::TubeFileEntry>,

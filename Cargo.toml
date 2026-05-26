@@ -37,7 +37,6 @@ regex-syntax = { version = "0.8.10", default-features = false, features = ["unic
 rpds = { version = "1.2.1", default-features = false }
 rstest = "0.26.1"
 serde = { version = "1.0.228", default-features = false, features = ["alloc"] }
-spin = { version = "0.9.8", default-features = false, features = ["mutex", "once", "rwlock", "spin_mutex"] }
 strum = { version = "0.28.0", features = ["derive"] }
 unicode-general-category = "1.1.0"
 walkdir = "2.5.0"

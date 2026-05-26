@@ -59,12 +59,13 @@ mod tests {
     };
     use argon_io::InputFile;
     use argon_parser::ast::Identifier;
+    use argon_util::sync::Mutex;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
     use embedded_io::{ErrorType, Read};
     use mitsein::vec1::Vec1;
     use std::fs;
     use std::path::Path;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use walkdir::WalkDir;
 
