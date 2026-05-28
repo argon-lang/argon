@@ -1,0 +1,17 @@
+package argon.backend.metadata;
+
+import nobleidl.core;
+
+
+@esexpr:(derive-codec)
+record platform-metadata-result {
+    platform: string;
+
+    @esexpr:(keyword)
+    tube-metadata: esexpr;
+
+    @esexpr:(keyword)
+    externs: dict[esexpr];
+}
+
+

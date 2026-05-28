@@ -2,7 +2,11 @@
 
 target/
 bin/
-
+src-gen/
+out/
+lib/
+dist/
+node_modules/
 
 *.artube
 

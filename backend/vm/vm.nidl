@@ -114,7 +114,7 @@ record tube-metadata {
     name: tube-name;
 
     @esexpr:(keyword)
-    referenced-tubes: list[tube-name];
+    referenced-tubes: list[tube-reference];
 
     @esexpr:(keyword)
     @esexpr:(optional)
@@ -127,6 +127,14 @@ record tube-metadata {
 @esexpr:(derive-codec)
 record module {
     path: module-path;
+}
+
+@esexpr:(derive-codec)
+record tube-reference {
+    name: tube-name;
+
+    @esexpr:(optional)
+    metadata: optional-field[esexpr];
 }
 
 

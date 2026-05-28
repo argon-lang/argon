@@ -1,0 +1,2736 @@
+import type {ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel} from "./program-model.js";
+import { encodeTubePathComponent, ensureExhaustive, getModuleId, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
+
+import type * as estree from "estree";
+import type * as ir from "@argon-lang/js-backend-api/vm.js";
+import { Identifier } from "@argon-lang/js-backend-api/vm.js";
+import { JsExtern } from "@argon-lang/js-backend-api";
+import type { IterableElement, JsonObject, JsonValue, ReadonlyDeep } from "type-fest";
+import type { TupleOf } from "type-fest";
+
+import { name as isValidIdName } from "estree-util-is-identifier-name";
+
+export interface OutputModuleInfo {
+    readonly modulePath: ir.ModulePath;
+    emitJsProgram(): ReadonlyDeep<estree.Program>;
+}
+
+export interface EmitOptions {
+    readonly program: ProgramModel,
+}
+
+
+abstract class TokenEmitter {
+    constructor(moduleEmitter: ModuleEmitter) {
+        this.#moduleEmitter = moduleEmitter;
+    }
+
+    readonly #moduleEmitter: ModuleEmitter;
+
+
+    buildTokenValue(t: ir.Token): estree.Expression {
+        switch(t.$type) {
+            case "builtin":
+                switch(t.b.$type) {
+                    case "bool":
+                        checkArgs(0)(t.args);
+                        return {
+                            type: "Literal",
+                            value: "boolean",
+                        };
+
+                    case "int":
+                        checkArgs(0)(t.args);
+                        return {
+                            type: "Literal",
+                            value: "bigint",
+                        };
+
+                    case "string":
+                        checkArgs(0)(t.args);
+                        return {
+                            type: "Literal",
+                            value: "string",
+                        };
+
+                    case "array": {
+                        const [arg] = checkArgs(1)(t.args);
+                        return {
+                            type: "NewExpression",
+                            callee: this.#moduleEmitter.getArgonRuntimeExport("ArrayType"),
+                            arguments: [
+                                this.buildTokenValue(arg),
+                            ],
+                        };
+                    }
+
+                    case "never":
+                    case "conjunction":
+                    case "disjunction":
+                        throw new Error("Not implemented buildTypeInfo builtin " + t.b.$type);
+                }
+
+            case "function":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("FunctionType"),
+                    arguments: [
+                        this.buildTokenValue(t.input),
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "function-erased":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("FunctionTypeErased"),
+                    arguments: [
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "function-token":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("FunctionTypeToken"),
+                    arguments: [
+                        this.buildTokenValue(t.tokenKind),
+                        this.buildTokenValue(t.output),
+                    ],
+                };
+
+            case "instance-value":
+            {
+                const instanceInfo = this.#moduleEmitter.options.program.getInstanceInfo(t.instanceId);
+                const funcExpr = this.#moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: funcExpr,
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "record":
+            {
+                const rec = this.#moduleEmitter.options.program.getRecordInfo(t.recordId);
+                if(t.args.length === 0) {
+                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "enum":
+            {
+                const rec = this.#moduleEmitter.options.program.getEnumInfo(t.enumId);
+                if(t.args.length === 0) {
+                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "parent-token-parameter":
+                return this.getParentTypeParam(t.index);
+
+            case "ref-cell":
+                return {
+                    type: "NewExpression",
+                    callee: this.#moduleEmitter.getArgonRuntimeExport("RefCellType"),
+                    arguments: [
+                        this.buildTokenValue(t.inner),
+                    ],
+                };
+
+            case "trait":
+            {
+                const rec = this.#moduleEmitter.options.program.getTraitInfo(t.traitId);
+                if(t.args.length === 0) {
+                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
+            case "tuple":
+                return {
+                    type: "ArrayExpression",
+                    elements: t.elements.map(item => this.buildTokenValue(item)),
+                };
+
+            case "token-parameter":
+                return this.getTypeParam(t.index);
+
+            case "type-info":
+                return this.#moduleEmitter.getArgonRuntimeExport("typeInfo");
+
+            case "boxed":
+                return this.#moduleEmitter.getArgonRuntimeExport("erasedType");
+        }
+    }
+
+    protected abstract getTypeParam(index: bigint): estree.Expression;
+    protected abstract getParentTypeParam(index: bigint): estree.Expression;
+
+}
+
+class VTableTokenEmitter extends TokenEmitter {
+    constructor(
+        moduleEmitter: ModuleEmitter,
+        private readonly parentExpr: estree.Expression,
+    ) {
+        super(moduleEmitter);
+    }
+
+
+    protected override getParentTypeParam(index: bigint): estree.Expression {
+        return {
+            type: "MemberExpression",
+            computed: true,
+            optional: false,
+            object: {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+                object: {
+                    type: "ThisExpression",
+                },
+                property: {
+                    type: "Identifier",
+                    name: "prototype",
+                },
+            },
+            property: {
+                type: "MemberExpression",
+                computed: true,
+                optional: false,
+                object: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.parentExpr,
+                    property: {
+                        type: "Identifier",
+                        name: "tokenParameterSymbols",
+                    },
+                },
+                property: {
+                    type: "Literal",
+                    value: Number(index),
+                },
+            },
+        };
+    }
+
+    protected override getTypeParam(_index: bigint): estree.Identifier {
+        throw new Error("Method type parameters not supported in vtable");
+    }
+}
+
+class InstanceBaseConstructorTokenEmitter extends TokenEmitter {
+    protected getParentTypeParam(_index: bigint): estree.Expression {
+        throw new Error("Parent type parameters not supported in instance base constructor");
+    }
+
+    protected getTypeParam(index: bigint): estree.Expression {
+        return {
+            type: "Identifier",
+            name: `t${index}`,
+        };
+    }
+
+}
+
+class BlockTokenEmitter extends TokenEmitter {
+    constructor(
+        moduleEmitter: ModuleEmitter,
+        private readonly parentExpr: estree.Expression | undefined,
+    ) {
+        super(moduleEmitter);
+    }
+
+    protected getParentTypeParam(index: bigint): estree.Expression {
+        if(this.parentExpr === undefined) {
+            throw new Error("Parent type parameters not supported in this block");
+        }
+
+        return {
+            type: "MemberExpression",
+            computed: true,
+            optional: false,
+            object: {
+                type: "ThisExpression",
+            },
+            property: {
+                type: "MemberExpression",
+                computed: true,
+                optional: false,
+                object: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.parentExpr,
+                    property: {
+                        type: "Identifier",
+                        name: "tokenParameterSymbols",
+                    },
+                },
+                property: {
+                    type: "Literal",
+                    value: Number(index),
+                },
+            },
+        };
+    }
+
+    protected getTypeParam(index: bigint): estree.Expression {
+        return {
+            type: "Identifier",
+            name: `t${index}`,
+        };
+    }
+}
+
+
+abstract class EmitterBase {
+    constructor(
+        readonly options: EmitOptions,
+    ) {}
+
+
+
+    /*
+        Name encoding
+
+        Full Export Name (used to reference types in signatures)
+        Tube$dName$sModule$sName$s<export name>
+
+        Export Name (identifier exported from module)
+        global           - <name>$a<args>$r<result>$e
+        synthetic nested - <parent>$k<index>
+
+        Identifier
+        <none>    - $_
+        named     - the name, but with all $ encoded as $$ and any invalid characters URL encoded, using $XX
+        binop     - The constructor name of the operator, but prefixed with $b and - replaced with _
+        unop      - Same as binop, but using $u as a prefix
+        extension - $x<name>
+        inverse   - $i<name>
+        update    - $m<name>
+
+
+        Erased signature types
+        builtin  - $b<int|bool|...>$a<args>$e
+        function - $f<arg>$r<result>$e
+        record   - $r<full export name>$a<args>$e
+        tuple    - $t<items>$e
+        erased   - $_
+
+    */
+
+    protected abstract getImportId(source: string): string;
+
+    protected getFullExportName(importSpec: ir.ImportSpecifier): string {
+        const moduleId = getModuleId(importSpec);
+
+        const moduleInfo = this.options.program.getModuleInfo(moduleId);
+        const tubeInfo = this.options.program.getTubeInfo(moduleInfo.tubeId);
+        
+        const tubePart = [ tubeInfo.tubeName.head, ...tubeInfo.tubeName.tail ]
+            .map(s => this.getExportNameForId({ $type: "named", s }))
+            .join("$d");
+
+        const modulePart = moduleInfo.path.path
+            .map(s => this.getExportNameForId({ $type: "named", s }) + "$s")
+            .join("");
+
+        return tubePart + "$s" + modulePart + this.getExportNameForImport(importSpec);
+    }
+
+    protected getExportNameForIdSig(id: Identifier | undefined, sig: ir.ErasedSignature): string {
+            return this.getExportNameForId(id) +
+                "$a" + sig.params.map(arg => this.getExportNameForType(arg)).join("") +
+                "$r" + this.getExportNameForType(sig.result);
+    }
+
+    protected getExportNameForImport(importSpec: ir.ImportSpecifier): string {
+        switch(importSpec.$type) {
+            case "global":
+                return this.getExportNameForId(importSpec.name) +
+                    "$a" + importSpec.sig.params.map(arg => this.getExportNameForType(arg)).join("") +
+                    "$r" + this.getExportNameForType(importSpec.sig.result);
+
+            case "local":
+                return this.getExportNameForImport(importSpec.parent) + "$k" + importSpec.index;
+        }
+    }
+
+    protected getExportNameForId(id: Identifier | undefined): string {
+        switch(id?.$type) {
+            case undefined:
+                return "$_";
+
+            case "named":
+                return urlEncodeIdentifier(id.s);
+
+            case "bin-op":
+                return "$b" + id.op.replaceAll("-", "_");
+
+            case "un-op":
+                return "$u" + id.op.replaceAll("-", "_");
+
+            case "extension":
+                return "$x" + this.getExportNameForId(id.inner);
+
+            case "inverse":
+                return "$i" + this.getExportNameForId(id.inner);
+
+            case "update":
+                return "$m" + this.getExportNameForId(id.inner);
+        }
+    }
+
+    protected getExportNameForType(t: ir.ErasedSignatureType): string {
+        switch(t.$type) {
+            case "builtin":
+            {
+                const name = t.b.$type;
+                const args = t.args.map(arg => this.getExportNameForType(arg)).join("");
+
+                return "$b" + name + "$a" + args + "$e";
+            }
+
+            case "function":
+                return "$f" + this.getExportNameForType(t.input) + "$r" + this.getExportNameForType(t.output) + "$e";
+
+            case "record":
+                return "$r" + this.getFullExportName(t.recordImport) +
+                    "$a" + t.args.map(arg => this.getExportNameForType(arg)).join("") +
+                    "$e";
+
+            case "tuple":
+                return "$t" + t.elements.map(elem => this.getExportNameForType(elem)).join("") +
+                    "$e";
+
+            case "erased":
+                return "$_";
+        }
+    }
+}
+
+export function* emitTube(options: EmitOptions): Iterable<OutputModuleInfo> {
+    for(const module of options.program.modules) {
+        yield {
+            modulePath: module.path,
+            emitJsProgram() {
+                const modEmitter = new ModuleEmitter(options, module);
+                return modEmitter.emit();
+            },
+        };
+    }
+}
+
+class ModuleEmitter extends EmitterBase {
+    constructor(
+        options: EmitOptions,
+        private readonly module: ModuleModel,
+    ) {
+        super(options);
+    }
+
+    private readonly imports: string[] = [];
+    private readonly moduleStatements: ReadonlyDeep<IterableElement<estree.Program["body"]>>[] = [];
+
+    emit(): ReadonlyDeep<estree.Program> {
+        for(const entry of this.module.exports) {
+            this.emitEntry(entry);
+        }
+
+        const body: ReadonlyDeep<IterableElement<estree.Program["body"]>>[] = [];
+
+        this.imports.forEach((path, i) => {
+            body.push({
+                type: "ImportDeclaration",
+                specifiers: [
+                    {
+                        type: "ImportNamespaceSpecifier",
+                        local: {
+                            type: "Identifier",
+                            name: "import" + i,
+                        },
+                    },
+                ],
+                source: {
+                    type: "Literal",
+                    value: path,
+                },
+                attributes: [],
+            })
+        });
+
+        body.push(...this.moduleStatements);
+
+        return {
+            type: "Program",
+            sourceType: "module",
+            body,
+        };
+    }
+
+    addDeclaration(declaration: ReadonlyDeep<estree.Declaration>): void {
+        this.moduleStatements.push({
+            type: "ExportNamedDeclaration",
+            declaration,
+            specifiers: [],
+            attributes: [],
+        });
+    }
+
+    override getImportId(source: string): string {
+        let index = this.imports.indexOf(source);
+        if(index < 0) {
+            index = this.imports.length;
+            this.imports.push(source);
+        }
+
+        return "import" + index;
+    }
+
+    getArgonRuntimeExport(name: string): estree.Expression {
+        return {
+            type: "MemberExpression",
+            computed: false,
+            optional: false,
+            object: {
+                type: "Identifier",
+                name: this.getImportId("@argon-lang/runtime"),
+            },
+            property: {
+                type: "Identifier",
+                name,
+            },
+        };
+    }
+
+
+    private getImportSource(moduleInfo: ModuleInfo): string {
+        if(moduleInfo.tubeId === 0n) {
+            let hasRemoved = false;
+            const parentModulePathParts = this.module.path.path.slice(0, Math.max(0, this.module.path.path.length - 1));
+            const targetModulePathParts = moduleInfo.path.path.slice();
+
+            while(parentModulePathParts.length > 0 && targetModulePathParts.length > 1 && parentModulePathParts[0] === targetModulePathParts[0]) {
+                hasRemoved = true;
+                parentModulePathParts.shift();
+                targetModulePathParts.shift();
+            }
+
+            let prefix: string;
+            if(parentModulePathParts.length === 0) {
+                if(targetModulePathParts.length === 0) {
+                    // No segments could have been removed and we want to reach the root of the package.
+                    // This means we go up one level.
+                    return "../";
+                }
+
+                prefix = "./";
+            }
+            else {
+                prefix = "../".repeat(parentModulePathParts.length);
+            }
+
+            if(hasRemoved) {
+                return prefix + targetModulePathParts.map(encodeTubePathComponent).join("/") + ".js";
+            }
+            else {
+                return prefix + getModulePathUrl({ path: targetModulePathParts });
+            }
+        }
+        else {
+            const tubeInfo = this.options.program.getTubeInfo(moduleInfo.tubeId);
+            const tubePackage = tubePackageName(tubeInfo);
+
+            const modulePathUrl = getModulePathExternalUrl(moduleInfo.path);
+            
+            if(modulePathUrl === "") {
+                return tubePackage;
+            }
+
+            return tubePackage + "/" + modulePathUrl;
+        }
+    }
+
+    getImportExpr(importSpec: ir.ImportSpecifier): estree.Expression {
+        const moduleId = getModuleId(importSpec);
+        const exportName = this.getExportNameForImport(importSpec);
+
+        const moduleInfo = this.options.program.getModuleInfo(moduleId);
+        if(moduleInfo.tubeId === 0n && modulePathEquals(moduleInfo.path, this.module.path)) {
+            return {
+                type: "Identifier",
+                name: exportName,
+            };
+        }
+
+        const importSource = this.getImportSource(moduleInfo);
+        const importId = this.getImportId(importSource);
+
+        return {
+            type: "MemberExpression",
+            object: {
+                type: "Identifier",
+                name: importId,
+            },
+            property: {
+                type: "Identifier",
+                name: exportName,
+            },
+            computed: false,
+            optional: false,
+        };
+    }
+
+    private emitEntry(entry: ModuleExportEntry): void {
+        switch(entry.$type) {
+            case "function-definition":
+                this.emitFunction(entry.definition);
+                break;
+
+            case "record-definition":
+                this.emitRecord(entry.definition);
+                break;
+
+            case "enum-definition":
+                this.emitEnum(entry.definition);
+                break;
+
+            case "trait-definition":
+                this.emitTrait(entry.definition);
+                break;
+
+            case "instance-definition":
+                this.emitInstance(entry.definition);
+                break;
+
+            default:
+                ensureExhaustive(entry);
+        }
+    }
+
+    private emitFunction(func: ir.FunctionDefinition): void {
+        if(func.implementation === undefined) {
+            throw new Error("Missing function implementation");
+        }
+
+        const impl = this.emitFunctionImpl(false, func.signature, func.implementation, undefined);
+
+        if(impl.type == "FunctionDeclaration") {
+            this.addDeclaration({
+                ...impl,
+                id: {
+                    type: "Identifier",
+                    name: this.getExportNameForImport(func.import),
+                },
+            });
+        }
+        else {
+            this.addDeclaration({
+                type: "VariableDeclaration",
+                kind: "const",
+                declarations: [
+                    {
+                        type: "VariableDeclarator",
+                        id: {
+                            type: "Identifier",
+                            name: this.getExportNameForImport(func.import),
+                        },
+                        init: impl,
+                    }
+                ],
+            });
+        }
+    }
+
+    private emitFunctionImpl(useThis: boolean, signature: ir.FunctionSignature, impl: ir.FunctionImplementation, parentExpr: estree.Expression | undefined): ReadonlyDeep<estree.MaybeNamedFunctionDeclaration | estree.Expression> {
+        switch(impl.$type) {
+            case "vm-ir":
+            {
+                const params: estree.Pattern[] = [];
+
+                const regOffset = useThis ? 1 : 0;
+
+                for(const i of signature.tokenParameters.keys()) {
+                    params.push({
+                        type: "Identifier",
+                        name: `t${i}`,
+                    });
+                }
+
+                for(const i of signature.parameters.keys()) {
+                    params.push({
+                        type: "Identifier",
+                        name: `r${regOffset + i}`,
+                    });
+                }
+
+                const varStmts: estree.Statement[] = [];
+
+                if(useThis) {
+                    varStmts.push({
+                        type: "VariableDeclaration",
+                        kind: "const",
+                        declarations: [
+                            {
+                                type: "VariableDeclarator",
+                                id: {
+                                    type: "Identifier",
+                                    name: "r0",
+                                },
+                                init: {
+                                    type: "ThisExpression",
+                                },
+                            },
+                        ],
+                    });
+                }
+
+                const varOffset = signature.parameters.length + regOffset;
+                for(let varIndex = 0; varIndex < impl.body.variables.variables.length; ++varIndex) {
+                    varStmts.push({
+                        type: "VariableDeclaration",
+                        kind: "let",
+                        declarations: [
+                            {
+                                type: "VariableDeclarator",
+                                id: {
+                                    type: "Identifier",
+                                    name: `r${varOffset + varIndex}`,
+                                },
+                            },
+                        ],
+                    });
+                }
+
+                const blockEmitter = new BlockEmitter(this, parentExpr, new Map());
+                blockEmitter.emitBlock(impl.body.block);
+
+                const block = blockEmitter.toBlock();
+                block.body.unshift(...varStmts);
+
+                return {
+                    type: "FunctionDeclaration",
+                    id: null,
+                    params: params,
+                    body: block,
+                };
+            }
+                
+            
+            case "extern":
+                const externRes = JsExtern.codec.decode(impl.extern);
+                if(!externRes.success) {
+                    throw new Error("Could not decode extern: " + externRes.message + " " + JSON.stringify(externRes.path));
+                }
+
+                const extern = externRes.value;
+
+                return this.getExprForImports(extern);
+
+            default:
+                ensureExhaustive(impl);
+        }
+    }
+
+
+    private getExprForImports(extern: JsExtern): ReadonlyDeep<estree.Expression> {
+        const node = extern.declaration;
+        const body: ReadonlyDeep<estree.Statement>[] = [];
+
+        for(const importedId of extern.imports) {
+            const mappedId = this.getImportId(importedId.source);
+
+            let value: estree.Expression;
+            if(importedId.member) {
+                const memberIsValidId = isValidIdName(importedId.member);
+                const property: estree.Expression = memberIsValidId
+                    ? { type: "Identifier", name: importedId.member }
+                    : { type: "Literal", value: importedId.member };
+
+                value = {
+                    type: "MemberExpression",
+                    object: {
+                        type: "Identifier",
+                        name: mappedId,
+                    },
+                    property: property,
+                    computed: false,
+                    optional: false,
+                };
+            }
+            else {
+                value = {
+                    type: "Identifier",
+                    name: mappedId,
+                };
+            }
+
+            body.push({
+                type: "VariableDeclaration",
+                kind: "const",
+                declarations: [
+                    {
+                        type: "VariableDeclarator",
+                        id: {
+                            type: "Identifier",
+                            name: importedId.localAlias,
+                        },
+                        init: value,
+                    },
+                ],
+            });
+        }
+
+        const funcExpr: ReadonlyDeep<estree.FunctionExpression> = {
+            type: "FunctionExpression",
+            id: node.id,
+            params: node.params,
+            body: node.body,
+            generator: node.generator,
+            async: node.async,
+        };
+
+        if(body.length === 0) {
+            return funcExpr;
+        }
+        else {
+            body.push({
+                type: "ReturnStatement",
+                argument: funcExpr,
+            });
+
+            return {
+                type: "CallExpression",
+                callee: {
+                    type: "FunctionExpression",
+                    params: [],
+                    body: {
+                        type: "BlockStatement",
+                        body,
+                    },
+                },
+                arguments: [],
+                optional: false,
+            };
+        }
+    }
+
+    private emitRecord(rec: ir.RecordDefinition): void {
+        const name = this.getExportNameForImport(rec.import);
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: {
+                        type: "Identifier",
+                        name,
+                    },
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createRecordType"),
+                        arguments: [
+                            jsonToExpression({
+                                name,
+                                tokenParameterCount: rec.signature.tokenParameters.length,
+                                fields: rec.fields.map(field => ({
+                                    name: this.getExportNameForId(field.name),
+                                    mutable: field.mutable,
+                                })),
+                            }),
+                        ],
+                    },
+                },
+            ],
+        });
+    }
+
+    private emitEnum(enumDef: ir.EnumDefinition): void {
+        const name = this.getExportNameForImport(enumDef.import);
+
+        const variantsObj: JsonObject = Object.create(null);
+        for(const variant of enumDef.variants) {
+            variantsObj[this.getExportNameForId(variant.name)] = {
+                argCount: variant.signature.tokenParameters.length + variant.signature.parameters.length,
+                fields: variant.fields.map(field => ({
+                    name: this.getExportNameForId(field.name),
+                    mutable: field.mutable,
+                }))
+            };
+        }
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: {
+                        type: "Identifier",
+                        name,
+                    },
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createEnumType"),
+                        arguments: [
+                            jsonToExpression({
+                                name,
+                                tokenParameterCount: enumDef.signature.tokenParameters.length,
+                                variants: variantsObj,
+                            }),
+                        ],
+                    },
+                },
+            ],
+        });
+    }
+
+    private emitTrait(traitDef: ir.TraitDefinition): void {
+        const name = this.getExportNameForImport(traitDef.import);
+        const nameId: estree.Expression = {
+            type: "Identifier",
+            name,
+        };
+
+        const methodFuncs = this.emitMethods(traitDef.methods, nameId);
+        const vtable = this.emitVTable(traitDef.vtable, nameId);
+
+        const traitInfoProps: ReadonlyDeep<estree.Property>[] = [
+            {
+                type: "Property",
+                computed: false,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: {
+                    type: "Identifier",
+                    name: "name",
+                },
+                value: {
+                    type: "Literal",
+                    value: name,
+                }
+            },
+            {
+                type: "Property",
+                computed: false,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: {
+                    type: "Identifier",
+                    name: "tokenParameterCount",
+                },
+                value: {
+                    type: "Literal",
+                    value: traitDef.signature.tokenParameters.length,
+                },
+            },
+            {
+                type: "Property",
+                computed: false,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: {
+                    type: "Identifier",
+                    name: "methods",
+                },
+                value: methodFuncs,
+            },
+            {
+                type: "Property",
+                computed: false,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: {
+                    type: "Identifier",
+                    name: "vtable",
+                },
+                value: vtable,
+            },
+        ];
+
+
+        const metadata = this.options.program.metadata;
+        if(
+            traitDef.import.$type === "global" &&
+            metadata.name.head == "Argon" &&
+            metadata.name.tail.length === 1 &&
+            metadata.name.tail[0] === "Core" &&
+            this.module.path.path.length === 1 &&
+            this.module.path.path[0] === "Exception" &&
+            traitDef.signature.parameters.length === 0 &&
+            traitDef.import.name.$type === "named" &&
+            traitDef.import.name.s === "Exception"
+        ) {
+            traitInfoProps.push({
+                type: "Property",
+                computed: false,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: {
+                    type: "Identifier",
+                    name: "special",
+                },
+                value: {
+                    type: "Literal",
+                    value: "exception",
+                },
+            })
+        }
+
+        const traitInfo: ReadonlyDeep<estree.Expression> = {
+            type: "ObjectExpression",
+            properties: traitInfoProps,
+        };
+
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: nameId,
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createTraitType"),
+                        arguments: [
+                            traitInfo,
+                        ],
+                    },
+                },
+            ],
+        });
+
+
+    }
+
+    private emitMethods(methods: readonly ir.MethodDefinition[], parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
+        const methodFuncs: ReadonlyDeep<estree.Property>[] = [];
+
+        for(const methodDef of methods) {
+            const methodName = this.getExportNameForIdSig(methodDef.name, methodDef.erasedSignature);
+            const useSimpleName = isValidIdName(methodName) && methodName !== "__proto__";
+
+            const methodImpl = this.emitMethodBody(methodDef, parentExpr);
+
+            methodFuncs.push({
+                type: "Property",
+                computed: !useSimpleName,
+                shorthand: false,
+                method: false,
+                kind: "init",
+                key: useSimpleName ? {
+                    type: "Identifier",
+                    name: methodName,
+                } : {
+                    type: "Literal",
+                    value: methodName,
+                },
+                value: {
+                    type: "ObjectExpression",
+                    properties: [
+                        {
+                            type: "Property",
+                            computed: false,
+                            shorthand: false,
+                            method: false,
+                            kind: "init",
+                            key: {
+                                type: "Identifier",
+                                name: "method",
+                            },
+                            value: methodImpl,
+                        },
+                    ],
+                },
+            });
+        }
+
+        return {
+            type: "ObjectExpression",
+            properties: methodFuncs,
+        };
+    }
+
+    private emitMethodBody(methodDef: ir.MethodDefinition, parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
+        if(methodDef.implementation === undefined) {
+            return {
+                type: "Literal",
+                value: null,
+            };
+        }
+        
+        const impl = this.emitFunctionImpl(true, methodDef.signature, methodDef.implementation, parentExpr);
+
+        if(impl.type == "FunctionDeclaration") {
+            return {
+                type: "FunctionExpression",
+                params: impl.params,
+                body: impl.body,
+            };
+        }
+        else {
+            return impl;
+        }
+    }
+
+    private emitVTable(vtable: ir.Vtable, parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
+        const entries: ReadonlyDeep<estree.Expression>[] = [];
+
+        for(const entry of vtable.entries) {
+            const methodInfo = this.options.program.getMethodInfo(entry.slotMethodId);
+
+            const methodSymbolExpr: ReadonlyDeep<estree.Expression> = {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+                
+                object: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: new VTableTokenEmitter(this, parentExpr).buildTokenValue(entry.slotInstanceType),
+                    property: {
+                        type: "Identifier",
+                        name: "methods",
+                    },
+                },
+
+                property: {
+                    type: "Identifier",
+                    name: this.getExportNameForIdSig(methodInfo.name, methodInfo.signature),
+                },
+            };
+
+            let methodTarget: JsonValue;
+            switch(entry.target.$type) {
+                case "abstract":
+                    methodTarget = {
+                        type: "abstract",
+                    };
+                    break;
+
+                case "ambiguous":
+                    methodTarget = {
+                        type: "ambiguous",
+                    };
+                    break;
+
+                case "implementation":
+                    methodTarget = {
+                        type: "implementation",
+                        methodIndex: Number(entry.target.methodIndex),
+                    };
+                    break;
+
+                default:
+                    ensureExhaustive(entry.target);
+            }
+
+            entries.push({
+                type: "ObjectExpression",
+                properties: [
+                    {
+                        type: "Property",
+                        computed: false,
+                        shorthand: false,
+                        method: false,
+                        kind: "init",
+                        key: {
+                            type: "Identifier",
+                            name: "slotMethodSymbol",
+                        },
+                        value: {
+                            type: "FunctionExpression",
+                            params: [],
+                            body: {
+                                type: "BlockStatement",
+                                body: [
+                                    {
+                                        type: "ReturnStatement",
+                                        argument: methodSymbolExpr,
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                    {
+                        type: "Property",
+                        computed: false,
+                        shorthand: false,
+                        method: false,
+                        kind: "init",
+                        key: {
+                            type: "Identifier",
+                            name: "target",
+                        },
+                        value: jsonToExpression(methodTarget),
+                    },
+                ],
+            });
+        }
+
+        return {
+            type: "ArrayExpression",
+            elements: entries,
+        };
+    }
+
+    private emitInstance(instanceDef: ir.InstanceDefinition): void {
+        const name = this.getExportNameForImport(instanceDef.import);
+        const nameId: estree.Expression = {
+            type: "Identifier",
+            name,
+        };
+
+        const methodFuncs = this.emitMethods(instanceDef.methods, nameId);
+        const vtable = this.emitVTable(instanceDef.vtable, nameId);
+
+        const instanceInfo: ReadonlyDeep<estree.Expression> = {
+            type: "ObjectExpression",
+            properties: [
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "name",
+                    },
+                    value: {
+                        type: "Literal",
+                        value: name,
+                    }
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "tokenParameterCount",
+                    },
+                    value: {
+                        type: "Literal",
+                        value: instanceDef.signature.tokenParameters.length,
+                    },
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "argCount",
+                    },
+                    value: {
+                        type: "Literal",
+                        value: instanceDef.signature.parameters.length,
+                    },
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "methods",
+                    },
+                    value: methodFuncs,
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: false,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "vtable",
+                    },
+                    value: vtable,
+                },
+                {
+                    type: "Property",
+                    computed: false,
+                    shorthand: false,
+                    method: true,
+                    kind: "init",
+                    key: {
+                        type: "Identifier",
+                        name: "baseConstructor",
+                    },
+                    value: {
+                        type: "FunctionExpression",
+                        params: instanceDef.signature.tokenParameters.map((_, i) => ({
+                            type: "Identifier",
+                            name: `t${i}`,
+                        })),
+                        body: {
+                            type: "BlockStatement",
+                            body: [
+                                {
+                                    type: "ReturnStatement",
+                                    argument: new InstanceBaseConstructorTokenEmitter(this).buildTokenValue(instanceDef.signature.returnType),
+                                }
+                            ],
+                        },
+                    },
+                },
+            ],
+        };
+
+
+        this.addDeclaration({
+            type: "VariableDeclaration",
+            kind: "const",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: nameId,
+                    init: {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: this.getArgonRuntimeExport("createInstanceDefinition"),
+                        arguments: [
+                            instanceInfo,
+                        ],
+                    },
+                },
+            ],
+        });
+    }
+}
+
+class BlockEmitter extends EmitterBase {
+    constructor(
+        private moduleEmitter: ModuleEmitter,
+        private readonly parentExpr: estree.Expression | undefined,
+        private readonly loopJumpState: Map<bigint, LoopJumpTargets>,
+    ) {
+        super(moduleEmitter.options);
+        this.tokenEmitter = new BlockTokenEmitter(this.moduleEmitter, this.parentExpr);
+    }
+
+    readonly stmts: estree.Statement[] = [];
+    private readonly tokenEmitter: TokenEmitter;
+
+    protected override getImportId(source: string): string {
+        return this.moduleEmitter.getImportId(source);
+    }
+
+    private nestedBlockEmitter(): BlockEmitter {
+        return new BlockEmitter(this.moduleEmitter, this.parentExpr, this.loopJumpState);
+    }
+
+    private emitNestedBlock(block: ir.Block): estree.BlockStatement {
+        const nestedEmitter = this.nestedBlockEmitter();
+        nestedEmitter.emitBlock(block);
+        return nestedEmitter.toBlock();
+    }
+
+    emitBlock(block: ir.Block): void {
+        for(const insn of block.instructions) {
+            this.emitInstruction(insn);
+        }
+    }
+
+    toBlock(): estree.BlockStatement {
+        return {
+            type: "BlockStatement",
+            body: this.stmts,
+        };
+    }
+
+    private emitInstruction(insn: ir.Instruction): void {
+        const stmts = this.stmts;
+
+        const assign = (dest: ir.RegisterId, value: estree.Expression) => {
+            stmts.push({
+                type: "ExpressionStatement",
+                expression: {
+                    type: "AssignmentExpression",
+                    left: this.getReg(dest),
+                    operator: "=",
+                    right: value,
+                }
+            });
+        };
+
+        const functionOutput = (dest: ir.FunctionResult, value: estree.Expression) => {
+            let stmt: estree.Statement;
+            switch(dest.$type) {
+                case "discard":
+                    stmt = {
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "CallExpression",
+                            optional: false,
+                            callee: this.moduleEmitter.getArgonRuntimeExport("resolve"),
+                            arguments: [value],
+                        },
+                    };
+                    break;
+
+                case "register":
+                    stmt = {
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            left: this.getReg(dest.id),
+                            operator: "=",
+                            right: {
+                                type: "CallExpression",
+                                optional: false,
+                                callee: this.moduleEmitter.getArgonRuntimeExport("resolve"),
+                                arguments: [value],
+                            },
+                        },
+                    };
+                    break;
+
+                case "return-value":
+                    stmt = {
+                        type: "ReturnStatement",
+                        argument: {
+                            type: "CallExpression",
+                            optional: false,
+                            callee: this.moduleEmitter.getArgonRuntimeExport("delay"),
+                            arguments: [
+                                {
+                                    type: "ArrowFunctionExpression",
+                                    params: [],
+                                    expression: true,
+                                    body: value,
+                                },
+                            ],
+                        },
+                    };
+                    break;
+            }
+
+            stmts.push(stmt);
+        }
+
+        switch(insn.$type) {
+            case "box":
+                assign(insn.dest, this.getReg(insn.value));
+                break;
+
+            case "builtin": {
+                const op = <N extends number>(n: N, f: (...args: Readonly<TupleOf<N, ir.RegisterId>>) => void) => {
+                    checkArgs(0)(insn.tokens);
+                    const args = checkArgs(n)(insn.registers);
+                    f(...args);
+                };
+
+                const unary = (operator: estree.UnaryOperator) =>
+                    op(2, (dest: ir.RegisterId, a: ir.RegisterId)=> {
+                        assign(dest, {
+                            type: "UnaryExpression",
+                            prefix: true,
+                            operator,
+                            argument: this.getReg(a),
+                        });
+                    });
+
+                const binary = (operator: estree.BinaryOperator) =>
+                    op(3, (dest: ir.RegisterId, a: ir.RegisterId, b: ir.RegisterId) => {
+                        assign(dest, {
+                            type: "BinaryExpression",
+                            left: this.getReg(a),
+                            operator,
+                            right: this.getReg(b)
+                        });
+                    });
+
+                const parameterizedOp = <N extends number>(n: N, f: (elementType: ir.Token, ...args: Readonly<TupleOf<N, ir.RegisterId>>) => void) => {
+                    const [elementType] = checkArgs(1)(insn.tokens);
+                    const args = checkArgs(n)(insn.registers);
+                    f(elementType, ...args);
+                };
+
+                switch(insn.op) {
+                    case "int-negate":
+                        unary("-");
+                        break;
+
+                    case "int-bit-not":
+                        unary("~");
+                        break;
+
+                    case "bool-not":
+                        unary("!");
+                        break;
+
+                    case "int-add":
+                    case "string-concat":
+                        binary("+");
+                        break;
+
+                    case "int-sub":
+                        binary("-");
+                        break;
+
+                    case "int-mul":
+                        binary("*");
+                        break;
+
+                    case "int-bit-and":
+                        binary("&");
+                        break;
+
+                    case "int-bit-or":
+                        binary("|");
+                        break;
+
+                    case "int-bit-xor":
+                        binary("^");
+                        break;
+
+                    case "int-bit-shift-left":
+                        binary("<<");
+                        break;
+
+                    case "int-bit-shift-right":
+                        binary(">>");
+                        break;
+
+                    case "int-eq":
+                    case "string-eq":
+                    case "bool-eq":
+                        binary("===");
+                        break;
+
+                    case "int-ne":
+                    case "string-ne":
+                    case "bool-ne":
+                        binary("!==");
+                        break;
+
+                    case "int-lt":
+                        binary("<");
+                        break;
+
+                    case "int-le":
+                        binary("<=");
+                        break;
+
+                    case "int-gt":
+                        binary(">");
+                        break;
+
+                    case "int-ge":
+                        binary(">=");
+                        break;
+
+                    case "array-create-unsafe-uninitialized": {
+                        parameterizedOp(2, (_elementType, dest, size) => {
+                            this.stmts.push({
+                                type: "IfStatement",
+                                test: {
+                                    type: "BinaryExpression",
+                                    operator: ">",
+                                    left: this.getReg(size),
+                                    right: {
+                                        type: "CallExpression",
+                                        optional: false,
+                                        callee: {
+                                            type: "MemberExpression",
+                                            computed: false,
+                                            optional: false,
+                                            object: {
+                                                type: "Identifier",
+                                                name: "globalThis",
+                                            },
+                                            property: {
+                                                type: "Identifier",
+                                                name: "BigInt",
+                                            },
+                                        },
+                                        arguments: [
+                                            {
+                                                type: "MemberExpression",
+                                                computed: false,
+                                                optional: false,
+                                                object: {
+                                                    type: "MemberExpression",
+                                                    computed: false,
+                                                    optional: false,
+                                                    object: {
+                                                        type: "Identifier",
+                                                        name: "globalThis",
+                                                    },
+                                                    property: {
+                                                        type: "Identifier",
+                                                        name: "Number",
+                                                    },
+                                                },
+                                                property: {
+                                                    type: "Identifier",
+                                                    name: "MAX_SAFE_INTEGER",
+                                                },
+                                            },
+                                        ],
+                                    },
+                                },
+                                consequent: {
+                                    type: "BlockStatement",
+                                    body: [
+                                        {
+                                            type: "ThrowStatement",
+                                            argument: {
+                                                type: "NewExpression",
+                                                callee: {
+                                                    type: "MemberExpression",
+                                                    computed: false,
+                                                    optional: false,
+                                                    object: {
+                                                        type: "Identifier",
+                                                        name: "globalThis",
+                                                    },
+                                                    property: {
+                                                        type: "Identifier",
+                                                        name: "Error",
+                                                    },
+                                                },
+                                                arguments: [
+                                                    {
+                                                        type: "Literal",
+                                                        value: "Array too large",
+                                                    },
+                                                ],
+                                            },
+                                        },
+                                    ],
+                                },
+                            });
+
+                            assign(dest, {
+                                type: "NewExpression",
+                                callee: {
+                                    type: "MemberExpression",
+                                    computed: false,
+                                    optional: false,
+                                    object: {
+                                        type: "Identifier",
+                                        name: "globalThis",
+                                    },
+                                    property: {
+                                        type: "Identifier",
+                                        name: "Array",
+                                    },
+                                },
+                                arguments: [
+                                    {
+                                        type: "CallExpression",
+                                        optional: false,
+                                        callee: {
+                                            type: "MemberExpression",
+                                            computed: false,
+                                            optional: false,
+                                            object: {
+                                                type: "Identifier",
+                                                name: "globalThis",
+                                            },
+                                            property: {
+                                                type: "Identifier",
+                                                name: "Number",
+                                            },
+                                        },
+                                        arguments: [
+                                            this.getReg(size),
+                                        ],
+                                    },
+                                ],
+                            });
+                        });
+                        break;
+                    }
+
+                    case "array-length":
+                        parameterizedOp(2, (_elementType, dest, arr) => {
+                            assign(dest, {
+                                type: "MemberExpression",
+                                object: this.getReg(arr),
+                                property: {
+                                    type: "Identifier",
+                                    name: "length",
+                                },
+                                computed: false,
+                                optional: false,
+                            });
+                        });
+                        break;
+
+                    case "array-get":
+                        parameterizedOp(3, (_elementType, dest, arr, index) => {
+                            assign(dest, {
+                                type: "MemberExpression",
+                                object: this.getReg(arr),
+                                property: this.getReg(index),
+                                computed: true,
+                                optional: false,
+                            });
+                        });
+                        break;
+
+                    case "array-set":
+                        parameterizedOp(3, (_elementType, arr, index, value) => {
+                            stmts.push({
+                                type: "ExpressionStatement",
+                                expression: {
+                                    type: "AssignmentExpression",
+                                    left: {
+                                        type: "MemberExpression",
+                                        object: this.getReg(arr),
+                                        property: this.getReg(index),
+                                        computed: true,
+                                        optional: false,
+                                    },
+                                    operator: "=",
+                                    right: this.getReg(value),
+                                }
+                            });
+                        });
+                        break;
+
+                    default:
+                        insn.op satisfies never;
+                }
+                break;
+            }
+
+            case "const-bool":
+                assign(insn.dest, {
+                    type: "Literal",
+                    value: insn.value,
+                });
+                break;
+
+            case "const-int":
+                assign(insn.dest, {
+                    type: "Literal",
+                    value: insn.value,
+                    bigint: insn.value.toString()
+                });
+                break;
+
+            case "const-string":
+                assign(insn.dest, {
+                    type: "Literal",
+                    value: insn.value,
+                });
+                break;
+
+            case "enum-variant-literal":
+            {
+                const args: estree.Expression[] = [];
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                args.push({
+                    type: "ObjectExpression",
+                    properties: insn.fields.map(field => {
+                        const fieldInfo = this.options.program.getRecordFieldInfo(field.fieldId);
+                        const id = this.getExportNameForId(fieldInfo.name);
+                        const isValid = isValidIdName(id);
+
+                        return {
+                            type: "Property",
+                            computed: !isValid,
+                            method: false,
+                            shorthand: false,
+                            kind: "init",
+                            key: isValid ? {
+                                type: "Identifier",
+                                name: id,
+                            } : {
+                                type: "Literal",
+                                value: id,
+                            },
+                            value: this.getReg(field.value),
+                        };
+                    }),
+                });
+
+                assign(insn.dest, {
+                    type: "NewExpression",
+                    callee: this.getVariantClass(insn.enumType, insn.variantId),
+                    arguments: args,
+                });
+
+                break;
+            }
+
+            case "finally":
+            {
+                stmts.push({
+                    type: "TryStatement",
+                    block: this.emitNestedBlock(insn.action),
+                    finalizer: this.emitNestedBlock(insn.ensuring),
+                });
+                break;
+            }
+
+            case "function-call":
+            {
+                const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
+                const funcExpr = this.moduleEmitter.getImportExpr(functionInfo.importSpecifier);
+
+                const args: estree.Expression[] = [];
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: funcExpr,
+                    arguments: args,
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "function-object-call":
+            {
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: this.getReg(insn.function),
+                    arguments: [ this.getReg(insn.arg) ],
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "function-object-token-call":
+            {
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: this.getReg(insn.function),
+                    arguments: [ this.buildTokenValue(insn.arg) ],
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "function-object-erased-call":
+            {
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: this.getReg(insn.function),
+                    arguments: [],
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "if-else":
+                if(insn.whenFalse.instructions.length === 0) {
+                    stmts.push({
+                        type: "IfStatement",
+                        test: this.getReg(insn.condition),
+                        consequent: this.emitNestedBlock(insn.whenTrue),
+                    });
+                }
+                else if(insn.whenTrue.instructions.length === 0) {
+                    stmts.push({
+                        type: "IfStatement",
+                        test: {
+                            type: "UnaryExpression",
+                            prefix: true,
+                            operator: "!",
+                            argument: this.getReg(insn.condition),
+                        },
+                        consequent: this.emitNestedBlock(insn.whenFalse),
+                    });
+                }
+                else {
+                    stmts.push({
+                        type: "IfStatement",
+                        test: this.getReg(insn.condition),
+                        consequent: this.emitNestedBlock(insn.whenTrue),
+                        alternate: this.emitNestedBlock(insn.whenFalse),
+                    });
+                }
+                break;
+
+            case "instance-method-call":
+            {
+                const methodInfo = this.options.program.getMethodInfo(insn.methodId);
+
+                const methodSymbolExpr: estree.Expression = {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    
+                    object: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.buildTokenValue(insn.instanceType),
+                        property: {
+                            type: "Identifier",
+                            name: "methods",
+                        },
+                    },
+
+                    property: {
+                        type: "Identifier",
+                        name: this.getExportNameForIdSig(methodInfo.name, methodInfo.signature),
+                    },
+                };
+
+                const args: estree.Expression[] = [];
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: {
+                        type: "MemberExpression",
+                        computed: true,
+                        optional: false,
+                        object: this.getReg(insn.instanceObject),
+                        property: methodSymbolExpr,
+                    },
+                    arguments: args,
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "is-enum-variant":
+                stmts.push({
+                    type: "ExpressionStatement",
+                    expression: {
+                        type: "AssignmentExpression",
+                        operator: "=",
+                        left: this.getReg(insn.dest),
+                        right: {
+                            type: "BinaryExpression",
+                            operator: "instanceof",
+                            left: this.getReg(insn.value),
+                            right: this.getVariantClass(insn.enumType, insn.variantId),
+                        },
+                    },
+                });
+
+                const body: estree.Statement[] = [];
+                for(const [i, arg] of insn.args.entries()) {
+                    body.push({
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            operator: "=",
+                            left: this.getReg(arg),
+                            right: {
+                                type: "MemberExpression",
+                                computed: false,
+                                optional: false,
+                                object: this.getReg(insn.value),
+                                property: {
+                                    type: "Identifier",
+                                    name: `args_${i}`,
+                                },
+                            }
+                        }
+                    });
+                }
+                for(const fieldExtractor of insn.fieldExtractors) {
+                    const fieldInfo = this.options.program.getRecordFieldInfo(fieldExtractor.fieldId);
+
+                    body.push({
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            operator: "=",
+                            left: this.getReg(fieldExtractor.r),
+                            right: {
+                                type: "MemberExpression",
+                                computed: false,
+                                optional: false,
+                                object: this.getReg(insn.value),
+                                property: {
+                                    type: "Identifier",
+                                    name: `field_${this.getExportNameForId(fieldInfo.name)}`,
+                                },
+                            }
+                        }
+                    });
+                }
+
+                stmts.push({
+                    type: "IfStatement",
+                    test: this.getReg(insn.dest),
+                    consequent: {
+                        type: "BlockStatement",
+                        body,
+                    },
+                });
+                break;
+
+            case "load-reference":
+                assign(insn.dest, {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.getReg(insn.ref),
+                    property: {
+                        type: "Identifier",
+                        name: "value",
+                    },
+                });
+                break;
+
+            case "load-token":
+                assign(insn.dest, this.buildTokenValue(insn.token));
+                break;
+
+            case "loop": {
+                const loopLabel = `loop_${insn.loopId.id}`;
+
+                const exitScanPrelude = new LoopExitScanner();
+                exitScanPrelude.scanBlock(insn.prelude);
+
+                const exitScanBody = new LoopExitScanner();
+                exitScanBody.scanBlock(insn.body);
+
+                const isPreludeEmpty = insn.prelude.instructions.length === 0;
+                const isPostludeEmpty = insn.postlude.instructions.length === 0;
+
+                const loopStmts: estree.Statement[] = [];
+
+
+
+
+                const preludeAndBodyLoopLabel = `${loopLabel}_preludeAndBody`;
+                const bodyLoopLabel = `${loopLabel}_body`;
+
+
+                this.loopJumpState.set(insn.loopId.id, {
+                    next: isPostludeEmpty ?
+                        {
+                            label: loopLabel,
+                            type: "continue",
+                        } :
+                        {
+                            label: preludeAndBodyLoopLabel,
+                            type: "break",
+                        },
+                    redo: {
+                        label: loopLabel,
+                        type: "continue",
+                    },
+                });
+
+                const preludeAndBodyBlock = this.emitNestedBlock(insn.prelude);
+
+
+
+                this.loopJumpState.set(insn.loopId.id, {
+                    next: isPostludeEmpty ?
+                        {
+                            label: loopLabel,
+                            type: "continue",
+                        } :
+                        {
+                            label: preludeAndBodyLoopLabel,
+                            type: "break",
+                        },
+                    redo: isPreludeEmpty ?
+                        {
+                            label: loopLabel,
+                            type: "continue",
+                        } : {
+                            label: bodyLoopLabel,
+                            type: "continue",
+                        },
+                });
+
+                const body = this.emitNestedBlock(insn.body);
+
+
+                if(isPreludeEmpty || !exitScanBody.hasRedo) {
+                    preludeAndBodyBlock.body.push(...body.body);
+                }
+                else {
+                    body.body.push({
+                        type: "BreakStatement",
+                    });
+
+                    preludeAndBodyBlock.body.push({
+                        type: "LabeledStatement",
+                        label: {
+                            type: "Identifier",
+                            name: bodyLoopLabel,
+                        },
+                        body: {
+                            type: "ForStatement",
+                            body,
+                        },
+                    });
+                }
+
+                if(isPostludeEmpty || (!exitScanPrelude.hasNext && !exitScanBody.hasNext)) {
+                    loopStmts.push(...preludeAndBodyBlock.body);
+                }
+                else {
+                    preludeAndBodyBlock.body.push({
+                        type: "BreakStatement",
+                    });
+
+                    loopStmts.push({
+                        type: "LabeledStatement",
+                        label: {
+                            type: "Identifier",
+                            name: preludeAndBodyLoopLabel,
+                        },
+                        body: {
+                            type: "ForStatement",
+                            body: preludeAndBodyBlock,
+                        },
+                    });
+                }
+
+                this.loopJumpState.delete(insn.loopId.id);
+
+
+
+                const postlude = this.emitNestedBlock(insn.postlude);
+
+                loopStmts.push(...postlude.body);
+
+                this.stmts.push({
+                    type: "LabeledStatement",
+                    label: {
+                        type: "Identifier",
+                        name: loopLabel,
+                    },
+                    body: {
+                        type: "ForStatement",
+                        body: {
+                            type: "BlockStatement",
+                            body: loopStmts,
+                        },
+                    },
+                });
+                break;
+            }
+
+            case "loop-break":
+                this.stmts.push({
+                    type: "BreakStatement",
+                    label: {
+                        type: "Identifier",
+                        name: `loop_${insn.loopId.id}`,
+                    },
+                });
+                break;
+
+            case "loop-next": {
+                const targets = this.loopJumpState.get(insn.loopId.id);
+                if(targets === undefined) {
+                    throw new Error(`Could not find loop jump target for loop ${insn.loopId.id}`);
+                }
+
+                this.stmts.push(createJumpFromTarget(targets.next));
+
+                break;
+            }
+
+            case "loop-redo": {
+                const targets = this.loopJumpState.get(insn.loopId.id);
+                if(targets === undefined) {
+                    throw new Error(`Could not find loop jump target for loop ${insn.loopId.id}`);
+                }
+
+                this.stmts.push(createJumpFromTarget(targets.redo));
+
+                break;
+            }
+
+
+            case "move":
+                assign(insn.dest, this.getReg(insn.src));
+                break;
+
+            case "new-instance":
+            {
+                const instanceInfo = this.options.program.getInstanceInfo(insn.instanceId);
+                const funcExpr = this.moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+
+                const args: estree.Expression[] = [];
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: funcExpr,
+                    arguments: args,
+                };
+
+                assign(insn.dest, callExpr);
+                break;
+            }
+
+            case "new-reference":
+                assign(insn.dest, {
+                    type: "NewExpression",
+                    callee: this.moduleEmitter.getArgonRuntimeExport("RefCell"),
+                    arguments: [this.getReg(insn.value)],
+                });
+                break;
+
+            case "partially-applied-function":
+            case "partially-applied-token-function":
+            case "partially-applied-function-erased":
+            {
+                const argName: estree.Identifier = {
+                    type: "Identifier",
+                    name: "arg",
+                };
+
+                // Build token args for call
+                const args: estree.Expression[] = [];
+                for(const tokenArg of insn.tokenArgs) {
+                    args.push(this.buildTokenValue(tokenArg));
+                }
+
+                if(insn.$type === "partially-applied-token-function") {
+                    args.push(argName);
+                }
+
+                // Build concrete args for call
+                const block: estree.Statement[] = [];
+
+                for(const arg of insn.args) {
+                    const name: estree.Identifier = {
+                        type: "Identifier",
+                        name: "capture" + block.length,
+                    };
+
+                    block.push({
+                        type: "VariableDeclaration",
+                        kind: "const",
+                        declarations: [
+                            {
+                                type: "VariableDeclarator",
+                                id: name,
+                                init: this.getReg(arg),
+                            },
+                        ],
+                    });
+
+                    args.push(name);
+                }
+
+                if(insn.$type === "partially-applied-function") {
+                    args.push(argName);
+                }
+
+                // Build call
+                const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
+                const funcExpr = this.moduleEmitter.getImportExpr(functionInfo.importSpecifier);
+
+                let params: estree.Pattern[] = [];
+                if(insn.$type !== "partially-applied-function-erased") {
+                    params.push(argName);
+                }
+
+                const lambda: estree.ArrowFunctionExpression = {
+                    type: "ArrowFunctionExpression",
+                    expression: true,
+                    body: {
+                        type: "CallExpression",
+                        callee: funcExpr,
+                        arguments: args,
+                        optional: false,
+                    },
+                    params,
+                };
+
+                if(block.length === 0) {
+                    assign(insn.dest, lambda);
+                }
+                else {
+                    block.push({
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            operator: "=",
+                            left: this.getReg(insn.dest),
+                            right: lambda,
+                        },
+                    });
+
+                    stmts.push({
+                        type: "BlockStatement",
+                        body: block,
+                    })
+                }
+                break;
+            }
+
+            case "raise":
+                stmts.push({
+                    type: "ThrowStatement",
+                    argument: this.getReg(insn.exception),
+                });
+                break;
+
+            case "record-field-load":
+            {
+                const fieldInfo = this.options.program.getRecordFieldInfo(insn.fieldId);
+                assign(insn.dest, {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.getReg(insn.recordValue),
+                    property: {
+                        type: "Identifier",
+                        name: "field_" + this.getExportNameForId(fieldInfo.name),
+                    },
+                });
+                break;
+            }
+
+            case "record-field-store":
+            {
+                const fieldInfo = this.options.program.getRecordFieldInfo(insn.fieldId);
+                stmts.push({
+                    type: "ExpressionStatement",
+                    expression: {
+                        type: "AssignmentExpression",
+                        operator: "=",
+                        left: {
+                            type: "MemberExpression",
+                            computed: false,
+                            optional: false,
+                            object: this.getReg(insn.recordValue),
+                            property: {
+                                type: "Identifier",
+                                name: "field_" + this.getExportNameForId(fieldInfo.name),
+                            },
+                        },
+                        right: this.getReg(insn.fieldValue),
+                    },
+                });
+                break;
+            }
+
+            case "record-literal":
+                assign(insn.dest, {
+                    type: "NewExpression",
+                    callee: this.buildTokenValue(insn.recordType),
+                    arguments: [
+                        {
+                            type: "ObjectExpression",
+                            properties: insn.fields.map(field => {
+                                const fieldInfo = this.options.program.getRecordFieldInfo(field.fieldId);
+                                const id = this.getExportNameForId(fieldInfo.name);
+                                const isValid = isValidIdName(id);
+
+                                return {
+                                    type: "Property",
+                                    computed: !isValid,
+                                    method: false,
+                                    shorthand: false,
+                                    kind: "init",
+                                    key: isValid ? {
+                                        type: "Identifier",
+                                        name: id,
+                                    } : {
+                                        type: "Literal",
+                                        value: id,
+                                    },
+                                    value: this.getReg(field.value),
+                                };
+                            }),
+                        },
+                    ],
+                });
+                break;
+
+            case "return":
+                stmts.push({
+                    type: "ReturnStatement",
+                    argument: this.getReg(insn.src),
+                });
+                break;
+
+            case "tuple":
+                if(insn.values.length === 0) {
+                    assign(insn.dest, {
+                        type: "Identifier",
+                        name: "undefined",
+                    });
+                }
+                else {
+                    assign(insn.dest, {
+                        type: "ArrayExpression",
+                        elements: insn.values.map(element => this.getReg(element)),
+                    });
+                }
+                break;
+
+            case "tuple-element":
+                assign(insn.dest, {
+                    type: "MemberExpression",
+                    object: this.getReg(insn.src),
+                    property: {
+                        type: "Literal",
+                        value: Number(insn.elementIndex),
+                    },
+                    computed: true,
+                    optional: false,
+                });
+                break;
+
+            case "unbox":
+                assign(insn.dest, this.getReg(insn.value));
+                break;
+
+            case "unreachable":
+                stmts.push({
+                    type: "ThrowStatement",
+                    argument: {
+                        type: "NewExpression",
+                        callee: this.moduleEmitter.getArgonRuntimeExport("UnreachableError"),
+                        arguments: [],
+                    }
+                });
+                break;
+
+            case "update-reference":
+                stmts.push({
+                    type: "ExpressionStatement",
+                    expression: {
+                        type: "AssignmentExpression",
+                        operator: "=",
+                        left: {
+                            type: "MemberExpression",
+                            computed: false,
+                            optional: false,
+                            object: this.getReg(insn.ref),
+                            property: {
+                                type: "Identifier",
+                                name: "value",
+                            },
+                        },
+                        right: this.getReg(insn.value),
+                    },
+                });
+                break;
+
+            default:
+                ensureExhaustive(insn);
+        }
+    }
+
+    private getVariantClass(enumType: ir.Token, variantId: bigint): estree.Expression {
+        const variantInfo = this.options.program.getEnumVariantInfo(variantId);
+
+
+        const variantName = this.getExportNameForId(variantInfo.name);
+        const nameValid = isValidIdName(variantName) && variantName !== "__proto__";
+
+        return {
+            type: "MemberExpression",
+            computed: !nameValid,
+            optional: false,
+
+            object: {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+
+                object: this.buildTokenValue(enumType),
+                property: {
+                    type: "Identifier",
+                    name: "variants",
+                },
+            },
+
+            property: nameValid ? {
+                type: "Identifier",
+                name: variantName,
+            } : {
+                type: "Literal",
+                value: variantName,
+            },
+        };
+    }
+
+
+    private getReg(reg: ir.RegisterId): estree.Identifier {
+        return {
+            type: "Identifier",
+            name: `r${reg.id}`,
+        };
+    }
+
+    private buildTokenValue(token: ir.Token): estree.Expression {
+        return this.tokenEmitter.buildTokenValue(token);
+    }
+}
+
+interface JumpTarget {
+    readonly label: string;
+    readonly type: "continue" | "break";
+}
+
+interface LoopJumpTargets {
+    readonly next: JumpTarget;
+    readonly redo: JumpTarget;
+}
+
+function createJumpFromTarget(target: JumpTarget): estree.Statement {
+    switch(target.type) {
+        case "continue":
+            return {
+                type: "ContinueStatement",
+                label: {
+                    type: "Identifier",
+                    name: target.label,
+                },
+            };
+
+        case "break":
+            return {
+                type: "BreakStatement",
+                label: {
+                    type: "Identifier",
+                    name: target.label,
+                },
+            };
+    }
+}
+
+function jsonToExpression(expr: JsonValue): estree.Expression {
+    switch(typeof expr) {
+        case "string":
+        case "number":
+        case "boolean":
+            return {
+                type: "Literal",
+                value: expr,
+            };
+
+        case "object":
+            if(expr === null) {
+                return {
+                    type: "Literal",
+                    value: null,
+                };
+            }
+            else if(expr instanceof Array) {
+                return {
+                    type: "ArrayExpression",
+                    elements: expr.map(jsonToExpression),
+                };
+            }
+            else {
+                const properties: estree.Property[] = [];
+                for(const key of Object.keys(expr)) {
+                    const value = jsonToExpression(expr[key]!);
+                    if(key === "__proto__" || !isValidIdName(key)) {
+                        properties.push({
+                            type: "Property",
+                            computed: true,
+                            shorthand: false,
+                            method: false,
+                            kind: "init",
+                            key: {
+                                type: "Literal",
+                                value: key,
+                            },
+                            value,
+                        });
+                    }
+                    else {
+                        properties.push({
+                            type: "Property",
+                            computed: false,
+                            shorthand: false,
+                            method: false,
+                            kind: "init",
+                            key: {
+                                type: "Identifier",
+                                name: key,
+                            },
+                            value,
+                        });
+                    }
+                }
+                return {
+                    type: "ObjectExpression",
+                    properties,
+                };
+            }
+
+        default:
+            ensureExhaustive(expr);
+    }
+}
+
+
+class LoopExitScanner {
+
+    hasNext = false;
+    hasRedo = false;
+
+    scanBlock(block: ir.Block): void {
+        for(const insn of block.instructions) {
+            if(this.hasNext && this.hasRedo) {
+                break;
+            }
+
+            this.scan(insn);
+        }
+    }
+
+    scan(i: ir.Instruction): void {
+        switch(i.$type) {
+            case "finally":
+                this.scanBlock(i.action);
+                this.scanBlock(i.ensuring);
+                break;
+
+            case "if-else":
+                this.scanBlock(i.whenTrue);
+                this.scanBlock(i.whenFalse);
+                break;
+
+            case "loop":
+                this.scanBlock(i.prelude);
+                this.scanBlock(i.body);
+                this.scanBlock(i.postlude);
+                break;
+
+            case "loop-next":
+                this.hasNext = true;
+                break;
+
+            case "loop-redo":
+                this.hasRedo = true;
+                break;
+        }
+    }
+
+}
+
+
+
+function checkArgs<N extends number>(n: N): <T>(args: readonly T[]) => Readonly<TupleOf<N, T>> {
+    return <T>(args: readonly T[]): Readonly<TupleOf<N, T>> => {
+        if(args.length !== n) {
+            throw new Error(`Expected ${n} arguments, got ${args.length}`);
+        }
+
+        return args as TupleOf<N, T>;
+    };
+}
+
+

@@ -161,6 +161,8 @@ dependencies = [
  "embedded-io",
  "esexpr",
  "esexpr-binary",
+ "noble-idl-compiler-rust",
+ "noble-idl-runtime",
  "walkdir",
 ]
 

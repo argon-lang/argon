@@ -8,6 +8,7 @@ mod context;
 #[cfg(feature = "std")]
 pub mod local_io;
 mod tubes;
+mod backend;
 
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
@@ -63,7 +64,8 @@ where
     };
 
     'errors: {
-        let tube = argon_source::define_source_tube(context.clone(), source_options, &tube_collection);
+        let tube =
+            argon_source::define_source_tube(context.clone(), source_options, &tube_collection);
         if context.runner_reporter().has_errors() {
             break 'errors;
         }
@@ -78,7 +80,9 @@ where
 
         let mut out_file = EmbeddedIoWrite::new(out_file);
         let mut expr_gen =
-            esexpr_binary::ExprGenerator::<_, argon_util::InternalCompilerError>::new(&mut out_file);
+            esexpr_binary::ExprGenerator::<_, argon_util::InternalCompilerError>::new(
+                &mut out_file,
+            );
 
         for entry in argon_tube::encoder::encode_tube(tube) {
             let entry = match entry {
@@ -110,7 +114,6 @@ where
         let _ = writeln!(error_output, "Compilation succeeded.");
         return true;
     }
-
 
     let _ = context.runner_reporter().print_error_messages(error_output);
     let _ = delete_output_file(&options.output_file, error_output);

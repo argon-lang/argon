@@ -24,10 +24,18 @@ argon-io = { path = "../argon-io", default-features = false }
 argon-source = { path = "../argon-source", default-features = false }
 argon-tube = { path = "../argon-tube", default-features = false }
 argon-util = { path = "../argon-util", default-features = false }
+
 embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true, default-features = false }
+noble-idl-runtime = { workspace = true }
 walkdir = { workspace = true, optional = true }
+
+[build-dependencies]
+noble-idl-compiler-rust = { workspace = true }
 
 [lints]
 workspace = true
+
+[package.metadata.noble-idl.package_mapping]
+"argon.backend.metadata" = "backend::metadata"

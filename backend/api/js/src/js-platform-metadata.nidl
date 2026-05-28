@@ -1,0 +1,32 @@
+package argon.jsbackendmetadata;
+
+import nobleidl.core;
+
+@esexpr:(derive-codec)
+record js-platform-tube-metadata {
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    package-name: optional-field[string];
+}
+
+@esexpr:(derive-codec)
+extern type estree-function-declaration;
+
+@esexpr:(derive-codec)
+enum js-extern {
+    js-function {
+        declaration: estree-function-declaration;
+        @esexpr:(keyword)
+        imports: list[imported-id];
+    },
+}
+
+@esexpr:(derive-codec)
+record imported-id {
+    local-alias: string;
+    source: string;
+
+    @esexpr:(optional)
+    member: optional-field[string];
+}
+
