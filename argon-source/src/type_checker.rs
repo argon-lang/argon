@@ -236,7 +236,7 @@ impl<'a> TypeInferResult<'a> {
     fn partially_inferred_type<'b>(&'b self) -> PartiallyInferredType<'b> {
         match self {
             TypeInferResult::Complete(inferred_type) => {
-                PartiallyInferredType::Full(&inferred_type.checked_expr)
+                PartiallyInferredType::Full(&inferred_type.inferred_type)
             }
             TypeInferResult::Closure { .. } => PartiallyInferredType::Closure,
             TypeInferResult::Tuple { elements, .. } => PartiallyInferredType::Tuple(

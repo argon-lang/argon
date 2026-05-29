@@ -48,7 +48,7 @@ impl<'a> SignatureParser<'a> {
             let mut parameter_scope =
                 ParameterScope::new(self.scope, self.owner.clone(), &parameters);
 
-            let bindings = param
+            let mut bindings = param
                 .value
                 .parameters
                 .iter()
@@ -67,7 +67,7 @@ impl<'a> SignatureParser<'a> {
                 .collect::<Vec<_>>();
 
             let single_binding = match &bindings[..] {
-                [binding] if param.value.has_trailing_comma => Some(binding),
+                [binding] if !param.value.has_trailing_comma => Some(binding),
                 _ => None,
             };
 
@@ -77,6 +77,7 @@ impl<'a> SignatureParser<'a> {
                 Some(binding) => {
                     name = binding.name.clone();
                     param_type = binding.param_type.clone();
+                    bindings.clear();
                 }
                 None => {
                     name = None;
