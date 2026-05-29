@@ -1,7 +1,10 @@
+use crate::platform::PlatformExtern;
 use crate::{CompileErrorReporter, Context, ContextObject};
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
+use hashbrown::HashMap;
+use parse18_runtime::WithLocation;
 
 #[derive(Clone, Default)]
 pub struct TestReporter {
@@ -47,6 +50,12 @@ impl Default for TestContext {
 impl ContextObject for TestContext {
     fn reporter(&self) -> &dyn CompileErrorReporter {
         &self.reporter
+    }
+
+    fn extern_function(&self, _name: &WithLocation<String>) -> PlatformExtern {
+        PlatformExtern {
+            externs: HashMap::new(),
+        }
     }
 
     fn normalize_fuel(&self) -> Fuel {

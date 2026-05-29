@@ -1,11 +1,15 @@
-use alloc::{sync::Arc, vec, vec::Vec};
+use alloc::{string::String, sync::Arc, vec, vec::Vec};
+use argon_compiler::platform::{ExternType, PlatformExtern, PlatformMetadata};
 use argon_compiler::{CompileErrorReporter, Context, ContextObject};
 use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use embedded_io::{Write, WriteFmtError};
+use hashbrown::{HashMap, hash_map};
+use parse18_runtime::WithLocation;
 
 pub struct RunnerContext {
     reporter: RunnerErrorReporter,
+    platform_metadata: HashMap<String, PlatformMetadata>,
 }
 
 impl RunnerContext {
@@ -15,11 +19,24 @@ impl RunnerContext {
                 compile_errors: Mutex::new(vec![]),
                 internal_compiler_errors: Mutex::new(vec![]),
             },
+            platform_metadata: HashMap::new(),
         }
     }
 
     pub fn runner_reporter(&self) -> &RunnerErrorReporter {
         &self.reporter
+    }
+
+    pub fn add_platform(&mut self, platform: String, platform_metadata: PlatformMetadata) {
+        match self.platform_metadata.entry(platform) {
+            hash_map::Entry::Occupied(oe) => {
+                self.reporter
+                    .report_error(CompileError::duplicate_platform(oe.key().clone()));
+            }
+            hash_map::Entry::Vacant(entry) => {
+                entry.insert(platform_metadata);
+            }
+        }
     }
 }
 
@@ -32,6 +49,41 @@ impl Default for RunnerContext {
 impl ContextObject for RunnerContext {
     fn reporter(&self) -> &dyn CompileErrorReporter {
         &self.reporter
+    }
+
+    fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern {
+        if self.platform_metadata.is_empty() {
+            self.reporter
+                .report_error(CompileError::platform_independent_extern(
+                    name.location.clone(),
+                    &name.value,
+                ));
+            return PlatformExtern {
+                externs: HashMap::new(),
+            };
+        }
+
+        let externs = self
+            .platform_metadata
+            .iter()
+            .filter_map(|(platform, metadata)| {
+                let Some(ext) = metadata.externs.get(&name.value) else {
+                    self.reporter
+                        .report_error(CompileError::unknown_platform_extern(
+                            name.location.clone(),
+                            platform,
+                            &name.value,
+                        ));
+                    return None;
+                };
+
+                match &ext.extern_type {
+                    ExternType::Function => Some((platform.clone(), ext.implementation.clone())),
+                }
+            })
+            .collect();
+
+        PlatformExtern { externs }
     }
 
     fn normalize_fuel(&self) -> Fuel {

@@ -4,6 +4,7 @@ use crate::modifiers::{
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::type_check_expr;
+use alloc::{boxed::Box, sync::Arc};
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
@@ -13,7 +14,6 @@ use argon_compiler::{
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
-use alloc::{boxed::Box, sync::Arc};
 use argon_util::sync::{Mutex, mutex_lock};
 
 pub struct SourceFunction {
@@ -128,8 +128,9 @@ impl Function for SourceFunction {
 
                 FunctionImplementation::Expr(expr)
             }
-            ast::FunctionBody::ExternBody(body) => {
-                FunctionImplementation::Extern(body.value.clone())
+            ast::FunctionBody::ExternBody(name) => {
+                let externs = self.context.extern_function(name);
+                FunctionImplementation::Extern(externs)
             }
         };
 

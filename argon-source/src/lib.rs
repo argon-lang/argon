@@ -70,6 +70,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{SourceCodeTubeOptions, define_source_tube};
+    use alloc::{format, string::String, string::ToString, vec, vec::Vec};
+    use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
         CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder, TubeName,
     };
@@ -77,9 +79,10 @@ mod tests {
     use argon_parser::ast::Identifier;
     use argon_util::sync::Mutex;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
-    use alloc::{format, string::ToString, vec, vec::Vec};
     use embedded_io::{ErrorType, Read};
+    use hashbrown::HashMap;
     use mitsein::vec1::Vec1;
+    use parse18_runtime::WithLocation;
     use std::fs;
     use std::path::Path;
     use std::sync::Arc;
@@ -117,6 +120,12 @@ mod tests {
     impl ContextObject for TestContext {
         fn reporter(&self) -> &dyn CompileErrorReporter {
             &self.reporter
+        }
+
+        fn extern_function(&self, _name: &WithLocation<String>) -> PlatformExtern {
+            PlatformExtern {
+                externs: HashMap::new(),
+            }
         }
 
         fn normalize_fuel(&self) -> Fuel {

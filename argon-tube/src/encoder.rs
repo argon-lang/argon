@@ -382,17 +382,16 @@ impl TubeEncoder {
                 body: Box::new(self.emit_expr(expr)?),
             },
 
-            FunctionImplementation::Extern(name) => {
-                let mut externs = BTreeMap::new();
-                externs.insert(
-                    "default".to_string(),
-                    ESExprStatic::new(esexpr::ESExpr::Str(name.clone().into())),
-                );
-
-                tf::FunctionImplementation::Extern {
-                    externs: Box::new(tf::ExternMap { externs }),
-                }
-            }
+            FunctionImplementation::Extern(externs) => tf::FunctionImplementation::Extern {
+                externs: Box::new(tf::ExternMap {
+                    externs: externs
+                        .externs
+                        .iter()
+                        .map(|(platform, expr)| (platform.clone(), ESExprStatic::new(expr.clone())))
+                        .collect::<BTreeMap<_, _>>()
+                        .into(),
+                }),
+            },
         })
     }
 

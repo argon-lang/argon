@@ -28,7 +28,9 @@ argon-util = { path = "../argon-util", default-features = false }
 embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true, default-features = false }
+hashbrown = { workspace = true }
 noble-idl-runtime = { workspace = true }
+parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
 walkdir = { workspace = true, optional = true }
 
 [build-dependencies]

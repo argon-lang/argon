@@ -6,6 +6,7 @@ extern crate std;
 
 pub mod access;
 pub mod erased_sig;
+pub mod platform;
 pub mod scanner;
 pub mod scope;
 pub mod signature;
@@ -13,6 +14,7 @@ pub mod signature;
 pub mod test_utils;
 
 pub use crate::access::AccessModifierGlobal;
+use crate::platform::PlatformExtern;
 pub use crate::signature::FunctionSignature;
 use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};
 use argon_expr::ExprContext;
@@ -33,6 +35,7 @@ use esexpr::ESExpr;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
 use mitsein::vec1::Vec1;
+use parse18_runtime::WithLocation;
 
 pub trait CompileErrorReporter:
     ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
@@ -54,6 +57,8 @@ fn write_lock<T>(lock: &RwLock<T>) -> RwLockWriteGuard<'_, T> {
 
 pub trait ContextObject: ThreadSafe {
     fn reporter(&self) -> &dyn CompileErrorReporter;
+
+    fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern;
 
     fn normalize_fuel(&self) -> Fuel;
 }
@@ -408,7 +413,7 @@ pub struct FunctionMetadata {
 
 pub enum FunctionImplementation {
     Expr(Expr<DefaultExprContext>),
-    Extern(String),
+    Extern(PlatformExtern),
 }
 
 pub trait Method: Unload + ThreadSafe {}

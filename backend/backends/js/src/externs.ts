@@ -4,12 +4,12 @@ import * as acorn from "acorn";
 import type * as estree from "estree";
 import type { ReadonlyDeep } from "type-fest";
 import type { InputFile } from "@argon-lang/js-backend-api";
-import type { ESExpr } from "@argon-lang/esexpr";
 import { JsExtern, type ImportedId } from "@argon-lang/js-backend-api";
+import { Extern as ExternMetadata } from "@argon-lang/js-backend-api/metadata.js";
 
-export async function loadExterns(files: readonly InputFile[]): Promise<Map<string, ESExpr>> {
+export async function loadExterns(files: readonly InputFile[]): Promise<Map<string, ExternMetadata>> {
     const moduleExternLoader = new ModuleExternLoader();
-    const externs = new Map<string, ESExpr>();
+    const externs = new Map<string, ExternMetadata>();
 
     for(const file of files) {
         const jsFile = await readJSFile(file);
@@ -20,8 +20,21 @@ export async function loadExterns(files: readonly InputFile[]): Promise<Map<stri
             }
 
             const encoded = JsExtern.codec.encode(extern.extern);
+            let metadata: ExternMetadata;
+            switch(extern.extern.$type) {
+                case "js-function":
+                    metadata = {
+                        $type: "extern-function",
+                        name: extern.name,
+                        implementation: encoded,
+                    }
+                    break;
 
-            externs.set(extern.name, encoded);
+                default:
+                    ensureExhaustive(extern.extern.$type);
+            }
+
+            externs.set(extern.name, metadata);
         }
     }
 
@@ -74,12 +87,26 @@ class ModuleExternLoader {
                     this.addImport(stmt);
                     break;
 
-                case "ExportNamedDeclaration":
-                    yield this.addExport(stmt);
+                case "ExpressionStatement":
+                {
+                    const expr = stmt.expression;
+                    if(expr.type !== "CallExpression" || expr.callee.type !== "Identifier" || expr.callee.name !== "externFunction") {
+                        throw new Error("Externs must be defined by calling an extern factory function.");
+                    }
+
+                    switch(expr.callee.name) {
+                        case "externFunction":
+                            yield this.addExternFunctionCall(expr);
+                            break;
+
+                        default:
+                            throw new Error("Unknown extern factory function: " + expr.callee.name + ".")
+                    }
                     break;
+                }
 
                 default:
-                    throw new Error("Only import and export statements are allowed in module used for externs.");
+                    throw new Error("Only import statements and externFunction calls are allowed in module used for externs.");
             }
         }
     }
@@ -132,14 +159,38 @@ class ModuleExternLoader {
         }
     }
 
-    private addExport(exportDecl: ReadonlyDeep<estree.ExportNamedDeclaration>): NamedExtern {
-        if(!exportDecl.declaration || exportDecl.declaration.type !== "FunctionDeclaration") {
-            throw new Error("Externs must be defined by exporting a function definition");
+    private addExternFunctionCall(expr: ReadonlyDeep<estree.CallExpression>): NamedExtern {
+        if(expr.arguments.length !== 2) {
+            throw new Error("externFunction must be called with a name and function.");
         }
 
+        const nameArg = expr.arguments[0]!;
+        const funcArg = expr.arguments[1]!;
+
+        if(nameArg.type !== "Literal" || typeof nameArg.value !== "string") {
+            throw new Error("externFunction name must be a string literal.");
+        }
+
+        if(funcArg.type !== "FunctionExpression") {
+            throw new Error("externFunction implementation must be a function expression.");
+        }
+
+        const funcDecl = this.functionExpressionToDeclaration(funcArg);
+
         return {
-            name: exportDecl.declaration.id.name,
-            extern: this.buildExternFunction(exportDecl.declaration),
+            name: nameArg.value,
+            extern: this.buildExternFunction(funcDecl),
+        };
+    }
+
+    private functionExpressionToDeclaration(func: ReadonlyDeep<estree.FunctionExpression>): ReadonlyDeep<estree.FunctionDeclaration> {
+        return {
+            type: "FunctionDeclaration",
+            id: func.id ?? { type: "Identifier", name: "__argonExtern" },
+            params: func.params,
+            body: func.body,
+            generator: func.generator,
+            async: func.async,
         };
     }
 
@@ -576,4 +627,3 @@ class FreeVariableScanner extends VariableScannerBase {
     // Nop since we ignore declarations.
     override scanDeclaredVars(_node: estree.Pattern, _kind: "let" | "const" | "var"): void {}
 }
-

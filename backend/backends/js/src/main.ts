@@ -4,7 +4,7 @@ import { open, type FileHandle } from "node:fs/promises";
 import { basename } from "node:path";
 import { Command, type CommandUnknownOpts } from "@commander-js/extra-typings";
 import { writeExprs } from "@argon-lang/esexpr/binary_format";
-import type { InputFile, InputStream, JSPlatformMetadata } from "@argon-lang/js-backend-api";
+import type { InputFile, InputStream } from "@argon-lang/js-backend-api";
 import { PlatformMetadataResult } from "@argon-lang/js-backend-api/metadata.js";
 import { loadMetadata } from "./index.js";
 
@@ -37,19 +37,19 @@ class LocalInputStream implements InputStream {
 async function platformMetadataJs(
     options: {
         readonly packageName?: string | undefined;
-        readonly externFile: readonly string[];
+        readonly extern: readonly string[];
         readonly outputFile: string;
     },
 ): Promise<void> {
     const metadata = await loadMetadata({
         packageName: options.packageName,
-        externFiles: options.externFile.map(file => new LocalInputFile(file)),
+        externFiles: options.extern.map(file => new LocalInputFile(file)),
     });
 
     await writePlatformMetadata(metadata, options.outputFile);
 }
 
-async function writePlatformMetadata(metadata: JSPlatformMetadata, outputFile: string): Promise<void> {
+async function writePlatformMetadata(metadata: PlatformMetadataResult, outputFile: string): Promise<void> {
     const expr = PlatformMetadataResult.codec.encode({
         ...metadata,
         platform: "js",
@@ -99,7 +99,7 @@ program
     .command("js")
     .description("Load platform metadata for JavaScript")
     .option("--package-name <name>", "NPM package name for the generated tube")
-    .option("--extern-file <file>", "JavaScript extern file", collect, [])
+    .option("--extern <file>", "JavaScript extern file", collect, [])
     .requiredOption("-o, --output-file <file>", "Output platform metadata file")
     .action(platformMetadataJs);
 

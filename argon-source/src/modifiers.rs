@@ -1,9 +1,9 @@
+use alloc::string::ToString;
 use argon_compiler::Context;
 use argon_compiler::access::AccessModifierGlobal;
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::CompileError;
-use alloc::string::ToString;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
 use mitsein::slice1;

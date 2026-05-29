@@ -1,4 +1,5 @@
 use crate::function::SourceFunction;
+use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::access::{AccessModifierGlobal, AccessToken};
 use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
 use argon_compiler::scope::{Lookup, OverloadLookup, Overloadable, Scope};
@@ -10,7 +11,6 @@ use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
 use argon_util::sync::{OnceLock, ThreadSafe};
-use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
 use core::{iter, mem};
 use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
@@ -308,7 +308,7 @@ impl GlobalScopeBuilder {
         let Some(module) = self.resolve_module(&tube, module_path, location) else {
             return;
         };
-        
+
         let export_groups = module.export_groups();
         let Some(exports) = export_groups.get(export_name) else {
             return;

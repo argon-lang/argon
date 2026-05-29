@@ -128,54 +128,17 @@ run_backend() {
 }
 
 describe_command() {
-    fallback="$1"
-    shift
-
-    binary="$(binary_path 2>/dev/null)" || {
-        printf '%s\n' "$fallback"
-        return
-    }
-    description="$("$binary" help-description "$@" 2>/dev/null)" && [ -n "$description" ] && {
-        printf '%s\n' "$description"
-        return
-    }
-
-    printf '%s\n' "$fallback"
+    printf '%s\n' "$("$binary" help-description "$@" 2>/dev/null)"
 }
 
 describe_platform_metadata() {
     cli="$dist_dir/backend/js/lib/main.js"
-
-    if [ -f "$cli" ]; then
-        description="$(node "$cli" help-description platform-metadata 2>/dev/null)" && [ -n "$description" ] && {
-            printf '%s\n' "$description"
-            return
-        }
-    fi
-
-    printf '%s\n' 'Load platform-specific metadata'
+    printf '%s\n' "$(node "$cli" help-description platform-metadata 2>/dev/null)"
 }
 
 describe_platform_metadata_backend() {
     backend="$1"
-
-    case "$backend" in
-        js)
-            cli="$dist_dir/backend/js/lib/main.js"
-
-            if [ -f "$cli" ]; then
-                description="$(node "$cli" help-description platform-metadata js 2>/dev/null)" && [ -n "$description" ] && {
-                    printf '%s\n' "$description"
-                    return
-                }
-            fi
-
-            printf '%s\n' 'Load platform metadata for JavaScript'
-            ;;
-        *)
-            printf '%s\n' "Load platform metadata for $backend"
-            ;;
-    esac
+    dispatch_platform_metadata "$backend" help-description platform-metadata "$backend"
 }
 
 all_backends() {

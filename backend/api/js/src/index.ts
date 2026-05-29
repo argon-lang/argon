@@ -1,5 +1,3 @@
-import type {ESExpr} from "@argon-lang/esexpr";
-
 export * from "./js-platform-metadata.js";
 
 export interface InputFile {
@@ -29,11 +27,6 @@ export interface OutputStream {
 export interface JSPlatformMetadataOptions {
     readonly packageName?: string | undefined;
     readonly externFiles: readonly InputFile[];
-}
-
-export interface JSPlatformMetadata {
-    readonly tubeMetadata: ESExpr;
-    readonly externs: Map<string, ESExpr>;
 }
 
 export interface JSCodeGenOptions {

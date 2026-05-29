@@ -1,6 +1,7 @@
 use crate::modifiers::{ERASURE_MODE, ModifierParser};
 use crate::module::GlobalScope;
 use crate::type_checker::type_check_type_expr;
+use alloc::vec::Vec;
 use argon_compiler::access::AccessToken;
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
@@ -8,7 +9,6 @@ use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{ErasureMode, Expr, ExpressionOwner};
 use argon_parser::ast;
 use argon_util::CompileError;
-use alloc::vec::Vec;
 use parse18_runtime::WithLocation;
 
 pub struct SignatureParser<'a> {

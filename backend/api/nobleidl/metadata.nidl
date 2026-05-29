@@ -11,7 +11,14 @@ record platform-metadata-result {
     tube-metadata: esexpr;
 
     @esexpr:(keyword)
-    externs: dict[esexpr];
+    externs: dict[extern];
 }
 
+@esexpr:(derive-codec)
+enum extern {
+    extern-function {
+        name: string;
+        implementation: esexpr;
+    },
+}
 

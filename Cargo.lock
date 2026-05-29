@@ -161,8 +161,10 @@ dependencies = [
  "embedded-io",
  "esexpr",
  "esexpr-binary",
+ "hashbrown 0.17.1",
  "noble-idl-compiler-rust",
  "noble-idl-runtime",
+ "parse18-runtime",
  "walkdir",
 ]
 
@@ -723,6 +725,7 @@ dependencies = [
  "esexpr",
  "esexpr-binary",
  "half",
+ "hashbrown 0.16.1",
  "itertools",
  "noble-idl-api",
  "noble-idl-compiler",

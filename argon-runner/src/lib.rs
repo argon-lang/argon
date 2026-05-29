@@ -4,12 +4,13 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+mod backend;
 mod context;
 #[cfg(feature = "std")]
 pub mod local_io;
 mod tubes;
-mod backend;
 
+use crate::backend::metadata::load_platform_metadata;
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use alloc::{sync::Arc, vec::Vec};
@@ -21,10 +22,11 @@ use embedded_io::{Write, WriteFmtError};
 use esexpr::ESExprCodec;
 use esexpr_binary::{ExprGeneratorSync, GeneratorError};
 
-pub struct CompileOptions<I, R, O> {
+pub struct CompileOptions<ID, IF, O> {
     pub tube_name: TubeName,
-    pub input_dirs: Vec<I>,
-    pub referenced_tubes: Vec<R>,
+    pub input_dirs: Vec<ID>,
+    pub referenced_tubes: Vec<IF>,
+    pub platform_metadata: Vec<IF>,
     pub output_file: O,
 }
 
@@ -39,15 +41,20 @@ pub struct JsCodeGenOptions<I, O> {
     pub output_dir: O,
 }
 
-pub fn compile<I, R, O, W>(options: CompileOptions<I, R, O>, error_output: &mut W) -> bool
+pub fn compile<ID, IF, O, W>(options: CompileOptions<ID, IF, O>, error_output: &mut W) -> bool
 where
-    I: InputDirectory + ThreadSafe,
-    I::File: ThreadSafe,
-    R: InputFile + ThreadSafe,
+    ID: InputDirectory + ThreadSafe,
+    ID::File: ThreadSafe,
+    IF: InputFile + ThreadSafe,
     O: OutputFile,
     W: Write,
 {
-    let context = Arc::new(RunnerContext::new());
+    let mut context = RunnerContext::new();
+    for input_file in options.platform_metadata {
+        load_platform_metadata(&mut context, input_file);
+    }
+
+    let context = Arc::new(context);
     let tube_collection = TubeCollectionBuilder::new(context.clone());
 
     let referenced_tube_names = options

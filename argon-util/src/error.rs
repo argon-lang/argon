@@ -44,6 +44,10 @@ pub enum ErrorCode {
     UnknownTube = 0x001E,
     InvalidBuiltin = 0x001F,
     CircularReexport = 0x0020,
+    DuplicatePlatform = 0x0021,
+    PlatformIndependentExtern = 0x0022,
+    UnknownPlatformExtern = 0x0023,
+    PlatformExternNotFunction = 0x0024,
 }
 
 impl ErrorCode {
@@ -326,6 +330,57 @@ impl CompileError {
             format!(
                 "Circular reexport involving module: {}",
                 module_path.as_ref()
+            ),
+            Some(loc),
+        )
+    }
+
+    pub fn duplicate_platform(name: String) -> Self {
+        Self::new(
+            ErrorCode::DuplicatePlatform,
+            format!("Duplicate platform: {}", name),
+            None,
+        )
+    }
+
+    pub fn platform_independent_extern(loc: Location, name: impl AsRef<str>) -> Self {
+        Self::new(
+            ErrorCode::PlatformIndependentExtern,
+            format!(
+                "Extern function {} is not available without platform metadata",
+                name.as_ref()
+            ),
+            Some(loc),
+        )
+    }
+
+    pub fn unknown_platform_extern(
+        loc: Location,
+        platform: impl AsRef<str>,
+        name: impl AsRef<str>,
+    ) -> Self {
+        Self::new(
+            ErrorCode::UnknownPlatformExtern,
+            format!(
+                "Unknown extern {} for platform {}",
+                name.as_ref(),
+                platform.as_ref()
+            ),
+            Some(loc),
+        )
+    }
+
+    pub fn platform_extern_not_function(
+        loc: Location,
+        platform: impl AsRef<str>,
+        name: impl AsRef<str>,
+    ) -> Self {
+        Self::new(
+            ErrorCode::PlatformExternNotFunction,
+            format!(
+                "Extern {} for platform {} is not a function",
+                name.as_ref(),
+                platform.as_ref()
             ),
             Some(loc),
         )

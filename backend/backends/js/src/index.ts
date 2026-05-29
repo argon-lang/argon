@@ -4,7 +4,8 @@ import { emitTube, type EmitOptions } from "./emitter.js";
 import { readIRFile } from "./ir-reader.js";
 import { getModuleOutputFileParts, getModulePathExternalUrl, getModulePathUrl, tubePackageName } from "./util.js";
 import type { PackageJson, ReadonlyDeep } from "type-fest";
-import {type JSPlatformMetadata, type JSPlatformMetadataOptions, JsPlatformTubeMetadata} from "@argon-lang/js-backend-api";
+import {type JSPlatformMetadataOptions, JsPlatformTubeMetadata} from "@argon-lang/js-backend-api";
+import type { PlatformMetadataResult } from "@argon-lang/js-backend-api/metadata.js";
 import type {JSCodeGenOptions} from "@argon-lang/js-backend-api";
 
 function emitPackageJson(options: EmitOptions): ReadonlyDeep<PackageJson> {
@@ -26,7 +27,7 @@ function emitPackageJson(options: EmitOptions): ReadonlyDeep<PackageJson> {
 }
 
 
-export async function loadMetadata(options: JSPlatformMetadataOptions): Promise<JSPlatformMetadata> {
+export async function loadMetadata(options: JSPlatformMetadataOptions): Promise<PlatformMetadataResult> {
     const tubeMetadataObj: JsPlatformTubeMetadata = {
         packageName: options.packageName,
     };
@@ -36,6 +37,7 @@ export async function loadMetadata(options: JSPlatformMetadataOptions): Promise<
 
     const externs = await loadExterns(options.externFiles);
     return {
+        platform: "js",
         tubeMetadata,
         externs,
     };
