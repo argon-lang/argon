@@ -57,6 +57,7 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
 pub enum Expr<EC: ExprContext + ?Sized> {
     Error,
     Hole(EC::Hole),
+    And(Box<Expr<EC>>, Box<Expr<EC>>),
     As {
         value: Box<Expr<EC>>,
         value_type: Box<Expr<EC>>,
@@ -130,6 +131,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Next {
         label: Option<Infallible>, // TODO: Use a proper label type
     },
+    Or(Box<Expr<EC>>, Box<Expr<EC>>),
     Raise {
         ex: Box<Expr<EC>>,
     },
@@ -409,10 +411,10 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
         }
     }
 
-    pub fn var_type(&self) -> Expr<EC> {
+    pub fn var_type(&self) -> &Expr<EC> {
         match self {
-            Variable::Local(variable) => variable.var_type.clone(),
-            Variable::Parameter(variable) => variable.var_type.clone(),
+            Variable::Local(variable) => &variable.var_type,
+            Variable::Parameter(variable) => &variable.var_type,
         }
     }
 

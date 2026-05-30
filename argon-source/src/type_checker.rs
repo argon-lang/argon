@@ -861,7 +861,7 @@ impl<'a> TypeChecker<'a> {
         v: Variable<TypeCheckExprContext>,
         args: VecDeque<ArgumentInfo<'a>>,
     ) -> TypeInferResult<'a> {
-        let t = v.var_type();
+        let t = v.var_type().clone();
         let expr = Expr::Variable(v);
         self.infer_function_object_call(expr, t, args)
     }
