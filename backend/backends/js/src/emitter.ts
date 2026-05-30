@@ -1535,7 +1535,6 @@ class BlockEmitter extends EmitterBase {
                         break;
 
                     case "int-add":
-                    case "string-concat":
                         binary("+");
                         break;
 
@@ -1566,6 +1565,34 @@ class BlockEmitter extends EmitterBase {
                     case "int-bit-shift-right":
                         binary(">>");
                         break;
+
+                    case "string-concat":
+                    {
+                        let dest = insn.registers[0];
+                        if(dest === undefined) {
+                            throw new Error("string-concat must have a destination");
+                        }
+
+                        let args = insn.registers.slice(1);
+
+                        let expr: estree.Expression =
+                            args.length === 0
+                                ? {
+                                    type: "Literal",
+                                    value: "",
+                                }
+                                : args
+                                    .map<estree.Expression>(reg => this.getReg(reg))
+                                    .reduce((left, right) => ({
+                                        type: "BinaryExpression",
+                                        operator: "+",
+                                        left,
+                                        right,
+                                    }));
+
+                        assign(dest, expr);
+                        break;
+                    }
 
                     case "int-eq":
                     case "string-eq":
