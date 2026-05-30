@@ -368,8 +368,24 @@ impl<'a> TypeChecker<'a> {
             ast::Expr::BinaryOperation { a, op, b } => {
                 let op_id = match op.value {
                     ast::BinaryOperator::Assign => todo!(),
-                    ast::BinaryOperator::LogicalOr => todo!(),
-                    ast::BinaryOperator::LogicalAnd => todo!(),
+
+                    ast::BinaryOperator::LogicalOr => {
+                        let a = self.check(a, &Expr::bool_type());
+                        let b = self.check(b, &Expr::bool_type());
+                        return TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::Or(Box::new(a), Box::new(b)),
+                            inferred_type: Expr::bool_type(),
+                        });
+                    }
+                    ast::BinaryOperator::LogicalAnd => {
+                        let a = self.check(a, &Expr::bool_type());
+                        let b = self.check(b, &Expr::bool_type());
+                        return TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::And(Box::new(a), Box::new(b)),
+                            inferred_type: Expr::bool_type(),
+                        });
+                    }
+
                     ast::BinaryOperator::PropEqual => todo!(),
                     ast::BinaryOperator::PropDisjunction => todo!(),
                     ast::BinaryOperator::PropConjunction => todo!(),
@@ -1287,6 +1303,9 @@ fn unify(a: &Expr<TypeCheckExprContext>, b: &Expr<TypeCheckExprContext>) -> bool
     match (a, b) {
         (Expr::Error, _) | (_, Expr::Error) => true,
         (Expr::Hole(a), Expr::Hole(b)) => a == b,
+        (Expr::And(a1, b1), Expr::And(a2, b2)) | (Expr::Or(a1, b1), Expr::Or(a2, b2)) => {
+            unify(a1, a2) && unify(b1, b2)
+        }
         (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
         (
             Expr::Builtin {

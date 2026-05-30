@@ -46,6 +46,7 @@ where
     match expr {
         Expr::Error => true,
         Expr::Hole(hole) => scanner.scan_hole(hole),
+        Expr::And(a, b) => scanner.scan(a) && scanner.scan(b),
         Expr::As { value, value_type } => scanner.scan(value) && scanner.scan(value_type),
         Expr::Assert { t } => scanner.scan(t),
         Expr::Finally {
@@ -104,6 +105,7 @@ where
         }
         Expr::NewTraitObject { .. } => true,
         Expr::Next { .. } => true,
+        Expr::Or(a, b) => scanner.scan(a) && scanner.scan(b),
         Expr::Raise { ex } => scanner.scan(ex),
         Expr::RecordLiteral { fields, .. } => fields
             .iter()
@@ -148,6 +150,7 @@ where
     match expr {
         Expr::Error => true,
         Expr::Hole(hole) => scanner.scan_hole(hole),
+        Expr::And(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
         Expr::As { value, value_type } => {
             scanner.scan(value.as_mut()) && scanner.scan(value_type.as_mut())
         }
@@ -210,6 +213,7 @@ where
         }
         Expr::NewTraitObject { .. } => true,
         Expr::Next { .. } => true,
+        Expr::Or(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
         Expr::Raise { ex } => scanner.scan(ex.as_mut()),
         Expr::RecordLiteral { fields, .. } => fields
             .iter_mut()

@@ -39,6 +39,7 @@ where
     match expr {
         Expr::Error => Expr::Error,
         Expr::Hole(hole) => shifter.shift_hole(hole),
+        Expr::And(a, b) => Expr::And(Box::new(shifter.shift(*a)), Box::new(shifter.shift(*b))),
         Expr::As { value, value_type } => Expr::As {
             value: Box::new(shifter.shift(*value)),
             value_type: Box::new(shifter.shift(*value_type)),
@@ -151,6 +152,7 @@ where
         },
         Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },
         Expr::Next { label } => Expr::Next { label },
+        Expr::Or(a, b) => Expr::Or(Box::new(shifter.shift(*a)), Box::new(shifter.shift(*b))),
         Expr::Raise { ex } => Expr::Raise {
             ex: Box::new(shifter.shift(*ex)),
         },

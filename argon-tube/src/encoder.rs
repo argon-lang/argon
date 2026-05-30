@@ -401,6 +401,10 @@ impl TubeEncoder {
     ) -> Result<tf::Expr, InternalCompilerError> {
         Ok(match expr {
             Expr::Error => tf::Expr::Error {},
+            Expr::And(a, b) => tf::Expr::And {
+                a: Box::new(self.emit_expr(a)?),
+                b: Box::new(self.emit_expr(b)?),
+            },
             Expr::BoolLiteral(value) => tf::Expr::BoolLiteral { value: *value },
             Expr::IntLiteral(i) => tf::Expr::IntLiteral { i: i.clone() },
             Expr::StringLiteral(s) => tf::Expr::StringLiteral { s: s.to_string() },
@@ -489,6 +493,10 @@ impl TubeEncoder {
                     .as_ref()
                     .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
                     .transpose()?,
+            },
+            Expr::Or(a, b) => tf::Expr::Or {
+                a: Box::new(self.emit_expr(a)?),
+                b: Box::new(self.emit_expr(b)?),
             },
             Expr::Variable(variable) => tf::Expr::Variable {
                 v: Box::new(self.emit_var(variable)?),
