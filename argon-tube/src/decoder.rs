@@ -2,6 +2,7 @@ use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
+use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, DefaultExprContext, EffectInfo,
@@ -652,8 +653,13 @@ impl TubeDecoder {
                 FunctionImplementation::Expr(self.decode_expr(*body))
             }
             tf::FunctionImplementation::Extern { externs } => {
-                let _ = externs;
-                todo!()
+                FunctionImplementation::Extern(PlatformExtern {
+                    externs: externs
+                        .externs
+                        .into_iter()
+                        .map(|(platform, expr)| (platform, expr.into_inner()))
+                        .collect(),
+                })
             }
         }
     }

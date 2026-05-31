@@ -202,7 +202,7 @@ impl VmEncoder {
                         import: Box::new(import),
                     }
                 } else {
-                    let signature = self.emit_function_signature(
+                    let mut signature = self.emit_function_signature(
                         &ExpressionOwner::Function(function.clone()),
                         &function.clone().signature(),
                     )?;
@@ -212,8 +212,8 @@ impl VmEncoder {
                         .map(|implementation| {
                             self.emit_function_implementation(
                                 &implementation,
-                                &signature,
-                                &import_specifier,
+                                &mut signature,
+                                import_specifier,
                             )
                         })
                         .transpose()?
@@ -416,8 +416,8 @@ impl VmEncoder {
     fn emit_function_implementation(
         &mut self,
         implementation: &FunctionImplementation,
-        signature: &FunctionSignatureWithMapping,
-        import_specifier: &ImportSpecifier,
+        signature: &mut FunctionSignatureWithMapping,
+        import_specifier: ImportSpecifier,
     ) -> Result<vf::FunctionImplementation, InternalCompilerError> {
         Ok(match implementation {
             FunctionImplementation::Expr(expr) => vf::FunctionImplementation::VmIr {
@@ -438,18 +438,18 @@ impl VmEncoder {
     fn emit_function_body(
         &mut self,
         expr: &Expr<DefaultExprContext>,
-        signature: &FunctionSignatureWithMapping,
-        import_specifier: &ImportSpecifier,
+        signature: &mut FunctionSignatureWithMapping,
+        import_specifier: ImportSpecifier,
     ) -> Result<vf::FunctionBody, InternalCompilerError> {
         let var_offset = (if signature.has_instance_param { 1 } else { 0 }) + signature.sig.parameters.len();
 
         let mut emitter = ExprEmitter {
             encoder: self,
             var_offset,
-            known_vars: HashMap::new(),
+            known_vars: mem::take(&mut signature.known_vars),
             declared_vars: Vec::new(),
             instructions: Vec::new(),
-            parent_import_specifier: import_specifier.clone(),
+            parent_import_specifier: import_specifier,
             captured_vars: HashSet::new(),
             loop_ids: HashMap::new(),
         };
@@ -503,6 +503,7 @@ struct FunctionSignatureWithMapping {
     sig: vf::FunctionSignature,
     arg_consumers: Vec<ArgConsumer>,
     has_instance_param: bool,
+    known_vars: HashMap<Variable<DefaultExprContext>, VariableRealization>,
 }
 
 #[derive(Clone, Copy)]
@@ -596,13 +597,49 @@ impl<'a> FunctionSignatureBuilder<'a> {
     }
 
     fn finish(
-        self,
+        mut self,
         return_type: &Expr<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let mut token_emitter = TokenEmitter {
             encoder: self.encoder,
             token_params: HashMap::new(),
         };
+
+
+        let reg_offset = (if self.instance_param.is_some() { BigUint::from(1u32) } else { BigUint::ZERO }) + self.parameters.len();
+
+        let mut known_vars = HashMap::new();
+
+        known_vars.extend(
+            self.instance_type_params
+                .into_iter()
+                .map(|(v, t)| (v, VariableRealization::Tok(t)))
+        );
+
+        known_vars.extend(
+            self.instance_param
+                .as_ref()
+                .map(|inst| (inst.clone(), VariableRealization::Reg(vf::RegisterId { id: BigUint::ZERO })))
+        );
+
+        known_vars.extend(
+            self.param_var_mapping
+                .into_iter()
+                .map(|(param, mapped_var)| {
+                    let r = vf::RegisterId {
+                        id: &reg_offset + mapped_var.index
+                    };
+
+                    let realization = if mapped_var.captured_ref {
+                        VariableRealization::RegRefCell(r)
+                    }
+                    else {
+                        VariableRealization::Reg(r)
+                    };
+
+                    (param, realization)
+                })
+        );
 
         Ok(FunctionSignatureWithMapping {
             sig: vf::FunctionSignature {
@@ -612,6 +649,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
             },
             arg_consumers: self.arg_consumers,
             has_instance_param: false,
+            known_vars,
         })
     }
 }
@@ -1261,7 +1299,7 @@ impl <'a> ExprEmitter<'a> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum VariableRealization {
     Reg(vf::RegisterId),
     RegRefCell(vf::RegisterId),
