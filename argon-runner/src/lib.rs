@@ -13,7 +13,7 @@ mod tubes;
 use crate::backend::metadata::load_platform_metadata;
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
 use argon_io::{EmbeddedIoWrite, InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
@@ -30,9 +30,10 @@ pub struct CompileOptions<ID, IF, O> {
     pub output_file: O,
 }
 
-pub struct GenIrOptions<I, R, O> {
-    pub input_tube: I,
-    pub referenced_tubes: Vec<R>,
+pub struct GenIrOptions<IF, O> {
+    pub input_tube: IF,
+    pub referenced_tubes: Vec<IF>,
+    pub platform: String,
     pub output_file: O,
 }
 
@@ -150,13 +151,59 @@ where
     Ok(())
 }
 
-pub fn gen_ir<I, R, O>(_options: GenIrOptions<I, R, O>)
+pub fn gen_ir<IF, O, W>(options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
 where
-    I: InputFile,
-    R: InputFile,
+    IF: InputFile + ThreadSafe,
     O: OutputFile,
+    W: Write,
 {
-    todo!("generate Argon VM IR from a tube")
+    let context = RunnerContext::new();
+    let context = Arc::new(context);
+    let tube_collection = TubeCollectionBuilder::new(context.clone());
+
+    options.referenced_tubes.par_iter().for_each(|ref_tube| {
+        load_referenced_tube(context.clone(), &tube_collection, ref_tube);
+    });
+
+    'errors: {
+        let Some(tube) =
+            load_referenced_tube(context.clone(), &tube_collection, &options.input_tube)
+        else {
+            break 'errors;
+        };
+
+        if context.runner_reporter().has_errors() {
+            break 'errors;
+        }
+
+        let out_file = match options.output_file.open() {
+            Ok(file) => file,
+            Err(e) => {
+                context.reporter().report_error(e);
+                break 'errors;
+            }
+        };
+        let mut out_file = EmbeddedIoWrite::new(out_file);
+
+        match argon_tube::vm::encode_vm_tube(&mut out_file, tube, &options.platform) {
+            Ok(_) => {}
+            Err(e) => {
+                context.reporter().report_error(e);
+                break 'errors;
+            }
+        }
+
+        if context.runner_reporter().has_errors() {
+            break 'errors;
+        }
+
+        let _ = writeln!(error_output, "Compilation succeeded.");
+        return true;
+    }
+
+    let _ = context.runner_reporter().print_error_messages(error_output);
+    let _ = delete_output_file(&options.output_file, error_output);
+    false
 }
 
 pub fn codegen_js<I, O>(_options: JsCodeGenOptions<I, O>)

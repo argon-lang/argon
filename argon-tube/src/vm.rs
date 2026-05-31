@@ -11,15 +11,36 @@ use argon_expr::{ErasureMode, Expr, ExprScannerMut, ExpressionOwner, FunctionArg
 use argon_format::vm as vf;
 use argon_util::{Fuel, InternalCompilerError, UniqueIdentifier};
 use core::mem;
-use std::vec;
-use esexpr::ESExprStatic;
+use alloc::vec;
+use esexpr::{ESExprStatic, ESExprCodec};
+use esexpr_binary::{ExprGenerator, ExprGeneratorSync, GeneratorError};
+use esexpr_binary::io::Write;
 use hashbrown::{HashMap, HashSet};
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 
 use crate::ids::TubeIdProvider;
 
-pub fn encode_vm_tube(
+pub fn encode_vm_tube<W: Write<InternalCompilerError>>(
+    out: &mut W,
+    tube: Arc<Tube>,
+    platform_id: impl Into<alloc::string::String>,
+) -> Result<(), InternalCompilerError> {
+    let mut generator = ExprGenerator::new(out);
+    for entry in encode_vm_tube_stream(tube, platform_id) {
+        let entry = entry?;
+
+        let expr = entry.encode_esexpr();
+
+        match generator.generate(&expr) {
+            Ok(()) => {},
+            Err(GeneratorError::IOError(err)) => Err(err)?,
+        }
+    }
+    Ok(())
+}
+
+pub fn encode_vm_tube_stream(
     tube: Arc<Tube>,
     platform_id: impl Into<alloc::string::String>,
 ) -> impl Iterator<Item = Result<vf::TubeFileEntry, InternalCompilerError>> {
