@@ -523,7 +523,7 @@ struct FunctionSignatureBuilder<'a> {
 
     instance_param: Option<Variable<DefaultExprContext>>,
     type_param_mapping: HashMap<Variable<DefaultExprContext>, usize>,
-    param_var_mapping: HashMap<Variable<DefaultExprContext>, MappedParamVar>
+    param_var_mapping: HashMap<Variable<DefaultExprContext>, MappedParamVar>,
 }
 
 impl<'a> FunctionSignatureBuilder<'a> {
@@ -606,7 +606,8 @@ impl<'a> FunctionSignatureBuilder<'a> {
         };
 
 
-        let reg_offset = (if self.instance_param.is_some() { BigUint::from(1u32) } else { BigUint::ZERO }) + self.parameters.len();
+        let reg_offset = if self.instance_param.is_some() { BigUint::from(1u32) } else { BigUint::ZERO };
+
 
         let mut known_vars = HashMap::new();
 
@@ -1438,15 +1439,22 @@ impl ExprOutput for AnyRegister {
     }
 
     fn copy_from(self, expr_emitter: &mut ExprEmitter<'_>, r: vf::RegisterId) -> EmitResult<Self::ResultType> {
-        let v = &expr_emitter.declared_vars[r.id.to_usize().expect("register id is not a usize")];
-        let t = (*v.r#type).clone();
+        if &r.id < &BigUint::from(expr_emitter.var_offset) {
+            // Skip copy because it is a parameter.
+            Ok(r)
+        }
+        else {
+            let v = &expr_emitter.declared_vars[(&r.id - expr_emitter.var_offset).to_usize().expect("register id is not a usize")];
+            let t = (*v.r#type).clone();
 
-        let dest = expr_emitter.add_var(t);
-        expr_emitter.emit(vf::Instruction::Move {
-            dest: Box::new(dest.clone()),
-            src: Box::new(r),
-        });
-        Ok(dest)
+            let dest = expr_emitter.add_var(t);
+            expr_emitter.emit(vf::Instruction::Move {
+                dest: Box::new(dest.clone()),
+                src: Box::new(r),
+            });
+            Ok(dest)
+        }
+
     }
 
     fn output_register(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputRegisterBuilder<Self>> {
