@@ -10,7 +10,7 @@ use argon_compiler::{
     ModuleExportEntry, ModulePath, Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata,
     TubeName, UnaryOperatorIdentifier, Unload,
 };
-use argon_expr::{FunctionArgument, LocalVariable, ParameterVariable, Variable};
+use argon_expr::{LocalVariable, ParameterVariable, Variable};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
 use argon_util::sync::{OnceLock, RwLock, rwlock_read, rwlock_write};
@@ -689,10 +689,7 @@ impl TubeDecoder {
                 function: self.function(id),
                 arguments: args
                     .into_iter()
-                    .map(|arg| FunctionArgument {
-                        list_type: FunctionParameterListType::NormalList,
-                        arg: self.decode_expr(*arg),
-                    })
+                    .map(|arg| self.decode_expr(*arg))
                     .collect(),
             },
             tf::Expr::FunctionObjectCall { f, a } => Expr::FunctionObjectCall {

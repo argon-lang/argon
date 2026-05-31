@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext, FunctionArgument, MatchCase, RecordFieldLiteral, Variable};
+use crate::{Expr, ExprContext, MatchCase, RecordFieldLiteral, Variable};
 use alloc::sync::Arc;
 
 mod normalizer;
@@ -47,8 +47,6 @@ where
         Expr::Error => true,
         Expr::Hole(hole) => scanner.scan_hole(hole),
         Expr::And(a, b) => scanner.scan(a) && scanner.scan(b),
-        Expr::As { value, value_type } => scanner.scan(value) && scanner.scan(value_type),
-        Expr::Assert { t } => scanner.scan(t),
         Expr::Finally {
             block_body,
             finally_body: ensures_body,
@@ -56,12 +54,11 @@ where
         Expr::BoolLiteral(_) => true,
         Expr::Break { .. } => true,
         Expr::Builtin { arguments, .. } => arguments.iter().all(|argument| scanner.scan(argument)),
-        Expr::Dot { o, .. } => scanner.scan(o),
         Expr::EnumType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::FunctionLiteral { body, .. } => scanner.scan(body),
         Expr::FunctionCall { arguments, .. } => arguments
             .iter()
-            .all(|argument: &FunctionArgument<S::EC>| scanner.scan(&argument.arg)),
+            .all(|argument| scanner.scan(argument)),
         Expr::FunctionObjectCall { function, argument } => {
             scanner.scan(function) && scanner.scan(argument)
         }
@@ -101,7 +98,7 @@ where
             scanner.scan(receiver)
                 && arguments
                     .iter()
-                    .all(|argument: &FunctionArgument<S::EC>| scanner.scan(&argument.arg))
+                    .all(|argument| scanner.scan(argument))
         }
         Expr::NewTraitObject { .. } => true,
         Expr::Next { .. } => true,
@@ -151,10 +148,6 @@ where
         Expr::Error => true,
         Expr::Hole(hole) => scanner.scan_hole(hole),
         Expr::And(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
-        Expr::As { value, value_type } => {
-            scanner.scan(value.as_mut()) && scanner.scan(value_type.as_mut())
-        }
-        Expr::Assert { t } => scanner.scan(t.as_mut()),
         Expr::Finally {
             block_body,
             finally_body: ensures_body,
@@ -164,12 +157,11 @@ where
         Expr::Builtin { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
-        Expr::Dot { o, .. } => scanner.scan(o.as_mut()),
         Expr::EnumType(_, arguments) => arguments.iter_mut().all(|argument| scanner.scan(argument)),
         Expr::FunctionLiteral { body, .. } => scanner.scan(body.as_mut()),
         Expr::FunctionCall { arguments, .. } => arguments
             .iter_mut()
-            .all(|argument: &mut FunctionArgument<S::EC>| scanner.scan(&mut argument.arg)),
+            .all(|argument| scanner.scan(argument)),
         Expr::FunctionObjectCall { function, argument } => {
             scanner.scan(function.as_mut()) && scanner.scan(argument.as_mut())
         }
@@ -209,7 +201,7 @@ where
             scanner.scan(receiver.as_mut())
                 && arguments
                     .iter_mut()
-                    .all(|argument: &mut FunctionArgument<S::EC>| scanner.scan(&mut argument.arg))
+                    .all(|argument| scanner.scan(argument))
         }
         Expr::NewTraitObject { .. } => true,
         Expr::Next { .. } => true,

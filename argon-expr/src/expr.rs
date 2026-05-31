@@ -1,5 +1,4 @@
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
-use argon_parser::ast::FunctionParameterListType;
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
 use core::convert::Infallible;
 use core::fmt::Debug;
@@ -58,13 +57,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Error,
     Hole(EC::Hole),
     And(Box<Expr<EC>>, Box<Expr<EC>>),
-    As {
-        value: Box<Expr<EC>>,
-        value_type: Box<Expr<EC>>,
-    },
-    Assert {
-        t: Box<Expr<EC>>,
-    },
     BoolLiteral(bool),
     Break {
         label: Option<Infallible>, // TODO: Use a proper label type
@@ -72,10 +64,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Builtin {
         builtin: Builtin,
         arguments: Vec<Expr<EC>>,
-    },
-    Dot {
-        o: Box<Expr<EC>>,
-        member: Identifier,
     },
     EnumType(EC::Enum, Vec<Expr<EC>>),
     Finally {
@@ -88,7 +76,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     FunctionCall {
         function: EC::Function,
-        arguments: Vec<FunctionArgument<EC>>,
+        arguments: Vec<Expr<EC>>,
     },
     FunctionObjectCall {
         function: Box<Expr<EC>>,
@@ -122,7 +110,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     MethodCall {
         method: EC::Method,
         receiver: Box<Expr<EC>>,
-        arguments: Vec<FunctionArgument<EC>>,
+        arguments: Vec<Expr<EC>>,
     },
     NewTraitObject {
         trait_ec: EC::Trait,
@@ -337,22 +325,6 @@ impl FromStr for Builtin {
             "disjunction_type" => Ok(Builtin::DisjunctionType),
             "equal_to_type" => Ok(Builtin::EqualToType),
             _ => Err(()),
-        }
-    }
-}
-
-#[derive(Derivative)]
-#[derivative(Debug(bound = ""))]
-pub struct FunctionArgument<EC: ExprContext + ?Sized> {
-    pub list_type: FunctionParameterListType,
-    pub arg: Expr<EC>,
-}
-
-impl<EC: ExprContext + ?Sized> Clone for FunctionArgument<EC> {
-    fn clone(&self) -> Self {
-        Self {
-            list_type: self.list_type,
-            arg: self.arg.clone(),
         }
     }
 }

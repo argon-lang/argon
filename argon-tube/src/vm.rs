@@ -7,7 +7,7 @@ use argon_compiler::{
     FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry,
     Record, Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
-use argon_expr::{ErasureMode, Expr, ExprScannerMut, ExpressionOwner, FunctionArgument, Normalizer, NormalizerScanner, ParameterVariable, SubstScanner, Variable};
+use argon_expr::{ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner, ParameterVariable, SubstScanner, Variable};
 use argon_format::vm as vf;
 use argon_util::{Fuel, InternalCompilerError, UniqueIdentifier};
 use core::mem;
@@ -18,7 +18,7 @@ use esexpr_binary::io::Write;
 use hashbrown::{HashMap, HashSet};
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
-
+use argon_compiler::expr_type::get_expr_type;
 use crate::ids::TubeIdProvider;
 
 pub fn encode_vm_tube<W: Write<InternalCompilerError>>(
@@ -1232,12 +1232,12 @@ impl <'a> ExprEmitter<'a> {
         })
     }
 
-    fn emit_arguments(&mut self, owner: ExpressionOwner<DefaultExprContext>, sig: Arc<FunctionSignature<DefaultExprContext>>, args: &[FunctionArgument<DefaultExprContext>]) -> EmitResult<FunctionArguments> {
+    fn emit_arguments(&mut self, owner: ExpressionOwner<DefaultExprContext>, sig: Arc<FunctionSignature<DefaultExprContext>>, args: &[Expr<DefaultExprContext>]) -> EmitResult<FunctionArguments> {
         let sig_with_mapping = self.encoder.emit_function_signature(&owner, &sig)?;
         self.emit_arguments_common(sig_with_mapping, args)
     }
 
-    fn emit_arguments_common(&mut self, sig: FunctionSignatureWithMapping, args: &[FunctionArgument<DefaultExprContext>]) -> EmitResult<FunctionArguments> {
+    fn emit_arguments_common(&mut self, sig: FunctionSignatureWithMapping, args: &[Expr<DefaultExprContext>]) -> EmitResult<FunctionArguments> {
         let mut arguments = Vec::with_capacity(args.len());
         let mut token_arguments = Vec::with_capacity(args.len());
 
@@ -1245,19 +1245,15 @@ impl <'a> ExprEmitter<'a> {
             match consumer {
                 ArgConsumer::Erased => {},
                 ArgConsumer::Token => {
-                    token_arguments.push(Box::new(self.token_expr(&arg.arg)?));
+                    token_arguments.push(Box::new(self.token_expr(arg)?));
                 },
                 ArgConsumer::Arg => {
-                    arguments.push(Box::new(self.expr(&arg.arg, AnyRegister)?));
+                    arguments.push(Box::new(self.expr(arg, AnyRegister)?));
                 },
             }
         }
 
         Ok(FunctionArguments { token_arguments, arguments })
-    }
-
-    fn get_expr_type(&mut self, e: &Expr<DefaultExprContext>) -> Result<Expr<DefaultExprContext>, InternalCompilerError> {
-        todo!()
     }
 
     fn expr_return(&mut self, e: &Expr<DefaultExprContext>) -> EmitResult<()> {
@@ -1338,7 +1334,7 @@ impl ExprOutput for ExprOutputKnown {
                 }
             }
             _ => {
-                let t = expr_emitter.get_expr_type(e)?;
+                let t = get_expr_type(e);
                 let t = expr_emitter.token_expr(&t)?;
                 let r = expr_emitter.add_var(t);
                 OutputRegisterBuilder {
@@ -1353,7 +1349,7 @@ impl ExprOutput for ExprOutputKnown {
         let builder_type = match self {
             ExprOutputKnown::Register(r) => OutputFunctionResultBuilderType::Register(r),
             ExprOutputKnown::RefCell(cell) => {
-                let t = expr_emitter.get_expr_type(e)?;
+                let t = get_expr_type(e);
                 let t = expr_emitter.token_expr(&t)?;
                 let r = expr_emitter.add_var(t);
                 OutputFunctionResultBuilderType::RefCell {
@@ -1397,7 +1393,7 @@ impl ExprOutput for AnyRegister {
     type ResultType = vf::RegisterId;
 
     fn into_known_location(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
-        let t = expr_emitter.get_expr_type(e)?;
+        let t = get_expr_type(e);
         let t = expr_emitter.token_expr(&t)?;
         let r = expr_emitter.add_var(t);
         Ok((r.clone(), ExprOutputKnown::Register(r)))
@@ -1416,7 +1412,7 @@ impl ExprOutput for AnyRegister {
     }
 
     fn output_register(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputRegisterBuilder<Self>> {
-        let t = expr_emitter.get_expr_type(e)?;
+        let t = get_expr_type(e);
         let t = expr_emitter.token_expr(&t)?;
         let r = expr_emitter.add_var(t);
         Ok(OutputRegisterBuilder {
@@ -1515,7 +1511,7 @@ impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
     fn get_function_body(
         &mut self,
         function: &Arc<dyn Function>,
-        arguments: &mut Vec<FunctionArgument<DefaultExprContext>>,
+        arguments: &mut Vec<Expr<DefaultExprContext>>,
     ) -> Option<Expr<DefaultExprContext>> {
         if !function.metadata().is_inline {
             return None;
@@ -1541,7 +1537,7 @@ impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
                     .to_parameter_var(owner.clone(), parameter_index),
             ));
 
-            subst.add_substitution(variable, &argument.arg);
+            subst.add_substitution(variable, argument);
         }
 
         subst.scan(&mut body);
@@ -1549,7 +1545,7 @@ impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
     }
 }
 
-fn variable_erasure_mode(variable: &Variable<argon_compiler::DefaultExprContext>) -> ErasureMode {
+fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode {
     match variable {
         Variable::Local(variable) => variable.erasure_mode,
         Variable::Parameter(variable) => variable.erasure_mode,

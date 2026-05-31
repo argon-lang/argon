@@ -9,7 +9,7 @@ use argon_compiler::{
 };
 use argon_expr::{
     Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    FunctionArgument, LocalVariable, Normalizer, NormalizerScanner, SubstScanner, Variable,
+    LocalVariable, Normalizer, NormalizerScanner, SubstScanner, Variable,
     VariableTupleElement,
 };
 use argon_parser::ast;
@@ -97,7 +97,7 @@ impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
     fn get_function_body(
         &mut self,
         function: &Arc<dyn Function>,
-        arguments: &mut Vec<FunctionArgument<TypeCheckExprContext>>,
+        arguments: &mut Vec<Expr<TypeCheckExprContext>>,
     ) -> Option<Expr<TypeCheckExprContext>> {
         if !function.metadata().is_inline {
             return None;
@@ -125,7 +125,7 @@ impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
             ));
             let variable = DefaultToTypeCheckExprContextShifter.shift_variable(variable);
 
-            subst.add_substitution(variable, &argument.arg);
+            subst.add_substitution(variable, argument);
         }
 
         subst.scan(&mut body);
@@ -1790,10 +1790,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
                         &arg_expr.checked_expr,
                     );
 
-                    selected_args.push(FunctionArgument {
-                        list_type: param.list_type,
-                        arg: arg_expr.checked_expr,
-                    });
+                    selected_args.push(arg_expr.checked_expr);
 
                     args = tail_args;
                 } else {

@@ -1,6 +1,6 @@
 use crate::{EffectInfo, Function};
 use alloc::sync::Arc;
-use argon_expr::{Expr, ExprContext, ExprScanner, FunctionArgument};
+use argon_expr::{Expr, ExprContext, ExprScanner};
 use core::marker::PhantomData;
 
 pub struct PurityScanner<EC: ?Sized> {
@@ -49,7 +49,7 @@ where
 
                 arguments
                     .iter()
-                    .all(|argument: &FunctionArgument<Self::EC>| self.scan(&argument.arg))
+                    .all(|argument| self.scan(argument))
             }
             _ => argon_expr::default_scan(self, expr),
         }

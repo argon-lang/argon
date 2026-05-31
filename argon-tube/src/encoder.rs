@@ -432,7 +432,7 @@ impl TubeEncoder {
                 id: self.get_function_id(function.clone()).into(),
                 args: arguments
                     .iter()
-                    .map(|arg| self.emit_expr(&arg.arg).map(Box::new))
+                    .map(|arg| self.emit_expr(arg).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::FunctionObjectCall { function, argument } => tf::Expr::FunctionObjectCall {

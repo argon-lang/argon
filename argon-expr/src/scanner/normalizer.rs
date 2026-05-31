@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext, ExprScannerMut, FunctionArgument, default_scan_mut};
+use crate::{Expr, ExprContext, ExprScannerMut, default_scan_mut};
 use alloc::vec::Vec;
 use argon_util::Fuel;
 use core::marker::PhantomData;
@@ -23,7 +23,7 @@ pub trait Normalizer<EC: ExprContext + ?Sized> {
     fn get_function_body(
         &mut self,
         function: &EC::Function,
-        arguments: &mut Vec<FunctionArgument<EC>>,
+        arguments: &mut Vec<Expr<EC>>,
     ) -> Option<Expr<EC>>;
 }
 

@@ -1,5 +1,5 @@
 use crate::{
-    Expr, ExprContext, ExpressionOwner, FunctionArgument, LocalVariable, MatchCase,
+    Expr, ExprContext, ExpressionOwner, LocalVariable, MatchCase,
     ParameterVariable, RecordFieldLiteral, Variable,
 };
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
@@ -40,13 +40,6 @@ where
         Expr::Error => Expr::Error,
         Expr::Hole(hole) => shifter.shift_hole(hole),
         Expr::And(a, b) => Expr::And(Box::new(shifter.shift(*a)), Box::new(shifter.shift(*b))),
-        Expr::As { value, value_type } => Expr::As {
-            value: Box::new(shifter.shift(*value)),
-            value_type: Box::new(shifter.shift(*value_type)),
-        },
-        Expr::Assert { t } => Expr::Assert {
-            t: Box::new(shifter.shift(*t)),
-        },
         Expr::Finally {
             block_body,
             finally_body: ensures_body,
@@ -62,10 +55,6 @@ where
                 .into_iter()
                 .map(|argument| shifter.shift(argument))
                 .collect(),
-        },
-        Expr::Dot { o, member } => Expr::Dot {
-            o: Box::new(shifter.shift(*o)),
-            member,
         },
         Expr::EnumType(enum_ec, arguments) => Expr::EnumType(
             enum_ec,
@@ -88,10 +77,7 @@ where
             function,
             arguments: arguments
                 .into_iter()
-                .map(|argument| FunctionArgument {
-                    list_type: argument.list_type,
-                    arg: shifter.shift(argument.arg),
-                })
+                .map(|argument| shifter.shift(argument))
                 .collect(),
         },
         Expr::FunctionObjectCall { function, argument } => Expr::FunctionObjectCall {
@@ -144,10 +130,7 @@ where
             receiver: Box::new(shifter.shift(*receiver)),
             arguments: arguments
                 .into_iter()
-                .map(|argument| FunctionArgument {
-                    list_type: argument.list_type,
-                    arg: shifter.shift(argument.arg),
-                })
+                .map(|argument| shifter.shift(argument))
                 .collect(),
         },
         Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },

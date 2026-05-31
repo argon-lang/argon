@@ -12,6 +12,7 @@ pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+pub mod expr_type;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::platform::PlatformExtern;
