@@ -15,15 +15,15 @@ std = [
 ]
 
 [dependencies]
-argon-compiler = { path = "../argon-compiler", default-features = false }
-argon-expr = { path = "../argon-expr", default-features = false }
-argon-io = { path = "../argon-io", default-features = false }
-argon-parser = { path = "../argon-parser", default-features = false }
-argon-util = { path = "../argon-util", default-features = false }
+argon-compiler = { workspace = true, default-features = false }
+argon-expr = { workspace = true, default-features = false }
+argon-io = { workspace = true, default-features = false }
+argon-parser = { workspace = true, default-features = false }
+argon-util = { workspace = true, default-features = false }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }
-parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
+parse18-runtime = { workspace = true, default-features = false }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }

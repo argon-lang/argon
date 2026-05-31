@@ -1,18 +1,20 @@
 [workspace]
 resolver = "3"
-members = ["argon-cli","argon-compiler","argon-expr","argon-format", "argon-io","argon-parser", "argon-prover", "argon-runner", "argon-source","argon-testcases", "argon-tube","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-cli","argon-compiler","argon-expr","argon-format", "argon-io","argon-parser", "argon-prover", "argon-runner", "argon-source","argon-test-runner","argon-testcases", "argon-tube","argon-util", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
-argon-compiler = { path = "argon-compiler" }
-argon-util = { path = "argon-util" }
-argon-expr = { path = "argon-expr" }
-argon-format = { path = "argon-format" }
-argon-io = { path = "argon-io" }
-argon-parser = { path = "argon-parser" }
-argon-prover = { path = "argon-prover" }
-argon-runner = { path = "argon-runner" }
-argon-source = { path = "argon-source" }
-argon-tube = { path = "argon-tube" }
+argon-compiler = { path = "argon-compiler", default-features = false }
+argon-util = { path = "argon-util", default-features = false }
+argon-expr = { path = "argon-expr", default-features = false }
+argon-format = { path = "argon-format", default-features = false }
+argon-io = { path = "argon-io", default-features = false }
+argon-parser = { path = "argon-parser", default-features = false }
+argon-prover = { path = "argon-prover", default-features = false }
+argon-runner = { path = "argon-runner", default-features = false }
+argon-source = { path = "argon-source", default-features = false }
+argon-testcases = { path = "argon-testcases", default-features = false }
+argon-test-runner = { path = "argon-test-runner", default-features = false }
+argon-tube = { path = "argon-tube", default-features = false }
 esexpr = { path = "../esexpr/rust/esexpr", default-features = false }
 esexpr-binary = { path = "../esexpr/rust/esexpr-binary", default-features = false }
 noble-idl-compiler-rust = { path = "../noble-idl/langs/rust/backend" }
@@ -25,12 +27,13 @@ derivative = { version = "2.2.0", features = ["use_core"] }
 embedded-io = { version = "0.7.1", default-features = false }
 encoding_rs = { version = "0.8.35", default-features = false, features = ["alloc"] }
 hashbrown = { version = "0.17.1", default-features = false, features = ["default-hasher"] }
+libtest-mimic = "0.8.2"
 mitsein = { version = "0.9.0", default-features = false, features = ["alloc"] }
 num-bigint = { version = "0.4.6", default-features = false }
 num-traits = { version = "0.2.19", default-features = false }
-parse18-lexer-gen = { path = "parse18/parse18-lexer-gen" }
-parse18-ll-gen = { path = "parse18/parse18-ll-gen" }
-parse18-runtime = { path = "parse18/parse18-runtime" }
+parse18-lexer-gen = { path = "parse18/parse18-lexer-gen", default-features = false }
+parse18-ll-gen = { path = "parse18/parse18-ll-gen", default-features = false }
+parse18-runtime = { path = "parse18/parse18-runtime", default-features = false }
 percent-encoding = { version = "2.3.2", default-features = false, features = ["alloc"] }
 quick-xml = "0.40.1"
 rayon = "1.12.0"
@@ -39,6 +42,7 @@ rpds = { version = "1.2.1", default-features = false }
 rstest = "0.26.1"
 serde = { version = "1.0.228", default-features = false, features = ["alloc"] }
 strum = { version = "0.28.0", features = ["derive"] }
+tempfile = "3.27.0"
 unicode-general-category = { version = "1.1.0", default-features = false }
 walkdir = "2.5.0"
 

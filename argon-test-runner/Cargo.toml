@@ -1,0 +1,18 @@
+[package]
+name = "argon-test-runner"
+publish = false
+edition = "2024"
+
+[[test]]
+name = "compiler_tests"
+path = "tests/compiler_tests.rs"
+harness = false
+
+[dependencies]
+argon-testcases = { workspace = true }
+libtest-mimic = { workspace = true }
+tempfile = { workspace = true }
+walkdir = { workspace = true }
+
+[lints]
+workspace = true

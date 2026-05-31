@@ -4,7 +4,7 @@ publish = false
 edition = "2024"
 
 [dependencies]
-argon-util = { path = "../argon-util", default-features = false }
+argon-util = { workspace = true, default-features = false }
 hashbrown = { workspace = true }
 
 [lints]

@@ -18,19 +18,19 @@ std = [
 ]
 
 [dependencies]
-argon-compiler = { path = "../argon-compiler", default-features = false }
+argon-compiler = { workspace = true, default-features = false }
 argon-format = { workspace = true }
-argon-io = { path = "../argon-io", default-features = false }
-argon-source = { path = "../argon-source", default-features = false }
-argon-tube = { path = "../argon-tube", default-features = false }
-argon-util = { path = "../argon-util", default-features = false }
+argon-io = { workspace = true, default-features = false }
+argon-source = { workspace = true, default-features = false }
+argon-tube = { workspace = true, default-features = false }
+argon-util = { workspace = true, default-features = false }
 
 embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true, default-features = false }
 hashbrown = { workspace = true }
 noble-idl-runtime = { workspace = true }
-parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
+parse18-runtime = { workspace = true, default-features = false }
 walkdir = { workspace = true, optional = true }
 
 [build-dependencies]

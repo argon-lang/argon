@@ -14,10 +14,10 @@ std = [
 ]
 
 [dependencies]
-argon-compiler = { path = "../argon-compiler", default-features = false }
-argon-expr = { path = "../argon-expr", default-features = false }
-argon-format = { path = "../argon-format" }
-argon-util = { path = "../argon-util", default-features = false }
+argon-compiler = { workspace = true, default-features = false }
+argon-expr = { workspace = true, default-features = false }
+argon-format = { workspace = true }
+argon-util = { workspace = true, default-features = false }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true, default-features = false }
 hashbrown = { workspace = true }

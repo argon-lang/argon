@@ -9,16 +9,16 @@ default = []
 std = ["argon-util/std", "parse18-runtime/std"]
 
 [dependencies]
-argon-util = { path = "../argon-util", default-features = false }
+argon-util = { workspace = true, default-features = false }
 embedded-io = { workspace = true }
 encoding_rs = { workspace = true }
-parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
+parse18-runtime = { workspace = true, default-features = false }
 unicode-general-category = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 
 [dev-dependencies]
-argon-testcases = { path = "../argon-testcases" }
+argon-testcases = { workspace = true }
 rstest = { workspace = true }
 
 [build-dependencies]

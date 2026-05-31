@@ -9,14 +9,14 @@ std = ["argon-expr/std", "argon-parser/std", "argon-util/std", "parse18-runtime/
 test-utils = []
 
 [dependencies]
-argon-expr = { path = "../argon-expr", default-features = false }
-argon-parser = { path = "../argon-parser", default-features = false }
-argon-util = { path = "../argon-util", default-features = false }
+argon-expr = { workspace = true, default-features = false }
+argon-parser = { workspace = true, default-features = false }
+argon-util = { workspace = true, default-features = false }
 esexpr = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 percent-encoding = { workspace = true }
-parse18-runtime = { path = "../parse18/parse18-runtime", default-features = false }
+parse18-runtime = { workspace = true, default-features = false }
 
 [lints]
 workspace = true
