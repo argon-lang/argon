@@ -350,7 +350,7 @@ class ProgramModelImpl implements ProgramModel {
         else {
             const moduleRef = this.#moduleRefMap.get(id);
             if(moduleRef === undefined) {
-                throw new Error("Could not get referenced module");
+                throw new Error(`Could not get referenced module: ${id}`);
             }
 
             return {

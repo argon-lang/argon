@@ -1,10 +1,6 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
-use argon_compiler::{
-    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
-    Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
-    Module, ModuleExportBinding, ModuleExportEntry, Tube, TubeName, UnaryOperatorIdentifier,
-};
+use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Tube, TubeName, UnaryOperatorIdentifier};
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
@@ -70,7 +66,18 @@ impl TubeEncoder {
         encoder
     }
 
-    fn get_function_id(&mut self, function: Arc<dyn argon_compiler::Function>) -> usize {
+    fn get_module_id(&mut self, tube_name: &TubeName, module_path: &ModulePath) -> usize {
+        let (id, is_new) = self.ids.module_ids.get_with_new((tube_name.clone(), module_path.clone()));
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::ModuleReference(tube_name.clone(), module_path.clone()));
+        }
+
+        id
+    }
+
+    fn get_function_id(&mut self, function: Arc<dyn Function>) -> usize {
         let (id, is_new) = self.ids.function_ids.get_with_new(function.clone());
 
         if is_new {
@@ -135,6 +142,18 @@ impl TubeEncoder {
                         modules,
                     }),
                 }
+            },
+
+            EntryEmitter::ModuleReference(tube, module) => {
+                let module_id = BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
+                let tube_id = BigUint::from(self.ids.tube_ids.get(tube.clone()));
+
+                let path = encode_module_path(&module);
+                tf::TubeFileEntry::ModuleReference {
+                    tube_id,
+                    module_id,
+                    path: Box::new(path),
+                }
             }
 
             EntryEmitter::Function(function) => {
@@ -171,7 +190,7 @@ impl TubeEncoder {
                         }),
                     }
                 }
-            }
+            },
         }))
     }
 
@@ -309,14 +328,10 @@ impl TubeEncoder {
                 name,
                 signature,
             } => {
-                let module_id = self
-                    .ids
-                    .module_ids
-                    .get((tube.clone(), module.clone()))
-                    .into();
+                let module_id = self.get_module_id(tube, module);
 
                 tf::ImportSpecifier::Global {
-                    module_id,
+                    module_id: BigUint::from(module_id),
                     name: Box::new(encode_identifier(name)?),
                     sig: Box::new(self.encode_erased_signature(signature)?),
                 }
@@ -594,6 +609,7 @@ impl Iterator for TubeEncoder {
 enum EntryEmitter {
     Header,
     Metadata,
+    ModuleReference(TubeName, ModulePath),
     Function(Arc<dyn Function>),
 }
 

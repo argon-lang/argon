@@ -65,6 +65,8 @@ abstract class TokenEmitter {
                     }
 
                     case "never":
+                        return this.#moduleEmitter.getArgonRuntimeExport("neverType");
+
                     case "conjunction":
                     case "disjunction":
                         throw new Error("Not implemented buildTypeInfo builtin " + t.b.$type);

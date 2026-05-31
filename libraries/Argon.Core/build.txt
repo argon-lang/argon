@@ -2,8 +2,9 @@ Commands to build:
 
 
 mkdir -p libraries/Argon.Core/bin
+mkdir -p libraries/Argon.Core/bin/js
 node backend/backends/js/lib/main.js platform-metadata js --extern libraries/Argon.Core/js/externs.js -o libraries/Argon.Core/bin/platform-js.esx
 RUST_BACKTRACE=1 cargo run --bin argonc compile --tube-name Argon.Core --input libraries/Argon.Core/src/ --platform libraries/Argon.Core/bin/platform-js.esx -o libraries/Argon.Core/bin/Argon.Core.artube
-RUST_BACKTRACE=1 cargo run --bin argonc genir --input libraries/Argon.Core/bin/Argon.Core.artube --platform js -o libraries/Argon.Core/bin/Argon.Core.js.arvmir
-
+RUST_BACKTRACE=1 cargo run --bin argonc genir --input libraries/Argon.Core/bin/Argon.Core.artube --platform js -o libraries/Argon.Core/bin/Argon.Core.js.arvm
+node backend/backends/js/lib/main.js codegen js -i libraries/Argon.Core/bin/Argon.Core.js.arvm -o libraries/Argon.Core/bin/js
 

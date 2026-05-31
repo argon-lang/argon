@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-import { open, type FileHandle } from "node:fs/promises";
-import { basename } from "node:path";
+import { mkdir, open, rm, type FileHandle } from "node:fs/promises";
+import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { Command, type CommandUnknownOpts } from "@commander-js/extra-typings";
 import { writeExprs } from "@argon-lang/esexpr/binary_format";
-import type { InputFile, InputStream } from "@argon-lang/js-backend-api";
+import type { InputFile, InputStream, OutputDirectory, OutputFile, OutputStream } from "@argon-lang/js-backend-api";
 import { PlatformMetadataResult } from "@argon-lang/js-backend-api/metadata.js";
-import { loadMetadata } from "./index.js";
+import { loadMetadata, codegen } from "./index.js";
 
 
 class LocalInputFile implements InputFile {
@@ -27,6 +27,54 @@ class LocalInputStream implements InputStream {
     async read(buffer: Uint8Array): Promise<number> {
         const result = await this.file.read(buffer);
         return result.bytesRead;
+    }
+
+    async close(): Promise<void> {
+        await this.file.close();
+    }
+}
+
+export class LocalOutputDirectory implements OutputDirectory {
+    private readonly rootPath: string;
+
+    constructor(path: string) {
+        this.rootPath = resolve(path);
+    }
+
+    getFile(...path: readonly [...readonly string[], string]): OutputFile {
+        return new LocalOutputFile(this.resolveOutputPath(path));
+    }
+
+    private resolveOutputPath(path: readonly string[]): string {
+        const filePath = resolve(this.rootPath, ...path);
+        const relativePath = relative(this.rootPath, filePath);
+
+        if(relativePath === "" || relativePath.startsWith("..") || isAbsolute(relativePath)) {
+            throw new Error("Output file path must be inside the output directory");
+        }
+
+        return filePath;
+    }
+}
+
+class LocalOutputFile implements OutputFile {
+    constructor(private readonly path: string) {}
+
+    async open(): Promise<OutputStream> {
+        await mkdir(dirname(this.path), { recursive: true });
+        return new LocalOutputStream(await open(this.path, "w"));
+    }
+
+    async delete(): Promise<void> {
+        await rm(this.path, { force: true });
+    }
+}
+
+class LocalOutputStream implements OutputStream {
+    constructor(private readonly file: FileHandle) {}
+
+    async write(buffer: Uint8Array): Promise<void> {
+        await this.file.write(buffer);
     }
 
     async close(): Promise<void> {
@@ -70,11 +118,17 @@ function collect(value: string, previous: readonly string[]): readonly string[] 
     return [...previous, value];
 }
 
-const program = new Command();
-
-program
-    .name("argon-js-backend")
-    .description("Argon JavaScript backend CLI");
+async function codegenJs(
+    options: {
+        readonly input: string;
+        readonly output: string;
+    },
+): Promise<void> {
+    await codegen({
+        tube: new LocalInputFile(options.input),
+        outputDirectory: new LocalOutputDirectory(options.output),
+    })
+}
 
 function printHelpDescription(commandPath: readonly string[]): void {
     let current: CommandUnknownOpts = program;
@@ -93,6 +147,12 @@ function printHelpDescription(commandPath: readonly string[]): void {
     console.log(current.description());
 }
 
+const program = new Command();
+
+program
+    .name("argon-js-backend")
+    .description("Argon JavaScript backend CLI");
+
 program
     .command("platform-metadata")
     .description("Load platform-specific metadata")
@@ -102,6 +162,15 @@ program
     .option("--extern <file>", "JavaScript extern file", collect, [])
     .requiredOption("-o, --output-file <file>", "Output platform metadata file")
     .action(platformMetadataJs);
+
+program
+    .command("codegen")
+    .description("Generate code from Argon VM IR")
+    .command("js")
+    .description("Generate JavaScript code from Argon VM IR")
+    .requiredOption("-i, --input <file>", "Input Argon VM IR file")
+    .requiredOption("-o, --output <dir>", "Output directory")
+    .action(codegenJs);
 
 program
     .command("help-description")

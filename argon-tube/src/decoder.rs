@@ -515,7 +515,11 @@ impl TubeDecoder {
         let (tube_id, path) = self
             .module_references
             .get(&id)
-            .unwrap_or_else(|| panic!("unknown module id {id}"))
+            .unwrap_or_else(|| {
+                std::eprintln!("modules: {:#?}", (*rwlock_read(&self.module_ids)).clone());
+                std::eprintln!("module references: {:#?}", self.module_references);
+                panic!("unknown module id {id}")
+            })
             .clone();
         let tube_name = rwlock_read(&self.tube_ids)
             .get(&tube_id)

@@ -24,7 +24,7 @@ print_help() {
     printf '%s%sCommands:%s\n' "$bold" "$underline" "$reset"
     printf '  %scompile%s             %s\n' "$bold" "$reset" "$(describe_command 'Compile Argon source code to a tube (.artube)' compile)"
     printf '  %sgenir%s               %s\n' "$bold" "$reset" "$(describe_command 'Generate Argon VM IR from a tube' genir)"
-    printf '  %scodegen%s             %s\n' "$bold" "$reset" "$(describe_command 'Generate code from Argon VM IR' codegen)"
+    printf '  %scodegen%s             %s\n' "$bold" "$reset" "$(describe_codegen)"
     printf '  %splatform-metadata%s   %s\n' "$bold" "$reset" "$(describe_platform_metadata)"
     printf '  %shelp%s                Print this message or the help of the given subcommand(s)\n' "$bold" "$reset"
     printf '\n'
@@ -41,6 +41,23 @@ print_platform_metadata_help() {
 
     for backend in $(all_backends); do
         printf '  %s%s%s%s%s\n' "$bold" "$backend" "$reset" "$(platform_metadata_padding "$backend")" "$(describe_platform_metadata_backend "$backend")"
+    done
+
+    printf '  %shelp%s%sPrint this message or the help of the given subcommand(s)\n' "$bold" "$reset" "$(platform_metadata_padding help)"
+    printf '\n'
+    printf '%s%sOptions:%s\n' "$bold" "$underline" "$reset"
+    printf ' %s-h%s, %s--help%s\n' "$bold" "$reset" "$bold" "$reset"
+}
+
+print_codegen_help() {
+    printf '%s%sUsage: %s%s codegen <command>\n' "$bold" "$underline" "$(basename "$0")" "$reset"
+    printf '\n'
+    printf '%s\n' "$(describe_codegen)"
+    printf '\n'
+    printf '%s%sCommands:%s\n' "$bold" "$underline" "$reset"
+
+    for backend in $(all_backends); do
+        printf '  %s%s%s%s%s\n' "$bold" "$backend" "$reset" "$(platform_metadata_padding "$backend")" "$(describe_codegen_backend "$backend")"
     done
 
     printf '  %shelp%s%sPrint this message or the help of the given subcommand(s)\n' "$bold" "$reset" "$(platform_metadata_padding help)"
@@ -128,6 +145,7 @@ run_backend() {
 }
 
 describe_command() {
+    binary="$(binary_path)"
     printf '%s\n' "$("$binary" help-description "$@" 2>/dev/null)"
 }
 
@@ -136,9 +154,19 @@ describe_platform_metadata() {
     printf '%s\n' "$(node "$cli" help-description platform-metadata 2>/dev/null)"
 }
 
+describe_codegen() {
+    cli="$dist_dir/backend/js/lib/main.js"
+    printf '%s\n' "$(node "$cli" help-description codegen 2>/dev/null)"
+}
+
 describe_platform_metadata_backend() {
     backend="$1"
-    dispatch_platform_metadata "$backend" help-description platform-metadata "$backend"
+    run_backend "$backend" "platform-metadata $backend" help-description platform-metadata "$backend"
+}
+
+describe_codegen_backend() {
+    backend="$1"
+    run_backend "$backend" "codegen $backend" help-description codegen "$backend"
 }
 
 all_backends() {
@@ -207,6 +235,21 @@ dispatch_platform_metadata() {
     esac
 }
 
+dispatch_codegen() {
+    case "$1" in
+        -h|--help)
+            print_codegen_help
+            exit 0
+            ;;
+        *)
+            backend="$1"
+            shift
+
+            run_backend "$backend" "codegen $backend" codegen "$backend" "$@"
+            ;;
+    esac
+}
+
 dispatch_argonc() {
     case "$1" in
     -h|--help)
@@ -226,30 +269,12 @@ dispatch_argonc() {
         shift
         if [ "$#" -eq 0 ]; then
             printf 'argonc: missing codegen backend\n\n' >&2
-            print_help >&2
+            print_codegen_help >&2
             exit 1
         fi
 
-        case "$1" in
-            js)
-                shift
-                if [ "$#" -gt 0 ] && [ "$1" = help ]; then
-                    shift
-                    run_binary codegen js help "$@"
-                fi
-                run_binary codegen js "$@"
-                ;;
-            -h|--help)
-                run_binary codegen --help
-                ;;
-            help)
-                shift
-                run_binary codegen help "$@"
-                ;;
-            *)
-                unknown_command "codegen $1" print_help
-                ;;
-        esac
+        handle_help_command print_codegen_help dispatch_codegen "$@"
+        dispatch_codegen "$@"
         ;;
     platform-metadata)
         shift

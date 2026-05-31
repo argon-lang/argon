@@ -2,11 +2,7 @@ use alloc::collections::VecDeque;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use alloc::borrow::ToOwned;
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
-use argon_compiler::{
-    BinaryOperatorIdentifier, Builtin, DefaultExprContext, Enum, Function, FunctionImplementation,
-    FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry,
-    Record, Trait, Tube, TubeName, UnaryOperatorIdentifier,
-};
+use argon_compiler::{BinaryOperatorIdentifier, Builtin, DefaultExprContext, Enum, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, Trait, Tube, TubeName, UnaryOperatorIdentifier};
 use argon_expr::{ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner, ParameterVariable, SubstScanner, Variable};
 use argon_format::vm as vf;
 use argon_util::{Fuel, InternalCompilerError, UniqueIdentifier};
@@ -93,6 +89,17 @@ impl VmEncoder {
         encoder.entry_emitters.push_back(EntryEmitter::Metadata);
 
         encoder
+    }
+
+    fn get_module_id(&mut self, tube: &TubeName, module: &ModulePath) -> usize {
+        let (id, is_new) = self.ids.module_ids.get_with_new((tube.clone(), module.clone()));
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::ModuleReference(tube.clone(), module.clone()));
+        }
+
+        id
     }
 
     fn get_function_id(&mut self, function: Arc<dyn Function>) -> usize {
@@ -189,7 +196,19 @@ impl VmEncoder {
                         modules,
                     }),
                 }
-            }
+            },
+
+            EntryEmitter::ModuleReference(tube, module) => {
+                let module_id = BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
+                let tube_id = BigUint::from(self.ids.tube_ids.get(tube.clone()));
+                let path = encode_module_path(&module);
+
+                vf::TubeFileEntry::ModuleReference {
+                    module_id,
+                    tube_id,
+                    path: Box::new(path),
+                }
+            },
 
             EntryEmitter::Function(function) => {
                 let function_id = BigUint::from(self.ids.function_ids.get(function.clone()));
@@ -228,7 +247,7 @@ impl VmEncoder {
                         }),
                     }
                 }
-            }
+            },
 
             EntryEmitter::Record(record) => {
                 let record_id = BigUint::from(self.ids.record_ids.get(record.clone()));
@@ -243,7 +262,7 @@ impl VmEncoder {
                 } else {
                     todo!("emit VM record definitions")
                 }
-            }
+            },
 
             EntryEmitter::Enum(enum_) => {
                 let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
@@ -258,7 +277,7 @@ impl VmEncoder {
                 } else {
                     todo!("emit VM enum definitions")
                 }
-            }
+            },
 
             EntryEmitter::Trait(trait_) => {
                 let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
@@ -273,11 +292,11 @@ impl VmEncoder {
                 } else {
                     todo!("emit VM trait definitions")
                 }
-            }
+            },
 
             EntryEmitter::Instance(_instance) => {
                 todo!("emit VM instance references and definitions")
-            }
+            },
         }))
     }
 
@@ -331,10 +350,7 @@ impl VmEncoder {
                 name,
                 signature,
             } => vf::ImportSpecifier::Global {
-                module_id: self
-                    .ids
-                    .module_ids
-                    .get((tube.clone(), module.clone()))
+                module_id: self.get_module_id(tube, module)
                     .into(),
                 name: Box::new(encode_identifier(name)),
                 sig: Box::new(self.encode_erased_signature(signature)?),
@@ -492,6 +508,7 @@ impl Iterator for VmEncoder {
 enum EntryEmitter {
     Header,
     Metadata,
+    ModuleReference(TubeName, ModulePath),
     Function(Arc<dyn Function>),
     Record(Arc<dyn Record>),
     Enum(Arc<dyn Enum>),

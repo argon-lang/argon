@@ -299,6 +299,7 @@ impl TubeBuilder {
             .entry(path.clone())
             .or_insert_with(|| {
                 Arc::new(Module {
+                    tube: self.tube.name().clone(),
                     path: path.clone(),
                     exports: RwLock::new(HashMap::new()),
                 })
@@ -310,11 +311,16 @@ impl TubeBuilder {
 }
 
 pub struct Module {
+    tube: TubeName,
     path: ModulePath,
     exports: RwLock<HashMap<Identifier, Vec1<ModuleExportEntry>>>,
 }
 
 impl Module {
+    pub fn tube(&self) -> &TubeName {
+        &self.tube
+    }
+
     pub fn path(&self) -> &ModulePath {
         &self.path
     }
