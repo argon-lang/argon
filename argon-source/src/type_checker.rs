@@ -171,7 +171,7 @@ impl Eq for Hole {}
 
 impl Hash for Hole {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        ptr::hash(self.hole_info.as_ref(), state);
+        (self.hole_info.as_ref() as *const HoleInfo as *const ()).hash(state);
     }
 }
 

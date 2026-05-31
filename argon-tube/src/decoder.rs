@@ -1,4 +1,5 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use core::fmt::Debug;
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
@@ -874,6 +875,12 @@ impl DecodedFunction {
             signature: OnceLock::new(),
             implementation: OnceLock::new(),
         }
+    }
+}
+
+impl Debug for DecodedFunction {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "function {:?}", self.definition.import)
     }
 }
 

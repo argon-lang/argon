@@ -5,6 +5,7 @@ use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::type_check_expr;
 use alloc::{boxed::Box, sync::Arc};
+use core::fmt::Debug;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
@@ -57,6 +58,12 @@ impl SourceFunction {
                 implementation: Mutex::new(None),
             }),
         }
+    }
+}
+
+impl Debug for SourceFunction {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "function {}", self.decl.name.value)
     }
 }
 

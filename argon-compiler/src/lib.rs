@@ -269,7 +269,7 @@ impl Eq for Tube {}
 
 impl Hash for Tube {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        core::ptr::hash(self, state);
+        (self as *const Tube as *const ()).hash(state);
     }
 }
 
@@ -336,7 +336,7 @@ impl Eq for Module {}
 
 impl Hash for Module {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        core::ptr::hash(self, state);
+        (self as *const Module as *const ()).hash(state);
     }
 }
 
@@ -397,7 +397,7 @@ pub trait Unload {
     fn unload(&self);
 }
 
-pub trait Function: Unload + ThreadSafe {
+pub trait Function: Debug + Unload + ThreadSafe {
     fn metadata(&self) -> &FunctionMetadata;
 
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
@@ -417,35 +417,29 @@ pub enum FunctionImplementation {
     Extern(PlatformExtern),
 }
 
-pub trait Method: Unload + ThreadSafe {}
+pub trait Method: Debug + Unload + ThreadSafe {}
 
-pub trait Record: Unload + ThreadSafe {
+pub trait Record: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait Enum: Unload + ThreadSafe {
+pub trait Enum: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait EnumCase: Unload + ThreadSafe {}
+pub trait EnumCase: Debug + Unload + ThreadSafe {}
 
-pub trait Trait: Unload + ThreadSafe {
+pub trait Trait: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait Instance: Unload + ThreadSafe {}
+pub trait Instance: Debug + Unload + ThreadSafe {}
 
 macro_rules! impl_dyn_stub_traits {
     ($trait_name:ident) => {
-        impl Debug for dyn $trait_name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-                f.debug_struct(stringify!($trait_name)).finish()
-            }
-        }
-
         impl PartialEq for dyn $trait_name {
             fn eq(&self, other: &Self) -> bool {
                 core::ptr::addr_eq(self, other)
@@ -456,7 +450,7 @@ macro_rules! impl_dyn_stub_traits {
 
         impl Hash for dyn $trait_name {
             fn hash<H: Hasher>(&self, state: &mut H) {
-                core::ptr::from_ref(self).hash(state);
+                (self as *const dyn $trait_name as *const ()).hash(state);
             }
         }
     };
