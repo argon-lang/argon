@@ -1,0 +1,9 @@
+{
+  "name": "@argon-lang/runtime",
+  "private": true,
+  "version": "0.1.0",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "type": "module"
+}

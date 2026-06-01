@@ -11,6 +11,8 @@ harness = false
 [dependencies]
 argon-testcases = { workspace = true }
 libtest-mimic = { workspace = true }
+fs_extra = { workspace = true }
+subprocess = { workspace = true }
 tempfile = { workspace = true }
 walkdir = { workspace = true }
 

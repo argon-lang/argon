@@ -614,7 +614,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
     }
 
     fn finish(
-        mut self,
+        self,
         return_type: &Expr<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let mut token_emitter = TokenEmitter {
@@ -967,7 +967,7 @@ impl <'a> ExprEmitter<'a> {
                     rb.into_result(emitter)
                 }
 
-                fn emit_parameterized_void_op<O: ExprOutput>(emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>, builtin: vf::BuiltinOp, arguments: &[Expr<DefaultExprContext>], output: O) -> EmitResult<O::ResultType> {
+                fn emit_parameterized_void_op<O: ExprOutput>(emitter: &mut ExprEmitter<'_>, builtin: vf::BuiltinOp, arguments: &[Expr<DefaultExprContext>], output: O) -> EmitResult<O::ResultType> {
                     let Some((type_arg, arguments)) = arguments.split_first() else {
                         todo!("return a proper error")
                     };
@@ -1005,7 +1005,7 @@ impl <'a> ExprEmitter<'a> {
 
                 macro_rules! parameterized_void_op {
                     ($name: ident) => {
-                        emit_parameterized_void_op(self, e, vf::BuiltinOp::$name, arguments, output)?
+                        emit_parameterized_void_op(self, vf::BuiltinOp::$name, arguments, output)?
                     };
                 }
 

@@ -25,7 +25,7 @@ pub struct InputSource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExpectedResult {
-    Output(Vec<String>),
+    Output(String),
     CompileErrors(Vec<String>),
     ExecutionErrors(Vec<String>),
 }
@@ -139,7 +139,7 @@ struct RawTestCase {
     #[serde(rename = "Libraries", default)]
     libraries: Libraries,
     #[serde(rename = "ExpectedOutput", default)]
-    expected_output: Vec<String>,
+    expected_output: Option<String>,
     #[serde(rename = "ExpectedError", default)]
     expected_error: Vec<String>,
     #[serde(rename = "ExpectedExecutionError", default)]
@@ -156,30 +156,19 @@ impl TryFrom<RawTestCase> for TestCase {
     type Error = DecodeError;
 
     fn try_from(value: RawTestCase) -> Result<Self, Self::Error> {
-        let expectation_type_count = [
-            !value.expected_output.is_empty(),
-            !value.expected_error.is_empty(),
-            !value.expected_execution_error.is_empty(),
-        ]
-        .into_iter()
-        .filter(|has_expectation| *has_expectation)
-        .count();
-
-        let expected = match expectation_type_count {
-            0 => return Err(DecodeError::MissingExpectation),
-            1 if !value.expected_output.is_empty() => ExpectedResult::Output(value.expected_output),
-            1 if !value.expected_error.is_empty() => {
+        let expected =
+            if let Some(expected_output) = value.expected_output {
+                ExpectedResult::Output(expected_output)
+            }
+            else if !value.expected_error.is_empty() {
                 ExpectedResult::CompileErrors(value.expected_error)
             }
-            1 => ExpectedResult::ExecutionErrors(value.expected_execution_error),
-            _ => {
-                return Err(DecodeError::MultipleExpectationTypes {
-                    output_count: value.expected_output.len(),
-                    compile_error_count: value.expected_error.len(),
-                    execution_error_count: value.expected_execution_error.len(),
-                });
+            else if !value.expected_execution_error.is_empty() {
+                ExpectedResult::ExecutionErrors(value.expected_execution_error)
             }
-        };
+            else {
+                return Err(DecodeError::MissingExpectation);
+            };
 
         Ok(Self {
             name: value.name,
@@ -207,14 +196,14 @@ mod tests {
         assert_eq!(test_case.input_sources[0].name, "index.argon");
         assert_eq!(
             test_case.expected,
-            ExpectedResult::Output(vec!["Hello World".to_string()])
+            ExpectedResult::Output("Hello World".to_string())
         );
     }
 
     #[test]
     fn decodes_libraries_and_multiple_execution_errors() {
         let xml = fs::read_to_string(
-            "testcases/access/function/Access_public_function_different_tube.xml",
+            "testcases-old/access/function/Access_public_function_different_tube.xml",
         )
         .unwrap();
         let test_case = TestCase::from_xml(&xml).unwrap();
@@ -224,7 +213,7 @@ mod tests {
             vec!["Argon.Core", "Argon.TestReference"]
         );
 
-        let xml = fs::read_to_string("testcases/exceptions/finally_method_error.xml").unwrap();
+        let xml = fs::read_to_string("testcases-old/exceptions/finally_method_error.xml").unwrap();
         let test_case = TestCase::from_xml(&xml).unwrap();
 
         assert_eq!(

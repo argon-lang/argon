@@ -1,0 +1,458 @@
+
+export class FunctionType {
+    constructor(param, res) {
+        this.param = param;
+        this.res = res;
+    }
+}
+
+export class FunctionTypeErased {
+    constructor(res) {
+        this.res = res;
+    }
+}
+
+export class FunctionTypeToken {
+    constructor(param, res) {
+        this.param = param;
+        this.res = res;
+    }
+}
+
+export const typeInfo = {};
+export const erasedType = {};
+
+export class RefCellType {
+    constructor(inner) {
+        this.inner = inner;
+    }
+}
+
+export class ArrayType {
+    constructor(inner) {
+        this.inner = inner;
+    }
+}
+
+export class UnreachableError extends Error {
+    constructor() {
+        super();
+    }
+}
+
+export class RefCell {
+    constructor(value) {
+        this.value = value;
+    }
+}
+
+
+
+function isSameType(a, b) {
+    if(a === b) {
+        return true;
+    }
+
+    if(a instanceof Array && b instanceof Array) {
+        if(a.length !== b.length) {
+            return false;
+        }
+
+        for(let i = 0; i < a.length; ++i) {
+            if(!isSameType(a[i], b[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    if(a instanceof FunctionType && b instanceof FunctionType) {
+        return isSameType(a.param, b.param) && isSameType(a.res, b.res);
+    }
+
+    if(a instanceof FunctionTypeErased && b instanceof FunctionTypeErased) {
+        return isSameType(a.res, b.res);
+    }
+
+    if(a instanceof FunctionTypeToken && b instanceof FunctionTypeToken) {
+        return isSameType(a.param, b.param) && isSameType(a.res, b.res);
+    }
+
+    if(a instanceof RefCellType && b instanceof RefCellType) {
+        return isSameType(a.inner, b.inner);
+    }
+
+    if(a instanceof ArrayType && b instanceof ArrayType) {
+        return isSameType(a.inner, b.inner);
+    }
+
+    return false;
+}
+
+function createNamedConstructor(name) {
+    const o = {
+        [name]: function() {},
+    };
+
+    return o[name];
+}
+
+function specialize(options = {}) {
+    const specializations = [];
+
+    function getSpecialization(...tokenArgs) {
+        const o = options.getInstancePrototype ? options.getInstancePrototype(this, tokenArgs) : this;
+        for(const spec of specializations) {
+            if(isSameType(spec.tokenArgs, tokenArgs)) {
+                return spec.specializedClass;
+            }
+        }
+
+        const specializedClass = function(...args) {
+            o.call(this, ...args);
+        };
+        specializedClass.prototype = Object.create(o.prototype);
+        storeTokenArgs(this, specializedClass, tokenArgs)
+
+        if(options.customize) {
+            options.customize(specializedClass);
+        }
+
+        specializations.push({
+            tokenArgs,
+            specializedClass,
+        });
+
+        return specializedClass;
+    }
+    
+    return getSpecialization;
+}
+
+function defineTokenArgSymbols(t, info) {
+    t.tokenParameterSymbols = Array.from({ length: info.tokenParameterCount }, () => Symbol());
+}
+
+function storeTokenArgs(t, c, args) {
+    for(let i = 0; i < args.length; ++i) {
+        Object.defineProperty(
+            c.prototype,
+            t.tokenParameterSymbols[i],
+            {
+                value: args[i],
+                writable: false,
+            },
+        );
+    }
+}
+
+export function createRecordType(recordInfo) {
+    const recordTypeConstructorObj = {
+        [recordInfo.name]: function(values) {
+            for(const field of recordInfo.fields) {
+                let fieldValue;
+                if(field.name in values) {
+                    fieldValue = values[field.name];
+                }
+                else if("defaultValue" in field) {
+                    fieldValue = field.defaultValue;
+                }
+                else {
+                    throw new Error("Missing field: " + field.name);
+                }
+
+                if(field.mutable) {
+                    this["field_" + field.name] = fieldValue;
+                }
+                else {
+                    Object.defineProperty(
+                        this,
+                        "field_" + field.name,
+                        {
+                            value: fieldValue,
+                            writable: false,
+                        },
+                    );
+                }
+            }
+        },
+    };
+
+    const recordType = recordTypeConstructorObj[recordInfo.name];
+
+    if(recordInfo.tokenParameterCount !== 0) {
+        recordType.specialize = specialize();
+    }
+
+    defineTokenArgSymbols(recordType, recordInfo);
+
+    return recordType;
+}
+
+export function createEnumType(enumInfo) {
+    const enumType = createNamedConstructor(enumInfo.name);
+
+    function setupVariants(classObj) {
+        classObj.variants = Object.create(null);
+        for(const variantName of Object.keys(enumInfo.variants)) {
+            if(!Object.hasOwn(enumInfo.variants, variantName)) {
+                continue;
+            }
+
+            classObj.variants[variantName] = createEnumVariant(classObj, enumInfo.variants[variantName]);
+        }
+    }
+
+    if(enumInfo.tokenParameterCount === 0) {
+        setupVariants(enumType);
+    }
+    else {
+        enumType.specialize = specialize({
+            customize(specialization) {
+                setupVariants(specialization);
+            },
+        });
+    }
+
+    defineTokenArgSymbols(enumType, enumInfo);
+
+    return enumType;
+}
+
+function createEnumVariant(proto, variant) {
+    const variantClass = function(...args) {
+        if(args.length - 1 !== variant.argCount) {
+            throw new Error(`Invalid arguments count expected ${variant.argCount + 1}, actual ${args.length}`);
+        }
+
+        for(let i = 0; i < variant.argCount; ++i) {
+            Object.defineProperty(
+                this,
+                `args_${i}`,
+                {
+                    value: args[i],
+                    writable: false,
+                },
+            );
+        }
+
+        const fieldValues = args[args.length - 1];
+
+        for(const field of variant.fields) {
+            let fieldValue;
+            if(field.name in fieldValues) {
+                fieldValue = fieldValues[field.name];
+            }
+            else if("defaultValue" in field) {
+                fieldValue = field.defaultValue;
+            }
+            else {
+                throw new Error("Missing field: " + field.name);
+            }
+
+            if(field.mutable) {
+                this["field_" + field.name] = fieldValue;
+            }
+            else {
+                Object.defineProperty(
+                    this,
+                    "field_" + field.name,
+                    {
+                        value: fieldValue,
+                        writable: false,
+                    },
+                );
+            }
+        }
+
+        proto.call(this);
+    };
+
+    variantClass.prototype = Object.create(proto);
+
+    return variantClass;
+}
+
+export function createTraitType(traitInfo) {
+    const traitType = createNamedConstructor(traitInfo.name);
+
+    switch(traitInfo.special) {
+        case "exception": {
+            traitType.prototype = Object.create(Error.prototype);
+            Object.defineProperty(
+                traitType.prototype,
+                "message",
+                {
+                    get() {
+                        return resolve(this[traitType.methods["message$a$r$bstring$a$e"]]());
+                    }
+                }
+            );
+            break;
+        }
+    }
+
+    if(traitInfo.tokenParameterCount === 0) {
+        traitType.methods = Object.create(null);
+        applyVTable(traitType, traitInfo.methods, traitInfo.vtable);
+    }
+    else {
+        traitType.specialize = specialize({
+            customize(c) {
+                c.methods = Object.create(null);
+                applyVTable(c, traitInfo.methods, traitInfo.vtable);
+            },
+        });
+    }
+
+    defineTokenArgSymbols(traitType, traitInfo);
+
+    return traitType;
+}
+
+
+function abstractMethodImplementation() {
+    throw new Error("Abstract Method Called");
+}
+
+function ambiguousMethodImplementation() {
+    throw new Error("Ambiguous Method Implementation");
+}
+
+
+function applyVTable(c, methods, vtable) {
+    const methodImpls = [];
+
+    for(const [name, methodImpl] of Object.entries(methods)) {
+        const sym = Symbol();
+        if(c.methods !== undefined) {
+            c.methods[name] = sym;
+        }
+        const method = methodImpl.method;
+        methodImpls.push(method);
+        if(method === null) {
+            c.prototype[sym] = abstractMethodImplementation;
+        }
+        else if(typeof method === "function") {
+            c.prototype[sym] = method;
+        }
+        else {
+            throw new Error("A method must be null (abstract) or a function. Actual: " + typeof(method));
+        }
+    }
+
+    for(const entry of vtable) {
+        let method;
+        switch(entry.target.type) {
+            case "abstract":
+                method = abstractMethodImplementation;
+                break;
+
+            case "ambiguous":
+                method = ambiguousMethodImplementation;
+                break;
+
+            case "implementation":
+                method = methodImpls[entry.target.methodIndex];
+                if(method === null || method === undefined) {
+                    throw new Error("Invalid target method index");
+                }
+
+                break;
+
+            default:
+                throw new Error("Unexpected target type");
+        }
+
+        c.prototype[entry.slotMethodSymbol.call(c)] = method;
+    }
+}
+
+export function createInstanceDefinition(instanceInfo) {
+    function createInstanceConstructor(base) {
+        const constructor = function(...args) {
+            if(args.length !== instanceInfo.argCount) {
+                throw new Error(`Invalid arguments count expected ${instanceInfo.argCount}, actual ${args.length}`);
+            }
+
+            for(let i = 0; i < instanceInfo.argCount; ++i) {
+                Object.defineProperty(
+                    this,
+                    `args_${i}`,
+                    {
+                        value: args[i],
+                        writable: false,
+                    },
+                );
+            }
+
+            base.call(this);
+        };
+        
+        constructor.prototype = Object.create(base.prototype);
+
+        return constructor;
+    }
+
+
+    const inst = {};
+    inst.specialize = specialize({
+        getInstancePrototype(_inst, tokenArgs) {
+            return createInstanceConstructor(instanceInfo.baseConstructor(...tokenArgs));
+        },
+        customize(specialized) {
+            specialized.methods = Object.create(null);
+            applyVTable(specialized, instanceInfo.methods, instanceInfo.vtable);
+        },
+    });
+
+    defineTokenArgSymbols(inst, instanceInfo);
+
+    let createInstance;
+
+    if(instanceInfo.argCount === 0) {
+        const instanceMemo = new Map();
+        createInstance = function(...tokenArgs) {
+            const ctor = inst.specialize(...tokenArgs);
+            let instance = instanceMemo.get(ctor);
+            if(instance === undefined) {
+                instance = new ctor();
+                instanceMemo.set(ctor, instance);
+            }
+            return instance;
+        };
+    }
+    else {
+        createInstance = function(...allArgs) {
+            const tokenArgs = allArgs.slice(0, instanceInfo.tokenParameterCount);
+            const args = allArgs.slice(instanceInfo.tokenParameterCount);
+
+            return new (inst.specialize(...tokenArgs))(...args);
+        };
+    }
+
+    createInstance.tokenParameterSymbols = inst.tokenParameterSymbols;
+    return createInstance;
+}
+
+
+class TrampolineDelay {
+    constructor(delay) {
+        this.delay = delay;
+    }
+}
+
+export function delay(f) {
+    return new TrampolineDelay(f);
+}
+
+export function resolve(value) {
+    while(value instanceof TrampolineDelay) {
+        const delay = value.delay;
+        value = delay();
+    }
+    return value;
+}
+
+
