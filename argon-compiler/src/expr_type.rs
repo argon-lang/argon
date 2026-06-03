@@ -14,6 +14,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
         }
 
         Expr::Loop { .. }
+        | Expr::VariableBinding(_, _)
         | Expr::VariableStore(_, _)
         | Expr::While { .. } => Expr::unit_type(),
 
@@ -171,7 +172,7 @@ fn return_type_for_args(
     let mut return_type = signature.return_type.clone();
 
     for (index, (parameter, argument)) in signature.parameters.iter().zip(arguments).enumerate() {
-        let variable = Variable::Parameter(Arc::new(
+        let variable = Variable::Parameter(Box::new(
             parameter.clone().to_parameter_var(owner.clone(), index),
         ));
         SubstScanner::subst(variable, &argument, &mut return_type);

@@ -4,7 +4,7 @@ use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Ef
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
-use crate::ids::{LocalVariableId, TubeIdProvider};
+use crate::ids::TubeIdProvider;
 use argon_expr::{ExpressionOwner, LocalVariable, Variable};
 use argon_format::tube as tf;
 
@@ -516,6 +516,10 @@ impl TubeEncoder {
             Expr::Variable(variable) => tf::Expr::Variable {
                 v: Box::new(self.emit_var(variable)?),
             },
+            Expr::VariableBinding(variable, value) => tf::Expr::BindVariable {
+                value: Box::new(self.emit_expr(value)?),
+                v: Box::new(self.emit_local_var_from_variable(variable)?),
+            },
             _ => todo!("Unimplement emit_expr for {:?}", expr),
         })
     }
@@ -537,7 +541,13 @@ impl TubeEncoder {
                 erasure: Box::new(encode_erasure_mode(variable.erasure_mode)),
                 witness: variable.is_witness,
             },
-            Variable::Local(_) => todo!("emit variable expressions for local variables"),
+            Variable::Local(variable) => tf::Var::LocalVar {
+                id: self
+                    .ids
+                    .local_variable_ids
+                    .get(variable.id.clone())
+                    .into(),
+            },
         })
     }
 
@@ -570,13 +580,13 @@ impl TubeEncoder {
 
     fn emit_local_var(
         &mut self,
-        variable: &Arc<LocalVariable<argon_compiler::DefaultExprContext>>,
+        variable: &LocalVariable<argon_compiler::DefaultExprContext>,
     ) -> Result<tf::LocalVar, InternalCompilerError> {
         Ok(tf::LocalVar {
             id: self
                 .ids
                 .local_variable_ids
-                .get(LocalVariableId::new(variable))
+                .get(variable.id.clone())
                 .into(),
             var_type: Box::new(self.emit_expr(&variable.var_type)?),
             name: variable

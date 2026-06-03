@@ -184,6 +184,10 @@ where
         Expr::Type(t) => Expr::Type(Box::new(shifter.shift(*t))),
         Expr::BigType(value) => Expr::BigType(value),
         Expr::Variable(variable) => Expr::Variable(shifter.shift_variable(variable)),
+        Expr::VariableBinding(variable, value) => Expr::VariableBinding(
+            shifter.shift_variable(variable),
+            Box::new(shifter.shift(*value)),
+        ),
         Expr::VariableStore(variable, value) => Expr::VariableStore(
             shifter.shift_variable(variable),
             Box::new(shifter.shift(*value)),
@@ -216,28 +220,27 @@ where
     S: ExprContextShifter + ?Sized,
 {
     match v {
-        Variable::Local(variable) => Variable::Local(Arc::new(LocalVariable {
-            name: variable.name.clone(),
-            var_type: shifter.shift(variable.var_type.clone()),
+        Variable::Local(variable) => Variable::Local(Box::new(LocalVariable {
+            id: variable.id,
+            name: variable.name,
+            var_type: shifter.shift(variable.var_type),
             erasure_mode: variable.erasure_mode,
             is_witness: variable.is_witness,
             is_mutable: variable.is_mutable,
         })),
-        Variable::Parameter(variable) => Variable::Parameter(Arc::new(ParameterVariable {
-            owner: match &variable.owner {
-                ExpressionOwner::Function(function) => ExpressionOwner::Function(function.clone()),
-                ExpressionOwner::Record(record) => ExpressionOwner::Record(record.clone()),
-                ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec.clone()),
-                ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec.clone()),
-                ExpressionOwner::EnumVariant(enum_variant) => {
-                    ExpressionOwner::EnumVariant(enum_variant.clone())
-                }
-                ExpressionOwner::Method(method) => ExpressionOwner::Method(method.clone()),
-                ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance.clone()),
+        Variable::Parameter(variable) => Variable::Parameter(Box::new(ParameterVariable {
+            owner: match variable.owner {
+                ExpressionOwner::Function(function) => ExpressionOwner::Function(function),
+                ExpressionOwner::Record(record) => ExpressionOwner::Record(record),
+                ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec),
+                ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec),
+                ExpressionOwner::EnumVariant(enum_variant) => ExpressionOwner::EnumVariant(enum_variant),
+                ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
+                ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
             },
             parameter_index: variable.parameter_index,
-            var_type: shifter.shift(variable.var_type.clone()),
-            name: variable.name.clone(),
+            var_type: shifter.shift(variable.var_type),
+            name: variable.name,
             erasure_mode: variable.erasure_mode,
             is_witness: variable.is_witness,
         })),

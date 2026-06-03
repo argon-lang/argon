@@ -4,9 +4,11 @@ use core::convert::Infallible;
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
 use core::str::FromStr;
+use std::ops::Deref;
 use derivative::Derivative;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
+use argon_util::UniqueIdentifier;
 
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
@@ -142,6 +144,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Type(Box<Expr<EC>>),
     BigType(BigInt),
     Variable(Variable<EC>),
+    VariableBinding(Variable<EC>, Box<Expr<EC>>),
     VariableStore(Variable<EC>, Box<Expr<EC>>),
     While {
         label: Option<Identifier>,
@@ -370,9 +373,13 @@ pub enum ErasureMode {
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub enum Variable<EC: ExprContext + ?Sized> {
-    Local(Arc<LocalVariable<EC>>),
-    Parameter(Arc<ParameterVariable<EC>>),
+    Local(Box<LocalVariable<EC>>),
+    Parameter(Box<ParameterVariable<EC>>),
 }
 
 impl<EC: ExprContext + ?Sized> Variable<EC> {
@@ -398,46 +405,6 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
     }
 }
 
-impl<EC: ExprContext + ?Sized> Clone for Variable<EC> {
-    fn clone(&self) -> Self {
-        match self {
-            Variable::Local(variable) => Variable::Local(variable.clone()),
-            Variable::Parameter(variable) => Variable::Parameter(variable.clone()),
-        }
-    }
-}
-
-impl<EC: ExprContext + ?Sized> PartialEq for Variable<EC> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Variable::Local(a), Variable::Local(b)) => Arc::ptr_eq(a, b),
-            (Variable::Local(_), _) | (_, Variable::Local(_)) => false,
-
-            (Variable::Parameter(a), Variable::Parameter(b)) => {
-                a.owner == b.owner && a.parameter_index == b.parameter_index
-            }
-        }
-    }
-}
-
-impl<EC: ExprContext + ?Sized> Eq for Variable<EC> {}
-
-impl<EC: ExprContext + ?Sized> Hash for Variable<EC> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        match self {
-            Variable::Local(variable) => {
-                0usize.hash(state);
-                Arc::as_ptr(variable).hash(state);
-            }
-            Variable::Parameter(variable) => {
-                1usize.hash(state);
-                variable.owner.hash(state);
-                variable.parameter_index.hash(state);
-            }
-        }
-    }
-}
-
 pub struct VariableTupleElement<EC: ExprContext + ?Sized> {
     pub variable: Variable<EC>,
     pub index: usize,
@@ -456,7 +423,9 @@ impl<EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
 pub struct LocalVariable<EC: ExprContext + ?Sized> {
+    pub id: UniqueIdentifier,
     pub name: Option<Identifier>,
     pub var_type: Expr<EC>,
     pub erasure_mode: ErasureMode,
@@ -464,20 +433,24 @@ pub struct LocalVariable<EC: ExprContext + ?Sized> {
     pub is_mutable: bool,
 }
 
-impl<EC: ExprContext + ?Sized> Clone for LocalVariable<EC> {
-    fn clone(&self) -> Self {
-        Self {
-            name: self.name.clone(),
-            var_type: self.var_type.clone(),
-            erasure_mode: self.erasure_mode,
-            is_witness: self.is_witness,
-            is_mutable: self.is_mutable,
-        }
+impl<EC: ExprContext + ?Sized> PartialEq for LocalVariable<EC> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
+impl<EC: ExprContext + ?Sized> Eq for LocalVariable<EC> {}
+
+impl<EC: ExprContext + ?Sized> Hash for LocalVariable<EC> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
+
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
 pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub owner: ExpressionOwner<EC>,
     pub parameter_index: usize,
@@ -487,16 +460,18 @@ pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub is_witness: bool,
 }
 
-impl<EC: ExprContext + ?Sized> Clone for ParameterVariable<EC> {
-    fn clone(&self) -> Self {
-        Self {
-            owner: self.owner.clone(),
-            parameter_index: self.parameter_index,
-            var_type: self.var_type.clone(),
-            name: self.name.clone(),
-            erasure_mode: self.erasure_mode,
-            is_witness: self.is_witness,
-        }
+impl <EC: ExprContext + ?Sized> PartialEq for ParameterVariable<EC> {
+    fn eq(&self, other: &Self) -> bool {
+        self.owner == other.owner && self.parameter_index == other.parameter_index
+    }
+}
+
+impl <EC: ExprContext + ?Sized> Eq for ParameterVariable<EC> {}
+
+impl <EC: ExprContext + ?Sized> Hash for ParameterVariable<EC> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.owner.hash(state);
+        self.parameter_index.hash(state);
     }
 }
 

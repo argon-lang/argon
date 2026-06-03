@@ -118,6 +118,9 @@ where
         Expr::Type(t) => scanner.scan(t),
         Expr::BigType(_) => true,
         Expr::Variable(variable) => scanner.scan_variable(variable),
+        Expr::VariableBinding(variable, value) => {
+            scanner.scan_variable(variable) && scanner.scan(value)
+        }
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value)
         }
@@ -225,6 +228,9 @@ where
         Expr::Type(t) => scanner.scan(t.as_mut()),
         Expr::BigType(_) => true,
         Expr::Variable(variable) => scanner.scan_variable(variable),
+        Expr::VariableBinding(variable, value) => {
+            scanner.scan_variable(variable) && scanner.scan(value.as_mut())
+        }
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value.as_mut())
         }
@@ -242,8 +248,8 @@ where
     S: ExprScannerMut + ?Sized,
 {
     match v {
-        Variable::Local(variable) => scanner.scan(&mut Arc::make_mut(variable).var_type),
-        Variable::Parameter(variable) => scanner.scan(&mut Arc::make_mut(variable).var_type),
+        Variable::Local(variable) => scanner.scan(&mut variable.var_type),
+        Variable::Parameter(variable) => scanner.scan(&mut variable.var_type),
     }
 }
 

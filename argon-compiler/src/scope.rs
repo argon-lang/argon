@@ -1,6 +1,7 @@
 use crate::signature::SignatureParameter;
 use crate::{DefaultExprContext, Enum, Function, Instance, Method, Record, Trait};
 use alloc::{sync::Arc, vec::Vec};
+use alloc::boxed::Box;
 use argon_expr::{
     ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
 };
@@ -94,7 +95,7 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
         let mut binding_lookup = HashMap::new();
 
         for (param_index, param) in parameters.iter().enumerate() {
-            let param_var = Variable::Parameter(Arc::new(
+            let param_var = Variable::Parameter(Box::new(
                 param.clone().to_parameter_var(owner.clone(), param_index),
             ));
 

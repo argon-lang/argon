@@ -423,7 +423,7 @@ impl VmEncoder {
         let mut builder = FunctionSignatureBuilder::new(self);
 
         for (index, param) in sig.parameters.iter().enumerate() {
-            builder.add_parameter(Arc::new(param.clone().to_parameter_var(owner.clone(), index)), false)?;
+            builder.add_parameter(Box::new(param.clone().to_parameter_var(owner.clone(), index)), false)?;
         }
 
         builder.finish(&sig.return_type)
@@ -577,7 +577,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
     fn add_parameter(
         &mut self,
-        param: Arc<ParameterVariable<DefaultExprContext>>,
+        param: Box<ParameterVariable<DefaultExprContext>>,
         captured_ref: bool,
     ) -> Result<(), InternalCompilerError> {
         match param.erasure_mode {
@@ -903,8 +903,6 @@ impl <'a> ExprEmitter<'a> {
 
                 rb.into_result(self)?
             },
-
-            // BindVariable
 
             Expr::BoolLiteral(b) => {
                 let rb = output.output_register(self, e)?;
@@ -1264,6 +1262,22 @@ impl <'a> ExprEmitter<'a> {
                 }
             },
 
+            Expr::VariableBinding(v, value) => {
+                let r = self.declare_var(v.clone())?;
+                if self.captured_vars.contains(v) && v.is_mutable() {
+                    let value_reg = self.expr(value, AnyRegister)?;
+                    self.emit(vf::Instruction::NewReference {
+                        dest: Box::new(r),
+                        value: Box::new(value_reg),
+                    });
+                }
+                else {
+                    self.expr(value, ExprOutputKnown::Register(r))?;
+                }
+
+                output.output_unit_result(self)?
+            }
+
             Expr::VariableStore(v, value) => {
                 let Some(realization) = self.known_vars.get(v) else {
                     todo!("return a proper error")
@@ -1594,7 +1608,7 @@ impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
         for ((parameter_index, parameter), argument) in
             signature.parameters.iter().enumerate().zip(&arguments)
         {
-            let variable = Variable::Parameter(Arc::new(
+            let variable = Variable::Parameter(Box::new(
                 parameter
                     .clone()
                     .to_parameter_var(owner.clone(), parameter_index),

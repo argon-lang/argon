@@ -51,7 +51,7 @@ struct TubeDecoder {
     module_ids: RwLock<HashMap<BigUint, (TubeName, ModulePath)>>,
     functions: RwLock<HashMap<BigUint, Arc<dyn Function>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
-    local_variables: RwLock<HashMap<BigUint, Arc<LocalVariable<DefaultExprContext>>>>,
+    local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
 }
 
 #[derive(Clone)]
@@ -515,11 +515,7 @@ impl TubeDecoder {
         let (tube_id, path) = self
             .module_references
             .get(&id)
-            .unwrap_or_else(|| {
-                std::eprintln!("modules: {:#?}", (*rwlock_read(&self.module_ids)).clone());
-                std::eprintln!("module references: {:#?}", self.module_references);
-                panic!("unknown module id {id}")
-            })
+            .unwrap_or_else(|| panic!("unknown module id {id}"))
             .clone();
         let tube_name = rwlock_read(&self.tube_ids)
             .get(&tube_id)
@@ -677,7 +673,11 @@ impl TubeDecoder {
                 Box::new(self.decode_expr(*a)),
                 Box::new(self.decode_expr(*b)),
             ),
-            tf::Expr::BindVariable { .. } => todo!("decode bind-variable expression"),
+            tf::Expr::BindVariable { v, value } => {
+                let value = self.decode_expr(*value);
+                let variable = self.decode_local_var(*v);
+                Expr::VariableBinding(Variable::Local(variable), Box::new(value))
+            }
             tf::Expr::BoolLiteral { value } => Expr::BoolLiteral(value),
             tf::Expr::Box { t, value } => Expr::Box {
                 t: Box::new(self.decode_expr(*t)),
@@ -797,7 +797,7 @@ impl TubeDecoder {
                 var_type,
                 erasure,
                 witness,
-            } => Variable::Parameter(Arc::new(ParameterVariable {
+            } => Variable::Parameter(Box::new(ParameterVariable {
                 owner: self.decode_expression_owner(*owner),
                 parameter_index: usize::try_from(parameter_index)
                     .expect("parameter index does not fit usize"),
@@ -834,9 +834,10 @@ impl TubeDecoder {
     fn decode_local_var(
         self: &Arc<Self>,
         variable: tf::LocalVar,
-    ) -> Arc<LocalVariable<DefaultExprContext>> {
+    ) -> Box<LocalVariable<DefaultExprContext>> {
         let id = variable.id;
-        let local_variable = Arc::new(LocalVariable {
+        let local_variable = Box::new(LocalVariable {
+            id: UniqueIdentifier::new(),
             name: variable.name.map(|name| decode_identifier(*name)),
             var_type: self.decode_expr(*variable.var_type),
             erasure_mode: if variable.erased {

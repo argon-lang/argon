@@ -1,9 +1,7 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::scanner::PurityScanner;
-use argon_compiler::scope::{
-    LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope,
-};
+use argon_compiler::scope::{LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope};
 use argon_compiler::{
     Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
 };
@@ -23,6 +21,7 @@ use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
+use crate::modifiers::{ModifierParser, ERASURE_MODE, IS_WITNESS};
 
 pub fn type_check_type_expr(
     context: Context,
@@ -118,7 +117,7 @@ impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
         for ((parameter_index, parameter), argument) in
             signature.parameters.iter().enumerate().zip(&arguments)
         {
-            let variable = Variable::Parameter(Arc::new(
+            let variable = Variable::Parameter(Box::new(
                 parameter
                     .clone()
                     .to_parameter_var(owner.clone(), parameter_index),
@@ -250,6 +249,13 @@ impl<'a> TypeInferResult<'a> {
             TypeInferResult::Sequence { last_result, .. } => last_result.partially_inferred_type(),
         }
     }
+
+    fn infer_fully(self) -> InferredType {
+        match self {
+            TypeInferResult::Complete(inferred_type) => inferred_type,
+            _ => todo!()
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -273,12 +279,12 @@ enum ExpectedType<'a> {
 
 struct TypeChecker<'a> {
     context: Context,
-    scope: &'a mut dyn Scope<ExprContext = TypeCheckExprContext>,
+    scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     model: Model,
 }
 
 impl<'a> TypeChecker<'a> {
-    fn new(context: Context, scope: &'a mut dyn Scope<ExprContext = TypeCheckExprContext>) -> Self {
+    fn new(context: Context, scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>) -> Self {
         Self {
             context,
             scope,
@@ -288,7 +294,7 @@ impl<'a> TypeChecker<'a> {
 
     fn with_scope<'b>(
         &'a mut self,
-        scope: &'b mut dyn Scope<ExprContext = TypeCheckExprContext>,
+        scope: &'b mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     ) -> TypeChecker<'b> {
         TypeChecker {
             context: self.context.clone(),
@@ -623,7 +629,41 @@ impl<'a> TypeChecker<'a> {
     fn infer_stmt(&mut self, stmt: &'a WithLocation<ast::Stmt>) -> TypeInferResult<'a> {
         match &stmt.value {
             ast::Stmt::Expr(expr) => self.infer(expr),
-            _ => todo!("inferring non-expression statements in blocks"),
+            ast::Stmt::VariableDeclaration(v) => {
+                let variable_value: Expr<TypeCheckExprContext>;
+                let var_type: Expr<TypeCheckExprContext>;
+                if let Some(t) = &v.var_type {
+                    var_type = self.check_type(t);
+                    variable_value = self.check(&v.value, &var_type);
+                }
+                else {
+                    let result = self.infer(&v.value).infer_fully();
+                    var_type = result.inferred_type;
+                    variable_value = result.checked_expr;
+                }
+
+                let mut mp = ModifierParser::new(self.context.clone(), &v.modifiers, &stmt.location);
+                let erasure_mode = mp.parse(ERASURE_MODE);
+                let is_witness = mp.parse(IS_WITNESS);
+                mp.done();
+
+                let v = Variable::Local(Box::new(LocalVariable {
+                    id: UniqueIdentifier::new(),
+                    name: v.name.clone(),
+                    var_type,
+                    erasure_mode,
+                    is_witness,
+                    is_mutable: v.is_mutable,
+                }));
+
+                self.scope.add_variable(v.clone());
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::VariableBinding(v, Box::new(variable_value)),
+                    inferred_type: Expr::unit_type(),
+                })
+            },
+            _ => todo!("inferring non-expression statements in blocks: {:#?}", stmt),
         }
     }
 
@@ -1259,7 +1299,8 @@ impl<'a> TypeChecker<'a> {
         cond_expr: &Expr<TypeCheckExprContext>,
         equal_to_value: bool,
     ) -> Variable<TypeCheckExprContext> {
-        Variable::Local(Arc::new(LocalVariable {
+        Variable::Local(Box::new(LocalVariable {
+            id: UniqueIdentifier::new(),
             name: None,
             var_type: Expr::Builtin {
                 builtin: Builtin::EqualToType,
@@ -1614,7 +1655,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
             };
 
             let v: Variable<TypeCheckExprContext> = DefaultToTypeCheckExprContextShifter
-                .shift_variable(Variable::Parameter(Arc::new(
+                .shift_variable(Variable::Parameter(Box::new(
                     param
                         .clone()
                         .to_parameter_var(overload.as_expression_owner(), parameter_index),
@@ -1765,7 +1806,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
             };
 
             let v: Variable<TypeCheckExprContext> = DefaultToTypeCheckExprContextShifter
-                .shift_variable(Variable::Parameter(Arc::new(
+                .shift_variable(Variable::Parameter(Box::new(
                     param
                         .clone()
                         .to_parameter_var(overload.as_expression_owner(), parameter_index),

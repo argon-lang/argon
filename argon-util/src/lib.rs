@@ -40,7 +40,7 @@ impl Eq for UniqueIdentifier {}
 
 impl Hash for UniqueIdentifier {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        Arc::as_ptr(&self.0).hash(state);
+        (Arc::as_ptr(&self.0) as usize).hash(state);
     }
 }
 
