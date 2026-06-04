@@ -26,32 +26,36 @@ where
 
     let mut file = EmbeddedIoRead::new(file);
     let mut tube_expr_stream = esexpr_binary::parse_sync(&mut file);
-    let tube_entries = iter::from_fn(move || {
-        let expr = match tube_expr_stream.try_read_next_expr() {
-            Ok(Some(expr)) => expr,
-            Ok(None) => return None,
-            Err(e) => {
-                context
-                    .reporter()
-                    .report_error(tube_parse_error(referenced_tube, e));
-                return None;
-            }
-        };
+    let tube_entries = {
+        let context = context.clone();
+        iter::from_fn(move || {
+            let expr = match tube_expr_stream.try_read_next_expr() {
+                Ok(Some(expr)) => expr,
+                Ok(None) => return None,
+                Err(e) => {
+                    context
+                        .reporter()
+                        .report_error(tube_parse_error(referenced_tube, e));
+                    return None;
+                }
+            };
 
-        let entry = match TubeFileEntry::decode_esexpr(expr) {
-            Ok(entry) => entry,
-            Err(e) => {
-                context
-                    .reporter()
-                    .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
-                return None;
-            }
-        };
+            let entry = match TubeFileEntry::decode_esexpr(expr) {
+                Ok(entry) => entry,
+                Err(e) => {
+                    context
+                        .reporter()
+                        .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
+                    return None;
+                }
+            };
 
-        Some(entry)
-    });
+            Some(entry)
+        })
+    };
 
     Some(argon_tube::decoder::decode_tube(
+        context,
         tube_entries,
         tube_collection_builder,
     ))

@@ -5,11 +5,7 @@ use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
-use argon_compiler::{
-    BinaryOperatorIdentifier, Builtin, DefaultExprContext, Enum, Function, FunctionImplementation,
-    FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry,
-    ModulePath, Record, Trait, Tube, TubeName, UnaryOperatorIdentifier,
-};
+use argon_compiler::{BinaryOperatorIdentifier, Builtin, DefaultExprContext, DefaultExprNormalizer, Enum, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, Trait, Tube, TubeName, UnaryOperatorIdentifier};
 use argon_expr::{
     ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner,
     ParameterVariable, SubstScanner, Variable,
@@ -1731,46 +1727,6 @@ enum OutputFunctionResultBuilderType {
     },
     Discard,
     Return,
-}
-
-struct DefaultExprNormalizer;
-
-impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
-    fn get_function_body(
-        &mut self,
-        function: &Arc<dyn Function>,
-        arguments: &mut Vec<Expr<DefaultExprContext>>,
-    ) -> Option<Expr<DefaultExprContext>> {
-        if !function.metadata().is_inline {
-            return None;
-        }
-
-        let implementation = function.clone().implementation()?;
-        let FunctionImplementation::Expr(body) = implementation.as_ref() else {
-            return None;
-        };
-
-        let signature = function.clone().signature();
-        let owner = ExpressionOwner::Function(function.clone());
-        let mut body = body.clone();
-        let arguments = mem::take(arguments);
-        let mut subst = SubstScanner::new();
-
-        for ((parameter_index, parameter), argument) in
-            signature.parameters.iter().enumerate().zip(&arguments)
-        {
-            let variable = Variable::Parameter(Box::new(
-                parameter
-                    .clone()
-                    .to_parameter_var(owner.clone(), parameter_index),
-            ));
-
-            subst.add_substitution(variable, argument);
-        }
-
-        subst.scan(&mut body);
-        Some(body)
-    }
 }
 
 fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode {

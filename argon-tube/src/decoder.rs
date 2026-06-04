@@ -4,14 +4,7 @@ use argon_compiler::erased_sig::{
 };
 use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
-use argon_compiler::{
-    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, DefaultExprContext, EffectInfo,
-    ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata,
-    FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldMetadata, RecordFieldOwner,
-    Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier,
-    Unload,
-};
+use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldMetadata, RecordFieldOwner, Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload};
 use argon_expr::{LocalVariable, ParameterVariable, RecordFieldLiteral, Variable};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
@@ -23,18 +16,20 @@ use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
 
 pub fn decode_tube(
+    context: Context,
     mut tube: impl Iterator<Item = tf::TubeFileEntry>,
     tube_collection_builder: &TubeCollectionBuilder,
 ) -> Arc<Tube> {
     read_version_entry(tube.next());
     let metadata = read_metadata_entry(tube.next());
 
-    let mut decoder = TubeDecoder::new(tube_collection_builder.tube_collection(), metadata);
+    let mut decoder = TubeDecoder::new(context, tube_collection_builder.tube_collection(), metadata);
     decoder.read_remaining_entries(tube);
     Arc::new(decoder).create_tube(tube_collection_builder)
 }
 
 struct TubeDecoder {
+    context: Context,
     tube_collection: Arc<TubeCollection>,
     metadata: tf::TubeMetadata,
     module_references: HashMap<BigUint, (BigUint, tf::ModulePath)>,
@@ -92,8 +87,9 @@ enum InstanceEntry {
 }
 
 impl TubeDecoder {
-    fn new(tube_collection: Arc<TubeCollection>, metadata: tf::TubeMetadata) -> Self {
+    fn new(context: Context, tube_collection: Arc<TubeCollection>, metadata: tf::TubeMetadata) -> Self {
         Self {
+            context,
             tube_collection,
             metadata,
             module_references: HashMap::new(),
@@ -451,7 +447,7 @@ impl TubeDecoder {
                     .iter()
                     .find_map(|entry| match &entry.binding {
                         ModuleExportBinding::Function(function)
-                            if &erase_signature(function.clone().signature().as_ref())
+                            if &erase_signature(self.context.clone(), function.clone().signature().as_ref())
                                 == signature.as_ref() =>
                         {
                             Some(function.clone())
@@ -518,7 +514,7 @@ impl TubeDecoder {
                     .iter()
                     .find_map(|entry| match &entry.binding {
                         ModuleExportBinding::Record(record)
-                            if &erase_signature(record.clone().signature().as_ref())
+                            if &erase_signature(self.context.clone(), record.clone().signature().as_ref())
                                 == signature.as_ref() =>
                         {
                             Some(record.clone())

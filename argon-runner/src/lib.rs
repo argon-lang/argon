@@ -92,7 +92,7 @@ where
                 &mut out_file,
             );
 
-        for entry in argon_tube::encoder::encode_tube(tube) {
+        for entry in argon_tube::encoder::encode_tube(context.clone(), tube) {
             let entry = match entry {
                 Ok(entry) => entry,
                 Err(e) => {

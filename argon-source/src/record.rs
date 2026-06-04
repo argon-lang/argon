@@ -84,7 +84,7 @@ impl Unload for SourceRecord {
 
 impl Record for SourceRecord {
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
-        let signature = erase_signature(self.clone().signature().as_ref());
+        let signature = erase_signature(self.context.clone(), self.clone().signature().as_ref());
         self.closure
             .import_specifier(self.decl.name.value.clone(), signature)
     }

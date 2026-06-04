@@ -1611,7 +1611,7 @@ fn partially_inferred_type_matches_expected(
                     .all(|e| partially_inferred_type_matches_expected(context, e, expected_type))
             }
 
-            ExpectedType::Exact(Expr::Tuple { items }) => {
+            ExpectedType::Exact(Expr::Tuple { items }) if items.len() == elements.len() => {
                 elements.iter().zip(items.iter()).all(|(actual, expected)| {
                     partially_inferred_type_matches_expected(
                         context,

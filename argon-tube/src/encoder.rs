@@ -1,11 +1,6 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
-use argon_compiler::{
-    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
-    Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
-    Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField,
-    RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier,
-};
+use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier};
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
@@ -20,12 +15,14 @@ use argon_util::InternalCompilerError;
 use esexpr::ESExprStatic;
 
 pub fn encode_tube(
+    context: Context,
     tube: Arc<Tube>,
 ) -> impl Iterator<Item = Result<tf::TubeFileEntry, InternalCompilerError>> {
-    TubeEncoder::new(tube)
+    TubeEncoder::new(context, tube)
 }
 
 pub struct TubeEncoder {
+    context: Context,
     tube: Arc<Tube>,
 
     // Used to ensure that modules are emitted in a consistent order.
@@ -37,7 +34,7 @@ pub struct TubeEncoder {
 }
 
 impl TubeEncoder {
-    pub fn new(tube: Arc<Tube>) -> Self {
+    pub fn new(context: Context, tube: Arc<Tube>) -> Self {
         let mut modules = tube
             .modules()
             .iter()
@@ -47,6 +44,7 @@ impl TubeEncoder {
         modules.sort_by(|m1, m2| m1.path().cmp(m2.path()));
 
         let mut encoder = Self {
+            context,
             tube,
             modules,
             ids: TubeIdProvider::default(),
@@ -321,7 +319,7 @@ impl TubeEncoder {
             ModuleExportBinding::Function(function) => {
                 let function_id = self.get_function_id(function.clone());
                 let sig = function.signature();
-                let erased_sig = erase_signature(sig.as_ref());
+                let erased_sig = erase_signature(self.context.clone(), sig.as_ref());
                 let signature = self.encode_erased_signature(&erased_sig)?;
                 tf::ModuleExport::Function {
                     function_id: BigUint::from(function_id),
@@ -333,7 +331,7 @@ impl TubeEncoder {
             ModuleExportBinding::Record(record) => {
                 let record_id = self.get_record_id(record.clone());
                 let sig = record.signature();
-                let erased_sig = erase_signature(sig.as_ref());
+                let erased_sig = erase_signature(self.context.clone(), sig.as_ref());
                 let signature = self.encode_erased_signature(&erased_sig)?;
                 tf::ModuleExport::Record {
                     record_id: BigUint::from(record_id),

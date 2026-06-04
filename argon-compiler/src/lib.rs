@@ -1,5 +1,6 @@
 #![no_std]
 
+use argon_expr::ExprScannerMut;
 extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
@@ -18,7 +19,7 @@ pub use crate::access::AccessModifierGlobal;
 use crate::platform::PlatformExtern;
 pub use crate::signature::FunctionSignature;
 use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};
-use argon_expr::ExprContext;
+use argon_expr::{ExprContext, ExpressionOwner, Normalizer, SubstScanner, Variable};
 pub use argon_expr::{Builtin, ErasureMode, Expr};
 pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
@@ -32,6 +33,8 @@ use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
 use core::hash::{Hash, Hasher};
 use core::str::FromStr;
+use std::mem;
+use std::prelude::rust_2015::Box;
 use esexpr::ESExpr;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
@@ -495,3 +498,46 @@ pub enum TypeDeclaration {
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
+
+
+
+pub struct DefaultExprNormalizer;
+
+impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
+    fn get_function_body(
+        &mut self,
+        function: &Arc<dyn Function>,
+        arguments: &mut Vec<Expr<DefaultExprContext>>,
+    ) -> Option<Expr<DefaultExprContext>> {
+        if !function.metadata().is_inline {
+            return None;
+        }
+
+        let implementation = function.clone().implementation()?;
+        let FunctionImplementation::Expr(body) = implementation.as_ref() else {
+            return None;
+        };
+
+        let signature = function.clone().signature();
+        let owner = ExpressionOwner::Function(function.clone());
+        let mut body = body.clone();
+        let arguments = mem::take(arguments);
+        let mut subst = SubstScanner::new();
+
+        for ((parameter_index, parameter), argument) in
+            signature.parameters.iter().enumerate().zip(&arguments)
+        {
+            let variable = Variable::Parameter(Box::new(
+                parameter
+                    .clone()
+                    .to_parameter_var(owner.clone(), parameter_index),
+            ));
+
+            subst.add_substitution(variable, argument);
+        }
+
+        subst.scan(&mut body);
+        Some(body)
+    }
+}
+
