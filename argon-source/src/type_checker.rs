@@ -725,7 +725,10 @@ impl<'a> TypeChecker<'a> {
             }
             CalleeInfo::Overloadable(overloads) => OverloadResolver::new(self)
                 .resolve_overload_lookup(call.location, overloads, call.arguments),
-            CalleeInfo::Expr(_) => todo!(),
+            CalleeInfo::Expr(e) => {
+                let res = self.infer(e);
+                self.infer_function_object_call(res, call.arguments)
+            },
             CalleeInfo::TypeN => {
                 if !call.arguments.is_empty() {
                     todo!()
@@ -965,7 +968,12 @@ impl<'a> TypeChecker<'a> {
     ) -> TypeInferResult<'a> {
         let t = v.var_type().clone();
         let expr = Expr::Variable(v);
-        self.infer_function_object_call(expr, t, args)
+        let res = TypeInferResult::Complete(InferredType {
+            checked_expr: expr,
+            inferred_type: t,
+        });
+
+        self.infer_function_object_call(res, args)
     }
 
     fn infer_variable_tuple_element(
@@ -975,20 +983,19 @@ impl<'a> TypeChecker<'a> {
     ) -> TypeInferResult<'a> {
         let t = vte.binding_type;
         let expr = Expr::TupleElement(Box::new(Expr::Variable(vte.variable)), vte.index);
-        self.infer_function_object_call(expr, t, args)
-    }
-
-    fn infer_function_object_call<'b>(
-        &mut self,
-        expr: Expr<TypeCheckExprContext>,
-        t: Expr<TypeCheckExprContext>,
-        args: VecDeque<ArgumentInfo<'a>>,
-    ) -> TypeInferResult<'a> {
-        let expr_result = TypeInferResult::Complete(InferredType {
+        let res = TypeInferResult::Complete(InferredType {
             checked_expr: expr,
             inferred_type: t,
         });
 
+        self.infer_function_object_call(res, args)
+    }
+
+    fn infer_function_object_call<'b>(
+        &mut self,
+        expr_result: TypeInferResult<'a>,
+        args: VecDeque<ArgumentInfo<'a>>,
+    ) -> TypeInferResult<'a> {
         let args = args
             .iter()
             .map(|arg| (self.infer(arg.arg), arg.clone()))
@@ -1066,7 +1073,7 @@ impl<'a> TypeChecker<'a> {
                         list_type: *list_type,
                     });
                     func_expr = func;
-                }
+                },
 
                 ast::Expr::Builtin(builtin_name) => {
                     let Ok(builtin) = builtin_name.parse::<Builtin>() else {
@@ -1083,7 +1090,7 @@ impl<'a> TypeChecker<'a> {
                         callee: CalleeInfo::Builtin(builtin),
                         arguments,
                     };
-                }
+                },
 
                 ast::Expr::Identifier(identifier) => {
                     let callee = self.process_lookup(&func_expr.location, identifier);
@@ -1092,7 +1099,7 @@ impl<'a> TypeChecker<'a> {
                         callee,
                         arguments,
                     };
-                }
+                },
 
                 ast::Expr::Dot { o, member } => {
                     let mut overload_groups = Vec::new();
@@ -1176,7 +1183,7 @@ impl<'a> TypeChecker<'a> {
                         callee: CalleeInfo::Overloadable(overload_groups),
                         arguments,
                     };
-                }
+                },
 
                 ast::Expr::Type => {
                     return CallInfo {
@@ -1184,7 +1191,7 @@ impl<'a> TypeChecker<'a> {
                         callee: CalleeInfo::TypeN,
                         arguments,
                     };
-                }
+                },
 
                 _ => {
                     return CallInfo {
