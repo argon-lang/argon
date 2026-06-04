@@ -1,12 +1,12 @@
 mod js_platform;
 
+use argon_testcases::TestCase;
+pub use js_platform::*;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-use argon_testcases::TestCase;
-pub use js_platform::*;
 
 pub struct TestSuiteContext<P: CompileTargetPlatform> {
     pub platform: Arc<P>,
@@ -21,10 +21,14 @@ pub struct TestSuiteContext<P: CompileTargetPlatform> {
     pub platform_state: P::PlatformState,
 }
 
-impl <P: CompileTargetPlatform> TestSuiteContext<P> {
+impl<P: CompileTargetPlatform> TestSuiteContext<P> {
     pub fn library_info(self: Arc<Self>, library_name: &str) -> LibraryInfo<P> {
         let library_path = self.lib_dir.join(library_name);
-        let library_output_path = self.test_suite_data_dir.path().join("lib").join(library_name);
+        let library_output_path = self
+            .test_suite_data_dir
+            .path()
+            .join("lib")
+            .join(library_name);
 
         std::fs::create_dir_all(&library_output_path).unwrap();
 
@@ -41,9 +45,15 @@ impl <P: CompileTargetPlatform> TestSuiteContext<P> {
 
         let context2 = self.clone();
 
-        metadata_map.entry(library_name.to_owned()).or_insert_with(|| {
-            context2.platform.clone().library_platform_metadata(&context2.library_info(library_name))
-        }).clone()
+        metadata_map
+            .entry(library_name.to_owned())
+            .or_insert_with(|| {
+                context2
+                    .platform
+                    .clone()
+                    .library_platform_metadata(&context2.library_info(library_name))
+            })
+            .clone()
     }
 
     pub fn compile_library_tube(self: Arc<Self>, library_name: &str) -> PathBuf {
@@ -51,41 +61,49 @@ impl <P: CompileTargetPlatform> TestSuiteContext<P> {
 
         let context2 = self.clone();
 
-        tube_map.entry(library_name.to_owned()).or_insert_with(|| {
-            let library = context2.library_info(library_name);
+        tube_map
+            .entry(library_name.to_owned())
+            .or_insert_with(|| {
+                let library = context2.library_info(library_name);
 
-            let output_file = library.library_output_path.join(format!("{}.artube", library.name));
+                let output_file = library
+                    .library_output_path
+                    .join(format!("{}.artube", library.name));
 
-            let mut cmd = Command::new(&library.test_suite_context.argon_bin);
-            cmd.arg("compile");
-            cmd.arg("--tube-name");
-            cmd.arg(&library.name);
+                let mut cmd = Command::new(&library.test_suite_context.argon_bin);
+                cmd.arg("compile");
+                cmd.arg("--tube-name");
+                cmd.arg(&library.name);
 
-            cmd.arg("--input");
-            cmd.arg(library.library_path.join("src"));
+                cmd.arg("--input");
+                cmd.arg(library.library_path.join("src"));
 
-            cmd.arg("--output");
-            cmd.arg(&output_file);
+                cmd.arg("--output");
+                cmd.arg(&output_file);
 
-            let metadata_files = library.test_suite_context.clone().build_library_metadata(library_name);
+                let metadata_files = library
+                    .test_suite_context
+                    .clone()
+                    .build_library_metadata(library_name);
 
-            for metadata_file in metadata_files {
-                cmd.arg("--platform");
-                cmd.arg(metadata_file);
-            }
+                for metadata_file in metadata_files {
+                    cmd.arg("--platform");
+                    cmd.arg(metadata_file);
+                }
 
-            let output = cmd.output().unwrap();
+                let output = cmd.output().unwrap();
 
-            assert!(
-                output.status.success(),
-                "Compilation of library {} failed\n{}\n{}",
-                library.name,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-            );
+                assert!(
+                    output.status.success(),
+                    "Compilation of library {} failed\n{}\n{}",
+                    library.name,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                );
 
-            output_file
-        }).clone()
+                output_file
+            })
+            .clone()
     }
 
     pub fn genir_library_tube(self: Arc<Self>, library_name: &str) -> PathBuf {
@@ -93,39 +111,45 @@ impl <P: CompileTargetPlatform> TestSuiteContext<P> {
 
         let context2 = self.clone();
 
-        tube_map.entry(library_name.to_owned()).or_insert_with(|| {
-            let library = context2.library_info(library_name);
+        tube_map
+            .entry(library_name.to_owned())
+            .or_insert_with(|| {
+                let library = context2.library_info(library_name);
 
-            let input_file = library.test_suite_context.clone().compile_library_tube(library_name);
-            let output_file = library.library_output_path.join(format!("{}.arvm", library.name));
+                let input_file = library
+                    .test_suite_context
+                    .clone()
+                    .compile_library_tube(library_name);
+                let output_file = library
+                    .library_output_path
+                    .join(format!("{}.arvm", library.name));
 
-            let mut cmd = Command::new(&library.test_suite_context.argon_bin);
-            cmd.arg("genir");
+                let mut cmd = Command::new(&library.test_suite_context.argon_bin);
+                cmd.arg("genir");
 
-            cmd.arg("--input");
-            cmd.arg(input_file);
+                cmd.arg("--input");
+                cmd.arg(input_file);
 
-            cmd.arg("--platform");
-            cmd.arg(P::ID);
+                cmd.arg("--platform");
+                cmd.arg(P::ID);
 
-            cmd.arg("--output");
-            cmd.arg(&output_file);
+                cmd.arg("--output");
+                cmd.arg(&output_file);
 
-            let output = cmd.output().unwrap();
+                let output = cmd.output().unwrap();
 
+                assert!(
+                    output.status.success(),
+                    "IR Generation of library {} failed\n{}\n{}",
+                    library.name,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                );
 
-            assert!(
-                output.status.success(),
-                "IR Generation of library {} failed\n{}\n{}",
-                library.name,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-            );
-
-            output_file
-        }).clone()
+                output_file
+            })
+            .clone()
     }
-
 }
 
 pub struct TestContext<P: CompileTargetPlatform> {
@@ -134,10 +158,9 @@ pub struct TestContext<P: CompileTargetPlatform> {
     pub test_case: Arc<(String, TestCase)>,
 }
 
-impl <P: CompileTargetPlatform> TestContext<P> {
+impl<P: CompileTargetPlatform> TestContext<P> {
     pub fn referenced_libraries(&self) -> impl Iterator<Item = &str> {
-        core::iter::once("Argon.Core")
-            .chain(self.test_case.1.libraries.iter().map(String::as_str))
+        core::iter::once("Argon.Core").chain(self.test_case.1.libraries.iter().map(String::as_str))
     }
 
     pub fn compile_test_case(&self) -> Result<PathBuf, String> {
@@ -155,7 +178,6 @@ impl <P: CompileTargetPlatform> TestContext<P> {
             std::fs::write(source_path, &f.source).unwrap();
         }
 
-
         let mut cmd = Command::new(&self.test_suite_context.argon_bin);
         cmd.arg("compile");
         cmd.arg("--tube-name");
@@ -166,7 +188,10 @@ impl <P: CompileTargetPlatform> TestContext<P> {
         cmd.arg(&output_file);
 
         for library_name in self.referenced_libraries() {
-            let tube_path = self.test_suite_context.clone().compile_library_tube(library_name);
+            let tube_path = self
+                .test_suite_context
+                .clone()
+                .compile_library_tube(library_name);
             cmd.arg("--reference");
             cmd.arg(tube_path);
         }
@@ -175,9 +200,12 @@ impl <P: CompileTargetPlatform> TestContext<P> {
 
         if output.status.success() {
             Ok(output_file)
-        }
-        else {
-            Err(format!("{}\n{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr)))
+        } else {
+            Err(format!(
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ))
         }
     }
 
@@ -197,7 +225,10 @@ impl <P: CompileTargetPlatform> TestContext<P> {
         cmd.arg(&output_file);
 
         for library_name in self.referenced_libraries() {
-            let tube_path = self.test_suite_context.clone().compile_library_tube(library_name);
+            let tube_path = self
+                .test_suite_context
+                .clone()
+                .compile_library_tube(library_name);
             cmd.arg("--reference");
             cmd.arg(tube_path);
         }
@@ -236,7 +267,3 @@ pub struct TestExecutionResult {
     pub exit_code: i32,
     pub output: String,
 }
-
-
-
-

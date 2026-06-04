@@ -1,21 +1,28 @@
-use alloc::collections::VecDeque;
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use crate::ids::TubeIdProvider;
 use alloc::borrow::ToOwned;
+use alloc::collections::VecDeque;
+use alloc::vec;
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
-use argon_compiler::{BinaryOperatorIdentifier, Builtin, DefaultExprContext, Enum, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, Trait, Tube, TubeName, UnaryOperatorIdentifier};
-use argon_expr::{ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner, ParameterVariable, SubstScanner, Variable};
+use argon_compiler::expr_type::get_expr_type;
+use argon_compiler::{
+    BinaryOperatorIdentifier, Builtin, DefaultExprContext, Enum, Function, FunctionImplementation,
+    FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry,
+    ModulePath, Record, Trait, Tube, TubeName, UnaryOperatorIdentifier,
+};
+use argon_expr::{
+    ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner,
+    ParameterVariable, SubstScanner, Variable,
+};
 use argon_format::vm as vf;
 use argon_util::{Fuel, InternalCompilerError, UniqueIdentifier};
 use core::mem;
-use alloc::vec;
-use esexpr::{ESExprStatic, ESExprCodec};
-use esexpr_binary::{ExprGenerator, ExprGeneratorSync, GeneratorError};
+use esexpr::{ESExprCodec, ESExprStatic};
 use esexpr_binary::io::Write;
+use esexpr_binary::{ExprGenerator, ExprGeneratorSync, GeneratorError};
 use hashbrown::{HashMap, HashSet};
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
-use argon_compiler::expr_type::get_expr_type;
-use crate::ids::TubeIdProvider;
 
 pub fn encode_vm_tube<W: Write<InternalCompilerError>>(
     out: &mut W,
@@ -29,7 +36,7 @@ pub fn encode_vm_tube<W: Write<InternalCompilerError>>(
         let expr = entry.encode_esexpr();
 
         match generator.generate(&expr) {
-            Ok(()) => {},
+            Ok(()) => {}
             Err(GeneratorError::IOError(err)) => Err(err)?,
         }
     }
@@ -92,7 +99,10 @@ impl VmEncoder {
     }
 
     fn get_module_id(&mut self, tube: &TubeName, module: &ModulePath) -> usize {
-        let (id, is_new) = self.ids.module_ids.get_with_new((tube.clone(), module.clone()));
+        let (id, is_new) = self
+            .ids
+            .module_ids
+            .get_with_new((tube.clone(), module.clone()));
 
         if is_new {
             self.entry_emitters
@@ -196,10 +206,11 @@ impl VmEncoder {
                         modules,
                     }),
                 }
-            },
+            }
 
             EntryEmitter::ModuleReference(tube, module) => {
-                let module_id = BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
+                let module_id =
+                    BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
                 let tube_id = BigUint::from(self.ids.tube_ids.get(tube.clone()));
                 let path = encode_module_path(&module);
 
@@ -208,7 +219,7 @@ impl VmEncoder {
                     tube_id,
                     path: Box::new(path),
                 }
-            },
+            }
 
             EntryEmitter::Function(function) => {
                 let function_id = BigUint::from(self.ids.function_ids.get(function.clone()));
@@ -247,7 +258,7 @@ impl VmEncoder {
                         }),
                     }
                 }
-            },
+            }
 
             EntryEmitter::Record(record) => {
                 let record_id = BigUint::from(self.ids.record_ids.get(record.clone()));
@@ -260,9 +271,47 @@ impl VmEncoder {
                         import: Box::new(import),
                     }
                 } else {
-                    todo!("emit VM record definitions")
+                    let signature = record.clone().signature();
+                    let owner = ExpressionOwner::Record(record.clone());
+                    let mut builder = FunctionSignatureBuilder::new(self);
+
+                    for (index, param) in signature.parameters.iter().enumerate() {
+                        builder.add_parameter(
+                            Box::new(param.clone().to_parameter_var(owner.clone(), index)),
+                            false,
+                        )?;
+                    }
+
+                    let fields = record
+                        .clone()
+                        .fields()
+                        .iter()
+                        .map(|field| {
+                            let metadata = field.metadata();
+                            let field_type = builder
+                                .token_emitter()
+                                .token_expr(&field.clone().field_type())?;
+
+                            Ok(Box::new(vf::RecordFieldDefinition {
+                                name: Box::new(encode_identifier(&metadata.name)),
+                                field_type: Box::new(field_type),
+                                mutable: metadata.is_mutable,
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+                    let signature = builder.finish(&signature.return_type)?;
+
+                    vf::TubeFileEntry::RecordDefinition {
+                        definition: Box::new(vf::RecordDefinition {
+                            record_id,
+                            import: Box::new(import),
+                            signature: Box::new(signature.sig),
+                            fields,
+                        }),
+                    }
                 }
-            },
+            }
 
             EntryEmitter::Enum(enum_) => {
                 let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
@@ -277,7 +326,7 @@ impl VmEncoder {
                 } else {
                     todo!("emit VM enum definitions")
                 }
-            },
+            }
 
             EntryEmitter::Trait(trait_) => {
                 let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
@@ -292,11 +341,11 @@ impl VmEncoder {
                 } else {
                     todo!("emit VM trait definitions")
                 }
-            },
+            }
 
             EntryEmitter::Instance(_instance) => {
                 todo!("emit VM instance references and definitions")
-            },
+            }
         }))
     }
 
@@ -350,8 +399,7 @@ impl VmEncoder {
                 name,
                 signature,
             } => vf::ImportSpecifier::Global {
-                module_id: self.get_module_id(tube, module)
-                    .into(),
+                module_id: self.get_module_id(tube, module).into(),
                 name: Box::new(encode_identifier(name)),
                 sig: Box::new(self.encode_erased_signature(signature)?),
             },
@@ -423,7 +471,10 @@ impl VmEncoder {
         let mut builder = FunctionSignatureBuilder::new(self);
 
         for (index, param) in sig.parameters.iter().enumerate() {
-            builder.add_parameter(Box::new(param.clone().to_parameter_var(owner.clone(), index)), false)?;
+            builder.add_parameter(
+                Box::new(param.clone().to_parameter_var(owner.clone(), index)),
+                false,
+            )?;
         }
 
         builder.finish(&sig.return_type)
@@ -457,7 +508,8 @@ impl VmEncoder {
         signature: &mut FunctionSignatureWithMapping,
         import_specifier: ImportSpecifier,
     ) -> Result<vf::FunctionBody, InternalCompilerError> {
-        let var_offset = (if signature.has_instance_param { 1 } else { 0 }) + signature.sig.parameters.len();
+        let var_offset =
+            (if signature.has_instance_param { 1 } else { 0 }) + signature.sig.parameters.len();
 
         let mut emitter = ExprEmitter {
             encoder: self,
@@ -471,7 +523,7 @@ impl VmEncoder {
         };
 
         match emitter.expr_return(expr) {
-            Ok(_) | Err(EmitStop::Branch) => {},
+            Ok(_) | Err(EmitStop::Branch) => {}
             Err(EmitStop::Error(err)) => return Err(err),
         }
 
@@ -561,13 +613,14 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
     fn token_emitter<'b>(&'b mut self) -> TokenEmitter<'b> {
         let mut token_params = self.instance_type_params.clone();
-        token_params.extend(
-            self.type_param_mapping
-                .iter()
-                .map(|(var, index)| (var.clone(), vf::Token::TokenParameter {
+        token_params.extend(self.type_param_mapping.iter().map(|(var, index)| {
+            (
+                var.clone(),
+                vf::Token::TokenParameter {
                     index: BigUint::from(index.clone()),
-                }))
-        );
+                },
+            )
+        }));
 
         TokenEmitter {
             encoder: self.encoder,
@@ -593,7 +646,8 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
                 let index = self.token_parameters.len();
                 self.token_parameters.push(Box::new(tp));
-                self.type_param_mapping.insert(Variable::Parameter(param), index);
+                self.type_param_mapping
+                    .insert(Variable::Parameter(param), index);
                 self.arg_consumers.push(ArgConsumer::Token);
             }
             ErasureMode::Concrete => {
@@ -605,7 +659,13 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
                 let index = self.parameters.len();
                 self.parameters.push(Box::new(sig_param));
-                self.param_var_mapping.insert(Variable::Parameter(param), MappedParamVar { index, captured_ref });
+                self.param_var_mapping.insert(
+                    Variable::Parameter(param),
+                    MappedParamVar {
+                        index,
+                        captured_ref,
+                    },
+                );
                 self.arg_consumers.push(ArgConsumer::Arg);
             }
         }
@@ -622,41 +682,43 @@ impl<'a> FunctionSignatureBuilder<'a> {
             token_params: HashMap::new(),
         };
 
-
-        let reg_offset = if self.instance_param.is_some() { BigUint::from(1u32) } else { BigUint::ZERO };
-
+        let reg_offset = if self.instance_param.is_some() {
+            BigUint::from(1u32)
+        } else {
+            BigUint::ZERO
+        };
 
         let mut known_vars = HashMap::new();
 
         known_vars.extend(
             self.instance_type_params
                 .into_iter()
-                .map(|(v, t)| (v, VariableRealization::Tok(t)))
+                .map(|(v, t)| (v, VariableRealization::Tok(t))),
         );
 
-        known_vars.extend(
-            self.instance_param
-                .as_ref()
-                .map(|inst| (inst.clone(), VariableRealization::Reg(vf::RegisterId { id: BigUint::ZERO })))
-        );
+        known_vars.extend(self.instance_param.as_ref().map(|inst| {
+            (
+                inst.clone(),
+                VariableRealization::Reg(vf::RegisterId { id: BigUint::ZERO }),
+            )
+        }));
 
         known_vars.extend(
             self.param_var_mapping
                 .into_iter()
                 .map(|(param, mapped_var)| {
                     let r = vf::RegisterId {
-                        id: &reg_offset + mapped_var.index
+                        id: &reg_offset + mapped_var.index,
                     };
 
                     let realization = if mapped_var.captured_ref {
                         VariableRealization::RegRefCell(r)
-                    }
-                    else {
+                    } else {
                         VariableRealization::Reg(r)
                     };
 
                     (param, realization)
-                })
+                }),
         );
 
         Ok(FunctionSignatureWithMapping {
@@ -672,12 +734,10 @@ impl<'a> FunctionSignatureBuilder<'a> {
     }
 }
 
-
 struct MappedParamVar {
     index: usize,
     captured_ref: bool,
 }
-
 
 enum EmitStop {
     Error(InternalCompilerError),
@@ -691,8 +751,6 @@ impl From<InternalCompilerError> for EmitStop {
 }
 
 type EmitResult<A> = Result<A, EmitStop>;
-
-
 
 trait TokenEmitterCommon {
     fn get_parameter_as_token(
@@ -822,9 +880,11 @@ impl TokenEmitterCommon for ExprEmitter<'_> {
     }
 }
 
-impl <'a> ExprEmitter<'a> {
-
-    fn with_nested_block<A>(&mut self, f: impl FnOnce(&mut Self) -> EmitResult<A>) -> Result<(vf::Block, EmitResult<A>), InternalCompilerError> {
+impl<'a> ExprEmitter<'a> {
+    fn with_nested_block<A>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> EmitResult<A>,
+    ) -> Result<(vf::Block, EmitResult<A>), InternalCompilerError> {
         let mut instructions = mem::take(&mut self.instructions);
         let result = match f(self) {
             Ok(result) => Ok(result),
@@ -832,31 +892,35 @@ impl <'a> ExprEmitter<'a> {
             Err(EmitStop::Branch) => Err(EmitStop::Branch),
         };
         mem::swap(&mut self.instructions, &mut instructions);
-        let block = vf::Block {
-            instructions,
-        };
+        let block = vf::Block { instructions };
 
         Ok((block, result))
     }
 
-    fn declare_var(&mut self, v: Variable<DefaultExprContext>) -> Result<vf::RegisterId, InternalCompilerError> {
+    fn declare_var(
+        &mut self,
+        v: Variable<DefaultExprContext>,
+    ) -> Result<vf::RegisterId, InternalCompilerError> {
         let t = self.token_expr(v.var_type())?;
 
         if self.captured_vars.contains(&v) && v.is_mutable() {
             let id = self.add_var(vf::Token::RefCell { inner: Box::new(t) });
-            self.known_vars.insert(v, VariableRealization::RegRefCell(id.clone()));
+            self.known_vars
+                .insert(v, VariableRealization::RegRefCell(id.clone()));
             Ok(id)
-        }
-        else {
+        } else {
             let id = self.add_var(t);
-            self.known_vars.insert(v, VariableRealization::Reg(id.clone()));
+            self.known_vars
+                .insert(v, VariableRealization::Reg(id.clone()));
             Ok(id)
         }
     }
 
     fn add_var(&mut self, t: vf::Token) -> vf::RegisterId {
         let id = BigUint::from(self.var_offset) + self.declared_vars.len();
-        self.declared_vars.push(Box::new(vf::VariableDeclaration { r#type: Box::new(t) }));
+        self.declared_vars.push(Box::new(vf::VariableDeclaration {
+            r#type: Box::new(t),
+        }));
         vf::RegisterId { id }
     }
 
@@ -883,7 +947,11 @@ impl <'a> ExprEmitter<'a> {
         self.instructions.push(Box::new(insn));
     }
 
-    fn expr<O: ExprOutput>(&mut self, e: &Expr<DefaultExprContext>, output: O) -> EmitResult<O::ResultType> {
+    fn expr<O: ExprOutput>(
+        &mut self,
+        e: &Expr<DefaultExprContext>,
+        output: O,
+    ) -> EmitResult<O::ResultType> {
         Ok(match e {
             Expr::And(a, b) => {
                 let rb = output.output_register(self, e)?;
@@ -898,11 +966,13 @@ impl <'a> ExprEmitter<'a> {
                 self.emit(vf::Instruction::IfElse {
                     condition: Box::new(rb.register().clone()),
                     when_true: Box::new(block),
-                    when_false: Box::new(vf::Block { instructions: vec![] }),
+                    when_false: Box::new(vf::Block {
+                        instructions: vec![],
+                    }),
                 });
 
                 rb.into_result(self)?
-            },
+            }
 
             Expr::BoolLiteral(b) => {
                 let rb = output.output_register(self, e)?;
@@ -912,14 +982,18 @@ impl <'a> ExprEmitter<'a> {
                 });
 
                 rb.into_result(self)?
-            },
+            }
 
             // Box
             // Break
-
             Expr::Builtin { builtin, arguments } => {
-
-                fn emit_op<O: ExprOutput>(emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>, builtin: vf::BuiltinOp, arguments: &[Expr<DefaultExprContext>], output: O) -> EmitResult<O::ResultType> {
+                fn emit_op<O: ExprOutput>(
+                    emitter: &mut ExprEmitter<'_>,
+                    e: &Expr<DefaultExprContext>,
+                    builtin: vf::BuiltinOp,
+                    arguments: &[Expr<DefaultExprContext>],
+                    output: O,
+                ) -> EmitResult<O::ResultType> {
                     let rb = output.output_register(emitter, e)?;
 
                     let mut registers = Vec::with_capacity(arguments.len() + 1);
@@ -939,7 +1013,13 @@ impl <'a> ExprEmitter<'a> {
                     rb.into_result(emitter)
                 }
 
-                fn emit_parameterized_op<O: ExprOutput>(emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>, builtin: vf::BuiltinOp, arguments: &[Expr<DefaultExprContext>], output: O) -> EmitResult<O::ResultType> {
+                fn emit_parameterized_op<O: ExprOutput>(
+                    emitter: &mut ExprEmitter<'_>,
+                    e: &Expr<DefaultExprContext>,
+                    builtin: vf::BuiltinOp,
+                    arguments: &[Expr<DefaultExprContext>],
+                    output: O,
+                ) -> EmitResult<O::ResultType> {
                     let rb = output.output_register(emitter, e)?;
 
                     let mut registers = Vec::with_capacity(arguments.len());
@@ -965,7 +1045,12 @@ impl <'a> ExprEmitter<'a> {
                     rb.into_result(emitter)
                 }
 
-                fn emit_parameterized_void_op<O: ExprOutput>(emitter: &mut ExprEmitter<'_>, builtin: vf::BuiltinOp, arguments: &[Expr<DefaultExprContext>], output: O) -> EmitResult<O::ResultType> {
+                fn emit_parameterized_void_op<O: ExprOutput>(
+                    emitter: &mut ExprEmitter<'_>,
+                    builtin: vf::BuiltinOp,
+                    arguments: &[Expr<DefaultExprContext>],
+                    output: O,
+                ) -> EmitResult<O::ResultType> {
                     let Some((type_arg, arguments)) = arguments.split_first() else {
                         todo!("return a proper error")
                     };
@@ -987,7 +1072,6 @@ impl <'a> ExprEmitter<'a> {
 
                     output.output_unit_result(emitter)
                 }
-
 
                 macro_rules! op {
                     ($name: ident) => {
@@ -1047,23 +1131,26 @@ impl <'a> ExprEmitter<'a> {
                     Builtin::BoolNot => op!(BoolNot),
                     Builtin::BoolEq => op!(BoolEq),
                     Builtin::BoolNe => op!(BoolNe),
-                    Builtin::ArrayCreateUnsafeUninitialized => parameterized_op!(ArrayCreateUnsafeUninitialized),
+                    Builtin::ArrayCreateUnsafeUninitialized => {
+                        parameterized_op!(ArrayCreateUnsafeUninitialized)
+                    }
                     Builtin::ArrayLength => parameterized_op!(ArrayLength),
                     Builtin::ArrayGet => parameterized_op!(ArrayGet),
                     Builtin::ArraySet => parameterized_void_op!(ArraySet),
                 }
-            },
+            }
 
             // EnumVariantLiteral
+            Expr::Finally {
+                block_body,
+                finally_body,
+            } => {
+                let (block_body, block_result) =
+                    self.with_nested_block(|emitter| emitter.expr(block_body, output))?;
 
-            Expr::Finally { block_body, finally_body } => {
-                let (block_body, block_result) = self.with_nested_block(|emitter|
-                    emitter.expr(block_body, output)
-                )?;
-
-                let (finally_body, finally_result) = self.with_nested_block(|emitter|
+                let (finally_body, finally_result) = self.with_nested_block(|emitter| {
                     emitter.expr(finally_body, ExprOutputKnown::Discard)
-                )?;
+                })?;
 
                 self.emit(vf::Instruction::Finally {
                     action: Box::new(block_body),
@@ -1073,14 +1160,21 @@ impl <'a> ExprEmitter<'a> {
                 let value = block_result?;
                 finally_result?;
                 value
-            },
+            }
 
-            Expr::FunctionCall { function, arguments } => {
+            Expr::FunctionCall {
+                function,
+                arguments,
+            } => {
                 let frb = output.output_function_result(self, e)?;
                 let id = self.encoder.get_function_id(function.clone());
 
                 let sig = function.clone().signature();
-                let func_args = self.emit_arguments(ExpressionOwner::Function(function.clone()), sig, arguments)?;
+                let func_args = self.emit_arguments(
+                    ExpressionOwner::Function(function.clone()),
+                    sig,
+                    arguments,
+                )?;
                 self.emit(vf::Instruction::FunctionCall {
                     function_id: BigUint::from(id),
                     dest: Box::new(frb.function_result()),
@@ -1089,22 +1183,24 @@ impl <'a> ExprEmitter<'a> {
                 });
 
                 frb.into_result(self)?
-            },
+            }
 
             // FunctionObjectCall
-
-            Expr::IfElse { condition, when_true, when_false, .. } => {
+            Expr::IfElse {
+                condition,
+                when_true,
+                when_false,
+                ..
+            } => {
                 let (result, output) = output.into_known_location(self, e)?;
 
                 let cond = self.expr(condition, AnyRegister)?;
 
-                let (when_true, true_result) = self.with_nested_block(|emitter|
-                    emitter.expr(when_true, output.clone())
-                )?;
+                let (when_true, true_result) =
+                    self.with_nested_block(|emitter| emitter.expr(when_true, output.clone()))?;
 
-                let (when_false, false_result) = self.with_nested_block(|emitter|
-                    emitter.expr(when_false, output)
-                )?;
+                let (when_false, false_result) =
+                    self.with_nested_block(|emitter| emitter.expr(when_false, output))?;
 
                 self.emit(vf::Instruction::IfElse {
                     condition: Box::new(cond),
@@ -1116,10 +1212,9 @@ impl <'a> ExprEmitter<'a> {
                     (Err(EmitStop::Branch), Err(EmitStop::Branch)) => Err(EmitStop::Branch)?,
                     _ => result,
                 }
-            },
+            }
 
             // InstanceMethodCall
-
             Expr::IntLiteral(i) => {
                 let rb = output.output_register(self, e)?;
                 self.emit(vf::Instruction::ConstInt {
@@ -1128,7 +1223,7 @@ impl <'a> ExprEmitter<'a> {
                 });
 
                 rb.into_result(self)?
-            },
+            }
 
             // Is
             // Lambda
@@ -1136,7 +1231,6 @@ impl <'a> ExprEmitter<'a> {
             // Match
             // NewInstance
             // Next
-
             Expr::Or(a, b) => {
                 let rb = output.output_register(self, e)?;
                 self.expr(a, ExprOutputKnown::Register(rb.register().clone()))?;
@@ -1149,12 +1243,14 @@ impl <'a> ExprEmitter<'a> {
 
                 self.emit(vf::Instruction::IfElse {
                     condition: Box::new(rb.register().clone()),
-                    when_true: Box::new(vf::Block { instructions: vec![] }),
+                    when_true: Box::new(vf::Block {
+                        instructions: vec![],
+                    }),
                     when_false: Box::new(block),
                 });
 
                 rb.into_result(self)?
-            },
+            }
 
             // Raise
             // RecordType
@@ -1166,7 +1262,6 @@ impl <'a> ExprEmitter<'a> {
             // RecordLiteral
             // Redo
             // RefCellCreate
-
             Expr::Sequence(items) => {
                 let mut item = items.first();
                 for next_item in items.iter().skip(1) {
@@ -1175,7 +1270,7 @@ impl <'a> ExprEmitter<'a> {
                 }
 
                 self.expr(item, output)?
-            },
+            }
 
             Expr::StringLiteral(s) => {
                 let rb = output.output_register(self, e)?;
@@ -1185,7 +1280,7 @@ impl <'a> ExprEmitter<'a> {
                     value: s.as_ref().to_owned(),
                 });
                 rb.into_result(self)?
-            },
+            }
 
             Expr::Tuple { items } => {
                 if let Some(result) = output.try_discard() {
@@ -1194,8 +1289,7 @@ impl <'a> ExprEmitter<'a> {
                     }
 
                     result
-                }
-                else {
+                } else {
                     let rb = output.output_register(self, e)?;
 
                     let item_regs = items
@@ -1210,7 +1304,7 @@ impl <'a> ExprEmitter<'a> {
 
                     rb.into_result(self)?
                 }
-            },
+            }
 
             Expr::TupleElement(tuple, index) => {
                 let rb = output.output_register(self, e)?;
@@ -1224,19 +1318,16 @@ impl <'a> ExprEmitter<'a> {
                 });
 
                 rb.into_result(self)?
-            },
+            }
 
             // Unbox
-
             Expr::Variable(v) => {
                 let Some(realization) = self.known_vars.get(v) else {
                     todo!("return a proper error")
                 };
 
                 match realization {
-                    VariableRealization::Reg(reg) => {
-                        output.copy_from(self, reg.clone())?
-                    },
+                    VariableRealization::Reg(reg) => output.copy_from(self, reg.clone())?,
                     VariableRealization::RegRefCell(reg) => {
                         let reg = reg.clone();
 
@@ -1247,7 +1338,7 @@ impl <'a> ExprEmitter<'a> {
                         });
 
                         rb.into_result(self)?
-                    },
+                    }
                     VariableRealization::Tok(tok) => {
                         let tok = tok.clone();
 
@@ -1258,9 +1349,9 @@ impl <'a> ExprEmitter<'a> {
                         });
 
                         rb.into_result(self)?
-                    },
+                    }
                 }
-            },
+            }
 
             Expr::VariableBinding(v, value) => {
                 let r = self.declare_var(v.clone())?;
@@ -1270,8 +1361,7 @@ impl <'a> ExprEmitter<'a> {
                         dest: Box::new(r),
                         value: Box::new(value_reg),
                     });
-                }
-                else {
+                } else {
                     self.expr(value, ExprOutputKnown::Register(r))?;
                 }
 
@@ -1286,44 +1376,56 @@ impl <'a> ExprEmitter<'a> {
                 match realization {
                     VariableRealization::Reg(reg) => {
                         self.expr(value, ExprOutputKnown::Register(reg.clone()))?;
-                    },
+                    }
                     VariableRealization::RegRefCell(reg) => {
                         self.expr(value, ExprOutputKnown::RefCell(reg.clone()))?;
-                    },
+                    }
                     VariableRealization::Tok(tok) => {
                         todo!("return a proper error")
-                    },
+                    }
                 }
 
                 output.output_unit_result(self)?
-            },
+            }
 
-            _ => todo!("Unimplemented emit expression: {:?}", e)
+            _ => todo!("Unimplemented emit expression: {:?}", e),
         })
     }
 
-    fn emit_arguments(&mut self, owner: ExpressionOwner<DefaultExprContext>, sig: Arc<FunctionSignature<DefaultExprContext>>, args: &[Expr<DefaultExprContext>]) -> EmitResult<FunctionArguments> {
+    fn emit_arguments(
+        &mut self,
+        owner: ExpressionOwner<DefaultExprContext>,
+        sig: Arc<FunctionSignature<DefaultExprContext>>,
+        args: &[Expr<DefaultExprContext>],
+    ) -> EmitResult<FunctionArguments> {
         let sig_with_mapping = self.encoder.emit_function_signature(&owner, &sig)?;
         self.emit_arguments_common(sig_with_mapping, args)
     }
 
-    fn emit_arguments_common(&mut self, sig: FunctionSignatureWithMapping, args: &[Expr<DefaultExprContext>]) -> EmitResult<FunctionArguments> {
+    fn emit_arguments_common(
+        &mut self,
+        sig: FunctionSignatureWithMapping,
+        args: &[Expr<DefaultExprContext>],
+    ) -> EmitResult<FunctionArguments> {
         let mut arguments = Vec::with_capacity(args.len());
         let mut token_arguments = Vec::with_capacity(args.len());
 
         for (consumer, arg) in sig.arg_consumers.iter().zip(args) {
             match consumer {
-                ArgConsumer::Erased => {},
+                ArgConsumer::Erased => {}
                 ArgConsumer::Token => {
                     token_arguments.push(Box::new(self.token_expr(arg)?));
-                },
+                }
                 ArgConsumer::Arg => {
                     arguments.push(Box::new(self.expr(arg, AnyRegister)?));
-                },
+                }
             }
         }
 
-        Ok(FunctionArguments { token_arguments, arguments })
+        Ok(FunctionArguments {
+            token_arguments,
+            arguments,
+        })
     }
 
     fn expr_return(&mut self, e: &Expr<DefaultExprContext>) -> EmitResult<()> {
@@ -1346,11 +1448,28 @@ struct FunctionArguments {
 trait ExprOutput: Sized {
     type ResultType;
 
-    fn into_known_location(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<(Self::ResultType, ExprOutputKnown)>;
-    fn copy_from(self, expr_emitter: &mut ExprEmitter<'_>, r: vf::RegisterId) -> EmitResult<Self::ResultType>;
-    fn output_register(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputRegisterBuilder<Self>>;
-    fn output_function_result(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>>;
-    fn output_unit_result(self, expr_emitter: &mut ExprEmitter<'_>) -> EmitResult<Self::ResultType>;
+    fn into_known_location(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<(Self::ResultType, ExprOutputKnown)>;
+    fn copy_from(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        r: vf::RegisterId,
+    ) -> EmitResult<Self::ResultType>;
+    fn output_register(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<OutputRegisterBuilder<Self>>;
+    fn output_function_result(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>>;
+    fn output_unit_result(self, expr_emitter: &mut ExprEmitter<'_>)
+    -> EmitResult<Self::ResultType>;
     fn try_discard(&self) -> Option<Self::ResultType>;
 }
 
@@ -1365,11 +1484,19 @@ enum ExprOutputKnown {
 impl ExprOutput for ExprOutputKnown {
     type ResultType = ();
 
-    fn into_known_location(self, _expr_emitter: &mut ExprEmitter<'_>, _e: &Expr<DefaultExprContext>) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
+    fn into_known_location(
+        self,
+        _expr_emitter: &mut ExprEmitter<'_>,
+        _e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
         Ok(((), self))
     }
 
-    fn copy_from(self, expr_emitter: &mut ExprEmitter<'_>, r: vf::RegisterId) -> EmitResult<Self::ResultType> {
+    fn copy_from(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        r: vf::RegisterId,
+    ) -> EmitResult<Self::ResultType> {
         Ok(match self {
             ExprOutputKnown::Register(out_reg) => {
                 if out_reg.id != r.id {
@@ -1387,35 +1514,36 @@ impl ExprOutput for ExprOutputKnown {
             }
             ExprOutputKnown::Discard => {}
             ExprOutputKnown::Return => {
-                expr_emitter.emit(vf::Instruction::Return {
-                    src: Box::new(r),
-                });
+                expr_emitter.emit(vf::Instruction::Return { src: Box::new(r) });
                 Err(EmitStop::Branch)?
             }
         })
     }
 
-    fn output_register(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputRegisterBuilder<Self>> {
+    fn output_register(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<OutputRegisterBuilder<Self>> {
         Ok(match &self {
-            ExprOutputKnown::Register(r) => {
-                OutputRegisterBuilder {
-                    r: r.clone(),
-                    output: self,
-                }
-            }
+            ExprOutputKnown::Register(r) => OutputRegisterBuilder {
+                r: r.clone(),
+                output: self,
+            },
             _ => {
                 let t = get_expr_type(e);
                 let t = expr_emitter.token_expr(&t)?;
                 let r = expr_emitter.add_var(t);
-                OutputRegisterBuilder {
-                    r,
-                    output: self,
-                }
+                OutputRegisterBuilder { r, output: self }
             }
         })
     }
 
-    fn output_function_result(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>> {
+    fn output_function_result(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>> {
         let builder_type = match self {
             ExprOutputKnown::Register(r) => OutputFunctionResultBuilderType::Register(r),
             ExprOutputKnown::RefCell(cell) => {
@@ -1426,7 +1554,7 @@ impl ExprOutput for ExprOutputKnown {
                     cell,
                     function_output: r,
                 }
-            },
+            }
             ExprOutputKnown::Discard => OutputFunctionResultBuilderType::Discard,
             ExprOutputKnown::Return => OutputFunctionResultBuilderType::Return,
         };
@@ -1437,7 +1565,10 @@ impl ExprOutput for ExprOutputKnown {
         })
     }
 
-    fn output_unit_result(self, expr_emitter: &mut ExprEmitter<'_>) -> EmitResult<Self::ResultType> {
+    fn output_unit_result(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+    ) -> EmitResult<Self::ResultType> {
         Ok(match self {
             ExprOutputKnown::Discard => (),
 
@@ -1462,20 +1593,29 @@ struct AnyRegister;
 impl ExprOutput for AnyRegister {
     type ResultType = vf::RegisterId;
 
-    fn into_known_location(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
+    fn into_known_location(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
         let t = get_expr_type(e);
         let t = expr_emitter.token_expr(&t)?;
         let r = expr_emitter.add_var(t);
         Ok((r.clone(), ExprOutputKnown::Register(r)))
     }
 
-    fn copy_from(self, expr_emitter: &mut ExprEmitter<'_>, r: vf::RegisterId) -> EmitResult<Self::ResultType> {
+    fn copy_from(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        r: vf::RegisterId,
+    ) -> EmitResult<Self::ResultType> {
         if &r.id < &BigUint::from(expr_emitter.var_offset) {
             // Skip copy because it is a parameter.
             Ok(r)
-        }
-        else {
-            let v = &expr_emitter.declared_vars[(&r.id - expr_emitter.var_offset).to_usize().expect("register id is not a usize")];
+        } else {
+            let v = &expr_emitter.declared_vars[(&r.id - expr_emitter.var_offset)
+                .to_usize()
+                .expect("register id is not a usize")];
             let t = (*v.r#type).clone();
 
             let dest = expr_emitter.add_var(t);
@@ -1485,21 +1625,24 @@ impl ExprOutput for AnyRegister {
             });
             Ok(dest)
         }
-
     }
 
-    fn output_register(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputRegisterBuilder<Self>> {
+    fn output_register(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<OutputRegisterBuilder<Self>> {
         let t = get_expr_type(e);
         let t = expr_emitter.token_expr(&t)?;
         let r = expr_emitter.add_var(t);
-        Ok(OutputRegisterBuilder {
-            r,
-            output: self,
-        })
+        Ok(OutputRegisterBuilder { r, output: self })
     }
 
-
-    fn output_function_result(self, expr_emitter: &mut ExprEmitter<'_>, e: &Expr<DefaultExprContext>) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>> {
+    fn output_function_result(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+        e: &Expr<DefaultExprContext>,
+    ) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>> {
         let (result, ko) = self.into_known_location(expr_emitter, e)?;
         let builder = ko.output_function_result(expr_emitter, e)?;
         Ok(OutputFunctionResultBuilder {
@@ -1508,7 +1651,10 @@ impl ExprOutput for AnyRegister {
         })
     }
 
-    fn output_unit_result(self, expr_emitter: &mut ExprEmitter<'_>) -> EmitResult<Self::ResultType> {
+    fn output_unit_result(
+        self,
+        expr_emitter: &mut ExprEmitter<'_>,
+    ) -> EmitResult<Self::ResultType> {
         let r = expr_emitter.add_var(vf::Token::Tuple { elements: vec![] });
         expr_emitter.emit(vf::Instruction::Tuple {
             dest: Box::new(r.clone()),
@@ -1527,7 +1673,7 @@ struct OutputRegisterBuilder<O> {
     output: O,
 }
 
-impl <O: ExprOutput> OutputRegisterBuilder<O> {
+impl<O: ExprOutput> OutputRegisterBuilder<O> {
     fn register(&self) -> &vf::RegisterId {
         &self.r
     }
@@ -1542,13 +1688,17 @@ struct OutputFunctionResultBuilder<R> {
     result: R,
 }
 
-impl <R> OutputFunctionResultBuilder<R> {
+impl<R> OutputFunctionResultBuilder<R> {
     fn function_result(&self) -> vf::FunctionResult {
         match &self.builder_type {
-            OutputFunctionResultBuilderType::Register(r) =>
-                vf::FunctionResult::Register { id: Box::new(r.clone()) },
-            OutputFunctionResultBuilderType::RefCell { function_output, .. } =>
-                vf::FunctionResult::Register { id: Box::new(function_output.clone()) },
+            OutputFunctionResultBuilderType::Register(r) => vf::FunctionResult::Register {
+                id: Box::new(r.clone()),
+            },
+            OutputFunctionResultBuilderType::RefCell {
+                function_output, ..
+            } => vf::FunctionResult::Register {
+                id: Box::new(function_output.clone()),
+            },
             OutputFunctionResultBuilderType::Discard => vf::FunctionResult::Discard {},
             OutputFunctionResultBuilderType::Return => vf::FunctionResult::ReturnValue {},
         }
@@ -1556,12 +1706,15 @@ impl <R> OutputFunctionResultBuilder<R> {
 
     fn into_result(self, expr_emitter: &mut ExprEmitter<'_>) -> Result<R, InternalCompilerError> {
         match self.builder_type {
-            OutputFunctionResultBuilderType::RefCell { cell, function_output } => {
+            OutputFunctionResultBuilderType::RefCell {
+                cell,
+                function_output,
+            } => {
                 expr_emitter.emit(vf::Instruction::UpdateReference {
                     r#ref: Box::new(cell),
                     value: Box::new(function_output),
                 });
-            },
+            }
 
             _ => {}
         }
@@ -1579,8 +1732,6 @@ enum OutputFunctionResultBuilderType {
     Discard,
     Return,
 }
-
-
 
 struct DefaultExprNormalizer;
 

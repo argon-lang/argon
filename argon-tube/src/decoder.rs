@@ -1,5 +1,4 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
-use core::fmt::Debug;
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
@@ -9,13 +8,15 @@ use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, DefaultExprContext, EffectInfo,
     ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata,
     FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata,
-    TubeName, UnaryOperatorIdentifier, Unload,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldMetadata, RecordFieldOwner,
+    Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier,
+    Unload,
 };
-use argon_expr::{LocalVariable, ParameterVariable, Variable};
+use argon_expr::{LocalVariable, ParameterVariable, RecordFieldLiteral, Variable};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
 use argon_util::sync::{OnceLock, RwLock, rwlock_read, rwlock_write};
+use core::fmt::Debug;
 use core::iter;
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
@@ -50,6 +51,8 @@ struct TubeDecoder {
     tube_ids: RwLock<HashMap<BigUint, TubeName>>,
     module_ids: RwLock<HashMap<BigUint, (TubeName, ModulePath)>>,
     functions: RwLock<HashMap<BigUint, Arc<dyn Function>>>,
+    records: RwLock<HashMap<BigUint, Arc<dyn Record>>>,
+    record_fields: RwLock<HashMap<BigUint, Arc<dyn RecordField>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
 }
@@ -107,6 +110,8 @@ impl TubeDecoder {
             tube_ids: RwLock::new(HashMap::new()),
             module_ids: RwLock::new(HashMap::new()),
             functions: RwLock::new(HashMap::new()),
+            records: RwLock::new(HashMap::new()),
+            record_fields: RwLock::new(HashMap::new()),
             local_import_ids: RwLock::new(HashMap::new()),
             local_variables: RwLock::new(HashMap::new()),
         }
@@ -460,15 +465,94 @@ impl TubeDecoder {
     }
 
     fn record(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Record> {
-        match self
+        if let Some(record) = rwlock_read(&self.records).get(&id).cloned() {
+            return record;
+        }
+
+        let record = match self
             .record_entries
             .get(&id)
             .unwrap_or_else(|| panic!("unknown record id {id}"))
             .clone()
         {
-            RecordEntry::Definition(_) => todo!("decode record definition"),
-            RecordEntry::Reference(_) => todo!("decode record reference"),
+            RecordEntry::Definition(definition) => {
+                let mut records = rwlock_write(&self.records);
+                if let Some(record) = records.get(&id) {
+                    return record.clone();
+                }
+
+                let record: Arc<dyn Record> =
+                    Arc::new(DecodedRecord::new(self.clone(), definition));
+                records.insert(id, record.clone());
+                return record;
+            }
+            RecordEntry::Reference(import) => self.resolve_record_import(import),
+        };
+
+        rwlock_write(&self.records).insert(id, record.clone());
+        record
+    }
+
+    fn resolve_record_import(self: &Arc<Self>, import: tf::ImportSpecifier) -> Arc<dyn Record> {
+        match self.decode_import_specifier(import) {
+            ImportSpecifier::Global {
+                tube,
+                module,
+                name,
+                signature,
+            } => {
+                let tube = self
+                    .tube_collection
+                    .tube(&tube)
+                    .unwrap_or_else(|| panic!("record import references unknown tube {tube}"));
+                let module = tube
+                    .module(&module)
+                    .unwrap_or_else(|| panic!("record import references unknown module {module}"));
+
+                let export_groups = module.export_groups();
+                let exports = export_groups
+                    .get(&name)
+                    .unwrap_or_else(|| panic!("record import references unknown export"));
+
+                exports
+                    .iter()
+                    .find_map(|entry| match &entry.binding {
+                        ModuleExportBinding::Record(record)
+                            if &erase_signature(record.clone().signature().as_ref())
+                                == signature.as_ref() =>
+                        {
+                            Some(record.clone())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("record import references unknown overload"))
+            }
+            ImportSpecifier::Local { .. } => todo!("resolve local record import"),
         }
+    }
+
+    fn record_field(self: &Arc<Self>, id: BigUint) -> Arc<dyn RecordField> {
+        if let Some(record_field) = rwlock_read(&self.record_fields).get(&id).cloned() {
+            return record_field;
+        }
+
+        let (record_id, name) = self
+            .record_field_references
+            .get(&id)
+            .unwrap_or_else(|| panic!("unknown record field id {id}"))
+            .clone();
+        let name = decode_identifier(name);
+        let record = self.record(record_id);
+        let record_field = record
+            .clone()
+            .fields()
+            .iter()
+            .find(|field| field.metadata().name == name)
+            .unwrap_or_else(|| panic!("record field reference has unknown field {name:?}"))
+            .clone();
+
+        rwlock_write(&self.record_fields).insert(id, record_field.clone());
+        record_field
     }
 
     fn enum_decl(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Enum> {
@@ -698,10 +782,7 @@ impl TubeDecoder {
             tf::Expr::Finally { .. } => todo!("decode finally expression"),
             tf::Expr::FunctionCall { id, args } => Expr::FunctionCall {
                 function: self.function(id),
-                arguments: args
-                    .into_iter()
-                    .map(|arg| self.decode_expr(*arg))
-                    .collect(),
+                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
             },
             tf::Expr::FunctionObjectCall { f, a } => Expr::FunctionObjectCall {
                 function: Box::new(self.decode_expr(*f)),
@@ -741,10 +822,38 @@ impl TubeDecoder {
             tf::Expr::Raise { ex } => Expr::Raise {
                 ex: Box::new(self.decode_expr(*ex)),
             },
-            tf::Expr::RecordType { .. }
-            | tf::Expr::RecordFieldLoad { .. }
-            | tf::Expr::RecordFieldStore { .. }
-            | tf::Expr::RecordLiteral { .. } => todo!("decode record expressions"),
+            tf::Expr::RecordType { record_type } => Expr::RecordType(
+                self.record(record_type.id),
+                record_type
+                    .args
+                    .into_iter()
+                    .map(|arg| self.decode_expr(*arg))
+                    .collect(),
+            ),
+            tf::Expr::RecordFieldLoad { .. } | tf::Expr::RecordFieldStore { .. } => {
+                todo!("decode record field load/store expressions")
+            }
+            tf::Expr::RecordLiteral { record, fields } => {
+                if !record.args.is_empty() {
+                    panic!(
+                        "record literal has type arguments, but argon-expr RecordLiteral cannot store them"
+                    );
+                }
+
+                Expr::RecordLiteral {
+                    record: self.record(record.id),
+                    fields: fields
+                        .into_iter()
+                        .map(|field| {
+                            let record_field = self.record_field(field.field_id);
+                            RecordFieldLiteral {
+                                name: record_field.metadata().name.clone(),
+                                value: self.decode_expr(*field.value),
+                            }
+                        })
+                        .collect(),
+                }
+            }
             tf::Expr::Redo { .. } => todo!("decode redo expression"),
             tf::Expr::RefCellType { .. }
             | tf::Expr::RefCellCreate { .. }
@@ -820,7 +929,9 @@ impl TubeDecoder {
                 let function: Arc<dyn Function> = self.function(index);
                 argon_expr::ExpressionOwner::Function(function)
             }
-            tf::ExpressionOwner::Rec { .. } => todo!("decode record expression owner"),
+            tf::ExpressionOwner::Rec { index } => {
+                argon_expr::ExpressionOwner::Record(self.record(index))
+            }
             tf::ExpressionOwner::Enum { .. } => todo!("decode enum expression owner"),
             tf::ExpressionOwner::Trait { .. } => todo!("decode trait expression owner"),
             tf::ExpressionOwner::Instance { .. } => todo!("decode instance expression owner"),
@@ -927,6 +1038,130 @@ impl Function for DecodedFunction {
                     .map(|implementation| {
                         Arc::new(self.decoder.decode_function_implementation(*implementation))
                     })
+            })
+            .clone()
+    }
+}
+
+struct DecodedRecord {
+    decoder: Arc<TubeDecoder>,
+    definition: tf::RecordDefinition,
+    import: OnceLock<ImportSpecifier>,
+    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
+    fields: OnceLock<Arc<Vec<Arc<dyn RecordField>>>>,
+}
+
+impl DecodedRecord {
+    fn new(decoder: Arc<TubeDecoder>, definition: tf::RecordDefinition) -> Self {
+        Self {
+            decoder,
+            definition,
+            import: OnceLock::new(),
+            signature: OnceLock::new(),
+            fields: OnceLock::new(),
+        }
+    }
+}
+
+impl Debug for DecodedRecord {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "record {:?}", self.definition.import)
+    }
+}
+
+impl Unload for DecodedRecord {
+    fn unload(&self) {}
+}
+
+impl Record for DecodedRecord {
+    fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
+        self.import
+            .get_or_init(|| {
+                self.decoder
+                    .decode_import_specifier((*self.definition.import).clone())
+            })
+            .clone()
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        self.signature
+            .get_or_init(|| {
+                Arc::new(
+                    self.decoder
+                        .decode_function_signature((*self.definition.signature).clone()),
+                )
+            })
+            .clone()
+    }
+
+    fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
+        self.fields
+            .get_or_init(|| {
+                Arc::new(
+                    self.definition
+                        .fields
+                        .iter()
+                        .map(|field| {
+                            Arc::new(DecodedRecordField::new(self.clone(), (**field).clone()))
+                                as Arc<dyn RecordField>
+                        })
+                        .collect(),
+                )
+            })
+            .clone()
+    }
+}
+
+struct DecodedRecordField {
+    owner: Arc<DecodedRecord>,
+    definition: tf::RecordFieldDefinition,
+    metadata: RecordFieldMetadata,
+    field_type: OnceLock<Arc<Expr<DefaultExprContext>>>,
+}
+
+impl DecodedRecordField {
+    fn new(owner: Arc<DecodedRecord>, definition: tf::RecordFieldDefinition) -> Self {
+        let metadata = RecordFieldMetadata {
+            is_mutable: definition.mutable,
+            name: decode_identifier((*definition.name).clone()),
+        };
+
+        Self {
+            owner,
+            definition,
+            metadata,
+            field_type: OnceLock::new(),
+        }
+    }
+}
+
+impl Debug for DecodedRecordField {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "record field {:?}", self.metadata.name)
+    }
+}
+
+impl Unload for DecodedRecordField {
+    fn unload(&self) {}
+}
+
+impl RecordField for DecodedRecordField {
+    fn owning_record(&self) -> RecordFieldOwner {
+        RecordFieldOwner::Record(self.owner.clone())
+    }
+
+    fn metadata(&self) -> &RecordFieldMetadata {
+        &self.metadata
+    }
+
+    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
+        self.field_type
+            .get_or_init(|| {
+                Arc::new(
+                    self.owner
+                        .decoder
+                        .decode_expr((*self.definition.field_type).clone()),
+                )
             })
             .clone()
     }

@@ -6,13 +6,13 @@ extern crate std;
 
 pub mod access;
 pub mod erased_sig;
+pub mod expr_type;
 pub mod platform;
 pub mod scanner;
 pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
-pub mod expr_type;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::platform::PlatformExtern;
@@ -74,7 +74,7 @@ impl ExprContext for DefaultExprContext {
     type Method = Arc<dyn Method>;
     type Record = Arc<dyn Record>;
     type Enum = Arc<dyn Enum>;
-    type EnumVariant = Arc<dyn EnumCase>;
+    type EnumVariant = Arc<dyn EnumVariant>;
     type Trait = Arc<dyn Trait>;
     type Instance = Arc<dyn Instance>;
 }
@@ -428,6 +428,24 @@ pub trait Method: Debug + Unload + ThreadSafe {}
 pub trait Record: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+
+    fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>>;
+}
+
+pub trait RecordField: Debug + Unload + ThreadSafe {
+    fn owning_record(&self) -> RecordFieldOwner;
+    fn metadata(&self) -> &RecordFieldMetadata;
+    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>>;
+}
+
+pub enum RecordFieldOwner {
+    Record(Arc<dyn Record>),
+    EnumVariant(Arc<dyn EnumVariant>),
+}
+
+pub struct RecordFieldMetadata {
+    pub is_mutable: bool,
+    pub name: Identifier,
 }
 
 pub trait Enum: Debug + Unload + ThreadSafe {
@@ -435,7 +453,7 @@ pub trait Enum: Debug + Unload + ThreadSafe {
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 }
 
-pub trait EnumCase: Debug + Unload + ThreadSafe {}
+pub trait EnumVariant: Debug + Unload + ThreadSafe {}
 
 pub trait Trait: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
@@ -466,7 +484,7 @@ impl_dyn_stub_traits!(Function);
 impl_dyn_stub_traits!(Method);
 impl_dyn_stub_traits!(Record);
 impl_dyn_stub_traits!(Enum);
-impl_dyn_stub_traits!(EnumCase);
+impl_dyn_stub_traits!(EnumVariant);
 impl_dyn_stub_traits!(Trait);
 impl_dyn_stub_traits!(Instance);
 

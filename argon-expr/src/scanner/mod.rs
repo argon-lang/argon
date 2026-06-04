@@ -56,9 +56,9 @@ where
         Expr::Builtin { arguments, .. } => arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::EnumType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::FunctionLiteral { body, .. } => scanner.scan(body),
-        Expr::FunctionCall { arguments, .. } => arguments
-            .iter()
-            .all(|argument| scanner.scan(argument)),
+        Expr::FunctionCall { arguments, .. } => {
+            arguments.iter().all(|argument| scanner.scan(argument))
+        }
         Expr::FunctionObjectCall { function, argument } => {
             scanner.scan(function) && scanner.scan(argument)
         }
@@ -94,12 +94,7 @@ where
             receiver,
             arguments,
             ..
-        } => {
-            scanner.scan(receiver)
-                && arguments
-                    .iter()
-                    .all(|argument| scanner.scan(argument))
-        }
+        } => scanner.scan(receiver) && arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::NewTraitObject { .. } => true,
         Expr::Next { .. } => true,
         Expr::Or(a, b) => scanner.scan(a) && scanner.scan(b),
@@ -162,9 +157,9 @@ where
         }
         Expr::EnumType(_, arguments) => arguments.iter_mut().all(|argument| scanner.scan(argument)),
         Expr::FunctionLiteral { body, .. } => scanner.scan(body.as_mut()),
-        Expr::FunctionCall { arguments, .. } => arguments
-            .iter_mut()
-            .all(|argument| scanner.scan(argument)),
+        Expr::FunctionCall { arguments, .. } => {
+            arguments.iter_mut().all(|argument| scanner.scan(argument))
+        }
         Expr::FunctionObjectCall { function, argument } => {
             scanner.scan(function.as_mut()) && scanner.scan(argument.as_mut())
         }
@@ -202,9 +197,7 @@ where
             ..
         } => {
             scanner.scan(receiver.as_mut())
-                && arguments
-                    .iter_mut()
-                    .all(|argument| scanner.scan(argument))
+                && arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
         Expr::NewTraitObject { .. } => true,
         Expr::Next { .. } => true,

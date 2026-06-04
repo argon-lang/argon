@@ -5,7 +5,6 @@ use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::type_check_expr;
 use alloc::{boxed::Box, sync::Arc};
-use core::fmt::Debug;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
@@ -16,6 +15,7 @@ use argon_compiler::{
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
 use argon_util::sync::{Mutex, mutex_lock};
+use core::fmt::Debug;
 
 pub struct SourceFunction {
     context: Context,

@@ -1,10 +1,15 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
-use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Tube, TubeName, UnaryOperatorIdentifier};
+use argon_compiler::{
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, EffectInfo, ErasureMode, Expr,
+    Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier,
+    Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField,
+    RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier,
+};
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
-use crate::ids::TubeIdProvider;
+use crate::ids::{RecordFieldId, TubeIdProvider};
 use argon_expr::{ExpressionOwner, LocalVariable, Variable};
 use argon_format::tube as tf;
 
@@ -67,11 +72,16 @@ impl TubeEncoder {
     }
 
     fn get_module_id(&mut self, tube_name: &TubeName, module_path: &ModulePath) -> usize {
-        let (id, is_new) = self.ids.module_ids.get_with_new((tube_name.clone(), module_path.clone()));
+        let (id, is_new) = self
+            .ids
+            .module_ids
+            .get_with_new((tube_name.clone(), module_path.clone()));
 
         if is_new {
-            self.entry_emitters
-                .push_back(EntryEmitter::ModuleReference(tube_name.clone(), module_path.clone()));
+            self.entry_emitters.push_back(EntryEmitter::ModuleReference(
+                tube_name.clone(),
+                module_path.clone(),
+            ));
         }
 
         id
@@ -83,6 +93,30 @@ impl TubeEncoder {
         if is_new {
             self.entry_emitters
                 .push_back(EntryEmitter::Function(function));
+        }
+
+        id
+    }
+
+    fn get_record_id(&mut self, record: Arc<dyn Record>) -> usize {
+        let (id, is_new) = self.ids.record_ids.get_with_new(record.clone());
+
+        if is_new {
+            self.entry_emitters.push_back(EntryEmitter::Record(record));
+        }
+
+        id
+    }
+
+    fn get_record_field_id(&mut self, field: Arc<dyn RecordField>) -> usize {
+        let (id, is_new) = self
+            .ids
+            .record_field_ids
+            .get_with_new(RecordFieldId::new(&field));
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::RecordField(field));
         }
 
         id
@@ -142,10 +176,11 @@ impl TubeEncoder {
                         modules,
                     }),
                 }
-            },
+            }
 
             EntryEmitter::ModuleReference(tube, module) => {
-                let module_id = BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
+                let module_id =
+                    BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
                 let tube_id = BigUint::from(self.ids.tube_ids.get(tube.clone()));
 
                 let path = encode_module_path(&module);
@@ -189,6 +224,61 @@ impl TubeEncoder {
                             implementation,
                         }),
                     }
+                }
+            }
+
+            EntryEmitter::Record(record) => {
+                let record_id = BigUint::from(self.ids.record_ids.get(record.clone()));
+                let import_specifier = record.clone().import_specifier();
+                let import = self.encode_import_specifier(&import_specifier)?;
+
+                if import_specifier_tube(&import_specifier) != self.tube.name() {
+                    tf::TubeFileEntry::RecordReference {
+                        record_id,
+                        import: Box::new(import),
+                    }
+                } else {
+                    let fields = record
+                        .clone()
+                        .fields()
+                        .iter()
+                        .map(|field| {
+                            self.get_record_field_id(field.clone());
+                            let metadata = field.metadata();
+                            Ok(Box::new(tf::RecordFieldDefinition {
+                                name: Box::new(encode_identifier(&metadata.name)?),
+                                field_type: Box::new(self.emit_expr(&field.clone().field_type())?),
+                                mutable: metadata.is_mutable,
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+                    tf::TubeFileEntry::RecordDefinition {
+                        definition: Box::new(tf::RecordDefinition {
+                            record_id,
+                            import: Box::new(import),
+                            signature: Box::new(self.emit_function_signature(&record.signature())?),
+                            fields,
+                        }),
+                    }
+                }
+            }
+
+            EntryEmitter::RecordField(field) => match field.owning_record() {
+                RecordFieldOwner::Record(record) => {
+                    let record_field_id =
+                        BigUint::from(self.ids.record_field_ids.get(RecordFieldId::new(&field)));
+                    let record_id = BigUint::from(self.get_record_id(record));
+                    let name = encode_identifier(&field.metadata().name)?;
+
+                    tf::TubeFileEntry::RecordFieldReference {
+                        record_field_id,
+                        record_id,
+                        name: Box::new(name),
+                    }
+                }
+                RecordFieldOwner::EnumVariant(_) => {
+                    todo!("emit enum variant record field references")
                 }
             },
         }))
@@ -240,8 +330,16 @@ impl TubeEncoder {
                 }
             }
 
-            ModuleExportBinding::Record(_) => {
-                todo!()
+            ModuleExportBinding::Record(record) => {
+                let record_id = self.get_record_id(record.clone());
+                let sig = record.signature();
+                let erased_sig = erase_signature(sig.as_ref());
+                let signature = self.encode_erased_signature(&erased_sig)?;
+                tf::ModuleExport::Record {
+                    record_id: BigUint::from(record_id),
+                    access: Box::new(encode_access_modifier_global(exp.access)),
+                    signature: Box::new(signature),
+                }
             }
             ModuleExportBinding::Enum(_) => {
                 todo!()
@@ -513,6 +611,44 @@ impl TubeEncoder {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
             },
+            Expr::RecordLiteral { record, fields } => {
+                let declared_fields = record.clone().fields();
+                tf::Expr::RecordLiteral {
+                    record: Box::new(tf::RecordType {
+                        id: BigUint::from(self.get_record_id(record.clone())),
+                        args: Vec::new(),
+                    }),
+                    fields: fields
+                        .iter()
+                        .map(|field| {
+                            let declared_field = declared_fields
+                                .iter()
+                                .find(|declared_field| declared_field.metadata().name == field.name)
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "record literal references unknown field {:?}",
+                                        field.name
+                                    )
+                                });
+                            Ok(Box::new(tf::RecordFieldLiteral {
+                                field_id: BigUint::from(
+                                    self.get_record_field_id(declared_field.clone()),
+                                ),
+                                value: Box::new(self.emit_expr(&field.value)?),
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, InternalCompilerError>>()?,
+                }
+            }
+            Expr::RecordType(record, arguments) => tf::Expr::RecordType {
+                record_type: Box::new(tf::RecordType {
+                    id: BigUint::from(self.get_record_id(record.clone())),
+                    args: arguments
+                        .iter()
+                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+            },
             Expr::Variable(variable) => tf::Expr::Variable {
                 v: Box::new(self.emit_var(variable)?),
             },
@@ -542,11 +678,7 @@ impl TubeEncoder {
                 witness: variable.is_witness,
             },
             Variable::Local(variable) => tf::Var::LocalVar {
-                id: self
-                    .ids
-                    .local_variable_ids
-                    .get(variable.id.clone())
-                    .into(),
+                id: self.ids.local_variable_ids.get(variable.id.clone()).into(),
             },
         })
     }
@@ -559,7 +691,9 @@ impl TubeEncoder {
             ExpressionOwner::Function(function) => tf::ExpressionOwner::Func {
                 index: self.get_function_id(function.clone()).into(),
             },
-            ExpressionOwner::Record(_) => todo!("emit record expression owners"),
+            ExpressionOwner::Record(record) => tf::ExpressionOwner::Rec {
+                index: self.get_record_id(record.clone()).into(),
+            },
             ExpressionOwner::Enum(_) => todo!("emit enum expression owners"),
             ExpressionOwner::Trait(_) => todo!("emit trait expression owners"),
             ExpressionOwner::EnumVariant(_) => todo!("emit enum variant expression owners"),
@@ -583,11 +717,7 @@ impl TubeEncoder {
         variable: &LocalVariable<argon_compiler::DefaultExprContext>,
     ) -> Result<tf::LocalVar, InternalCompilerError> {
         Ok(tf::LocalVar {
-            id: self
-                .ids
-                .local_variable_ids
-                .get(variable.id.clone())
-                .into(),
+            id: self.ids.local_variable_ids.get(variable.id.clone()).into(),
             var_type: Box::new(self.emit_expr(&variable.var_type)?),
             name: variable
                 .name
@@ -621,6 +751,8 @@ enum EntryEmitter {
     Metadata,
     ModuleReference(TubeName, ModulePath),
     Function(Arc<dyn Function>),
+    Record(Arc<dyn Record>),
+    RecordField(Arc<dyn RecordField>),
 }
 
 fn encode_module_path(path: &argon_compiler::ModulePath) -> tf::ModulePath {

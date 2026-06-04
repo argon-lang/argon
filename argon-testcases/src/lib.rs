@@ -156,19 +156,15 @@ impl TryFrom<RawTestCase> for TestCase {
     type Error = DecodeError;
 
     fn try_from(value: RawTestCase) -> Result<Self, Self::Error> {
-        let expected =
-            if let Some(expected_output) = value.expected_output {
-                ExpectedResult::Output(expected_output)
-            }
-            else if !value.expected_error.is_empty() {
-                ExpectedResult::CompileErrors(value.expected_error)
-            }
-            else if !value.expected_execution_error.is_empty() {
-                ExpectedResult::ExecutionErrors(value.expected_execution_error)
-            }
-            else {
-                return Err(DecodeError::MissingExpectation);
-            };
+        let expected = if let Some(expected_output) = value.expected_output {
+            ExpectedResult::Output(expected_output)
+        } else if !value.expected_error.is_empty() {
+            ExpectedResult::CompileErrors(value.expected_error)
+        } else if !value.expected_execution_error.is_empty() {
+            ExpectedResult::ExecutionErrors(value.expected_execution_error)
+        } else {
+            return Err(DecodeError::MissingExpectation);
+        };
 
         Ok(Self {
             name: value.name,

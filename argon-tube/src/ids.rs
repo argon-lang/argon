@@ -1,5 +1,8 @@
 use alloc::{sync::Arc, vec::Vec};
-use argon_compiler::{DefaultExprContext, Enum, EnumCase, Function, Instance, Method, ModulePath, Record, Trait, TubeName};
+use argon_compiler::{
+    DefaultExprContext, Enum, EnumVariant, Function, Instance, Method, ModulePath, Record, Trait,
+    TubeName,
+};
 use argon_expr::{ExprContext, LocalVariable};
 use argon_util::UniqueIdentifier;
 use core::hash::Hash;
@@ -12,7 +15,7 @@ pub struct TubeIdProvider {
     pub function_ids: IdStore<Arc<dyn Function>>,
     pub record_ids: IdStore<Arc<dyn Record>>,
     pub enum_ids: IdStore<Arc<dyn Enum>>,
-    pub enum_variant_ids: IdStore<Arc<dyn EnumCase>>,
+    pub enum_variant_ids: IdStore<Arc<dyn EnumVariant>>,
     pub record_field_ids: IdStore<RecordFieldId>,
     pub trait_ids: IdStore<Arc<dyn Trait>>,
     pub method_ids: IdStore<Arc<dyn Method>>,

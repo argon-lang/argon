@@ -52,5 +52,4 @@ impl<EC: ExprContext + ?Sized, S: Normalizer<EC>> ExprScannerMut for NormalizerS
 
         default_scan_mut(self, expr)
     }
-    
 }

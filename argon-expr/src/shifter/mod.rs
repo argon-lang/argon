@@ -1,6 +1,6 @@
 use crate::{
-    Expr, ExprContext, ExpressionOwner, LocalVariable, MatchCase,
-    ParameterVariable, RecordFieldLiteral, Variable,
+    Expr, ExprContext, ExpressionOwner, LocalVariable, MatchCase, ParameterVariable,
+    RecordFieldLiteral, Variable,
 };
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -234,7 +234,9 @@ where
                 ExpressionOwner::Record(record) => ExpressionOwner::Record(record),
                 ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec),
                 ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec),
-                ExpressionOwner::EnumVariant(enum_variant) => ExpressionOwner::EnumVariant(enum_variant),
+                ExpressionOwner::EnumVariant(enum_variant) => {
+                    ExpressionOwner::EnumVariant(enum_variant)
+                }
                 ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
                 ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
             },

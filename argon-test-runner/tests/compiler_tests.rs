@@ -1,10 +1,10 @@
 use argon_test_runner::*;
+use argon_testcases::{ExpectedResult, TestCase, load_test_case};
+use libtest_mimic::{Arguments, Trial};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use libtest_mimic::{Arguments, Trial};
 use tempfile::TempDir;
-use argon_testcases::{load_test_case, ExpectedResult, TestCase};
 
 fn workspace_root() -> PathBuf {
     let mut workspace_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
@@ -23,27 +23,33 @@ fn result_matches_expected(result: &TestExecutionResult, expected: &ExpectedResu
                     .collect::<String>()
             }
 
-            result.exit_code == 0 &&
-                normalize_output(&result.output) == normalize_output(&expected_output)
-        },
+            result.exit_code == 0
+                && normalize_output(&result.output) == normalize_output(&expected_output)
+        }
         ExpectedResult::CompileErrors(_) => false,
         ExpectedResult::ExecutionErrors(expected_errors) => {
-            result.exit_code != 0 &&
-                expected_errors.iter().all(|expected_error| result.output.contains(expected_error))
-        },
+            result.exit_code != 0
+                && expected_errors
+                    .iter()
+                    .all(|expected_error| result.output.contains(expected_error))
+        }
     }
 }
 
 fn run_test<P: CompileTargetPlatform>(context: TestContext<P>) {
     match (context.compile_test_case(), &context.test_case.1.expected) {
         (Ok(_), ExpectedResult::CompileErrors(expected_errors)) => {
-            panic!("Expected compilation to fail with errors: {:?}", expected_errors);
-        },
-        (Ok(_), _) => {},
+            panic!(
+                "Expected compilation to fail with errors: {:?}",
+                expected_errors
+            );
+        }
+        (Ok(_), _) => {}
 
         (Err(output), ExpectedResult::CompileErrors(expected_errors)) => {
             assert!(
-                expected_errors.iter()
+                expected_errors
+                    .iter()
                     .all(|expected_error| output.contains(expected_error)),
                 "Expected compilation to fail with errors: {:?}\nActual:\n{}",
                 expected_errors,
@@ -53,7 +59,10 @@ fn run_test<P: CompileTargetPlatform>(context: TestContext<P>) {
         }
 
         (Err(output), _) => {
-            panic!("Expected compilation to succeed, but it failed with:\n{}", output);
+            panic!(
+                "Expected compilation to succeed, but it failed with:\n{}",
+                output
+            );
         }
     };
     let platform = context.test_suite_context.platform.clone();
@@ -67,7 +76,11 @@ fn run_test<P: CompileTargetPlatform>(context: TestContext<P>) {
     );
 }
 
-pub fn build_test_suite<P: CompileTargetPlatform>(platform: Arc<P>, test_cases: &Vec<Arc<(String, TestCase)>>, tests: &mut Vec<Trial>) {
+pub fn build_test_suite<P: CompileTargetPlatform>(
+    platform: Arc<P>,
+    test_cases: &Vec<Arc<(String, TestCase)>>,
+    tests: &mut Vec<Trial>,
+) {
     let temp_dir = TempDir::new().unwrap();
 
     let mut lib_dir = workspace_root();
@@ -125,9 +138,16 @@ fn main() {
         let path = entry.path();
         if path.is_file() {
             let test_case = load_test_case(&path).unwrap();
-            let rel_path = path.strip_prefix(&testcases_dir).unwrap().to_string_lossy().into_owned();
+            let rel_path = path
+                .strip_prefix(&testcases_dir)
+                .unwrap()
+                .to_string_lossy()
+                .into_owned();
 
-            test_cases.push(Arc::new((rel_path.strip_suffix(".xml").unwrap().to_string(), test_case)));
+            test_cases.push(Arc::new((
+                rel_path.strip_suffix(".xml").unwrap().to_string(),
+                test_case,
+            )));
         }
     }
 
@@ -137,4 +157,3 @@ fn main() {
 
     libtest_mimic::run(&args, tests).exit()
 }
-

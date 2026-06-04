@@ -47,9 +47,7 @@ where
                     return false;
                 }
 
-                arguments
-                    .iter()
-                    .all(|argument| self.scan(argument))
+                arguments.iter().all(|argument| self.scan(argument))
             }
             _ => argon_expr::default_scan(self, expr),
         }

@@ -1,10 +1,10 @@
+use crate::{CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult};
+use fs_extra::dir::CopyOptions;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use fs_extra::dir::CopyOptions;
-use crate::{CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult};
 
 pub struct JSPlatform;
 
@@ -15,39 +15,50 @@ pub struct JSPlatformState {
 
 impl JSPlatform {
     fn codegen_library(&self, library_info: &LibraryInfo<Self>) -> PathBuf {
-        let mut tube_map = library_info.test_suite_context.platform_state.library_codegen.lock().unwrap();
+        let mut tube_map = library_info
+            .test_suite_context
+            .platform_state
+            .library_codegen
+            .lock()
+            .unwrap();
 
         let context = library_info.test_suite_context.clone();
 
-        tube_map.entry(library_info.name.clone()).or_insert_with(|| {
-            let library = context.library_info(&library_info.name);
+        tube_map
+            .entry(library_info.name.clone())
+            .or_insert_with(|| {
+                let library = context.library_info(&library_info.name);
 
-            let input_file = library.test_suite_context.clone().genir_library_tube(&library_info.name);
-            let output_dir = library.library_output_path.join("js");
-            std::fs::create_dir_all(&output_dir).unwrap();
+                let input_file = library
+                    .test_suite_context
+                    .clone()
+                    .genir_library_tube(&library_info.name);
+                let output_dir = library.library_output_path.join("js");
+                std::fs::create_dir_all(&output_dir).unwrap();
 
-            let mut cmd = Command::new(&library.test_suite_context.argon_bin);
-            cmd.arg("codegen");
-            cmd.arg("js");
+                let mut cmd = Command::new(&library.test_suite_context.argon_bin);
+                cmd.arg("codegen");
+                cmd.arg("js");
 
-            cmd.arg("--input");
-            cmd.arg(input_file);
+                cmd.arg("--input");
+                cmd.arg(input_file);
 
-            cmd.arg("--output");
-            cmd.arg(&output_dir);
+                cmd.arg("--output");
+                cmd.arg(&output_dir);
 
-            let output = cmd.output().unwrap();
+                let output = cmd.output().unwrap();
 
-            assert!(
-                output.status.success(),
-                "Code generation of library {} failed\n{}\n{}",
-                library.name,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr),
-            );
+                assert!(
+                    output.status.success(),
+                    "Code generation of library {} failed\n{}\n{}",
+                    library.name,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                );
 
-            output_dir
-        }).clone()
+                output_dir
+            })
+            .clone()
     }
 }
 
@@ -55,7 +66,6 @@ impl CompileTargetPlatform for JSPlatform {
     type PlatformState = JSPlatformState;
 
     const ID: &'static str = "js";
-
 
     fn library_platform_metadata(self: Arc<Self>, library: &LibraryInfo<Self>) -> Vec<PathBuf> {
         let path = library.library_output_path.join("platform-metadata.esx");
@@ -81,7 +91,6 @@ impl CompileTargetPlatform for JSPlatform {
 
         let output = cmd.output().unwrap();
 
-
         assert!(
             output.status.success(),
             "Getting metadata for library {} failed:\n{}\n{}",
@@ -90,7 +99,7 @@ impl CompileTargetPlatform for JSPlatform {
             String::from_utf8_lossy(&*output.stderr),
         );
 
-        vec![ path ]
+        vec![path]
     }
 
     fn codegen(self: Arc<Self>, test_context: &TestContext<Self>) {
@@ -98,7 +107,10 @@ impl CompileTargetPlatform for JSPlatform {
         std::fs::create_dir_all(&output_dir).unwrap();
 
         {
-            let runtime_dir = test_context.test_suite_context.backend_dir.join("runtime/js");
+            let runtime_dir = test_context
+                .test_suite_context
+                .backend_dir
+                .join("runtime/js");
             let runtime_module_dir = output_dir.join("node_modules/@argon-lang/runtime");
             std::fs::create_dir_all(&runtime_module_dir).unwrap();
 
@@ -108,9 +120,15 @@ impl CompileTargetPlatform for JSPlatform {
         }
 
         for library_name in test_context.referenced_libraries() {
-            let lib_dir = self.codegen_library(&test_context.test_suite_context.clone().library_info(library_name));
+            let lib_dir = self.codegen_library(
+                &test_context
+                    .test_suite_context
+                    .clone()
+                    .library_info(library_name),
+            );
 
-            let lib_module_dir = output_dir.join(format!("node_modules/@argon-tube/{}", library_name));
+            let lib_module_dir =
+                output_dir.join(format!("node_modules/@argon-tube/{}", library_name));
             std::fs::create_dir_all(&lib_module_dir).unwrap();
 
             let mut options = CopyOptions::new();
@@ -129,7 +147,6 @@ impl CompileTargetPlatform for JSPlatform {
         cmd.arg("--output");
         cmd.arg(&output_dir);
 
-
         let output = cmd.output().unwrap();
 
         assert!(
@@ -139,11 +156,9 @@ impl CompileTargetPlatform for JSPlatform {
             String::from_utf8_lossy(&output.stderr),
         );
 
-
         {
             let entrypoint_path = output_dir.join("main.js");
-            let contents =
-                "import * as rt from \"@argon-lang/runtime\";\n\
+            let contents = "import * as rt from \"@argon-lang/runtime\";\n\
 				import { main$a$t$e$r$t$e } from \"./index.js\";\n\
 				rt.resolve(main$a$t$e$r$t$e());\n";
 
@@ -160,16 +175,11 @@ impl CompileTargetPlatform for JSPlatform {
             .capture()
             .unwrap();
 
-        let exit_code = output.exit_status.code()
+        let exit_code = output
+            .exit_status
+            .code()
             .map(|code| code as i32)
-            .unwrap_or_else(||
-                if output.exit_status.success() {
-                    0
-                }
-                else {
-                    1
-                }
-            );
+            .unwrap_or_else(|| if output.exit_status.success() { 0 } else { 1 });
 
         TestExecutionResult {
             exit_code,
@@ -177,4 +187,3 @@ impl CompileTargetPlatform for JSPlatform {
         }
     }
 }
-

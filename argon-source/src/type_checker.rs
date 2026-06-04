@@ -1,18 +1,21 @@
+use crate::modifiers::{ERASURE_MODE, IS_WITNESS, ModifierParser};
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::scanner::PurityScanner;
-use argon_compiler::scope::{LocalScope, LocalVariableScope, Lookup, OverloadLookup, Overloadable, Scope, ShiftedScope};
+use argon_compiler::scope::{
+    self, LocalScope, LocalVariableScope, Lookup, OverloadLookup, Scope, ShiftedScope,
+};
 use argon_compiler::{
-    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
+    Context, DefaultExprContext, Enum, Function, FunctionImplementation, FunctionSignature,
+    Instance, Method, Record, Trait,
 };
 use argon_expr::{
     Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    LocalVariable, Normalizer, NormalizerScanner, SubstScanner, Variable,
-    VariableTupleElement,
+    LocalVariable, Normalizer, NormalizerScanner, SubstScanner, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
-use argon_util::{CompileError, UniqueIdentifier, VecDequeSlice};
+use argon_util::{CompileError, MultiSlice, UniqueIdentifier};
 use core::cmp::Ordering;
 use core::fmt::{Debug, Formatter};
 use core::hash::{Hash, Hasher};
@@ -21,7 +24,6 @@ use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
-use crate::modifiers::{ModifierParser, ERASURE_MODE, IS_WITNESS};
 
 pub fn type_check_type_expr(
     context: Context,
@@ -253,7 +255,7 @@ impl<'a> TypeInferResult<'a> {
     fn infer_fully(self) -> InferredType {
         match self {
             TypeInferResult::Complete(inferred_type) => inferred_type,
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }
@@ -277,6 +279,47 @@ enum ExpectedType<'a> {
     Exact(&'a Expr<TypeCheckExprContext>),
 }
 
+enum Overloadable<'a> {
+    Base(scope::Overloadable),
+    ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
+}
+
+impl <'a> Overloadable<'a> {
+    fn initial_arguments_info(&self) -> Vec<ArgumentInfo<'a>> {
+        match self {
+            Overloadable::Base(_) => vec![],
+            Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
+        }
+    }
+
+    fn initial_arguments(&self) -> Vec<TypeInferResult<'static>> {
+        match self {
+            Overloadable::Base(_) => vec![],
+            Overloadable::ExtensionMethod(_, _, arg) => vec![TypeInferResult::Complete(arg.clone())],
+        }
+    }
+
+    fn as_expression_owner(&self) -> ExpressionOwner<DefaultExprContext> {
+        match self {
+            Overloadable::Base(base) => base.as_expression_owner(),
+            Overloadable::ExtensionMethod(f, _, _) => ExpressionOwner::Function(f.clone()),
+        }
+    }
+
+    fn signature(&self) -> Arc<FunctionSignature<DefaultExprContext>> {
+        match self {
+            Overloadable::Base(base) => base.signature(),
+            Overloadable::ExtensionMethod(f, _, _) => f.clone().signature(),
+        }
+    }
+}
+
+impl From<scope::Overloadable> for Overloadable<'_> {
+    fn from(value: scope::Overloadable) -> Self {
+        Overloadable::Base(value)
+    }
+}
+
 struct TypeChecker<'a> {
     context: Context,
     scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
@@ -284,7 +327,10 @@ struct TypeChecker<'a> {
 }
 
 impl<'a> TypeChecker<'a> {
-    fn new(context: Context, scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>) -> Self {
+    fn new(
+        context: Context,
+        scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
+    ) -> Self {
         Self {
             context,
             scope,
@@ -364,6 +410,7 @@ impl<'a> TypeChecker<'a> {
             }),
 
             ast::Expr::Builtin(_)
+            | ast::Expr::Dot { .. }
             | ast::Expr::FunctionCall { .. }
             | ast::Expr::Identifier(_)
             | ast::Expr::Type => {
@@ -499,7 +546,6 @@ impl<'a> TypeChecker<'a> {
 
                 result
             }
-            ast::Expr::Dot { .. } => todo!("infer member access"),
             ast::Expr::FunctionLiteral(_) => todo!("infer function literals"),
             ast::Expr::FunctionType { .. } => todo!("infer function types"),
             ast::Expr::IfElse {
@@ -635,14 +681,14 @@ impl<'a> TypeChecker<'a> {
                 if let Some(t) = &v.var_type {
                     var_type = self.check_type(t);
                     variable_value = self.check(&v.value, &var_type);
-                }
-                else {
+                } else {
                     let result = self.infer(&v.value).infer_fully();
                     var_type = result.inferred_type;
                     variable_value = result.checked_expr;
                 }
 
-                let mut mp = ModifierParser::new(self.context.clone(), &v.modifiers, &stmt.location);
+                let mut mp =
+                    ModifierParser::new(self.context.clone(), &v.modifiers, &stmt.location);
                 let erasure_mode = mp.parse(ERASURE_MODE);
                 let is_witness = mp.parse(IS_WITNESS);
                 mp.done();
@@ -662,7 +708,7 @@ impl<'a> TypeChecker<'a> {
                     checked_expr: Expr::VariableBinding(v, Box::new(variable_value)),
                     inferred_type: Expr::unit_type(),
                 })
-            },
+            }
             _ => todo!("inferring non-expression statements in blocks: {:#?}", stmt),
         }
     }
@@ -945,7 +991,7 @@ impl<'a> TypeChecker<'a> {
 
         let args = args
             .iter()
-            .map(|arg| (self.infer(arg.arg), arg))
+            .map(|arg| (self.infer(arg.arg), arg.clone()))
             .collect::<Vec<_>>();
 
         self.infer_function_object_call_inferred(expr_result, args.into_iter())
@@ -954,7 +1000,7 @@ impl<'a> TypeChecker<'a> {
     fn infer_function_object_call_inferred<'b>(
         &mut self,
         mut expr_result: TypeInferResult<'a>,
-        args: impl Iterator<Item = (TypeInferResult<'a>, &'b ArgumentInfo<'a>)>,
+        args: impl Iterator<Item = (TypeInferResult<'a>, ArgumentInfo<'a>)>,
     ) -> TypeInferResult<'a>
     where
         'a: 'b,
@@ -1003,7 +1049,7 @@ impl<'a> TypeChecker<'a> {
         expr_result
     }
 
-    fn process_call<'b>(&mut self, mut func_expr: &'b WithLocation<ast::Expr>) -> CallInfo<'b> {
+    fn process_call(&mut self, mut func_expr: &'a WithLocation<ast::Expr>) -> CallInfo<'a> {
         let mut arguments = VecDeque::new();
         let call_location = &func_expr.location;
 
@@ -1048,7 +1094,89 @@ impl<'a> TypeChecker<'a> {
                     };
                 }
 
-                ast::Expr::Dot { .. } => todo!(),
+                ast::Expr::Dot { o, member } => {
+                    let mut overload_groups = Vec::new();
+
+                    'done: {
+                        let mut instance = self.process_call(o);
+                        let call_location = instance.location;
+
+                        // Find enum variants
+                        // if arguments.is_empty() && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee {
+                        //     if let Some(e) = instance_overloads.item_groups
+                        //         .iter()
+                        //         .flatten()
+                        //         .find_map(|overload| match overload {
+                        //             Overloadable::Enum(e) => Some(e),
+                        //             _ => None,
+                        //         })
+                        //     {
+                        //         todo!("Find record fields");
+                        //
+                        //         let sig = r.signature();
+                        //         if sig.parameters.is_empty() {
+                        //             break 'done;
+                        //         }
+                        //     }
+                        // }
+
+                        let mut instance = self.infer_call(instance).infer_fully();
+
+                        // TODO: Check for assignment
+
+                        {
+                            let mut norm = NormalizerScanner::new(
+                                self.context.normalize_fuel(),
+                                ExprNormalizer,
+                            );
+                            norm.scan(&mut instance.inferred_type);
+                        }
+
+                        match &instance.inferred_type {
+                            Expr::RecordType(..) => todo!("Record members"),
+                            Expr::TraitType(..) => todo!("Trait members"),
+                            _ => {}
+                        }
+
+                        // Extension methods
+                        if let Lookup::Overloadable(extension_overloads) = self
+                            .scope
+                            .lookup(&Identifier::Extension(Box::new(member.value.clone())))
+                        {
+                            overload_groups.extend(
+                                extension_overloads
+                                    .item_groups
+                                    .into_iter()
+                                    .map(|overload_group| {
+                                        overload_group
+                                            .into_iter()
+                                            .filter_map(|overload| match overload {
+                                                scope::Overloadable::Function(f) => {
+                                                    Some(Overloadable::ExtensionMethod(
+                                                        f,
+                                                        ArgumentInfo {
+                                                            call_location,
+                                                            arg: o,
+                                                            list_type: FunctionParameterListType::NormalList,
+                                                        },
+                                                        instance.clone(),
+                                                    ))
+                                                }
+                                                _ => None,
+                                            })
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .filter(|overload_group| !overload_group.is_empty()),
+                            );
+                        }
+                    }
+
+                    return CallInfo {
+                        location: call_location,
+                        callee: CalleeInfo::Overloadable(overload_groups),
+                        arguments,
+                    };
+                }
 
                 ast::Expr::Type => {
                     return CallInfo {
@@ -1133,7 +1261,18 @@ impl<'a> TypeChecker<'a> {
             Lookup::Variable(v) => CalleeInfo::Variable(v),
             Lookup::VariableTupleElement(vte) => CalleeInfo::VariableTupleElement(vte),
 
-            Lookup::Overloadable(overloadable) => CalleeInfo::Overloadable(overloadable),
+            Lookup::Overloadable(overloadable) => CalleeInfo::Overloadable(
+                overloadable
+                    .item_groups
+                    .into_iter()
+                    .map(|group| {
+                        group
+                            .into_iter()
+                            .map(Overloadable::from)
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>(),
+            ),
         }
     }
 
@@ -1480,6 +1619,7 @@ fn partially_inferred_type_matches_expected(
     }
 }
 
+#[derive(Clone)]
 struct ArgumentInfo<'a> {
     call_location: &'a Location,
     arg: &'a WithLocation<ast::Expr>,
@@ -1492,7 +1632,7 @@ enum CalleeInfo<'a> {
     Builtin(Builtin),
     Variable(Variable<TypeCheckExprContext>),
     VariableTupleElement(VariableTupleElement<TypeCheckExprContext>),
-    Overloadable(OverloadLookup),
+    Overloadable(Vec<Vec<Overloadable<'a>>>),
     TypeN,
 }
 
@@ -1504,7 +1644,7 @@ struct CallInfo<'a> {
 
 struct OverloadResolver<'a, 'b> {
     type_checker: &'b mut TypeChecker<'a>,
-    rejected_overloads: Vec<(Overloadable, OverloadRejectionReason)>,
+    rejected_overloads: Vec<(Overloadable<'a>, OverloadRejectionReason)>,
 }
 
 impl<'a, 'b> OverloadResolver<'a, 'b> {
@@ -1518,7 +1658,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
     fn resolve_overload_lookup(
         mut self,
         call_location: &'a Location,
-        overload_lookup: OverloadLookup,
+        overload_lookup: Vec<Vec<Overloadable<'a>>>,
         args: VecDeque<ArgumentInfo<'a>>,
     ) -> TypeInferResult<'a> {
         let inferred_args = args
@@ -1527,14 +1667,14 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
             .collect::<VecDeque<_>>();
 
         let overload = 'find_overload: {
-            for group in overload_lookup.into_item_groups() {
-                for mut group in self.group_overloads_by_arity(group, VecDequeSlice::new(&args)) {
+            for group in overload_lookup {
+                for mut group in self.group_overloads_by_arity(group, MultiSlice::from(&args)) {
                     let mut i = 0;
                     while i < group.len() {
                         if let Some(reason) = self.is_overload_applicable(
                             &group[i],
-                            VecDequeSlice::new(&args),
-                            VecDequeSlice::new(&inferred_args),
+                            MultiSlice::from(&args),
+                            MultiSlice::from(&inferred_args),
                         ) {
                             let overload = group.swap_remove(i);
                             self.rejected_overloads.push((overload, reason));
@@ -1566,18 +1706,18 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
             return TypeInferResult::error();
         };
 
-        self.select_overload(overload, VecDequeSlice::new(&args), inferred_args)
+        self.select_overload(overload, MultiSlice::from(&args), inferred_args)
     }
 
     fn group_overloads_by_arity(
         &mut self,
-        overloads: Vec<Overloadable>,
-        args: VecDequeSlice<'_, ArgumentInfo<'_>>,
-    ) -> impl Iterator<Item = Vec<Overloadable>> + 'static {
+        overloads: Vec<Overloadable<'a>>,
+        args: MultiSlice<'_, ArgumentInfo<'a>>,
+    ) -> impl Iterator<Item = Vec<Overloadable<'a>>> + 'a {
         let mut groups: BTreeMap<OverloadArityRank, Vec<Overloadable>> = BTreeMap::new();
 
         for overload in overloads {
-            match self.rank_by_arity(&overload, args) {
+            match self.rank_by_arity(&overload, args.clone()) {
                 Some(rank) => groups.entry(rank).or_default().push(overload),
                 None => self
                     .rejected_overloads
@@ -1590,35 +1730,42 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn rank_by_arity(
         &self,
-        overload: &Overloadable,
-        mut args: VecDequeSlice<'_, ArgumentInfo<'_>>,
+        overload: &Overloadable<'a>,
+        mut args: MultiSlice<'_, ArgumentInfo<'a>>,
     ) -> Option<OverloadArityRank> {
-        let sig = self.get_overload_sig(overload);
+        let sig = overload.signature();
 
         let mut params = &sig.parameters[..];
 
         let mut num_inferred = 0;
 
+        args.push_front_vec(overload.initial_arguments_info());
+
         loop {
             let Some((param, tail_params)) = params.split_first() else {
                 if args.is_empty() {
                     return Some(OverloadArityRank::Exact(num_inferred));
-                } else {
+                }
+                else {
                     return Some(OverloadArityRank::More(args.len()));
                 }
             };
 
-            if let Some((arg, tail_args)) = args.split_first() {
+            if let Some(arg) = args.first() {
                 if param.list_type == arg.list_type {
-                    args = tail_args;
-                } else if param.list_type == FunctionParameterListType::NormalList {
+                    args.pop_front();
+                }
+                else if param.list_type == FunctionParameterListType::NormalList {
                     return None;
-                } else {
+                }
+                else {
                     num_inferred += 1;
                 }
-            } else if param.list_type == FunctionParameterListType::NormalList {
+            }
+            else if param.list_type == FunctionParameterListType::NormalList {
                 return Some(OverloadArityRank::Less(params.len()));
-            } else {
+            }
+            else {
                 num_inferred += 1;
             }
 
@@ -1628,11 +1775,11 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn is_overload_applicable(
         &self,
-        overload: &Overloadable,
-        mut args: VecDequeSlice<'_, ArgumentInfo<'a>>,
-        mut inferred_args: VecDequeSlice<'_, TypeInferResult<'a>>,
+        overload: &Overloadable<'a>,
+        mut args: MultiSlice<'_, ArgumentInfo<'a>>,
+        mut inferred_args: MultiSlice<'_, TypeInferResult<'a>>,
     ) -> Option<OverloadRejectionReason> {
-        let sig = self.get_overload_sig(overload);
+        let sig = overload.signature();
 
         let mut param_types = sig
             .parameters
@@ -1643,7 +1790,10 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
         let mut return_type = DefaultToTypeCheckExprContextShifter.shift(sig.return_type.clone());
 
         let mut params = &sig.parameters[..];
-        let mut parameter_index = overload.initial_parameter_index();
+        let mut parameter_index = 0;
+
+        args.push_front_vec(overload.initial_arguments_info());
+        inferred_args.push_front_vec(overload.initial_arguments());
 
         loop {
             let Some((param, tail_params)) = params.split_first() else {
@@ -1661,8 +1811,8 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
                         .to_parameter_var(overload.as_expression_owner(), parameter_index),
                 )));
 
-            if let (Some((arg, tail_args)), Some((inferred_arg, tail_inferred_args))) =
-                (args.split_first(), inferred_args.split_first())
+            if let (Some(arg), Some(inferred_arg)) =
+                (args.first(), inferred_args.first())
             {
                 if param.list_type == arg.list_type {
                     if !partially_inferred_type_matches_expected(
@@ -1679,12 +1829,13 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
                         &mut param_types,
                         &mut return_type,
                         v,
-                        inferred_arg,
+                        &inferred_arg,
                     );
 
-                    args = tail_args;
-                    inferred_args = tail_inferred_args;
-                } else {
+                    args.pop_front();
+                    inferred_args.pop_front();
+                }
+                else {
                     match param.list_type {
                         FunctionParameterListType::NormalList => {
                             return Some(OverloadRejectionReason::ParameterListTypeMismatch);
@@ -1704,7 +1855,8 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
                         }
                     }
                 }
-            } else {
+            }
+            else {
                 match param.list_type {
                     FunctionParameterListType::NormalList => {
                         return Some(OverloadRejectionReason::ParameterListTypeMismatch);
@@ -1730,8 +1882,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
         }
 
         // Process extra arguments by comparing argument types to return type
-        while let (Some((arg, tail_args)), Some((inferred_arg, tail_inferred_args))) =
-            (args.split_first(), inferred_args.split_first())
+        while let (Some(arg), Some(inferred_arg)) = (args.pop_front(), inferred_args.pop_front())
         {
             todo!()
         }
@@ -1777,11 +1928,11 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn select_overload(
         &mut self,
-        overload: Overloadable,
-        mut args: VecDequeSlice<'_, ArgumentInfo<'a>>,
+        overload: Overloadable<'a>,
+        mut args: MultiSlice<'_, ArgumentInfo<'a>>,
         mut inferred_args: VecDeque<TypeInferResult<'a>>,
     ) -> TypeInferResult<'a> {
-        let sig = self.get_overload_sig(&overload);
+        let sig = overload.signature();
 
         let mut param_types = sig
             .parameters
@@ -1792,7 +1943,11 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
         let mut return_type = DefaultToTypeCheckExprContextShifter.shift(sig.return_type.clone());
 
         let mut params = &sig.parameters[..];
-        let mut parameter_index = overload.initial_parameter_index();
+        let mut parameter_index = 0;
+        args.push_front_vec(overload.initial_arguments_info());
+        for initial_arg in overload.initial_arguments().into_iter().rev() {
+            inferred_args.push_front(initial_arg);
+        }
 
         let mut selected_args = Vec::with_capacity(inferred_args.len());
 
@@ -1812,7 +1967,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
                         .to_parameter_var(overload.as_expression_owner(), parameter_index),
                 )));
 
-            if let Some((arg, tail_args)) = args.split_first() {
+            if let Some(arg) = args.first() {
                 if param.list_type == arg.list_type {
                     let arg_result = inferred_args
                         .pop_front()
@@ -1833,8 +1988,9 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
                     selected_args.push(arg_expr.checked_expr);
 
-                    args = tail_args;
-                } else {
+                    args.pop_front();
+                }
+                else {
                     match param.list_type {
                         FunctionParameterListType::NormalList => {
                             unreachable!(
@@ -1856,7 +2012,8 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
                         }
                     }
                 }
-            } else {
+            }
+            else {
                 match param.list_type {
                     FunctionParameterListType::NormalList => {
                         unreachable!(
@@ -1884,7 +2041,11 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
         }
 
         let expr = match overload {
-            Overloadable::Function(f) => Expr::FunctionCall {
+            Overloadable::Base(scope::Overloadable::Function(f)) => Expr::FunctionCall {
+                function: f,
+                arguments: selected_args,
+            },
+            Overloadable::ExtensionMethod(f, _, _) => Expr::FunctionCall {
                 function: f,
                 arguments: selected_args,
             },
@@ -1898,16 +2059,6 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
             }),
             inferred_args.into_iter().zip(args),
         )
-    }
-
-    fn get_overload_sig(
-        &self,
-        overload: &Overloadable,
-    ) -> Arc<FunctionSignature<DefaultExprContext>> {
-        match overload {
-            Overloadable::Function(f) => f.clone().signature(),
-            _ => todo!(),
-        }
     }
 }
 

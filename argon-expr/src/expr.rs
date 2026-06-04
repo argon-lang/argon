@@ -1,14 +1,14 @@
 use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
+use argon_util::UniqueIdentifier;
 use core::convert::Infallible;
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
 use core::str::FromStr;
-use std::ops::Deref;
 use derivative::Derivative;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
-use argon_util::UniqueIdentifier;
+use std::ops::Deref;
 
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
@@ -447,7 +447,6 @@ impl<EC: ExprContext + ?Sized> Hash for LocalVariable<EC> {
     }
 }
 
-
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
@@ -460,15 +459,15 @@ pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub is_witness: bool,
 }
 
-impl <EC: ExprContext + ?Sized> PartialEq for ParameterVariable<EC> {
+impl<EC: ExprContext + ?Sized> PartialEq for ParameterVariable<EC> {
     fn eq(&self, other: &Self) -> bool {
         self.owner == other.owner && self.parameter_index == other.parameter_index
     }
 }
 
-impl <EC: ExprContext + ?Sized> Eq for ParameterVariable<EC> {}
+impl<EC: ExprContext + ?Sized> Eq for ParameterVariable<EC> {}
 
-impl <EC: ExprContext + ?Sized> Hash for ParameterVariable<EC> {
+impl<EC: ExprContext + ?Sized> Hash for ParameterVariable<EC> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.owner.hash(state);
         self.parameter_index.hash(state);

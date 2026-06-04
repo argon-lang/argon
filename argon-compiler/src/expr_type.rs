@@ -3,7 +3,6 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use argon_expr::{Builtin, Expr, ExpressionOwner, SubstScanner, Variable};
 
-
 pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext> {
     match expr {
         Expr::Error => Expr::Error,
@@ -53,17 +52,12 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Match { .. } => todo!(),
 
-        Expr::Sequence(items) => {
-            get_expr_type(items.last())
-        }
+        Expr::Sequence(items) => get_expr_type(items.last()),
 
         Expr::StringLiteral(_) => Expr::string_type(),
 
         Expr::Tuple { items } => Expr::Tuple {
-            items: items
-                .into_iter()
-                .map(|item| get_expr_type(item))
-                .collect(),
+            items: items.into_iter().map(|item| get_expr_type(item)).collect(),
         },
 
         Expr::TupleElement(tuple, index) => match get_expr_type(&**tuple) {
@@ -158,9 +152,7 @@ fn get_builtin_type(
 
         Builtin::ArraySet => Expr::unit_type(),
 
-        Builtin::ConjunctionType | Builtin::DisjunctionType | Builtin::EqualToType => {
-            Expr::Error
-        }
+        Builtin::ConjunctionType | Builtin::DisjunctionType | Builtin::EqualToType => Expr::Error,
     }
 }
 

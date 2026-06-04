@@ -1,7 +1,7 @@
 use crate::signature::SignatureParameter;
-use crate::{DefaultExprContext, Enum, Function, Instance, Method, Record, Trait};
-use alloc::{sync::Arc, vec::Vec};
+use crate::{DefaultExprContext, Enum, Function, FunctionSignature, Instance, Method, Record, Trait};
 use alloc::boxed::Box;
+use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
     ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
 };
@@ -29,7 +29,7 @@ pub enum Lookup<EC: ExprContext + ?Sized> {
 }
 
 pub struct OverloadLookup {
-    item_groups: Vec<Vec<Overloadable>>,
+    pub item_groups: Vec<Vec<Overloadable>>,
 }
 
 impl OverloadLookup {
@@ -52,10 +52,6 @@ pub enum Overloadable {
 }
 
 impl Overloadable {
-    pub fn initial_parameter_index(&self) -> usize {
-        0
-    }
-
     pub fn as_expression_owner<EC>(&self) -> ExpressionOwner<EC>
     where
         EC: ExprContext<
@@ -75,6 +71,17 @@ impl Overloadable {
             Overloadable::Enum(e) => ExpressionOwner::Enum(e.clone()),
             Overloadable::Trait(t) => ExpressionOwner::Trait(t.clone()),
             Overloadable::Instance(i) => ExpressionOwner::Instance(i.clone()),
+        }
+    }
+
+    pub fn signature(&self) -> Arc<FunctionSignature<DefaultExprContext>> {
+        match self {
+            Overloadable::Function(f) => f.clone().signature(),
+            Overloadable::Record(r) => r.clone().signature(),
+            Overloadable::Method(_) => todo!(),
+            Overloadable::Enum(e) => e.clone().signature(),
+            Overloadable::Trait(t) => t.clone().signature(),
+            Overloadable::Instance(i) => todo!(),
         }
     }
 }

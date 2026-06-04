@@ -14,12 +14,12 @@ pub mod sync;
 #[path = "sync_no_std.rs"]
 pub mod sync;
 
-mod vec_deque_slice;
+mod multi_slice;
 
 use alloc::sync::Arc;
 use core::hash::Hash;
 pub use error::*;
-pub use vec_deque_slice::*;
+pub use multi_slice::*;
 
 #[derive(Debug, Clone)]
 pub struct UniqueIdentifier(Arc<()>);

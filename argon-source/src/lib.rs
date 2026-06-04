@@ -14,6 +14,7 @@ use hashbrown::HashMap;
 mod function;
 mod modifiers;
 mod module;
+mod record;
 mod signature;
 mod type_checker;
 
