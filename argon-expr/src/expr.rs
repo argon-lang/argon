@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, sync::Arc, vec, vec::Vec};
+use alloc::{boxed::Box, vec, vec::Vec};
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
 use argon_util::UniqueIdentifier;
 use core::convert::Infallible;

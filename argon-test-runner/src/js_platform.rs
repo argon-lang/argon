@@ -1,7 +1,6 @@
 use crate::{CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult};
 use fs_extra::dir::CopyOptions;
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};

@@ -3,11 +3,11 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{
-    self, LocalScope, LocalVariableScope, Lookup, OverloadLookup, Scope, ShiftedScope,
+    self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope,
 };
 use argon_compiler::{
-    Context, DefaultExprContext, Enum, Function, FunctionImplementation, FunctionSignature,
-    Instance, Method, Record, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait,
+    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
+    RecordField, RecordFieldOwner, SubstFunctionSignature,
 };
 use argon_expr::{
     Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
@@ -346,6 +346,16 @@ struct TypeChecker<'a> {
     model: Model,
 }
 
+macro_rules! with_nested_scope {
+    ($tc:ident) => {
+        TypeChecker {
+            context: $tc.context.clone(),
+            scope: &mut LocalVariableScope::new($tc.scope),
+            model: $tc.model.clone(),
+        }
+    };
+}
+
 impl<'a> TypeChecker<'a> {
     fn new(
         context: Context,
@@ -358,22 +368,9 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn with_scope<'b>(
-        &'a mut self,
-        scope: &'b mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
-    ) -> TypeChecker<'b> {
-        TypeChecker {
-            context: self.context.clone(),
-            scope,
-            model: self.model.clone(),
-        }
-    }
-}
-
-impl<'a> TypeChecker<'a> {
-    fn check(
+    fn check<'e>(
         &mut self,
-        expr: &'a WithLocation<ast::Expr>,
+        expr: &'e WithLocation<ast::Expr>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
         let infer = self.infer(expr);
@@ -381,16 +378,16 @@ impl<'a> TypeChecker<'a> {
             .checked_expr
     }
 
-    fn check_type(&mut self, expr: &'a WithLocation<ast::Expr>) -> Expr<TypeCheckExprContext> {
+    fn check_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> Expr<TypeCheckExprContext> {
         self.check_type_with_meta_type(expr).checked_expr
     }
 
-    fn check_type_with_meta_type(&mut self, expr: &'a WithLocation<ast::Expr>) -> InferredType {
+    fn check_type_with_meta_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> InferredType {
         let infer = self.infer(expr);
         self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType)
     }
 
-    fn infer(&mut self, expr: &'a WithLocation<ast::Expr>) -> TypeInferResult<'a> {
+    fn infer<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> TypeInferResult<'e> {
         match &expr.value {
             ast::Expr::Error => TypeInferResult::error(),
 
@@ -686,8 +683,8 @@ impl<'a> TypeChecker<'a> {
                 when_false,
             } => {
                 let conv_condition = self.check(condition, &Expr::bool_type());
-                let true_body_result = self.infer_block(when_true);
-                let false_body_result = self.infer_block(when_false);
+                let true_body_result = with_nested_scope!(self).infer_block(when_true);
+                let false_body_result = with_nested_scope!(self).infer_block(when_false);
 
                 let (when_true_var, when_false_var) = self.create_if_cond_vars(&conv_condition);
 
@@ -730,7 +727,6 @@ impl<'a> TypeChecker<'a> {
             ast::Expr::Match { .. } => todo!("infer match expressions"),
             ast::Expr::NewTraitObject { .. } => todo!("infer trait object construction"),
             ast::Expr::Raise { .. } => todo!("infer raise expressions"),
-            ast::Expr::RecordLiteral { .. } => todo!("infer record literals"),
             ast::Expr::Summon { .. } => todo!("infer summon expressions"),
 
             ast::Expr::Tuple { items } => TypeInferResult::Tuple {
@@ -745,10 +741,12 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_block(
+    fn infer_block<'e>(
         &mut self,
-        body: &'a WithLocation<Vec<WithLocation<ast::Stmt>>>,
-    ) -> TypeInferResult<'a> {
+        body: &'e WithLocation<Vec<WithLocation<ast::Stmt>>>,
+    ) -> TypeInferResult<'e> {
+        let mut nested = with_nested_scope!(self);
+
         let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
             return TypeInferResult::Complete(InferredType {
                 checked_expr: Expr::unit_type(),
@@ -758,14 +756,14 @@ impl<'a> TypeChecker<'a> {
 
         let checked_stmts = leading_stmts
             .iter()
-            .map(|stmt| self.check_stmt(stmt, &Expr::unit_type()))
+            .map(|stmt| nested.check_stmt(stmt, &Expr::unit_type()))
             .collect::<Vec<_>>();
 
         let Ok(mut checked_stmts) = Vec1::try_from(checked_stmts) else {
-            return self.infer_stmt(last_stmt);
+            return nested.infer_stmt(last_stmt);
         };
 
-        match self.infer_stmt(last_stmt) {
+        match nested.infer_stmt(last_stmt) {
             TypeInferResult::Complete(InferredType {
                 checked_expr,
                 inferred_type,
@@ -784,9 +782,9 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn check_block(
+    fn check_block<'e>(
         &mut self,
-        body: &'a WithLocation<Vec<WithLocation<ast::Stmt>>>,
+        body: &'e WithLocation<Vec<WithLocation<ast::Stmt>>>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
         let infer = self.infer_block(body);
@@ -794,9 +792,9 @@ impl<'a> TypeChecker<'a> {
             .checked_expr
     }
 
-    fn check_stmt(
+    fn check_stmt<'e>(
         &mut self,
-        stmt: &'a WithLocation<ast::Stmt>,
+        stmt: &'e WithLocation<ast::Stmt>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
         let infer = self.infer_stmt(stmt);
@@ -804,7 +802,7 @@ impl<'a> TypeChecker<'a> {
             .checked_expr
     }
 
-    fn infer_stmt(&mut self, stmt: &'a WithLocation<ast::Stmt>) -> TypeInferResult<'a> {
+    fn infer_stmt<'e>(&mut self, stmt: &'e WithLocation<ast::Stmt>) -> TypeInferResult<'e> {
         match &stmt.value {
             ast::Stmt::Expr(expr) => self.infer(expr),
             ast::Stmt::VariableDeclaration(v) => {
@@ -845,7 +843,7 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_call(&mut self, call: CallInfo<'a>) -> TypeInferResult<'a> {
+    fn infer_call<'e>(&mut self, call: CallInfo<'e>) -> TypeInferResult<'e> {
         match call.callee {
             CalleeInfo::Error => TypeInferResult::error(),
             CalleeInfo::Builtin(builtin) => {
@@ -891,12 +889,12 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_builtin(
+    fn infer_builtin<'e>(
         &mut self,
-        location: &'a Location,
+        location: &'e Location,
         builtin: Builtin,
-        args: VecDeque<ArgumentInfo<'a>>,
-    ) -> TypeInferResult<'a> {
+        args: VecDeque<ArgumentInfo<'e>>,
+    ) -> TypeInferResult<'e> {
         match builtin {
             Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
                 self.infer_fixed_builtin(location, builtin, args, [], Expr::type_n(0))
@@ -1033,14 +1031,14 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn infer_fixed_builtin<const ARG_COUNT: usize>(
+    fn infer_fixed_builtin<'e, const ARG_COUNT: usize>(
         &mut self,
         location: &Location,
         builtin: Builtin,
-        args: VecDeque<ArgumentInfo<'a>>,
+        args: VecDeque<ArgumentInfo<'e>>,
         expected_arg_types: [Expr<TypeCheckExprContext>; ARG_COUNT],
         inferred_type: Expr<TypeCheckExprContext>,
-    ) -> TypeInferResult<'a> {
+    ) -> TypeInferResult<'e> {
         if args.len() != ARG_COUNT {
             self.report_builtin_arity_error(location, builtin, ARG_COUNT, args.len());
             return TypeInferResult::error();
@@ -1061,11 +1059,11 @@ impl<'a> TypeChecker<'a> {
         })
     }
 
-    fn infer_parameterized_builtin<const REST_ARG_COUNT: usize>(
+    fn infer_parameterized_builtin<'e, const REST_ARG_COUNT: usize>(
         &mut self,
-        location: &'a Location,
+        location: &'e Location,
         builtin: Builtin,
-        mut args: VecDeque<ArgumentInfo<'a>>,
+        mut args: VecDeque<ArgumentInfo<'e>>,
         create_rest_arg_types: impl FnOnce(
             &Expr<TypeCheckExprContext>,
         ) -> [Expr<TypeCheckExprContext>; REST_ARG_COUNT],
@@ -1073,7 +1071,7 @@ impl<'a> TypeChecker<'a> {
             &Expr<TypeCheckExprContext>,
             Expr<TypeCheckExprContext>,
         ) -> Expr<TypeCheckExprContext>,
-    ) -> TypeInferResult<'a> {
+    ) -> TypeInferResult<'e> {
         let expected_arg_count = REST_ARG_COUNT + 1;
         let total_arg_count = args.len();
 
@@ -1110,11 +1108,11 @@ impl<'a> TypeChecker<'a> {
         })
     }
 
-    fn infer_variable(
+    fn infer_variable<'e>(
         &mut self,
         v: Variable<TypeCheckExprContext>,
-        args: VecDeque<ArgumentInfo<'a>>,
-    ) -> TypeInferResult<'a> {
+        args: VecDeque<ArgumentInfo<'e>>,
+    ) -> TypeInferResult<'e> {
         let t = v.var_type().clone();
         let expr = Expr::Variable(v);
         let res = TypeInferResult::Complete(InferredType {
@@ -1125,11 +1123,11 @@ impl<'a> TypeChecker<'a> {
         self.infer_function_object_call(res, args)
     }
 
-    fn infer_variable_tuple_element(
+    fn infer_variable_tuple_element<'e>(
         &mut self,
         vte: VariableTupleElement<TypeCheckExprContext>,
-        args: VecDeque<ArgumentInfo<'a>>,
-    ) -> TypeInferResult<'a> {
+        args: VecDeque<ArgumentInfo<'e>>,
+    ) -> TypeInferResult<'e> {
         let t = vte.binding_type;
         let expr = Expr::TupleElement(Box::new(Expr::Variable(vte.variable)), vte.index);
         let res = TypeInferResult::Complete(InferredType {
@@ -1140,11 +1138,11 @@ impl<'a> TypeChecker<'a> {
         self.infer_function_object_call(res, args)
     }
 
-    fn infer_function_object_call<'b>(
+    fn infer_function_object_call<'e>(
         &mut self,
-        expr_result: TypeInferResult<'a>,
-        args: VecDeque<ArgumentInfo<'a>>,
-    ) -> TypeInferResult<'a> {
+        expr_result: TypeInferResult<'e>,
+        args: VecDeque<ArgumentInfo<'e>>,
+    ) -> TypeInferResult<'e> {
         let args = args
             .iter()
             .map(|arg| (self.infer(arg.arg), arg))
@@ -1153,13 +1151,13 @@ impl<'a> TypeChecker<'a> {
         self.infer_function_object_call_inferred(expr_result, args.into_iter())
     }
 
-    fn infer_function_object_call_inferred<'b>(
+    fn infer_function_object_call_inferred<'b, 'e>(
         &mut self,
-        mut expr_result: TypeInferResult<'a>,
-        args: impl Iterator<Item = (TypeInferResult<'a>, &'b ArgumentInfo<'a>)>,
-    ) -> TypeInferResult<'a>
+        mut expr_result: TypeInferResult<'e>,
+        args: impl Iterator<Item = (TypeInferResult<'e>, &'b ArgumentInfo<'e>)>,
+    ) -> TypeInferResult<'e>
     where
-        'a: 'b,
+        'e: 'b,
     {
         for (arg_result, arg) in args {
             match expr_result.partially_inferred_type() {
@@ -1205,7 +1203,7 @@ impl<'a> TypeChecker<'a> {
         expr_result
     }
 
-    fn process_call(&mut self, mut func_expr: &'a WithLocation<ast::Expr>) -> CallInfo<'a> {
+    fn process_call<'e>(&mut self, mut func_expr: &'e WithLocation<ast::Expr>) -> CallInfo<'e> {
         let mut arguments = VecDeque::new();
         let call_location = &func_expr.location;
 
@@ -1465,10 +1463,10 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
-    fn resolve_inferred_type(
+    fn resolve_inferred_type<'f>(
         &mut self,
         infer: TypeInferResult,
-        expected_type: ExpectedType<'_>,
+        expected_type: ExpectedType<'f>,
     ) -> InferredType {
         match infer {
             TypeInferResult::Complete(inferred_type) => inferred_type,
@@ -1831,12 +1829,12 @@ struct CallInfo<'a> {
     arguments: VecDeque<ArgumentInfo<'a>>,
 }
 
-struct OverloadResolver<'a, 'b> {
+struct OverloadResolver<'a, 'b, 'e> {
     type_checker: &'b mut TypeChecker<'a>,
-    rejected_overloads: Vec<(Overloadable<'a>, OverloadRejectionReason)>,
+    rejected_overloads: Vec<(Overloadable<'e>, OverloadRejectionReason)>,
 }
 
-impl<'a, 'b> OverloadResolver<'a, 'b> {
+impl<'a, 'b, 'e> OverloadResolver<'a, 'b, 'e> {
     fn new(type_checker: &'b mut TypeChecker<'a>) -> Self {
         Self {
             type_checker,
@@ -1846,10 +1844,10 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn resolve_overload_lookup(
         mut self,
-        call_location: &'a Location,
-        overload_lookup: Vec<Vec<Overloadable<'a>>>,
-        mut args: VecDeque<ArgumentInfo<'a>>,
-    ) -> ResolvedOverload<'a> {
+        call_location: &'e Location,
+        overload_lookup: Vec<Vec<Overloadable<'e>>>,
+        mut args: VecDeque<ArgumentInfo<'e>>,
+    ) -> ResolvedOverload<'e> {
         let mut inferred_args = args
             .iter()
             .map(|arg| self.type_checker.infer(arg.arg))
@@ -1910,9 +1908,9 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn group_overloads_by_arity(
         &mut self,
-        overloads: Vec<Overloadable<'a>>,
-        args: MultiSlice<'_, ArgumentInfo<'a>>,
-    ) -> impl Iterator<Item = Vec<Overloadable<'a>>> + 'a {
+        overloads: Vec<Overloadable<'e>>,
+        args: MultiSlice<'_, ArgumentInfo<'e>>,
+    ) -> impl Iterator<Item = Vec<Overloadable<'e>>> + 'e {
         let mut groups: BTreeMap<OverloadArityRank, Vec<Overloadable>> = BTreeMap::new();
 
         for overload in overloads {
@@ -1929,8 +1927,8 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn rank_by_arity(
         &self,
-        overload: &Overloadable<'a>,
-        mut args: MultiSlice<'_, ArgumentInfo<'a>>,
+        overload: &Overloadable<'e>,
+        mut args: MultiSlice<'_, ArgumentInfo<'e>>,
     ) -> Option<OverloadArityRank> {
         let sig = overload.signature();
 
@@ -1969,9 +1967,9 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn is_overload_applicable(
         &self,
-        overload: &Overloadable<'a>,
-        mut args: MultiSlice<'_, ArgumentInfo<'a>>,
-        mut inferred_args: MultiSlice<'_, TypeInferResult<'a>>,
+        overload: &Overloadable<'e>,
+        mut args: MultiSlice<'_, ArgumentInfo<'e>>,
+        mut inferred_args: MultiSlice<'_, TypeInferResult<'e>>,
     ) -> Option<OverloadRejectionReason> {
         let sig = overload.signature();
 
@@ -2086,7 +2084,7 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
         param_types: &mut VecDeque<Expr<TypeCheckExprContext>>,
         return_type: &mut Expr<TypeCheckExprContext>,
         v: Variable<TypeCheckExprContext>,
-        arg: &TypeInferResult<'a>,
+        arg: &TypeInferResult<'e>,
     ) {
         if let TypeInferResult::Complete(inferred_type) = arg {
             self.substitute_arg_in_param_types(
@@ -2119,10 +2117,10 @@ impl<'a, 'b> OverloadResolver<'a, 'b> {
 
     fn select_overload(
         &mut self,
-        overload: Overloadable<'a>,
-        args: &mut VecDeque<ArgumentInfo<'a>>,
-        inferred_args: &mut VecDeque<TypeInferResult<'a>>,
-    ) -> SelectedOverload<'a> {
+        overload: Overloadable<'e>,
+        args: &mut VecDeque<ArgumentInfo<'e>>,
+        inferred_args: &mut VecDeque<TypeInferResult<'e>>,
+    ) -> SelectedOverload<'e> {
         let sig = overload.signature();
 
         let mut param_types = sig

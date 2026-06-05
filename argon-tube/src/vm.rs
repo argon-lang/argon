@@ -12,8 +12,8 @@ use argon_compiler::{
     UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner,
-    ParameterVariable, SubstScanner, Variable,
+    ErasureMode, Expr, ExprScannerMut, ExpressionOwner, NormalizerScanner,
+    ParameterVariable, Variable,
 };
 use argon_format::vm as vf;
 use argon_util::{Fuel, InternalCompilerError, UniqueIdentifier};

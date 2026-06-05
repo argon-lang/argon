@@ -84,7 +84,7 @@ impl Overloadable {
             Overloadable::Method(_) => todo!(),
             Overloadable::Enum(e) => e.clone().signature(),
             Overloadable::Trait(t) => t.clone().signature(),
-            Overloadable::Instance(i) => todo!(),
+            Overloadable::Instance(_) => todo!(),
         }
     }
 }
