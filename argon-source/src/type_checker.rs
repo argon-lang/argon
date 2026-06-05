@@ -509,8 +509,10 @@ impl<'a> TypeChecker<'a> {
                 'not_record: {
                     let record_call = self.process_call(record_expr);
 
-                    let CalleeInfo::Overloadable(overloads) = record_call.callee else {
-                        break 'not_record;
+                    let overloads = match record_call.callee {
+                        CalleeInfo::Error => return TypeInferResult::error(),
+                        CalleeInfo::Overloadable(overloads) => overloads,
+                        _ => break 'not_record,
                     };
 
                     let resolved = OverloadResolver::new(self).resolve_overload_lookup(
@@ -520,7 +522,7 @@ impl<'a> TypeChecker<'a> {
                     );
 
                     let Some(selected_overload) = resolved.overload else {
-                        break 'not_record;
+                        return TypeInferResult::error();
                     };
 
                     let owner: RecordFieldOwner;
@@ -535,13 +537,19 @@ impl<'a> TypeChecker<'a> {
                             record_fields = r.clone().fields();
                             record_type_signature = r.clone().signature();
                         }
-                        Overloadable::EnumVariant() => todo!(),
+                        Overloadable::EnumVariant() => {
+                            todo!()
+                        }
 
                         _ => break 'not_record,
                     };
 
                     if !resolved.extra_argument_info.is_empty() {
-                        todo!("Record type in literal has extra arguments")
+                        self.context
+                            .reporter()
+                            .report_error(CompileError::record_literal_extra_arguments(
+                                record_expr.location.clone(),
+                            ));
                     }
 
                     let mut subst = SubstScanner::new();
@@ -568,13 +576,25 @@ impl<'a> TypeChecker<'a> {
 
                     for field_literal in &fields.value {
                         if !seen_field_names.insert(field_literal.value.name.value.clone()) {
-                            todo!("Duplicate field in record literal")
+                            self.context.reporter().report_error(
+                                CompileError::duplicate_record_literal_field(
+                                    field_literal.value.name.location.clone(),
+                                    field_literal.value.name.value.to_string(),
+                                ),
+                            );
+                            continue;
                         }
 
                         let Some((name, field)) =
                             remaining_fields.remove_entry(&field_literal.value.name.value)
                         else {
-                            todo!("Unknown field in record literal")
+                            self.context.reporter().report_error(
+                                CompileError::unknown_record_literal_field(
+                                    field_literal.value.name.location.clone(),
+                                    field_literal.value.name.value.to_string(),
+                                ),
+                            );
+                            continue;
                         };
 
                         let mut field_type = DefaultToTypeCheckExprContextShifter
@@ -602,7 +622,9 @@ impl<'a> TypeChecker<'a> {
                                 arguments: selected_overload.args.clone(),
                             });
                         }
-                        RecordFieldOwner::EnumVariant(_) => todo!(),
+                        RecordFieldOwner::EnumVariant(_) => {
+                            todo!()
+                        }
                     }
 
                     return TypeInferResult::Complete(InferredType {
@@ -611,7 +633,12 @@ impl<'a> TypeChecker<'a> {
                     });
                 }
 
-                todo!()
+                self.context
+                    .reporter()
+                    .report_error(CompileError::record_type_required(
+                        record_expr.location.clone(),
+                    ));
+                TypeInferResult::error()
             }
 
             ast::Expr::StringLiteral(value) => {

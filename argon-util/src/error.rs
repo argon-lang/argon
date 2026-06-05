@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
-use parse18_runtime::{Location, LocationFile, write_location_file};
+use parse18_runtime::{write_location_file, Location, LocationFile};
 #[cfg(feature = "std")]
 use std::path::PathBuf;
 
@@ -48,6 +48,10 @@ pub enum ErrorCode {
     PlatformIndependentExtern = 0x0022,
     UnknownPlatformExtern = 0x0023,
     PlatformExternNotFunction = 0x0024,
+    RecordTypeRequired = 0x0025,
+    RecordLiteralExtraArguments = 0x0026,
+    DuplicateRecordLiteralField = 0x0027,
+    UnknownRecordLiteralField = 0x0028,
 }
 
 impl ErrorCode {
@@ -382,6 +386,38 @@ impl CompileError {
                 name.as_ref(),
                 platform.as_ref()
             ),
+            Some(loc),
+        )
+    }
+
+    pub fn record_type_required(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::RecordTypeRequired,
+            "Record type required",
+            Some(loc),
+        )
+    }
+
+    pub fn record_literal_extra_arguments(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::RecordLiteralExtraArguments,
+            "Record literal type has extra arguments",
+            Some(loc),
+        )
+    }
+
+    pub fn duplicate_record_literal_field(loc: Location, name: impl AsRef<str>) -> Self {
+        Self::new(
+            ErrorCode::DuplicateRecordLiteralField,
+            format!("Duplicate field in record literal: {}", name.as_ref()),
+            Some(loc),
+        )
+    }
+
+    pub fn unknown_record_literal_field(loc: Location, name: impl AsRef<str>) -> Self {
+        Self::new(
+            ErrorCode::UnknownRecordLiteralField,
+            format!("Unknown field in record literal: {}", name.as_ref()),
             Some(loc),
         )
     }
