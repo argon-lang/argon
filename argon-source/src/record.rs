@@ -185,6 +185,8 @@ impl RecordField for SourceRecordField {
     }
 
     fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
+        let access_token = self.owner.closure.access_token();
+
         let mut field_type_store = mutex_lock(&self.field_type);
         if let Some(ref field_type) = *field_type_store {
             return field_type.clone();
@@ -200,6 +202,7 @@ impl RecordField for SourceRecordField {
 
         let field_type = type_check_type_expr(
             self.owner.context.clone(),
+            &access_token,
             &mut scope,
             &self.field.field_type,
         );

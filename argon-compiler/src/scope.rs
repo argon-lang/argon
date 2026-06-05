@@ -9,12 +9,13 @@ use argon_expr::{
 };
 use argon_parser::ast::Identifier;
 use hashbrown::{HashMap, HashSet};
+use crate::access::AccessToken;
 
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;
 
-    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext>;
-    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext>;
+    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext>;
+    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext>;
 }
 
 pub trait LocalScope: Scope {
@@ -150,14 +151,14 @@ impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
 impl<'a, EC: ExprContext + ?Sized> Scope for ParameterScope<'a, EC> {
     type ExprContext = EC;
 
-    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup_name(name)
-            .unwrap_or_else(|| self.parent.lookup(name))
+            .unwrap_or_else(|| self.parent.lookup(name, access))
     }
 
-    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup_name(name)
-            .unwrap_or_else(|| self.parent.lookup_assign(name))
+            .unwrap_or_else(|| self.parent.lookup_assign(name, access))
     }
 }
 
@@ -186,14 +187,14 @@ impl<'a, EC: ExprContext + ?Sized> LocalVariableScope<'a, EC> {
 impl<'a, EC: ExprContext + ?Sized> Scope for LocalVariableScope<'a, EC> {
     type ExprContext = EC;
 
-    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup_variable(name)
-            .unwrap_or_else(|| self.parent.lookup(name))
+            .unwrap_or_else(|| self.parent.lookup(name, access))
     }
 
-    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup_variable(name)
-            .unwrap_or_else(|| self.parent.lookup_assign(name))
+            .unwrap_or_else(|| self.parent.lookup_assign(name, access))
     }
 }
 
@@ -256,13 +257,13 @@ where
 {
     type ExprContext = Sh::EC2;
 
-    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
-        let lookup = self.inner.lookup(name);
+    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
+        let lookup = self.inner.lookup(name, access);
         self.shift_lookup(lookup)
     }
 
-    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
-        let lookup = self.inner.lookup_assign(name);
+    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
+        let lookup = self.inner.lookup_assign(name, access);
         self.shift_lookup(lookup)
     }
 }

@@ -12,8 +12,10 @@ harness = false
 argon-testcases = { workspace = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }
 tempfile = { workspace = true }
+toml_edit = { version = "0.25.11", default-features = false, features = ["parse", "serde"] }
 walkdir = { workspace = true }
 
 [lints]

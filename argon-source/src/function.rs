@@ -118,6 +118,8 @@ impl Function for SourceFunction {
 
         let implementation = match &self.decl.body {
             ast::FunctionBody::ExprBody(body) => {
+                let access_token = self.closure.access_token();
+
                 let signature = self.clone().signature();
                 let mut scope = self.closure.scope();
                 let mut scope = ParameterScope::new(
@@ -128,6 +130,7 @@ impl Function for SourceFunction {
 
                 let expr = type_check_expr(
                     self.context.clone(),
+                    &access_token,
                     &mut scope,
                     body.as_ref(),
                     &signature.return_type,

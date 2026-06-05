@@ -75,7 +75,9 @@ pub struct GlobalScope {
 impl Scope for GlobalScope {
     type ExprContext = DefaultExprContext;
 
-    fn lookup(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
+    fn lookup(&self, name: &Identifier, _access: &AccessToken) -> Lookup<Self::ExprContext> {
+        // Access token is not needed here since we're already filtering out inaccessible globals.
+
         let mut groups = Vec::new();
         if let Some(exp_group) = self.current_module.export_groups().get(name) {
             groups.push(
@@ -103,8 +105,8 @@ impl Scope for GlobalScope {
         }
     }
 
-    fn lookup_assign(&self, name: &Identifier) -> Lookup<Self::ExprContext> {
-        self.lookup(&Identifier::Update(Box::new(name.clone())))
+    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
+        self.lookup(&Identifier::Update(Box::new(name.clone())), access)
     }
 }
 

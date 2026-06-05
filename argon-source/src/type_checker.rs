@@ -24,16 +24,18 @@ use core::{mem, ptr};
 use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
+use argon_compiler::access::AccessToken;
 use parse18_runtime::{Location, WithLocation};
 
 pub fn type_check_type_expr(
     context: Context,
+    access: &AccessToken,
     scope: &mut dyn Scope<ExprContext = DefaultExprContext>,
     e: &WithLocation<ast::Expr>,
 ) -> Expr<DefaultExprContext> {
     let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
     let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
-    let mut checker = TypeChecker::new(context.clone(), &mut local_scope);
+    let mut checker = TypeChecker::new(context.clone(), access, &mut local_scope);
 
     let expr = checker.check_type(e);
 
@@ -42,13 +44,14 @@ pub fn type_check_type_expr(
 
 pub fn type_check_expr(
     context: Context,
+    access: &AccessToken,
     scope: &mut dyn Scope<ExprContext = DefaultExprContext>,
     e: &WithLocation<ast::Expr>,
     expected_type: &Expr<DefaultExprContext>,
 ) -> Expr<DefaultExprContext> {
     let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
     let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
-    let mut checker = TypeChecker::new(context.clone(), &mut local_scope);
+    let mut checker = TypeChecker::new(context.clone(), access, &mut local_scope);
 
     let expected_type = DefaultToTypeCheckExprContextShifter.shift(expected_type.clone());
     let expr = checker.check(e, &expected_type);
@@ -340,9 +343,10 @@ impl From<scope::Overloadable> for Overloadable<'_> {
     }
 }
 
-struct TypeChecker<'a> {
+struct TypeChecker<'access, 'scope> {
     context: Context,
-    scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
+    access: &'access AccessToken,
+    scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     model: Model,
 }
 
@@ -350,19 +354,22 @@ macro_rules! with_nested_scope {
     ($tc:ident) => {
         TypeChecker {
             context: $tc.context.clone(),
+            access: $tc.access,
             scope: &mut LocalVariableScope::new($tc.scope),
             model: $tc.model.clone(),
         }
     };
 }
 
-impl<'a> TypeChecker<'a> {
+impl<'access, 'scope> TypeChecker<'access, 'scope> {
     fn new(
         context: Context,
-        scope: &'a mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
+        access: &'access AccessToken,
+        scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     ) -> Self {
         Self {
             context,
+            access,
             scope,
             model: Model::new(),
         }
@@ -1355,7 +1362,10 @@ impl<'a> TypeChecker<'a> {
                         // Extension methods
                         if let Lookup::Overloadable(extension_overloads) = self
                             .scope
-                            .lookup(&Identifier::Extension(Box::new(member.value.clone())))
+                            .lookup(
+                                &Identifier::Extension(Box::new(member.value.clone())),
+                                self.access,
+                            )
                         {
                             overload_groups.extend(
                                 extension_overloads
@@ -1460,7 +1470,7 @@ impl<'a> TypeChecker<'a> {
         location: &Location,
         identifier: &Identifier,
     ) -> CalleeInfo<'b> {
-        match self.scope.lookup(identifier) {
+        match self.scope.lookup(identifier, self.access) {
             Lookup::Empty => {
                 self.context
                     .reporter()
@@ -1856,13 +1866,13 @@ struct CallInfo<'a> {
     arguments: VecDeque<ArgumentInfo<'a>>,
 }
 
-struct OverloadResolver<'a, 'b, 'e> {
-    type_checker: &'b mut TypeChecker<'a>,
+struct OverloadResolver<'parent, 'access, 'scope, 'e> {
+    type_checker: &'parent mut TypeChecker<'access, 'scope>,
     rejected_overloads: Vec<(Overloadable<'e>, OverloadRejectionReason)>,
 }
 
-impl<'a, 'b, 'e> OverloadResolver<'a, 'b, 'e> {
-    fn new(type_checker: &'b mut TypeChecker<'a>) -> Self {
+impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e> {
+    fn new(type_checker: &'parent mut TypeChecker<'access, 'scope>) -> Self {
         Self {
             type_checker,
             rejected_overloads: Vec::new(),

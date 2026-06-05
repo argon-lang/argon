@@ -55,6 +55,7 @@ impl<'a> SignatureParser<'a> {
                 .map(|param_elem| {
                     let t = type_check_type_expr(
                         self.context.clone(),
+                        &self.access_token,
                         &mut parameter_scope,
                         &param_elem.value.param_type,
                     );
@@ -105,6 +106,7 @@ impl<'a> SignatureParser<'a> {
 
         let conv_return_type = type_check_type_expr(
             self.context.clone(),
+            &self.access_token,
             &mut parameter_scope,
             &return_type.value.return_type,
         );
@@ -113,7 +115,7 @@ impl<'a> SignatureParser<'a> {
             .value
             .ensures_clauses
             .iter()
-            .map(|clause| type_check_type_expr(self.context.clone(), &mut parameter_scope, clause))
+            .map(|clause| type_check_type_expr(self.context.clone(), &self.access_token, &mut parameter_scope, clause))
             .collect::<Vec<_>>();
 
         FunctionSignature {

@@ -2,7 +2,8 @@ mod js_platform;
 
 use argon_testcases::TestCase;
 pub use js_platform::*;
-use std::collections::HashMap;
+use serde::Deserialize;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -41,7 +42,10 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
     }
 
     pub fn build_library_metadata(self: Arc<Self>, library_name: &str) -> Vec<PathBuf> {
-        let mut metadata_map = self.library_platform_metadata.lock().unwrap();
+        let mut metadata_map = self
+            .library_platform_metadata
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         let context2 = self.clone();
 
@@ -56,58 +60,140 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
             .clone()
     }
 
+    pub fn library_dependencies(&self, library_name: &str) -> Vec<String> {
+        let manifest_path = self.lib_dir.join(library_name).join("lib.toml");
+        if !manifest_path.exists() {
+            return Vec::new();
+        }
+
+        let manifest = std::fs::read_to_string(&manifest_path).unwrap_or_else(|err| {
+            panic!(
+                "Reading library manifest {} failed: {}",
+                manifest_path.display(),
+                err
+            )
+        });
+        let manifest =
+            toml_edit::de::from_str::<LibraryManifest>(&manifest).unwrap_or_else(|err| {
+                panic!(
+                    "Decoding library manifest {} failed: {}",
+                    manifest_path.display(),
+                    err
+                )
+            });
+
+        manifest.dependencies.libraries
+    }
+
+    pub fn referenced_libraries(self: &Arc<Self>, libraries: &[String]) -> Vec<String> {
+        let mut referenced_libraries = Vec::new();
+        let mut seen = HashSet::new();
+
+        self.collect_referenced_library("Argon.Core", &mut seen, &mut referenced_libraries);
+        for library_name in libraries {
+            self.collect_referenced_library(library_name, &mut seen, &mut referenced_libraries);
+        }
+
+        referenced_libraries
+    }
+
+    fn collect_referenced_library(
+        self: &Arc<Self>,
+        library_name: &str,
+        seen: &mut HashSet<String>,
+        referenced_libraries: &mut Vec<String>,
+    ) {
+        if !seen.insert(library_name.to_owned()) {
+            return;
+        }
+
+        for dependency_name in self.library_dependencies(library_name) {
+            self.collect_referenced_library(&dependency_name, seen, referenced_libraries);
+        }
+
+        referenced_libraries.push(library_name.to_owned());
+    }
+
     pub fn compile_library_tube(self: Arc<Self>, library_name: &str) -> PathBuf {
-        let mut tube_map = self.library_compiled_tubes.lock().unwrap();
+        if let Some(path) = self
+            .library_compiled_tubes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(library_name)
+            .cloned()
+        {
+            return path;
+        }
+
+        let dependency_references = self
+            .referenced_libraries(&self.library_dependencies(library_name))
+            .into_iter()
+            .filter(|dependency_name| dependency_name != library_name)
+            .map(|dependency_name| self.clone().compile_library_tube(&dependency_name))
+            .collect::<Vec<_>>();
+
+        let mut tube_map = self
+            .library_compiled_tubes
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
+        if let Some(path) = tube_map.get(library_name).cloned() {
+            return path;
+        }
 
         let context2 = self.clone();
+        let library = context2.library_info(library_name);
 
-        tube_map
-            .entry(library_name.to_owned())
-            .or_insert_with(|| {
-                let library = context2.library_info(library_name);
+        let output_file = library
+            .library_output_path
+            .join(format!("{}.artube", library.name));
 
-                let output_file = library
-                    .library_output_path
-                    .join(format!("{}.artube", library.name));
+        let mut cmd = Command::new(&library.test_suite_context.argon_bin);
+        cmd.arg("compile");
+        cmd.arg("--tube-name");
+        cmd.arg(&library.name);
 
-                let mut cmd = Command::new(&library.test_suite_context.argon_bin);
-                cmd.arg("compile");
-                cmd.arg("--tube-name");
-                cmd.arg(&library.name);
+        cmd.arg("--input");
+        cmd.arg(library.library_path.join("src"));
 
-                cmd.arg("--input");
-                cmd.arg(library.library_path.join("src"));
+        cmd.arg("--output");
+        cmd.arg(&output_file);
 
-                cmd.arg("--output");
-                cmd.arg(&output_file);
-
-                let metadata_files = library
-                    .test_suite_context
-                    .clone()
-                    .build_library_metadata(library_name);
-
-                for metadata_file in metadata_files {
-                    cmd.arg("--platform");
-                    cmd.arg(metadata_file);
-                }
-
-                let output = cmd.output().unwrap();
-
-                assert!(
-                    output.status.success(),
-                    "Compilation of library {} failed\n{}\n{}",
-                    library.name,
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr),
-                );
-
-                output_file
-            })
+        let metadata_files = library
+            .test_suite_context
             .clone()
+            .build_library_metadata(library_name);
+
+        for metadata_file in metadata_files {
+            cmd.arg("--platform");
+            cmd.arg(metadata_file);
+        }
+
+        for dependency_reference in dependency_references {
+            cmd.arg("--reference");
+            cmd.arg(dependency_reference);
+        }
+
+        let output = cmd.output().unwrap();
+
+        assert!(
+            output.status.success(),
+            "Compilation of library {} failed\n{}\n{}",
+            library.name,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+
+        tube_map.insert(library_name.to_owned(), output_file.clone());
+
+        output_file
     }
 
     pub fn genir_library_tube(self: Arc<Self>, library_name: &str) -> PathBuf {
-        let mut tube_map = self.library_generated_ir.lock().unwrap();
+        let mut tube_map = self
+            .library_generated_ir
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
 
         let context2 = self.clone();
 
@@ -124,6 +210,23 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
                     .library_output_path
                     .join(format!("{}.arvm", library.name));
 
+                let dependency_references = library
+                    .test_suite_context
+                    .referenced_libraries(
+                        &library
+                            .test_suite_context
+                            .library_dependencies(library_name),
+                    )
+                    .into_iter()
+                    .filter(|dependency_name| dependency_name != library_name)
+                    .map(|dependency_name| {
+                        library
+                            .test_suite_context
+                            .clone()
+                            .compile_library_tube(&dependency_name)
+                    })
+                    .collect::<Vec<_>>();
+
                 let mut cmd = Command::new(&library.test_suite_context.argon_bin);
                 cmd.arg("genir");
 
@@ -135,6 +238,11 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
 
                 cmd.arg("--output");
                 cmd.arg(&output_file);
+
+                for dependency_reference in dependency_references {
+                    cmd.arg("--reference");
+                    cmd.arg(dependency_reference);
+                }
 
                 let output = cmd.output().unwrap();
 
@@ -152,6 +260,20 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
     }
 }
 
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct LibraryManifest {
+    #[serde(default)]
+    dependencies: LibraryManifestDependencies,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct LibraryManifestDependencies {
+    #[serde(default)]
+    libraries: Vec<String>,
+}
+
 pub struct TestContext<P: CompileTargetPlatform> {
     pub test_suite_context: Arc<TestSuiteContext<P>>,
     pub test_data_dir: PathBuf,
@@ -159,8 +281,9 @@ pub struct TestContext<P: CompileTargetPlatform> {
 }
 
 impl<P: CompileTargetPlatform> TestContext<P> {
-    pub fn referenced_libraries(&self) -> impl Iterator<Item = &str> {
-        core::iter::once("Argon.Core").chain(self.test_case.1.libraries.iter().map(String::as_str))
+    pub fn referenced_libraries(&self) -> Vec<String> {
+        self.test_suite_context
+            .referenced_libraries(&self.test_case.1.libraries)
     }
 
     pub fn compile_test_case(&self) -> Result<PathBuf, String> {
@@ -191,7 +314,7 @@ impl<P: CompileTargetPlatform> TestContext<P> {
             let tube_path = self
                 .test_suite_context
                 .clone()
-                .compile_library_tube(library_name);
+                .compile_library_tube(&library_name);
             cmd.arg("--reference");
             cmd.arg(tube_path);
         }
@@ -228,7 +351,7 @@ impl<P: CompileTargetPlatform> TestContext<P> {
             let tube_path = self
                 .test_suite_context
                 .clone()
-                .compile_library_tube(library_name);
+                .compile_library_tube(&library_name);
             cmd.arg("--reference");
             cmd.arg(tube_path);
         }

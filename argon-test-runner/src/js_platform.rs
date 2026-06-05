@@ -19,7 +19,7 @@ impl JSPlatform {
             .platform_state
             .library_codegen
             .lock()
-            .unwrap();
+            .unwrap_or_else(|e| e.into_inner());
 
         let context = library_info.test_suite_context.clone();
 
@@ -123,7 +123,7 @@ impl CompileTargetPlatform for JSPlatform {
                 &test_context
                     .test_suite_context
                     .clone()
-                    .library_info(library_name),
+                    .library_info(&library_name),
             );
 
             let lib_module_dir =
