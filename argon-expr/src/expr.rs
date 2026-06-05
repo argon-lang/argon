@@ -8,7 +8,6 @@ use core::str::FromStr;
 use derivative::Derivative;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
-use std::ops::Deref;
 
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
@@ -16,6 +15,7 @@ pub trait ExprContext {
     type Record: Clone + Debug + Eq + Hash;
     type Enum: Clone + Debug + Eq + Hash;
     type Trait: Clone + Debug + Eq + Hash;
+    type RecordField: Clone + Debug + Eq + Hash;
     type EnumVariant: Clone + Debug + Eq + Hash;
     type Method: Clone + Debug + Eq + Hash;
     type Instance: Clone + Debug + Eq + Hash;
@@ -125,11 +125,22 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Raise {
         ex: Box<Expr<EC>>,
     },
+    RecordFieldLoad {
+        record_type: Box<Expr<EC>>,
+        field: EC::RecordField,
+        record_value: Box<Expr<EC>>,
+    },
+    RecordFieldStore {
+        record_type: Box<Expr<EC>>,
+        field: EC::RecordField,
+        record_value: Box<Expr<EC>>,
+        new_value: Box<Expr<EC>>,
+    },
     RecordLiteral {
-        record: EC::Record,
+        record_type: RecordType<EC>,
         fields: Vec<RecordFieldLiteral<EC>>,
     },
-    RecordType(EC::Record, Vec<Expr<EC>>),
+    RecordType(RecordType<EC>),
     Redo {
         label: Option<Infallible>, // TODO: Use a proper label type
     },
@@ -374,6 +385,14 @@ pub enum ErasureMode {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+pub struct RecordType<EC: ExprContext + ?Sized> {
+    pub record: EC::Record,
+    pub arguments: Vec<Expr<EC>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
 #[derivative(PartialEq(bound = ""))]
 #[derivative(Eq(bound = ""))]
 #[derivative(Hash(bound = ""))]
@@ -485,6 +504,7 @@ mod tests {
         type Hole = u8;
         type Function = u8;
         type Record = u8;
+        type RecordField = u8;
         type Enum = u8;
         type Trait = u8;
         type EnumVariant = u8;

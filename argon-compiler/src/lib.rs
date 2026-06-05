@@ -17,10 +17,10 @@ pub mod test_utils;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::platform::PlatformExtern;
-pub use crate::signature::FunctionSignature;
+pub use crate::signature::{FunctionSignature, SubstFunctionSignature};
 use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};
-use argon_expr::{ExprContext, ExpressionOwner, Normalizer, SubstScanner, Variable};
 pub use argon_expr::{Builtin, ErasureMode, Expr};
+use argon_expr::{ExprContext, ExpressionOwner, Normalizer, SubstScanner};
 pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
@@ -33,13 +33,12 @@ use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
 use core::hash::{Hash, Hasher};
 use core::str::FromStr;
-use std::mem;
-use std::prelude::rust_2015::Box;
 use esexpr::ESExpr;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
 use mitsein::vec1::Vec1;
 use parse18_runtime::WithLocation;
+use core::mem;
 
 pub trait CompileErrorReporter:
     ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
@@ -76,6 +75,7 @@ impl ExprContext for DefaultExprContext {
     type Function = Arc<dyn Function>;
     type Method = Arc<dyn Method>;
     type Record = Arc<dyn Record>;
+    type RecordField = Arc<dyn RecordField>;
     type Enum = Arc<dyn Enum>;
     type EnumVariant = Arc<dyn EnumVariant>;
     type Trait = Arc<dyn Trait>;
@@ -486,6 +486,7 @@ macro_rules! impl_dyn_stub_traits {
 impl_dyn_stub_traits!(Function);
 impl_dyn_stub_traits!(Method);
 impl_dyn_stub_traits!(Record);
+impl_dyn_stub_traits!(RecordField);
 impl_dyn_stub_traits!(Enum);
 impl_dyn_stub_traits!(EnumVariant);
 impl_dyn_stub_traits!(Trait);
@@ -498,8 +499,6 @@ pub enum TypeDeclaration {
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
-
-
 
 pub struct DefaultExprNormalizer;
 
@@ -523,21 +522,8 @@ impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
         let mut body = body.clone();
         let arguments = mem::take(arguments);
         let mut subst = SubstScanner::new();
-
-        for ((parameter_index, parameter), argument) in
-            signature.parameters.iter().enumerate().zip(&arguments)
-        {
-            let variable = Variable::Parameter(Box::new(
-                parameter
-                    .clone()
-                    .to_parameter_var(owner.clone(), parameter_index),
-            ));
-
-            subst.add_substitution(variable, argument);
-        }
-
+        subst.add_function_parameter_substitutions(owner, &signature, &arguments);
         subst.scan(&mut body);
         Some(body)
     }
 }
-

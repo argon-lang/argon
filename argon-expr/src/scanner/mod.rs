@@ -1,5 +1,4 @@
-use crate::{Expr, ExprContext, MatchCase, RecordFieldLiteral, Variable};
-use alloc::sync::Arc;
+use crate::{Expr, ExprContext, MatchCase, RecordFieldLiteral, RecordType, Variable};
 
 mod normalizer;
 mod subst;
@@ -99,10 +98,27 @@ where
         Expr::Next { .. } => true,
         Expr::Or(a, b) => scanner.scan(a) && scanner.scan(b),
         Expr::Raise { ex } => scanner.scan(ex),
-        Expr::RecordLiteral { fields, .. } => fields
-            .iter()
-            .all(|field: &RecordFieldLiteral<S::EC>| scanner.scan(&field.value)),
-        Expr::RecordType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
+        Expr::RecordFieldLoad {
+            record_type,
+            record_value,
+            ..
+        } => scanner.scan(record_type) && scanner.scan(record_value),
+        Expr::RecordFieldStore {
+            record_type,
+            record_value,
+            new_value,
+            ..
+        } => scanner.scan(record_type) && scanner.scan(record_value) && scanner.scan(new_value),
+        Expr::RecordLiteral {
+            record_type,
+            fields,
+        } => {
+            default_scan_record_type(scanner, record_type)
+                && fields
+                    .iter()
+                    .all(|field: &RecordFieldLiteral<S::EC>| scanner.scan(&field.value))
+        }
+        Expr::RecordType(record_type) => default_scan_record_type(scanner, record_type),
         Expr::Redo { .. } => true,
         Expr::Sequence(exprs) => exprs.iter().all(|expr| scanner.scan(expr)),
         Expr::StoreVariable(variable) => scanner.scan_variable(variable),
@@ -126,6 +142,16 @@ where
         Expr::Box { t, value } => scanner.scan(t) && scanner.scan(value),
         Expr::Unbox { t, value } => scanner.scan(t) && scanner.scan(value),
     }
+}
+
+fn default_scan_record_type<S>(scanner: &mut S, record_type: &RecordType<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    record_type
+        .arguments
+        .iter()
+        .all(|argument| scanner.scan(argument))
 }
 
 pub fn default_scan_variable<S>(scanner: &mut S, v: &Variable<S::EC>) -> bool
@@ -203,12 +229,31 @@ where
         Expr::Next { .. } => true,
         Expr::Or(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
         Expr::Raise { ex } => scanner.scan(ex.as_mut()),
-        Expr::RecordLiteral { fields, .. } => fields
-            .iter_mut()
-            .all(|field: &mut RecordFieldLiteral<S::EC>| scanner.scan(&mut field.value)),
-        Expr::RecordType(_, arguments) => {
-            arguments.iter_mut().all(|argument| scanner.scan(argument))
+        Expr::RecordFieldLoad {
+            record_type,
+            record_value,
+            ..
+        } => scanner.scan(record_type.as_mut()) && scanner.scan(record_value.as_mut()),
+        Expr::RecordFieldStore {
+            record_type,
+            record_value,
+            new_value,
+            ..
+        } => {
+            scanner.scan(record_type.as_mut())
+                && scanner.scan(record_value.as_mut())
+                && scanner.scan(new_value.as_mut())
         }
+        Expr::RecordLiteral {
+            record_type,
+            fields,
+        } => {
+            default_scan_record_type_mut(scanner, record_type)
+                && fields
+                    .iter_mut()
+                    .all(|field: &mut RecordFieldLiteral<S::EC>| scanner.scan(&mut field.value))
+        }
+        Expr::RecordType(record_type) => default_scan_record_type_mut(scanner, record_type),
         Expr::Redo { .. } => true,
         Expr::Sequence(exprs) => exprs.iter_mut().all(|expr| scanner.scan(expr)),
         Expr::StoreVariable(variable) => scanner.scan_variable(variable),
@@ -236,6 +281,16 @@ where
     }
 }
 
+fn default_scan_record_type_mut<S>(scanner: &mut S, record_type: &mut RecordType<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    record_type
+        .arguments
+        .iter_mut()
+        .all(|argument| scanner.scan(argument))
+}
+
 pub fn default_scan_variable_mut<S>(scanner: &mut S, v: &mut Variable<S::EC>) -> bool
 where
     S: ExprScannerMut + ?Sized,
@@ -260,6 +315,7 @@ mod tests {
         type Hole = u8;
         type Function = ();
         type Record = ();
+        type RecordField = ();
         type Enum = ();
         type Trait = ();
         type EnumVariant = ();

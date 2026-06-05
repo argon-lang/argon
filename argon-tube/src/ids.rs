@@ -1,7 +1,7 @@
 use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{
-    DefaultExprContext, Enum, EnumVariant, Function, Instance, Method, ModulePath, Record, Trait,
-    TubeName,
+    DefaultExprContext, Enum, EnumVariant, Function, Instance, Method, ModulePath, Record,
+    RecordField, Trait, TubeName,
 };
 use argon_expr::{ExprContext, LocalVariable};
 use argon_util::UniqueIdentifier;
@@ -16,21 +16,12 @@ pub struct TubeIdProvider {
     pub record_ids: IdStore<Arc<dyn Record>>,
     pub enum_ids: IdStore<Arc<dyn Enum>>,
     pub enum_variant_ids: IdStore<Arc<dyn EnumVariant>>,
-    pub record_field_ids: IdStore<RecordFieldId>,
+    pub record_field_ids: IdStore<Arc<dyn RecordField>>,
     pub trait_ids: IdStore<Arc<dyn Trait>>,
     pub method_ids: IdStore<Arc<dyn Method>>,
     pub instance_ids: IdStore<Arc<dyn Instance>>,
     pub local_variable_ids: IdStore<UniqueIdentifier>,
     pub local_import_ids: IdStore<UniqueIdentifier>,
-}
-
-#[derive(Clone, Copy, Eq, Hash, PartialEq)]
-pub struct RecordFieldId(*const ());
-
-impl RecordFieldId {
-    pub fn new<T: ?Sized>(field: &Arc<T>) -> Self {
-        Self(Arc::as_ptr(field).cast::<()>())
-    }
 }
 
 pub struct IdStore<T> {

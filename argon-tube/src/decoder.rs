@@ -4,8 +4,15 @@ use argon_compiler::erased_sig::{
 };
 use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
-use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldMetadata, RecordFieldOwner, Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload};
-use argon_expr::{LocalVariable, ParameterVariable, RecordFieldLiteral, Variable};
+use argon_compiler::{
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
+    EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata,
+    FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldMetadata, RecordFieldOwner,
+    Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier,
+    Unload,
+};
+use argon_expr::{LocalVariable, ParameterVariable, RecordFieldLiteral, RecordType, Variable};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
 use argon_util::sync::{OnceLock, RwLock, rwlock_read, rwlock_write};
@@ -23,7 +30,8 @@ pub fn decode_tube(
     read_version_entry(tube.next());
     let metadata = read_metadata_entry(tube.next());
 
-    let mut decoder = TubeDecoder::new(context, tube_collection_builder.tube_collection(), metadata);
+    let mut decoder =
+        TubeDecoder::new(context, tube_collection_builder.tube_collection(), metadata);
     decoder.read_remaining_entries(tube);
     Arc::new(decoder).create_tube(tube_collection_builder)
 }
@@ -87,7 +95,11 @@ enum InstanceEntry {
 }
 
 impl TubeDecoder {
-    fn new(context: Context, tube_collection: Arc<TubeCollection>, metadata: tf::TubeMetadata) -> Self {
+    fn new(
+        context: Context,
+        tube_collection: Arc<TubeCollection>,
+        metadata: tf::TubeMetadata,
+    ) -> Self {
         Self {
             context,
             tube_collection,
@@ -447,8 +459,10 @@ impl TubeDecoder {
                     .iter()
                     .find_map(|entry| match &entry.binding {
                         ModuleExportBinding::Function(function)
-                            if &erase_signature(self.context.clone(), function.clone().signature().as_ref())
-                                == signature.as_ref() =>
+                            if &erase_signature(
+                                self.context.clone(),
+                                function.clone().signature().as_ref(),
+                            ) == signature.as_ref() =>
                         {
                             Some(function.clone())
                         }
@@ -514,8 +528,10 @@ impl TubeDecoder {
                     .iter()
                     .find_map(|entry| match &entry.binding {
                         ModuleExportBinding::Record(record)
-                            if &erase_signature(self.context.clone(), record.clone().signature().as_ref())
-                                == signature.as_ref() =>
+                            if &erase_signature(
+                                self.context.clone(),
+                                record.clone().signature().as_ref(),
+                            ) == signature.as_ref() =>
                         {
                             Some(record.clone())
                         }
@@ -818,38 +834,68 @@ impl TubeDecoder {
             tf::Expr::Raise { ex } => Expr::Raise {
                 ex: Box::new(self.decode_expr(*ex)),
             },
-            tf::Expr::RecordType { record_type } => Expr::RecordType(
-                self.record(record_type.id),
-                record_type
+            tf::Expr::RecordType { record_type } => Expr::RecordType(RecordType {
+                record: self.record(record_type.id),
+                arguments: record_type
                     .args
                     .into_iter()
                     .map(|arg| self.decode_expr(*arg))
                     .collect(),
-            ),
-            tf::Expr::RecordFieldLoad { .. } | tf::Expr::RecordFieldStore { .. } => {
-                todo!("decode record field load/store expressions")
-            }
-            tf::Expr::RecordLiteral { record, fields } => {
-                if !record.args.is_empty() {
-                    panic!(
-                        "record literal has type arguments, but argon-expr RecordLiteral cannot store them"
-                    );
-                }
-
-                Expr::RecordLiteral {
+            }),
+            tf::Expr::RecordFieldLoad {
+                record,
+                field_id,
+                record_value,
+            } => Expr::RecordFieldLoad {
+                record_type: Box::new(Expr::RecordType(RecordType {
                     record: self.record(record.id),
-                    fields: fields
+                    arguments: record
+                        .args
                         .into_iter()
-                        .map(|field| {
-                            let record_field = self.record_field(field.field_id);
-                            RecordFieldLiteral {
-                                name: record_field.metadata().name.clone(),
-                                value: self.decode_expr(*field.value),
-                            }
-                        })
+                        .map(|arg| self.decode_expr(*arg))
                         .collect(),
-                }
-            }
+                })),
+                field: self.record_field(field_id),
+                record_value: Box::new(self.decode_expr(*record_value)),
+            },
+            tf::Expr::RecordFieldStore {
+                record,
+                field_id,
+                record_value,
+                field_value,
+            } => Expr::RecordFieldStore {
+                record_type: Box::new(Expr::RecordType(RecordType {
+                    record: self.record(record.id),
+                    arguments: record
+                        .args
+                        .into_iter()
+                        .map(|arg| self.decode_expr(*arg))
+                        .collect(),
+                })),
+                field: self.record_field(field_id),
+                record_value: Box::new(self.decode_expr(*record_value)),
+                new_value: Box::new(self.decode_expr(*field_value)),
+            },
+            tf::Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
+                record_type: RecordType {
+                    record: self.record(record.id),
+                    arguments: record
+                        .args
+                        .into_iter()
+                        .map(|arg| self.decode_expr(*arg))
+                        .collect(),
+                },
+                fields: fields
+                    .into_iter()
+                    .map(|field| {
+                        let record_field = self.record_field(field.field_id);
+                        RecordFieldLiteral {
+                            name: record_field.metadata().name.clone(),
+                            value: self.decode_expr(*field.value),
+                        }
+                    })
+                    .collect(),
+            },
             tf::Expr::Redo { .. } => todo!("decode redo expression"),
             tf::Expr::RefCellType { .. }
             | tf::Expr::RefCellCreate { .. }

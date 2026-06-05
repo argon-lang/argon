@@ -1,5 +1,7 @@
 use crate::signature::SignatureParameter;
-use crate::{DefaultExprContext, Enum, Function, FunctionSignature, Instance, Method, Record, Trait};
+use crate::{
+    DefaultExprContext, Enum, Function, FunctionSignature, Instance, Method, Record, Trait,
+};
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
@@ -42,6 +44,7 @@ impl OverloadLookup {
     }
 }
 
+#[derive(Debug)]
 pub enum Overloadable {
     Function(Arc<dyn Function>),
     Method(Arc<dyn Method>),

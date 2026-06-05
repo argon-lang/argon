@@ -1,11 +1,16 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
-use argon_compiler::{AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionParameterListType, FunctionSignature, Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier};
+use argon_compiler::{
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, EffectInfo, ErasureMode,
+    Expr, Function, FunctionImplementation, FunctionParameterListType, FunctionSignature,
+    Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField,
+    RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier,
+};
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
-use crate::ids::{RecordFieldId, TubeIdProvider};
-use argon_expr::{ExpressionOwner, LocalVariable, Variable};
+use crate::ids::TubeIdProvider;
+use argon_expr::{ExpressionOwner, LocalVariable, RecordType, Variable};
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
@@ -107,10 +112,7 @@ impl TubeEncoder {
     }
 
     fn get_record_field_id(&mut self, field: Arc<dyn RecordField>) -> usize {
-        let (id, is_new) = self
-            .ids
-            .record_field_ids
-            .get_with_new(RecordFieldId::new(&field));
+        let (id, is_new) = self.ids.record_field_ids.get_with_new(field.clone());
 
         if is_new {
             self.entry_emitters
@@ -265,7 +267,7 @@ impl TubeEncoder {
             EntryEmitter::RecordField(field) => match field.owning_record() {
                 RecordFieldOwner::Record(record) => {
                     let record_field_id =
-                        BigUint::from(self.ids.record_field_ids.get(RecordFieldId::new(&field)));
+                        BigUint::from(self.ids.record_field_ids.get(field.clone()));
                     let record_id = BigUint::from(self.get_record_id(record));
                     let name = encode_identifier(&field.metadata().name)?;
 
@@ -609,12 +611,65 @@ impl TubeEncoder {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
             },
-            Expr::RecordLiteral { record, fields } => {
+            Expr::RecordFieldLoad {
+                record_type,
+                field,
+                record_value,
+            } => {
+                let Expr::RecordType(record_type) = &**record_type else {
+                    panic!("record field load has non-record type {:?}", record_type);
+                };
+
+                tf::Expr::RecordFieldLoad {
+                    record: Box::new(tf::RecordType {
+                        id: BigUint::from(self.get_record_id(record_type.record.clone())),
+                        args: record_type
+                            .arguments
+                            .iter()
+                            .map(|arg| self.emit_expr(arg).map(Box::new))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    }),
+                    field_id: BigUint::from(self.get_record_field_id(field.clone())),
+                    record_value: Box::new(self.emit_expr(record_value)?),
+                }
+            }
+            Expr::RecordFieldStore {
+                record_type,
+                field,
+                record_value,
+                new_value,
+            } => {
+                let Expr::RecordType(record_type) = &**record_type else {
+                    panic!("record field store has non-record type {:?}", record_type);
+                };
+
+                tf::Expr::RecordFieldStore {
+                    record: Box::new(tf::RecordType {
+                        id: BigUint::from(self.get_record_id(record_type.record.clone())),
+                        args: record_type
+                            .arguments
+                            .iter()
+                            .map(|arg| self.emit_expr(arg).map(Box::new))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    }),
+                    field_id: BigUint::from(self.get_record_field_id(field.clone())),
+                    record_value: Box::new(self.emit_expr(record_value)?),
+                    field_value: Box::new(self.emit_expr(new_value)?),
+                }
+            }
+            Expr::RecordLiteral {
+                record_type,
+                fields,
+            } => {
+                let RecordType { record, arguments } = record_type;
                 let declared_fields = record.clone().fields();
                 tf::Expr::RecordLiteral {
                     record: Box::new(tf::RecordType {
                         id: BigUint::from(self.get_record_id(record.clone())),
-                        args: Vec::new(),
+                        args: arguments
+                            .iter()
+                            .map(|arg| self.emit_expr(arg).map(Box::new))
+                            .collect::<Result<Vec<_>, _>>()?,
                     }),
                     fields: fields
                         .iter()
@@ -638,10 +693,11 @@ impl TubeEncoder {
                         .collect::<Result<Vec<_>, InternalCompilerError>>()?,
                 }
             }
-            Expr::RecordType(record, arguments) => tf::Expr::RecordType {
+            Expr::RecordType(record_type) => tf::Expr::RecordType {
                 record_type: Box::new(tf::RecordType {
-                    id: BigUint::from(self.get_record_id(record.clone())),
-                    args: arguments
+                    id: BigUint::from(self.get_record_id(record_type.record.clone())),
+                    args: record_type
+                        .arguments
                         .iter()
                         .map(|arg| self.emit_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,

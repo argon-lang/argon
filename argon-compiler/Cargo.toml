@@ -12,6 +12,7 @@ test-utils = []
 argon-expr = { workspace = true, default-features = false }
 argon-parser = { workspace = true, default-features = false }
 argon-util = { workspace = true, default-features = false }
+derivative = { workspace = true }
 esexpr = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }

@@ -77,9 +77,17 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Variable(variable) | Expr::StoreVariable(variable) => variable.var_type().clone(),
 
-        Expr::RecordType(record, arguments) => {
-            let owner = ExpressionOwner::Record(record.clone());
-            return_type_for_args(owner, record.clone().signature(), arguments)
+        Expr::RecordFieldLoad { field, .. } => (*field.clone().field_type()).clone(),
+
+        Expr::RecordFieldStore { .. } => Expr::unit_type(),
+
+        Expr::RecordType(record_type) => {
+            let owner = ExpressionOwner::Record(record_type.record.clone());
+            return_type_for_args(
+                owner,
+                record_type.record.clone().signature(),
+                &record_type.arguments,
+            )
         }
 
         Expr::EnumType(enum_, arguments) => {

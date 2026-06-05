@@ -44,7 +44,8 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
 mod tests {
     use super::SubstScanner;
     use crate::{ErasureMode, Expr, ExprContext, ExprScannerMut, LocalVariable, Variable};
-    use alloc::{sync::Arc, vec};
+    use alloc::{boxed::Box, vec};
+    use argon_util::UniqueIdentifier;
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -53,6 +54,7 @@ mod tests {
         type Hole = ();
         type Function = ();
         type Record = ();
+        type RecordField = ();
         type Enum = ();
         type Trait = ();
         type EnumVariant = ();
@@ -61,7 +63,8 @@ mod tests {
     }
 
     fn variable() -> Variable<TestContext> {
-        Variable::Local(Arc::new(LocalVariable {
+        Variable::Local(Box::new(LocalVariable {
+            id: UniqueIdentifier::new(),
             name: None,
             var_type: Expr::Error,
             erasure_mode: ErasureMode::Concrete,

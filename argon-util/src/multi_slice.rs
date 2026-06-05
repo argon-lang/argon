@@ -429,7 +429,7 @@ impl<'a, T: Clone> MultiSlice<'a, T> {
     }
 }
 
-impl <'a, T> From<Vec<T>> for MultiSlice<'a, T> {
+impl<'a, T> From<Vec<T>> for MultiSlice<'a, T> {
     fn from(vec: Vec<T>) -> Self {
         let mut ms = Self::new();
         ms.push_vec(vec);
@@ -437,7 +437,7 @@ impl <'a, T> From<Vec<T>> for MultiSlice<'a, T> {
     }
 }
 
-impl <'a, T> From<&'a [T]> for MultiSlice<'a, T> {
+impl<'a, T> From<&'a [T]> for MultiSlice<'a, T> {
     fn from(slice: &'a [T]) -> Self {
         let mut ms = Self::new();
         ms.push_slice(slice);
@@ -445,7 +445,7 @@ impl <'a, T> From<&'a [T]> for MultiSlice<'a, T> {
     }
 }
 
-impl <'a, T> From<&'a VecDeque<T>> for MultiSlice<'a, T> {
+impl<'a, T> From<&'a VecDeque<T>> for MultiSlice<'a, T> {
     fn from(vec_deque: &'a VecDeque<T>) -> Self {
         let mut ms = Self::new();
         ms.push_vec_deque_slices(vec_deque);

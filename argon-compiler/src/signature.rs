@@ -1,13 +1,74 @@
-use alloc::vec::Vec;
-use argon_expr::{ErasureMode, Expr, ExprContext, ExpressionOwner, ParameterVariable};
+use alloc::{boxed::Box, vec::Vec};
+use argon_expr::{
+    ErasureMode, Expr, ExprContext, ExprContextShifter, ExpressionOwner, ParameterVariable,
+    SubstScanner, Variable,
+};
 use argon_parser::ast::{FunctionParameterListType, Identifier};
+use derivative::Derivative;
 
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct FunctionSignature<EC: ExprContext + ?Sized> {
     pub parameters: Vec<SignatureParameter<EC>>,
     pub return_type: Expr<EC>,
     pub ensures_clauses: Vec<Expr<EC>>,
 }
 
+impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
+    pub fn shift<Sh>(self, shifter: &mut Sh) -> FunctionSignature<Sh::EC2>
+    where
+        Sh: ExprContextShifter<EC1 = EC> + ?Sized,
+    {
+        FunctionSignature {
+            parameters: self
+                .parameters
+                .into_iter()
+                .map(|parameter| parameter.shift(shifter))
+                .collect(),
+            return_type: shifter.shift(self.return_type),
+            ensures_clauses: self
+                .ensures_clauses
+                .into_iter()
+                .map(|ensures_clause| shifter.shift(ensures_clause))
+                .collect(),
+        }
+    }
+}
+
+pub trait SubstFunctionSignature<'a, EC: ExprContext + ?Sized> {
+    fn add_function_parameter_substitutions(
+        &mut self,
+        owner: ExpressionOwner<EC>,
+        signature: &FunctionSignature<EC>,
+        arguments: &'a [Expr<EC>],
+    );
+}
+
+impl<'a, EC: ExprContext + ?Sized> SubstFunctionSignature<'a, EC> for SubstScanner<'a, EC> {
+    fn add_function_parameter_substitutions(
+        &mut self,
+        owner: ExpressionOwner<EC>,
+        signature: &FunctionSignature<EC>,
+        arguments: &'a [Expr<EC>],
+    ) {
+        debug_assert_eq!(signature.parameters.len(), arguments.len());
+
+        for ((parameter_index, parameter), argument) in
+            signature.parameters.iter().enumerate().zip(arguments)
+        {
+            let variable = Variable::Parameter(Box::new(
+                parameter
+                    .clone()
+                    .to_parameter_var(owner.clone(), parameter_index),
+            ));
+
+            self.add_substitution(variable, argument);
+        }
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct SignatureParameter<EC: ExprContext + ?Sized> {
     pub list_type: FunctionParameterListType,
     pub erasure_mode: ErasureMode,
@@ -17,6 +78,23 @@ pub struct SignatureParameter<EC: ExprContext + ?Sized> {
 }
 
 impl<EC: ExprContext + ?Sized> SignatureParameter<EC> {
+    pub fn shift<Sh>(self, shifter: &mut Sh) -> SignatureParameter<Sh::EC2>
+    where
+        Sh: ExprContextShifter<EC1 = EC> + ?Sized,
+    {
+        SignatureParameter {
+            list_type: self.list_type,
+            erasure_mode: self.erasure_mode,
+            bindings: self
+                .bindings
+                .into_iter()
+                .map(|binding| binding.shift(shifter))
+                .collect(),
+            name: self.name,
+            param_type: shifter.shift(self.param_type),
+        }
+    }
+
     pub fn to_parameter_var(
         self,
         owner: ExpressionOwner<EC>,
@@ -33,28 +111,21 @@ impl<EC: ExprContext + ?Sized> SignatureParameter<EC> {
     }
 }
 
-impl<EC: ExprContext + ?Sized> Clone for SignatureParameter<EC> {
-    fn clone(&self) -> Self {
-        SignatureParameter {
-            list_type: self.list_type,
-            erasure_mode: self.erasure_mode,
-            bindings: self.bindings.clone(),
-            name: self.name.clone(),
-            param_type: self.param_type.clone(),
-        }
-    }
-}
-
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct ParameterBinding<EC: ExprContext + ?Sized> {
     pub name: Option<Identifier>,
     pub param_type: Expr<EC>,
 }
 
-impl<EC: ExprContext + ?Sized> Clone for ParameterBinding<EC> {
-    fn clone(&self) -> Self {
+impl<EC: ExprContext + ?Sized> ParameterBinding<EC> {
+    pub fn shift<Sh>(self, shifter: &mut Sh) -> ParameterBinding<Sh::EC2>
+    where
+        Sh: ExprContextShifter<EC1 = EC> + ?Sized,
+    {
         ParameterBinding {
-            name: self.name.clone(),
-            param_type: self.param_type.clone(),
+            name: self.name,
+            param_type: shifter.shift(self.param_type),
         }
     }
 }

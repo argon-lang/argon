@@ -89,6 +89,7 @@ dependencies = [
  "argon-expr",
  "argon-parser",
  "argon-util",
+ "derivative",
  "esexpr",
  "hashbrown 0.17.1",
  "mitsein",

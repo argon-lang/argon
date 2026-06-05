@@ -1,8 +1,8 @@
 use crate::{
     Expr, ExprContext, ExpressionOwner, LocalVariable, MatchCase, ParameterVariable,
-    RecordFieldLiteral, Variable,
+    RecordFieldLiteral, RecordType, Variable,
 };
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
 
 mod fresh_var;
@@ -16,6 +16,7 @@ pub trait ExprContextShifter {
             Record = <Self::EC1 as ExprContext>::Record,
             Enum = <Self::EC1 as ExprContext>::Enum,
             Trait = <Self::EC1 as ExprContext>::Trait,
+            RecordField = <Self::EC1 as ExprContext>::RecordField,
             EnumVariant = <Self::EC1 as ExprContext>::EnumVariant,
             Method = <Self::EC1 as ExprContext>::Method,
             Instance = <Self::EC1 as ExprContext>::Instance,
@@ -139,8 +140,31 @@ where
         Expr::Raise { ex } => Expr::Raise {
             ex: Box::new(shifter.shift(*ex)),
         },
-        Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
-            record,
+        Expr::RecordFieldLoad {
+            record_type,
+            field,
+            record_value,
+        } => Expr::RecordFieldLoad {
+            record_type: Box::new(shifter.shift(*record_type)),
+            field,
+            record_value: Box::new(shifter.shift(*record_value)),
+        },
+        Expr::RecordFieldStore {
+            record_type,
+            field,
+            record_value,
+            new_value,
+        } => Expr::RecordFieldStore {
+            record_type: Box::new(shifter.shift(*record_type)),
+            field,
+            record_value: Box::new(shifter.shift(*record_value)),
+            new_value: Box::new(shifter.shift(*new_value)),
+        },
+        Expr::RecordLiteral {
+            record_type,
+            fields,
+        } => Expr::RecordLiteral {
+            record_type: default_shift_record_type(shifter, record_type),
             fields: fields
                 .into_iter()
                 .map(|field| RecordFieldLiteral {
@@ -149,13 +173,9 @@ where
                 })
                 .collect(),
         },
-        Expr::RecordType(record, arguments) => Expr::RecordType(
-            record,
-            arguments
-                .into_iter()
-                .map(|argument| shifter.shift(argument))
-                .collect(),
-        ),
+        Expr::RecordType(record_type) => {
+            Expr::RecordType(default_shift_record_type(shifter, record_type))
+        }
         Expr::Redo { label } => Expr::Redo { label },
         Expr::Sequence(exprs) => Expr::Sequence(
             Vec1::try_from(
@@ -212,6 +232,23 @@ where
             t: Box::new(shifter.shift(*t)),
             value: Box::new(shifter.shift(*value)),
         },
+    }
+}
+
+fn default_shift_record_type<S>(
+    shifter: &mut S,
+    record_type: RecordType<S::EC1>,
+) -> RecordType<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    RecordType {
+        record: record_type.record,
+        arguments: record_type
+            .arguments
+            .into_iter()
+            .map(|argument| shifter.shift(argument))
+            .collect(),
     }
 }
 

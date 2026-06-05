@@ -5,7 +5,12 @@ use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
-use argon_compiler::{BinaryOperatorIdentifier, Builtin, DefaultExprContext, DefaultExprNormalizer, Enum, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, Trait, Tube, TubeName, UnaryOperatorIdentifier};
+use argon_compiler::{
+    BinaryOperatorIdentifier, Builtin, DefaultExprContext, DefaultExprNormalizer, Enum, Function,
+    FunctionImplementation, FunctionSignature, Identifier, Instance, Module, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Trait, Tube, TubeName,
+    UnaryOperatorIdentifier,
+};
 use argon_expr::{
     ErasureMode, Expr, ExprScannerMut, ExpressionOwner, Normalizer, NormalizerScanner,
     ParameterVariable, SubstScanner, Variable,
@@ -124,6 +129,17 @@ impl VmEncoder {
 
         if is_new {
             self.entry_emitters.push_back(EntryEmitter::Record(record));
+        }
+
+        id
+    }
+
+    fn get_record_field_id(&mut self, field: Arc<dyn RecordField>) -> usize {
+        let (id, is_new) = self.ids.record_field_ids.get_with_new(field.clone());
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::RecordField(field));
         }
 
         id
@@ -308,6 +324,21 @@ impl VmEncoder {
                     }
                 }
             }
+
+            EntryEmitter::RecordField(record_field) => match record_field.owning_record() {
+                RecordFieldOwner::Record(r) => {
+                    let record_field_id =
+                        BigUint::from(self.get_record_field_id(record_field.clone()));
+                    let record_id = BigUint::from(self.get_record_id(r.clone()));
+
+                    vf::TubeFileEntry::RecordFieldReference {
+                        name: Box::new(encode_identifier(&record_field.metadata().name)),
+                        record_id,
+                        record_field_id,
+                    }
+                }
+                RecordFieldOwner::EnumVariant(_) => todo!(),
+            },
 
             EntryEmitter::Enum(enum_) => {
                 let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
@@ -559,6 +590,7 @@ enum EntryEmitter {
     ModuleReference(TubeName, ModulePath),
     Function(Arc<dyn Function>),
     Record(Arc<dyn Record>),
+    RecordField(Arc<dyn RecordField>),
     Enum(Arc<dyn Enum>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
@@ -790,9 +822,11 @@ trait TokenEmitterCommon {
                 output: Box::new(self.token_expr(r)?),
             }),
 
-            Expr::RecordType(record, arguments) => Ok(vf::Token::Record {
-                record_id: BigUint::from(self.vm_encoder().get_record_id(record.clone())),
-                args: self.token_exprs(arguments)?,
+            Expr::RecordType(record_type) => Ok(vf::Token::Record {
+                record_id: BigUint::from(
+                    self.vm_encoder().get_record_id(record_type.record.clone()),
+                ),
+                args: self.token_exprs(&record_type.arguments)?,
             }),
 
             Expr::EnumType(enum_, arguments) => Ok(vf::Token::Enum {
@@ -1253,9 +1287,58 @@ impl<'a> ExprEmitter<'a> {
             // EnumType
             // RefCellType
             // TraitType
-            // RecordFieldLoad
+            Expr::RecordFieldLoad {
+                record_type,
+                field,
+                record_value,
+            } => {
+                let rb = output.output_register(self, e)?;
+                let field_id = BigUint::from(self.encoder.get_record_field_id(field.clone()));
+                let value_reg = self.expr(&**record_value, AnyRegister)?;
+                self.emit(vf::Instruction::RecordFieldLoad {
+                    dest: Box::new(rb.register().clone()),
+                    field_id,
+                    record_value: Box::new(value_reg),
+                });
+                rb.into_result(self)?
+            }
             // RecordFieldStore
             // RecordLiteral
+            Expr::RecordLiteral {
+                record_type,
+                fields,
+            } => {
+                let rb = output.output_register(self, e)?;
+                let declared_fields = record_type.record.clone().fields();
+
+                let mut vm_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let declared_field = declared_fields
+                        .iter()
+                        .find(|declared_field| declared_field.metadata().name == field.name)
+                        .unwrap_or_else(|| {
+                            panic!("record literal references unknown field {:?}", field.name)
+                        });
+                    let field_id =
+                        BigUint::from(self.encoder.get_record_field_id(declared_field.clone()));
+                    let value = self.expr(&field.value, AnyRegister)?;
+                    vm_fields.push(Box::new(vf::RecordFieldLiteral {
+                        field_id,
+                        value: Box::new(value),
+                    }));
+                }
+
+                let record_type_token = self.token_expr(&Expr::RecordType(record_type.clone()))?;
+
+                self.emit(vf::Instruction::RecordLiteral {
+                    dest: Box::new(rb.register().clone()),
+                    record_type: Box::new(record_type_token),
+                    fields: vm_fields,
+                });
+
+                rb.into_result(self)?
+            }
+
             // Redo
             // RefCellCreate
             Expr::Sequence(items) => {
