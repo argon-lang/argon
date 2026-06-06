@@ -1,7 +1,7 @@
 use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::type_check_type_expr;
+use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
@@ -202,8 +202,7 @@ impl RecordField for SourceRecordField {
 
         let field_type = type_check_type_expr(
             self.owner.context.clone(),
-            &access_token,
-            &mut scope,
+            TypeCheckOptions::new(&access_token, &mut scope),
             &self.field.field_type,
         );
 

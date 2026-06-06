@@ -710,6 +710,10 @@ impl TubeEncoder {
                 value: Box::new(self.emit_expr(value)?),
                 v: Box::new(self.emit_local_var_from_variable(variable)?),
             },
+            Expr::VariableStore(variable, value) => tf::Expr::VariableStore {
+                v: Box::new(self.emit_var(variable)?),
+                value: Box::new(self.emit_expr(value)?),
+            },
             _ => todo!("Unimplement emit_expr for {:?}", expr),
         })
     }

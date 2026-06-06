@@ -3,7 +3,7 @@ use crate::modifiers::{
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::type_check_expr;
+use crate::type_checker::{TypeCheckOptions, type_check_expr};
 use alloc::{boxed::Box, sync::Arc};
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
@@ -130,8 +130,7 @@ impl Function for SourceFunction {
 
                 let expr = type_check_expr(
                     self.context.clone(),
-                    &access_token,
-                    &mut scope,
+                    TypeCheckOptions::new(&access_token, &mut scope),
                     body.as_ref(),
                     &signature.return_type,
                 );

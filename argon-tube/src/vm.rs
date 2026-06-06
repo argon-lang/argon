@@ -1302,7 +1302,26 @@ impl<'a> ExprEmitter<'a> {
                 });
                 rb.into_result(self)?
             }
-            // RecordFieldStore
+
+            Expr::RecordFieldStore {
+                record_type,
+                field,
+                record_value,
+                new_value,
+            } => {
+                let field_id = BigUint::from(self.encoder.get_record_field_id(field.clone()));
+                let record_value_reg = self.expr(&**record_value, AnyRegister)?;
+                let new_value_reg = self.expr(&**new_value, AnyRegister)?;
+
+                self.emit(vf::Instruction::RecordFieldStore {
+                    field_id,
+                    record_value: Box::new(record_value_reg),
+                    field_value: Box::new(new_value_reg),
+                });
+
+                output.output_unit_result(self)?
+            }
+
             // RecordLiteral
             Expr::RecordLiteral {
                 record_type,

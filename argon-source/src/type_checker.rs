@@ -1,13 +1,13 @@
 use crate::modifiers::{ERASURE_MODE, IS_WITNESS, ModifierParser};
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
+use argon_compiler::access::AccessToken;
 use argon_compiler::scanner::PurityScanner;
-use argon_compiler::scope::{
-    self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope,
-};
+use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
+use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{
-    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
-    RecordField, RecordFieldOwner, SubstFunctionSignature,
+    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, RecordField,
+    RecordFieldOwner, SubstFunctionSignature,
 };
 use argon_expr::{
     Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
@@ -24,15 +24,14 @@ use core::{mem, ptr};
 use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
-use argon_compiler::access::AccessToken;
 use parse18_runtime::{Location, WithLocation};
 
 pub fn type_check_type_expr(
     context: Context,
-    access: &AccessToken,
-    scope: &mut dyn Scope<ExprContext = DefaultExprContext>,
+    options: TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
 ) -> Expr<DefaultExprContext> {
+    let TypeCheckOptions { access, scope } = options;
     let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
     let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
     let mut checker = TypeChecker::new(context.clone(), access, &mut local_scope);
@@ -44,11 +43,11 @@ pub fn type_check_type_expr(
 
 pub fn type_check_expr(
     context: Context,
-    access: &AccessToken,
-    scope: &mut dyn Scope<ExprContext = DefaultExprContext>,
+    options: TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
     expected_type: &Expr<DefaultExprContext>,
 ) -> Expr<DefaultExprContext> {
+    let TypeCheckOptions { access, scope } = options;
     let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
     let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
     let mut checker = TypeChecker::new(context.clone(), access, &mut local_scope);
@@ -57,6 +56,20 @@ pub fn type_check_expr(
     let expr = checker.check(e, &expected_type);
 
     TypeCheckToDefaultExprContextShifter.shift(expr)
+}
+
+pub struct TypeCheckOptions<'a> {
+    access: &'a AccessToken,
+    scope: &'a mut dyn Scope<ExprContext = DefaultExprContext>,
+}
+
+impl<'a> TypeCheckOptions<'a> {
+    pub fn new(
+        access: &'a AccessToken,
+        scope: &'a mut dyn Scope<ExprContext = DefaultExprContext>,
+    ) -> Self {
+        Self { access, scope }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -284,6 +297,12 @@ enum Overloadable<'a> {
         field_type: Expr<TypeCheckExprContext>,
         record_value: Expr<TypeCheckExprContext>,
     },
+    RecordFieldStore {
+        record_type: Expr<TypeCheckExprContext>,
+        field: Arc<dyn RecordField>,
+        field_type: Expr<TypeCheckExprContext>,
+        record_value: Expr<TypeCheckExprContext>,
+    },
     EnumVariant(),
 }
 
@@ -293,6 +312,7 @@ impl<'a> Overloadable<'a> {
             Overloadable::Base(_) => vec![],
             Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
             Overloadable::RecordField { .. } => vec![],
+            Overloadable::RecordFieldStore { .. } => vec![],
             Overloadable::EnumVariant() => vec![],
         }
     }
@@ -304,6 +324,7 @@ impl<'a> Overloadable<'a> {
                 vec![TypeInferResult::Complete(arg.clone())]
             }
             Overloadable::RecordField { .. } => vec![],
+            Overloadable::RecordFieldStore { .. } => vec![],
             Overloadable::EnumVariant() => todo!(),
         }
     }
@@ -313,6 +334,7 @@ impl<'a> Overloadable<'a> {
             Overloadable::Base(base) => Some(base.as_expression_owner()),
             Overloadable::ExtensionMethod(f, _, _) => Some(ExpressionOwner::Function(f.clone())),
             Overloadable::RecordField { .. } => None,
+            Overloadable::RecordFieldStore { .. } => None,
             Overloadable::EnumVariant() => todo!(),
         }
     }
@@ -330,6 +352,17 @@ impl<'a> Overloadable<'a> {
             Overloadable::RecordField { field_type, .. } => FunctionSignature {
                 parameters: vec![],
                 return_type: field_type.clone(),
+                ensures_clauses: vec![],
+            },
+            Overloadable::RecordFieldStore { field_type, .. } => FunctionSignature {
+                parameters: vec![SignatureParameter {
+                    list_type: FunctionParameterListType::NormalList,
+                    name: None,
+                    erasure_mode: ErasureMode::Concrete,
+                    param_type: field_type.clone(),
+                    bindings: vec![],
+                }],
+                return_type: Expr::unit_type(),
                 ensures_clauses: vec![],
             },
             Overloadable::EnumVariant() => todo!(),
@@ -438,13 +471,21 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
             | ast::Expr::FunctionCall { .. }
             | ast::Expr::Identifier(_)
             | ast::Expr::Type => {
-                let call = self.process_call(expr);
+                let call = self.process_call(expr, None);
                 self.infer_call(call)
             }
 
             ast::Expr::BinaryOperation { a, op, b } => {
                 let op_id = match op.value {
-                    ast::BinaryOperator::Assign => todo!(),
+                    ast::BinaryOperator::Assign => {
+                        let assigned_value = AssignedValue {
+                            assign_location: &op.location,
+                            value: b,
+                        };
+
+                        let call = self.process_call(a, Some(assigned_value));
+                        return self.infer_call(call);
+                    }
 
                     ast::BinaryOperator::LogicalOr => {
                         let a = self.check(a, &Expr::bool_type());
@@ -514,7 +555,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 fields,
             } => {
                 'not_record: {
-                    let record_call = self.process_call(record_expr);
+                    let record_call = self.process_call(record_expr, None);
 
                     let overloads = match record_call.callee {
                         CalleeInfo::Error => return TypeInferResult::error(),
@@ -522,8 +563,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         _ => break 'not_record,
                     };
 
-                    let resolved = OverloadResolver::new(self).resolve_overload_lookup(
-                        record_call.location,
+                    let resolved = OverloadResolver::new(self, record_call.location).resolve_overload_lookup(
                         overloads,
                         record_call.arguments,
                     );
@@ -552,11 +592,11 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                     };
 
                     if !resolved.extra_argument_info.is_empty() {
-                        self.context
-                            .reporter()
-                            .report_error(CompileError::record_literal_extra_arguments(
+                        self.context.reporter().report_error(
+                            CompileError::record_literal_extra_arguments(
                                 record_expr.location.clone(),
-                            ));
+                            ),
+                        );
                     }
 
                     let mut subst = SubstScanner::new();
@@ -884,12 +924,12 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 self.infer_builtin(call.location, builtin, call.arguments)
             }
             CalleeInfo::Variable(v) => self.infer_variable(v, call.arguments),
+            CalleeInfo::VariableStore(v) => self.infer_variable_store(call.location, v, call.arguments),
             CalleeInfo::VariableTupleElement(vte) => {
                 self.infer_variable_tuple_element(vte, call.arguments)
             }
             CalleeInfo::Overloadable(overloads) => {
-                let resolved = OverloadResolver::new(self).resolve_overload_lookup(
-                    call.location,
+                let resolved = OverloadResolver::new(self, call.location).resolve_overload_lookup(
                     overloads,
                     call.arguments,
                 );
@@ -899,7 +939,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 };
 
                 self.infer_function_object_call_inferred(
-                    TypeInferResult::Complete(inferred_type.into_inferred_type()),
+                    TypeInferResult::Complete(inferred_type.into_inferred_type(self)),
                     resolved
                         .extra_inferred_args
                         .into_iter()
@@ -1157,6 +1197,35 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
         self.infer_function_object_call(res, args)
     }
 
+    fn infer_variable_store<'e>(
+        &mut self,
+        location: &'e Location,
+        v: Variable<TypeCheckExprContext>,
+        mut args: VecDeque<ArgumentInfo<'e>>,
+    ) -> TypeInferResult<'e> {
+        let t = v.var_type().clone();
+
+        let value = args
+            .pop_front()
+            .expect("Variable value should have been added as an argument");
+
+        let value = self.check(value.arg, &t);
+
+        if !v.is_mutable() {
+            self.context.reporter().report_error(
+                CompileError::can_not_mutate(
+                    location.clone()
+                )
+            )
+        }
+
+        let expr = Expr::VariableStore(v, Box::new(value));
+        TypeInferResult::Complete(InferredType {
+            checked_expr: expr,
+            inferred_type: Expr::unit_type(),
+        })
+    }
+
     fn infer_variable_tuple_element<'e>(
         &mut self,
         vte: VariableTupleElement<TypeCheckExprContext>,
@@ -1237,7 +1306,11 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
         expr_result
     }
 
-    fn process_call<'e>(&mut self, mut func_expr: &'e WithLocation<ast::Expr>) -> CallInfo<'e> {
+    fn process_call<'e>(
+        &mut self,
+        mut func_expr: &'e WithLocation<ast::Expr>,
+        assigned_value: Option<AssignedValue<'e>>,
+    ) -> CallInfo<'e> {
         let mut arguments = VecDeque::new();
         let call_location = &func_expr.location;
 
@@ -1257,6 +1330,15 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 }
 
                 ast::Expr::Builtin(builtin_name) => {
+                    if assigned_value.is_some() {
+                        self.report_invalid_assignment_target(&func_expr.location);
+                        return CallInfo {
+                            location: call_location,
+                            callee: CalleeInfo::Error,
+                            arguments,
+                        };
+                    }
+
                     let Ok(builtin) = builtin_name.parse::<Builtin>() else {
                         self.report_invalid_builtin(&func_expr.location, builtin_name);
                         return CallInfo {
@@ -1274,7 +1356,29 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 }
 
                 ast::Expr::Identifier(identifier) => {
-                    let callee = self.process_lookup(&func_expr.location, identifier);
+                    let callee = self.process_lookup(
+                        &func_expr.location,
+                        identifier,
+                        assigned_value.is_some(),
+                    );
+
+                    if !arguments.is_empty() && matches!(callee, CalleeInfo::VariableStore(_)) {
+                        self.report_invalid_assignment_target(call_location);
+                        return CallInfo {
+                            location: call_location,
+                            callee: CalleeInfo::Error,
+                            arguments,
+                        };
+                    }
+
+                    if let Some(assigned_value) = assigned_value {
+                        arguments.push_back(ArgumentInfo {
+                            call_location: assigned_value.assign_location,
+                            arg: assigned_value.value,
+                            list_type: FunctionParameterListType::NormalList,
+                        });
+                    }
+
                     return CallInfo {
                         location: call_location,
                         callee,
@@ -1286,8 +1390,14 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                     let mut overload_groups = Vec::new();
 
                     'done: {
-                        let mut instance = self.process_call(o);
+                        let mut instance = self.process_call(o, None);
                         let call_location = instance.location;
+
+                        let adjusted_member_name = if assigned_value.is_some() {
+                            Identifier::Update(Box::new(member.value.clone()))
+                        } else {
+                            member.value.clone()
+                        };
 
                         // Find enum variants
                         // if arguments.is_empty() && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee {
@@ -1309,8 +1419,6 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         // }
 
                         let mut instance = self.infer_call(instance).infer_fully();
-
-                        // TODO: Check for assignment
 
                         {
                             let mut norm = NormalizerScanner::new(
@@ -1346,12 +1454,23 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                                             );
                                             subst.scan(&mut field_type);
 
-                                            vec![Overloadable::RecordField {
-                                                record_type: instance.inferred_type.clone(),
-                                                field: field.clone(),
-                                                field_type,
-                                                record_value: instance.checked_expr.clone(),
-                                            }]
+                                            let overload = if assigned_value.is_some() {
+                                                Overloadable::RecordFieldStore {
+                                                    record_type: instance.inferred_type.clone(),
+                                                    field: field.clone(),
+                                                    field_type,
+                                                    record_value: instance.checked_expr.clone(),
+                                                }
+                                            } else {
+                                                Overloadable::RecordField {
+                                                    record_type: instance.inferred_type.clone(),
+                                                    field: field.clone(),
+                                                    field_type,
+                                                    record_value: instance.checked_expr.clone(),
+                                                }
+                                            };
+
+                                            vec![overload]
                                         }),
                                 );
                             }
@@ -1360,13 +1479,10 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         }
 
                         // Extension methods
-                        if let Lookup::Overloadable(extension_overloads) = self
-                            .scope
-                            .lookup(
-                                &Identifier::Extension(Box::new(member.value.clone())),
-                                self.access,
-                            )
-                        {
+                        if let Lookup::Overloadable(extension_overloads) = self.scope.lookup(
+                            &Identifier::Extension(Box::new(adjusted_member_name.clone())),
+                            self.access,
+                        ) {
                             overload_groups.extend(
                                 extension_overloads
                                     .item_groups
@@ -1395,6 +1511,14 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         }
                     }
 
+                    if let Some(assigned_value) = assigned_value {
+                        arguments.push_back(ArgumentInfo {
+                            call_location: assigned_value.assign_location,
+                            arg: assigned_value.value,
+                            list_type: FunctionParameterListType::NormalList,
+                        });
+                    }
+
                     return CallInfo {
                         location: call_location,
                         callee: CalleeInfo::Overloadable(overload_groups),
@@ -1403,6 +1527,15 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 }
 
                 ast::Expr::Type => {
+                    if assigned_value.is_some() {
+                        self.report_invalid_assignment_target(&func_expr.location);
+                        return CallInfo {
+                            location: call_location,
+                            callee: CalleeInfo::Error,
+                            arguments,
+                        };
+                    }
+
                     return CallInfo {
                         location: call_location,
                         callee: CalleeInfo::TypeN,
@@ -1411,6 +1544,15 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 }
 
                 _ => {
+                    if assigned_value.is_some() {
+                        self.report_invalid_assignment_target(call_location);
+                        return CallInfo {
+                            location: call_location,
+                            callee: CalleeInfo::Error,
+                            arguments,
+                        };
+                    }
+
                     return CallInfo {
                         location: call_location,
                         callee: CalleeInfo::Expr(func_expr),
@@ -1431,7 +1573,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
     ) -> CallInfo<'b> {
         CallInfo {
             location,
-            callee: self.process_lookup(op_location, &Identifier::BinaryOp(op)),
+            callee: self.process_lookup(op_location, &Identifier::BinaryOp(op), false),
             arguments: VecDeque::from([
                 ArgumentInfo {
                     call_location: location,
@@ -1456,7 +1598,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
     ) -> CallInfo<'b> {
         CallInfo {
             location,
-            callee: self.process_lookup(op_location, &Identifier::UnaryOp(op)),
+            callee: self.process_lookup(op_location, &Identifier::UnaryOp(op), false),
             arguments: VecDeque::from([ArgumentInfo {
                 call_location: location,
                 arg,
@@ -1469,8 +1611,15 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
         &mut self,
         location: &Location,
         identifier: &Identifier,
+        is_assignment: bool,
     ) -> CalleeInfo<'b> {
-        match self.scope.lookup(identifier, self.access) {
+        let lookup = if is_assignment {
+            self.scope.lookup_assign(identifier, self.access)
+        } else {
+            self.scope.lookup(identifier, self.access)
+        };
+
+        match lookup {
             Lookup::Empty => {
                 self.context
                     .reporter()
@@ -1482,8 +1631,21 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 CalleeInfo::Error
             }
 
-            Lookup::Variable(v) => CalleeInfo::Variable(v),
-            Lookup::VariableTupleElement(vte) => CalleeInfo::VariableTupleElement(vte),
+            Lookup::Variable(v) => {
+                if is_assignment {
+                    CalleeInfo::VariableStore(v)
+                } else {
+                    CalleeInfo::Variable(v)
+                }
+            }
+            Lookup::VariableTupleElement(vte) => {
+                if is_assignment {
+                    self.report_invalid_assignment_target(location);
+                    return CalleeInfo::Error;
+                }
+
+                CalleeInfo::VariableTupleElement(vte)
+            }
 
             Lookup::Overloadable(overloadable) => CalleeInfo::Overloadable(
                 overloadable
@@ -1681,6 +1843,12 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
             .report_error(CompileError::invalid_builtin(Some(location.clone()), name));
     }
 
+    fn report_invalid_assignment_target(&self, location: &Location) {
+        self.context
+            .reporter()
+            .report_error(CompileError::invalid_assignment_target(location.clone()));
+    }
+
     fn report_builtin_arity_error(
         &self,
         location: &Location,
@@ -1850,11 +2018,18 @@ struct ArgumentInfo<'a> {
     list_type: FunctionParameterListType,
 }
 
+#[derive(Debug, Clone)]
+struct AssignedValue<'e> {
+    assign_location: &'e Location,
+    value: &'e WithLocation<ast::Expr>,
+}
+
 enum CalleeInfo<'a> {
     Error,
     Expr(&'a WithLocation<ast::Expr>),
     Builtin(Builtin),
     Variable(Variable<TypeCheckExprContext>),
+    VariableStore(Variable<TypeCheckExprContext>),
     VariableTupleElement(VariableTupleElement<TypeCheckExprContext>),
     Overloadable(Vec<Vec<Overloadable<'a>>>),
     TypeN,
@@ -1868,20 +2043,21 @@ struct CallInfo<'a> {
 
 struct OverloadResolver<'parent, 'access, 'scope, 'e> {
     type_checker: &'parent mut TypeChecker<'access, 'scope>,
+    call_location: &'e Location,
     rejected_overloads: Vec<(Overloadable<'e>, OverloadRejectionReason)>,
 }
 
 impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e> {
-    fn new(type_checker: &'parent mut TypeChecker<'access, 'scope>) -> Self {
+    fn new(type_checker: &'parent mut TypeChecker<'access, 'scope>, call_location: &'e Location) -> Self {
         Self {
             type_checker,
+            call_location,
             rejected_overloads: Vec::new(),
         }
     }
 
     fn resolve_overload_lookup(
         mut self,
-        call_location: &'e Location,
         overload_lookup: Vec<Vec<Overloadable<'e>>>,
         mut args: VecDeque<ArgumentInfo<'e>>,
     ) -> ResolvedOverload<'e> {
@@ -1915,7 +2091,7 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                         self.type_checker
                             .context
                             .reporter()
-                            .report_error(CompileError::ambiguous_overload(call_location.clone()));
+                            .report_error(CompileError::ambiguous_overload(self.call_location.clone()));
                     }
 
                     break 'find_overload selected_overload;
@@ -1925,7 +2101,7 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
             self.type_checker
                 .context
                 .reporter()
-                .report_error(CompileError::invalid_overload(call_location.clone()));
+                .report_error(CompileError::invalid_overload(self.call_location.clone()));
 
             return ResolvedOverload {
                 overload: None,
@@ -2033,56 +2209,41 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                 break;
             };
 
-            let v: Variable<TypeCheckExprContext> = Variable::Parameter(Box::new(
-                param.clone().to_parameter_var(
-                    overload
-                        .as_expression_owner()
-                        .expect("overload without owner should not have parameters"),
-                    parameter_index,
-                ),
-            ));
+            // Skip substitution if an expression owner is not available.
+            // This is safe because these overloads either do not have parameters
+            // or they have a single parameter and a fixed result type.
 
-            if let (Some(arg), Some(inferred_arg)) = (args.first(), inferred_args.first()) {
-                if param.list_type == arg.list_type {
-                    if !partially_inferred_type_matches_expected(
-                        &self.type_checker.context,
-                        &inferred_arg.partially_inferred_type(),
-                        ExpectedType::Exact(&param_type),
-                    ) {
-                        return Some(OverloadRejectionReason::ParameterTypeMismatch {
-                            parameter_index,
-                        });
-                    }
+            let v: Option<Variable<TypeCheckExprContext>> =
+                overload.as_expression_owner().map(|owner| {
+                    Variable::Parameter(Box::new(
+                        param.clone().to_parameter_var(owner, parameter_index),
+                    ))
+                });
 
+            if let (Some(arg), Some(inferred_arg)) = (args.first(), inferred_args.first())
+                && param.list_type == arg.list_type
+            {
+                if !partially_inferred_type_matches_expected(
+                    &self.type_checker.context,
+                    &inferred_arg.partially_inferred_type(),
+                    ExpectedType::Exact(&param_type),
+                ) {
+                    return Some(OverloadRejectionReason::ParameterTypeMismatch {
+                        parameter_index,
+                    });
+                }
+
+                if let Some(v) = v {
                     self.substitute_inferred_arg_in_param_types(
                         &mut param_types,
                         &mut return_type,
                         v,
                         &inferred_arg,
                     );
-
-                    args.pop_front();
-                    inferred_args.pop_front();
-                } else {
-                    match param.list_type {
-                        FunctionParameterListType::NormalList => {
-                            return Some(OverloadRejectionReason::ParameterListTypeMismatch);
-                        }
-                        FunctionParameterListType::InferrableList
-                        | FunctionParameterListType::QuoteList => {
-                            let hole = Hole::new(param_type);
-                            self.substitute_arg_in_param_types(
-                                &mut param_types,
-                                &mut return_type,
-                                v,
-                                &Expr::Hole(hole),
-                            );
-                        }
-                        FunctionParameterListType::RequiresList => {
-                            todo!("implicit resolution")
-                        }
-                    }
                 }
+
+                args.pop_front();
+                inferred_args.pop_front();
             } else {
                 match param.list_type {
                     FunctionParameterListType::NormalList => {
@@ -2091,12 +2252,14 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                     FunctionParameterListType::InferrableList
                     | FunctionParameterListType::QuoteList => {
                         let hole = Hole::new(param_type);
-                        self.substitute_arg_in_param_types(
-                            &mut param_types,
-                            &mut return_type,
-                            v,
-                            &Expr::Hole(hole),
-                        );
+                        if let Some(v) = v {
+                            self.substitute_arg_in_param_types(
+                                &mut param_types,
+                                &mut return_type,
+                                v,
+                                &Expr::Hole(hole),
+                            );
+                        }
                     }
                     FunctionParameterListType::RequiresList => {
                         todo!("implicit resolution")
@@ -2190,14 +2353,14 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                 break;
             };
 
-            let v: Variable<TypeCheckExprContext> = Variable::Parameter(Box::new(
-                param.clone().to_parameter_var(
-                    overload
-                        .as_expression_owner()
-                        .expect("overload without owner should not have parameters"),
-                    parameter_index,
-                ),
-            ));
+            let v: Option<Variable<TypeCheckExprContext>> = overload.as_expression_owner().map(|owner| {
+                Variable::Parameter(Box::new(
+                    param.clone().to_parameter_var(
+                        owner,
+                        parameter_index,
+                    ),
+                ))
+            });
 
             if let Some(arg) = args.front()
                 && param.list_type == arg.list_type
@@ -2212,12 +2375,14 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                     ExpectedType::Exact(&param_type),
                 );
 
-                self.substitute_arg_in_param_types(
-                    &mut param_types,
-                    &mut return_type,
-                    v,
-                    &arg_expr.checked_expr,
-                );
+                if let Some(v) = v {
+                    self.substitute_arg_in_param_types(
+                        &mut param_types,
+                        &mut return_type,
+                        v,
+                        &arg_expr.checked_expr,
+                    );
+                }
 
                 selected_args.push(arg_expr.checked_expr);
 
@@ -2232,12 +2397,15 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                     FunctionParameterListType::InferrableList
                     | FunctionParameterListType::QuoteList => {
                         let hole = Hole::new(param_type);
-                        self.substitute_arg_in_param_types(
-                            &mut param_types,
-                            &mut return_type,
-                            v,
-                            &Expr::Hole(hole),
-                        );
+
+                        if let Some(v) = v {
+                            self.substitute_arg_in_param_types(
+                                &mut param_types,
+                                &mut return_type,
+                                v,
+                                &Expr::Hole(hole),
+                            );
+                        }
                     }
                     FunctionParameterListType::RequiresList => {
                         todo!("implicit resolution")
@@ -2250,6 +2418,7 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
         }
 
         SelectedOverload {
+            call_location: self.call_location,
             overload,
             args: selected_args,
             return_type,
@@ -2292,20 +2461,21 @@ enum OverloadRejectionReason {
     ParameterTypeMismatch { parameter_index: usize },
 }
 
-struct ResolvedOverload<'a> {
-    overload: Option<SelectedOverload<'a>>,
-    extra_argument_info: VecDeque<ArgumentInfo<'a>>,
-    extra_inferred_args: VecDeque<TypeInferResult<'a>>,
+struct ResolvedOverload<'e> {
+    overload: Option<SelectedOverload<'e>>,
+    extra_argument_info: VecDeque<ArgumentInfo<'e>>,
+    extra_inferred_args: VecDeque<TypeInferResult<'e>>,
 }
 
-struct SelectedOverload<'a> {
-    overload: Overloadable<'a>,
+struct SelectedOverload<'e> {
+    call_location: &'e Location,
+    overload: Overloadable<'e>,
     args: Vec<Expr<TypeCheckExprContext>>,
     return_type: Expr<TypeCheckExprContext>,
 }
 
 impl<'a> SelectedOverload<'a> {
-    fn into_inferred_type(self) -> InferredType {
+    fn into_inferred_type(mut self, checker: &TypeChecker<'_, '_>) -> InferredType {
         let expr = match self.overload {
             Overloadable::Base(scope::Overloadable::Function(f)) => Expr::FunctionCall {
                 function: f,
@@ -2329,7 +2499,33 @@ impl<'a> SelectedOverload<'a> {
                 field,
                 record_value: Box::new(record_value),
             },
-            _ => todo!("into_inferred_type: unimplemented overloadable {:?}", self.overload),
+            Overloadable::RecordFieldStore {
+                record_type,
+                field,
+                record_value,
+                ..
+            } => {
+                let value = self.args.pop().expect("Record field store should have an argument");
+
+                if !field.metadata().is_mutable {
+                    checker.context.reporter().report_error(
+                        CompileError::can_not_mutate(
+                            self.call_location.clone()
+                        )
+                    );
+                }
+
+                Expr::RecordFieldStore {
+                    record_type: Box::new(record_type),
+                    field,
+                    record_value: Box::new(record_value),
+                    new_value: Box::new(value),
+                }
+            },
+            _ => todo!(
+                "into_inferred_type: unimplemented overloadable {:?}",
+                self.overload
+            ),
         };
 
         InferredType {
