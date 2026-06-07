@@ -3,5 +3,12 @@ module _
 import Argon.Core::*
 
 proc main(): () do
-    puts "Hello World"
+    let mut i = 1
+    loop
+        puts (i.to_s())
+        i := i + 1
+        if i > 5 then
+            break
+        end
+    end
 end

@@ -757,7 +757,7 @@ class ModuleEmitter extends EmitterBase {
                     });
                 }
 
-                const blockEmitter = new BlockEmitter(this, parentExpr, new Map());
+                const blockEmitter = new BlockEmitter(this, parentExpr);
                 blockEmitter.emitBlock(impl.body.block);
 
                 const block = blockEmitter.toBlock();
@@ -1379,7 +1379,6 @@ class BlockEmitter extends EmitterBase {
     constructor(
         private moduleEmitter: ModuleEmitter,
         private readonly parentExpr: estree.Expression | undefined,
-        private readonly loopJumpState: Map<bigint, LoopJumpTargets>,
     ) {
         super(moduleEmitter.options);
         this.tokenEmitter = new BlockTokenEmitter(this.moduleEmitter, this.parentExpr);
@@ -1393,7 +1392,7 @@ class BlockEmitter extends EmitterBase {
     }
 
     private nestedBlockEmitter(): BlockEmitter {
-        return new BlockEmitter(this.moduleEmitter, this.parentExpr, this.loopJumpState);
+        return new BlockEmitter(this.moduleEmitter, this.parentExpr);
     }
 
     private emitNestedBlock(block: ir.Block): estree.BlockStatement {
@@ -1486,6 +1485,82 @@ class BlockEmitter extends EmitterBase {
         }
 
         switch(insn.$type) {
+            case "block": {
+                const body = this.emitNestedBlock(insn.body);
+
+                let loopStmt: estree.Statement;
+                if(insn.flags.hasRetry || insn.flags.isLoop) {
+                    if(!insn.flags.isLoop) {
+                        body.body.push({
+                            type: "BreakStatement",
+                        });
+                    }
+
+                    loopStmt = {
+                        type: "ForStatement",
+                        init: null,
+                        test: null,
+                        update: null,
+                        body,
+                    };
+                }
+                else {
+                    loopStmt = {
+                        type: "DoWhileStatement",
+                        test: {
+                            type: "Literal",
+                            value: false,
+                        },
+                        body,
+                    };
+                }
+
+                if(insn.flags.hasRetry || insn.flags.hasBreak) {
+                    const label: estree.Identifier = {
+                        type: "Identifier",
+                        name: `block_${insn.blockId.id}`,
+                    };
+
+                    loopStmt = {
+                        type: "LabeledStatement",
+                        label,
+                        body: loopStmt,
+                    }
+                }
+
+                stmts.push(loopStmt);
+
+                break;
+            }
+
+            case "block-break": {
+                const label: estree.Identifier = {
+                    type: "Identifier",
+                    name: `block_${insn.blockId.id}`,
+                };
+
+                this.stmts.push({
+                    type: "BreakStatement",
+                    label,
+                });
+
+                break;
+            }
+
+            case "block-retry": {
+                const label: estree.Identifier = {
+                    type: "Identifier",
+                    name: `block_${insn.blockId.id}`,
+                };
+
+                this.stmts.push({
+                    type: "ContinueStatement",
+                    label,
+                });
+
+                break;
+            }
+
             case "box":
                 assign(insn.dest, this.getReg(insn.value));
                 break;
@@ -2111,170 +2186,6 @@ class BlockEmitter extends EmitterBase {
                 assign(insn.dest, this.buildTokenValue(insn.token));
                 break;
 
-            case "loop": {
-                const loopLabel = `loop_${insn.loopId.id}`;
-
-                const exitScanPrelude = new LoopExitScanner();
-                exitScanPrelude.scanBlock(insn.prelude);
-
-                const exitScanBody = new LoopExitScanner();
-                exitScanBody.scanBlock(insn.body);
-
-                const isPreludeEmpty = insn.prelude.instructions.length === 0;
-                const isPostludeEmpty = insn.postlude.instructions.length === 0;
-
-                const loopStmts: estree.Statement[] = [];
-
-
-
-
-                const preludeAndBodyLoopLabel = `${loopLabel}_preludeAndBody`;
-                const bodyLoopLabel = `${loopLabel}_body`;
-
-
-                this.loopJumpState.set(insn.loopId.id, {
-                    next: isPostludeEmpty ?
-                        {
-                            label: loopLabel,
-                            type: "continue",
-                        } :
-                        {
-                            label: preludeAndBodyLoopLabel,
-                            type: "break",
-                        },
-                    redo: {
-                        label: loopLabel,
-                        type: "continue",
-                    },
-                });
-
-                const preludeAndBodyBlock = this.emitNestedBlock(insn.prelude);
-
-
-
-                this.loopJumpState.set(insn.loopId.id, {
-                    next: isPostludeEmpty ?
-                        {
-                            label: loopLabel,
-                            type: "continue",
-                        } :
-                        {
-                            label: preludeAndBodyLoopLabel,
-                            type: "break",
-                        },
-                    redo: isPreludeEmpty ?
-                        {
-                            label: loopLabel,
-                            type: "continue",
-                        } : {
-                            label: bodyLoopLabel,
-                            type: "continue",
-                        },
-                });
-
-                const body = this.emitNestedBlock(insn.body);
-
-
-                if(isPreludeEmpty || !exitScanBody.hasRedo) {
-                    preludeAndBodyBlock.body.push(...body.body);
-                }
-                else {
-                    body.body.push({
-                        type: "BreakStatement",
-                    });
-
-                    preludeAndBodyBlock.body.push({
-                        type: "LabeledStatement",
-                        label: {
-                            type: "Identifier",
-                            name: bodyLoopLabel,
-                        },
-                        body: {
-                            type: "ForStatement",
-                            body,
-                        },
-                    });
-                }
-
-                if(isPostludeEmpty || (!exitScanPrelude.hasNext && !exitScanBody.hasNext)) {
-                    loopStmts.push(...preludeAndBodyBlock.body);
-                }
-                else {
-                    preludeAndBodyBlock.body.push({
-                        type: "BreakStatement",
-                    });
-
-                    loopStmts.push({
-                        type: "LabeledStatement",
-                        label: {
-                            type: "Identifier",
-                            name: preludeAndBodyLoopLabel,
-                        },
-                        body: {
-                            type: "ForStatement",
-                            body: preludeAndBodyBlock,
-                        },
-                    });
-                }
-
-                this.loopJumpState.delete(insn.loopId.id);
-
-
-
-                const postlude = this.emitNestedBlock(insn.postlude);
-
-                loopStmts.push(...postlude.body);
-
-                this.stmts.push({
-                    type: "LabeledStatement",
-                    label: {
-                        type: "Identifier",
-                        name: loopLabel,
-                    },
-                    body: {
-                        type: "ForStatement",
-                        body: {
-                            type: "BlockStatement",
-                            body: loopStmts,
-                        },
-                    },
-                });
-                break;
-            }
-
-            case "loop-break":
-                this.stmts.push({
-                    type: "BreakStatement",
-                    label: {
-                        type: "Identifier",
-                        name: `loop_${insn.loopId.id}`,
-                    },
-                });
-                break;
-
-            case "loop-next": {
-                const targets = this.loopJumpState.get(insn.loopId.id);
-                if(targets === undefined) {
-                    throw new Error(`Could not find loop jump target for loop ${insn.loopId.id}`);
-                }
-
-                this.stmts.push(createJumpFromTarget(targets.next));
-
-                break;
-            }
-
-            case "loop-redo": {
-                const targets = this.loopJumpState.get(insn.loopId.id);
-                if(targets === undefined) {
-                    throw new Error(`Could not find loop jump target for loop ${insn.loopId.id}`);
-                }
-
-                this.stmts.push(createJumpFromTarget(targets.redo));
-
-                break;
-            }
-
-
             case "move":
                 assign(insn.dest, this.getReg(insn.src));
                 break;
@@ -2605,38 +2516,6 @@ class BlockEmitter extends EmitterBase {
     }
 }
 
-interface JumpTarget {
-    readonly label: string;
-    readonly type: "continue" | "break";
-}
-
-interface LoopJumpTargets {
-    readonly next: JumpTarget;
-    readonly redo: JumpTarget;
-}
-
-function createJumpFromTarget(target: JumpTarget): estree.Statement {
-    switch(target.type) {
-        case "continue":
-            return {
-                type: "ContinueStatement",
-                label: {
-                    type: "Identifier",
-                    name: target.label,
-                },
-            };
-
-        case "break":
-            return {
-                type: "BreakStatement",
-                label: {
-                    type: "Identifier",
-                    name: target.label,
-                },
-            };
-    }
-}
-
 function jsonToExpression(expr: JsonValue): estree.Expression {
     switch(typeof expr) {
         case "string":
@@ -2702,52 +2581,6 @@ function jsonToExpression(expr: JsonValue): estree.Expression {
         default:
             ensureExhaustive(expr);
     }
-}
-
-
-class LoopExitScanner {
-
-    hasNext = false;
-    hasRedo = false;
-
-    scanBlock(block: ir.Block): void {
-        for(const insn of block.instructions) {
-            if(this.hasNext && this.hasRedo) {
-                break;
-            }
-
-            this.scan(insn);
-        }
-    }
-
-    scan(i: ir.Instruction): void {
-        switch(i.$type) {
-            case "finally":
-                this.scanBlock(i.action);
-                this.scanBlock(i.ensuring);
-                break;
-
-            case "if-else":
-                this.scanBlock(i.whenTrue);
-                this.scanBlock(i.whenFalse);
-                break;
-
-            case "loop":
-                this.scanBlock(i.prelude);
-                this.scanBlock(i.body);
-                this.scanBlock(i.postlude);
-                break;
-
-            case "loop-next":
-                this.hasNext = true;
-                break;
-
-            case "loop-redo":
-                this.hasRedo = true;
-                break;
-        }
-    }
-
 }
 
 

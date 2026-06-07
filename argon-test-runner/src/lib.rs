@@ -1,9 +1,11 @@
 mod js_platform;
+pub mod workspace;
 
 use argon_testcases::TestCase;
+use hashbrown::{HashMap, HashSet};
 pub use js_platform::*;
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -15,6 +17,7 @@ pub struct TestSuiteContext<P: CompileTargetPlatform> {
     pub lib_dir: PathBuf,
     pub backend_dir: PathBuf,
     pub argon_bin: PathBuf,
+    pub print_commands: bool,
 
     pub library_platform_metadata: Mutex<HashMap<String, Vec<PathBuf>>>,
     pub library_compiled_tubes: Mutex<HashMap<String, PathBuf>>,
@@ -50,7 +53,7 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
         let context2 = self.clone();
 
         metadata_map
-            .entry(library_name.to_owned())
+            .entry_ref(library_name)
             .or_insert_with(|| {
                 context2
                     .platform
@@ -114,6 +117,12 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
         referenced_libraries.push(library_name.to_owned());
     }
 
+    pub fn print_command(&self, cmd: &Command) {
+        if self.print_commands {
+            println!("$ {}", format_command(cmd));
+        }
+    }
+
     pub fn compile_library_tube(self: Arc<Self>, library_name: &str) -> PathBuf {
         if let Some(path) = self
             .library_compiled_tubes
@@ -174,6 +183,7 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
             cmd.arg(dependency_reference);
         }
 
+        library.test_suite_context.print_command(&cmd);
         let output = cmd.output().unwrap();
 
         assert!(
@@ -198,7 +208,7 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
         let context2 = self.clone();
 
         tube_map
-            .entry(library_name.to_owned())
+            .entry_ref(library_name)
             .or_insert_with(|| {
                 let library = context2.library_info(library_name);
 
@@ -244,6 +254,7 @@ impl<P: CompileTargetPlatform> TestSuiteContext<P> {
                     cmd.arg(dependency_reference);
                 }
 
+                library.test_suite_context.print_command(&cmd);
                 let output = cmd.output().unwrap();
 
                 assert!(
@@ -319,6 +330,7 @@ impl<P: CompileTargetPlatform> TestContext<P> {
             cmd.arg(tube_path);
         }
 
+        self.test_suite_context.print_command(&cmd);
         let output = cmd.output().unwrap();
 
         if output.status.success() {
@@ -356,6 +368,7 @@ impl<P: CompileTargetPlatform> TestContext<P> {
             cmd.arg(tube_path);
         }
 
+        self.test_suite_context.print_command(&cmd);
         let output = cmd.output().unwrap();
 
         assert!(
@@ -389,4 +402,26 @@ pub trait CompileTargetPlatform: Sized + Send + Sync + 'static {
 pub struct TestExecutionResult {
     pub exit_code: i32,
     pub output: String,
+}
+
+fn format_command(cmd: &Command) -> String {
+    std::iter::once(cmd.get_program())
+        .chain(cmd.get_args())
+        .map(quote_arg)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn quote_arg(arg: &OsStr) -> String {
+    let arg = arg.to_string_lossy();
+
+    if !arg.is_empty()
+        && arg
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '-' | '_' | ':' | '='))
+    {
+        return arg.into_owned();
+    }
+
+    format!("'{}'", arg.replace('\'', "'\"'\"'"))
 }

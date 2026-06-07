@@ -307,6 +307,7 @@ pub enum Expr {
     BoolLiteral(bool),
     Break {
         label: Option<WithLocation<Identifier>>,
+        value: Option<Box<WithLocation<Expr>>>,
     },
     Builtin(String),
     Dot {
@@ -358,6 +359,9 @@ pub enum Expr {
         fields: WithLocation<Vec<WithLocation<RecordFieldLiteral>>>,
     },
     Redo {
+        label: Option<WithLocation<Identifier>>,
+    },
+    Retry {
         label: Option<WithLocation<Identifier>>,
     },
     StringLiteral(StringLiteral),

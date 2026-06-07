@@ -104,6 +104,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("break"), "TokenType::Token(Token::KwBreak)");
     b.add(Regex::str("next"), "TokenType::Token(Token::KwNext)");
     b.add(Regex::str("redo"), "TokenType::Token(Token::KwRedo)");
+    b.add(Regex::str("retry"), "TokenType::Token(Token::KwRetry)");
     b.add(Regex::str("type"), "TokenType::Token(Token::KwType)");
     b.add(Regex::str("type!"), "TokenType::Token(Token::KwBigtype)");
     b.add(Regex::str("extern"), "TokenType::Token(Token::KwExtern)");
@@ -196,6 +197,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str(":"), "TokenType::Token(Token::SymColon)");
     b.add(Regex::str("@"), "TokenType::Token(Token::SymAt)");
     b.add(Regex::str("|"), "TokenType::Token(Token::SymPipe)");
+    b.add(Regex::str("'"), "TokenType::Token(Token::SymSingleQuote)");
 
     b.into_dfa()
 }

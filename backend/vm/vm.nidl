@@ -517,6 +517,20 @@ record block {
 
 @esexpr:(derive-codec)
 enum instruction {
+    block {
+        block-id: block-id;
+        flags: block-flags;
+        body: block;
+    },
+
+    block-break {
+        block-id: block-id;
+    },
+
+    block-retry {
+        block-id: block-id;
+    },
+
     box {
         dest: register-id;
         value: register-id;
@@ -638,25 +652,6 @@ enum instruction {
         token: token;
     },
 
-    loop {
-        loop-id: loop-id;
-        prelude: block;
-        body: block;
-        postlude: block;
-    },
-
-    loop-break {
-        loop-id: loop-id;
-    },
-
-    loop-next {
-        loop-id: loop-id;
-    },
-
-    loop-redo {
-        loop-id: loop-id;
-    },
-
     move {
         dest: register-id;
         src: register-id;
@@ -776,9 +771,17 @@ record register-id {
 }
 
 @esexpr:(derive-codec)
-record loop-id {
+record block-id {
     id: nat;
 }
+
+@esexpr:(derive-codec)
+flags block-flags {
+    has-break = 0x01,
+    has-retry = 0x02,
+    is-loop = 0x04,
+}
+
 
 @esexpr:(derive-codec)
 enum function-result {
@@ -825,4 +828,5 @@ record field-extractor {
     r: register-id;
     field-id: nat;
 }
+
 

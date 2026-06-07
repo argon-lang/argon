@@ -12,7 +12,10 @@ use argon_compiler::{
     Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier,
     Unload,
 };
-use argon_expr::{LocalVariable, ParameterVariable, RecordFieldLiteral, RecordType, Variable};
+use argon_expr::{
+    BlockLabel, BlockLabelKind, LocalVariable, ParameterVariable, RecordFieldLiteral, RecordType,
+    Variable,
+};
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
 use argon_util::sync::{OnceLock, RwLock, rwlock_read, rwlock_write};
@@ -58,6 +61,7 @@ struct TubeDecoder {
     record_fields: RwLock<HashMap<BigUint, Arc<dyn RecordField>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
+    block_labels: RwLock<HashMap<BigUint, Box<BlockLabel<DefaultExprContext>>>>,
 }
 
 #[derive(Clone)]
@@ -122,6 +126,7 @@ impl TubeDecoder {
             record_fields: RwLock::new(HashMap::new()),
             local_import_ids: RwLock::new(HashMap::new()),
             local_variables: RwLock::new(HashMap::new()),
+            block_labels: RwLock::new(HashMap::new()),
         }
     }
 
@@ -786,11 +791,17 @@ impl TubeDecoder {
             tf::Expr::Boxed { t } => Expr::BoxedType {
                 t: Box::new(self.decode_expr(*t)),
             },
-            tf::Expr::Break { .. } => todo!("decode break expression"),
+            tf::Expr::Block { label, body } => Expr::Block {
+                label: self.decode_block_label(*label),
+                body: Box::new(self.decode_expr(*body)),
+            },
+            tf::Expr::Break { block_id, value } => Expr::Break {
+                label: self.decode_block_id(*block_id),
+                value: Box::new(self.decode_expr(*value)),
+            },
             tf::Expr::EnumType { .. } | tf::Expr::EnumVariantLiteral { .. } => {
                 todo!("decode enum expressions")
             }
-            tf::Expr::Next { .. } => todo!("decode next expression"),
             tf::Expr::Finally { .. } => todo!("decode finally expression"),
             tf::Expr::FunctionCall { id, args } => Expr::FunctionCall {
                 function: self.function(id),
@@ -825,7 +836,6 @@ impl TubeDecoder {
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
             tf::Expr::Is { .. } => todo!("decode is expression"),
             tf::Expr::Lambda { .. } => todo!("decode lambda expression"),
-            tf::Expr::Loop { .. } => todo!("decode loop expression"),
             tf::Expr::Match { .. } => todo!("decode match expression"),
             tf::Expr::Or { a, b } => Expr::Or(
                 Box::new(self.decode_expr(*a)),
@@ -896,7 +906,9 @@ impl TubeDecoder {
                     })
                     .collect(),
             },
-            tf::Expr::Redo { .. } => todo!("decode redo expression"),
+            tf::Expr::Retry { block_id } => Expr::Retry {
+                label: self.decode_block_id(*block_id),
+            },
             tf::Expr::RefCellType { .. }
             | tf::Expr::RefCellCreate { .. }
             | tf::Expr::RefCellLoad { .. }
@@ -1004,6 +1016,36 @@ impl TubeDecoder {
 
         rwlock_write(&self.local_variables).insert(id, local_variable.clone());
         local_variable
+    }
+
+    fn decode_block_label(
+        self: &Arc<Self>,
+        label: tf::BlockLabel,
+    ) -> Box<BlockLabel<DefaultExprContext>> {
+        let id = label.id;
+        if let Some(existing) = rwlock_read(&self.block_labels).get(&id).cloned() {
+            return existing;
+        }
+
+        let block_label = Box::new(BlockLabel {
+            id: UniqueIdentifier::new(),
+            name: label.name.map(|name| decode_identifier(*name)),
+            kind: decode_block_label_kind(label.kind),
+            block_result_type: self.decode_expr(*label.block_result_type),
+        });
+
+        rwlock_write(&self.block_labels).insert(id, block_label.clone());
+        block_label
+    }
+
+    fn decode_block_id(
+        self: &Arc<Self>,
+        block_id: tf::BlockId,
+    ) -> Box<BlockLabel<DefaultExprContext>> {
+        rwlock_read(&self.block_labels)
+            .get(&block_id.id)
+            .cloned()
+            .expect("block jump references unknown block label id")
     }
 }
 
@@ -1308,6 +1350,15 @@ fn decode_erasure_mode(mode: tf::ErasureMode) -> ErasureMode {
         tf::ErasureMode::Concrete {} => ErasureMode::Concrete,
         tf::ErasureMode::Erased {} => ErasureMode::Erased,
         tf::ErasureMode::Token {} => ErasureMode::Token,
+    }
+}
+
+fn decode_block_label_kind(kind: tf::BlockLabelKind) -> BlockLabelKind {
+    match kind {
+        tf::BlockLabelKind::Block => BlockLabelKind::Block,
+        tf::BlockLabelKind::Loop => BlockLabelKind::Loop,
+        tf::BlockLabelKind::WhileOuter => BlockLabelKind::WhileOuter,
+        tf::BlockLabelKind::WhileInner => BlockLabelKind::WhileInner,
     }
 }
 

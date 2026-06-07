@@ -1,16 +1,9 @@
 use argon_test_runner::*;
 use argon_testcases::{ExpectedResult, TestCase, load_test_case};
+use hashbrown::HashMap;
 use libtest_mimic::{Arguments, Trial};
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-
-fn workspace_root() -> PathBuf {
-    let mut workspace_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    workspace_dir.pop();
-    workspace_dir
-}
 
 fn result_matches_expected(result: &TestExecutionResult, expected: &ExpectedResult) -> bool {
     match expected {
@@ -82,22 +75,15 @@ pub fn build_test_suite<P: CompileTargetPlatform>(
     tests: &mut Vec<Trial>,
 ) {
     let temp_dir = TempDir::new().unwrap();
-
-    let mut lib_dir = workspace_root();
-    lib_dir.push("libraries");
-
-    let mut argon_bin = workspace_root();
-    argon_bin.push("dist/bin/argonc");
-
-    let mut backend_dir = workspace_root();
-    backend_dir.push("backend");
+    let workspace_paths = workspace::WorkspacePaths::from_cargo_manifest_dir().unwrap();
 
     let context = Arc::new(TestSuiteContext {
         platform,
         test_suite_data_dir: temp_dir,
-        lib_dir,
-        argon_bin,
-        backend_dir,
+        lib_dir: workspace_paths.libraries_dir(),
+        argon_bin: workspace_paths.argon_bin(),
+        backend_dir: workspace_paths.backend_dir(),
+        print_commands: false,
 
         library_platform_metadata: Mutex::new(HashMap::new()),
         library_compiled_tubes: Mutex::new(HashMap::new()),
@@ -128,9 +114,8 @@ pub fn build_test_suite<P: CompileTargetPlatform>(
 
 fn main() {
     let args = Arguments::from_args();
-
-    let mut testcases_dir = workspace_root();
-    testcases_dir.push("argon-testcases/testcases");
+    let workspace_paths = workspace::WorkspacePaths::from_cargo_manifest_dir().unwrap();
+    let testcases_dir = workspace_paths.testcases_dir();
 
     let mut test_cases = Vec::new();
     for entry in walkdir::WalkDir::new(&testcases_dir) {

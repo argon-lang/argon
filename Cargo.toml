@@ -15,16 +15,17 @@ argon-source = { path = "argon-source", default-features = false }
 argon-testcases = { path = "argon-testcases", default-features = false }
 argon-test-runner = { path = "argon-test-runner", default-features = false }
 argon-tube = { path = "argon-tube", default-features = false }
-esexpr = { path = "../esexpr/rust/esexpr", default-features = false }
-esexpr-binary = { path = "../esexpr/rust/esexpr-binary", default-features = false }
+esexpr = { version = "0.3.1", default-features = false }
+esexpr-binary = { version = "0.3.1", default-features = false }
 noble-idl-compiler-rust = { path = "../noble-idl/langs/rust/backend" }
 noble-idl-runtime = { path = "../noble-idl/langs/rust/runtime" }
 
-bitflags = "2.11.1"
+bitflags = "2.13.0"
 clap = { version = "4.6.1", features = ["derive"] }
 dashmap = "6.2.1"
 derivative = { version = "2.2.0", features = ["use_core"] }
 embedded-io = { version = "0.7.1", default-features = false }
+embedded-io-adapters = { version = "0.7.0", features = ["std"] }
 encoding_rs = { version = "0.8.35", default-features = false, features = ["alloc"] }
 fs_extra = { version = "1.3.0" }
 hashbrown = { version = "0.17.1", default-features = false, features = ["default-hasher"] }

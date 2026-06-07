@@ -604,8 +604,13 @@ enum expr {
     boxed {
         t: expr;
     },
+    block {
+        label: block-label;
+        body: expr;
+    },
     break {
-        loop-id: nat;
+        block-id: block-id;
+        value: expr;
     },
     @esexpr:(inline-value)
     enum-type {
@@ -620,9 +625,6 @@ enum expr {
 
         @esexpr:(vararg)
         fields: list[record-field-literal];
-    },
-    next {
-        loop-id: nat;
     },
     finally {
         action: expr;
@@ -679,12 +681,6 @@ enum expr {
         return-type: expr;
         body: expr;
     },
-    loop {
-        id: nat;
-        prelude: expr;
-        body: expr;
-        postlude: expr;
-    },
     match {
         value: expr;
         cases: list[match-case];
@@ -721,8 +717,8 @@ enum expr {
         @esexpr:(vararg)
         fields: list[record-field-literal];
     },
-    redo {
-        loop-id: nat;
+    retry {
+        block-id: block-id;
     },
     ref-cell-type {
         element-type: expr;
@@ -1009,5 +1005,28 @@ enum expression-owner {
     method {
         index: nat;
     },
+}
+
+@esexpr:(derive-codec)
+record block-label {
+    id: nat;
+    @esexpr:(optional)
+    name: optional-field[identifier];
+    kind: block-label-kind;
+    block-result-type: expr;
+}
+
+@esexpr:(derive-codec)
+simple enum block-label-kind {
+    block,
+    loop,
+    while-outer,
+    while-inner,
+}
+
+
+@esexpr:(derive-codec)
+record block-id {
+    id: nat;
 }
 

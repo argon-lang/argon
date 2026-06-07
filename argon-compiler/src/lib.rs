@@ -32,13 +32,13 @@ use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
 use core::hash::{Hash, Hasher};
+use core::mem;
 use core::str::FromStr;
 use esexpr::ESExpr;
 use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
 use mitsein::vec1::Vec1;
 use parse18_runtime::WithLocation;
-use core::mem;
 
 pub trait CompileErrorReporter:
     ErrorReporter<CompileError> + ErrorReporter<InternalCompilerError>
@@ -299,7 +299,7 @@ impl TubeBuilder {
 
     pub fn module(&self, path: ModulePath) -> ModuleBuilder {
         let module = write_lock(&self.tube.modules)
-            .entry(path.clone())
+            .entry_ref(&path)
             .or_insert_with(|| {
                 Arc::new(Module {
                     tube: self.tube.name().clone(),
@@ -502,7 +502,13 @@ pub enum TypeDeclaration {
 
 pub struct DefaultExprNormalizer;
 
-impl Normalizer<DefaultExprContext> for DefaultExprNormalizer {
+impl Normalizer for DefaultExprNormalizer {
+    type EC = DefaultExprContext;
+
+    fn resolve_hole(&mut self, hole: &<Self::EC as ExprContext>::Hole) -> Option<Expr<Self::EC>> {
+        match *hole {}
+    }
+
     fn get_function_body(
         &mut self,
         function: &Arc<dyn Function>,

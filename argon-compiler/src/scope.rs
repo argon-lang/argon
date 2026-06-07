@@ -1,3 +1,4 @@
+use crate::access::AccessToken;
 use crate::signature::SignatureParameter;
 use crate::{
     DefaultExprContext, Enum, Function, FunctionSignature, Instance, Method, Record, Trait,
@@ -5,23 +6,33 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
-    ExprContext, ExprContextShifter, ExpressionOwner, Variable, VariableTupleElement,
+    BlockLabel, BlockLabelDeclaration, ExprContext, ExprContextShifter, ExpressionOwner,
+    LoopLabels, Variable, VariableTupleElement,
 };
 use argon_parser::ast::Identifier;
 use hashbrown::{HashMap, HashSet};
-use crate::access::AccessToken;
 
 pub trait Scope {
     type ExprContext: ExprContext + ?Sized;
 
     fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext>;
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext>;
+
+    fn lookup_block_label(
+        &self,
+        name: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>>;
+
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>>;
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>>;
 }
 
 pub trait LocalScope: Scope {
     fn add_variable(&mut self, variable: Variable<Self::ExprContext>);
 
     fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool;
+
+    fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>);
 }
 
 pub enum Lookup<EC: ExprContext + ?Sized> {
@@ -160,20 +171,41 @@ impl<'a, EC: ExprContext + ?Sized> Scope for ParameterScope<'a, EC> {
         self.lookup_name(name)
             .unwrap_or_else(|| self.parent.lookup_assign(name, access))
     }
+
+    fn lookup_block_label(
+        &self,
+        _name: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
+        None
+    }
+
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
+        None
+    }
+
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
+        None
+    }
 }
 
 pub struct LocalVariableScope<'a, EC: ExprContext + ?Sized> {
-    parent: &'a mut dyn Scope<ExprContext = EC>,
+    parent: &'a dyn Scope<ExprContext = EC>,
     variable_lookup: HashMap<Identifier, Variable<EC>>,
     variables: HashSet<Variable<EC>>,
+    block_labels: HashMap<Identifier, BlockLabelDeclaration<EC>>,
+    latest_loop_labels: Option<LoopLabels<EC>>,
+    latest_block_label: Option<BlockLabel<EC>>,
 }
 
 impl<'a, EC: ExprContext + ?Sized> LocalVariableScope<'a, EC> {
-    pub fn new(parent: &'a mut dyn Scope<ExprContext = EC>) -> Self {
+    pub fn new(parent: &'a dyn Scope<ExprContext = EC>) -> Self {
         Self {
             parent,
             variable_lookup: HashMap::new(),
             variables: HashSet::new(),
+            block_labels: HashMap::new(),
+            latest_loop_labels: None,
+            latest_block_label: None,
         }
     }
 
@@ -196,6 +228,28 @@ impl<'a, EC: ExprContext + ?Sized> Scope for LocalVariableScope<'a, EC> {
         self.lookup_variable(name)
             .unwrap_or_else(|| self.parent.lookup_assign(name, access))
     }
+
+    fn lookup_block_label(
+        &self,
+        name: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
+        self.block_labels
+            .get(name)
+            .cloned()
+            .or_else(|| self.parent.lookup_block_label(name))
+    }
+
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
+        self.latest_loop_labels
+            .clone()
+            .or_else(|| self.parent.latest_loop_labels())
+    }
+
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
+        self.latest_block_label
+            .clone()
+            .or_else(|| self.parent.latest_block_label())
+    }
 }
 
 impl<'a, EC: ExprContext + ?Sized> LocalScope for LocalVariableScope<'a, EC> {
@@ -210,6 +264,27 @@ impl<'a, EC: ExprContext + ?Sized> LocalScope for LocalVariableScope<'a, EC> {
 
     fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool {
         self.variables.contains(variable)
+    }
+
+    fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>) {
+        match label {
+            BlockLabelDeclaration::Block(label) => {
+                if let Some(name) = &label.name {
+                    self.block_labels
+                        .insert(name.clone(), BlockLabelDeclaration::Block(label.clone()));
+                }
+
+                self.latest_block_label = Some(label);
+            }
+            BlockLabelDeclaration::Loop(labels) => {
+                if let Some(name) = labels.name() {
+                    self.block_labels
+                        .insert(name.clone(), BlockLabelDeclaration::Loop(labels.clone()));
+                }
+
+                self.latest_loop_labels = Some(labels);
+            }
+        }
     }
 }
 
@@ -248,6 +323,40 @@ where
             }
         }
     }
+
+    fn shift_block_label_declaration(
+        &self,
+        label: BlockLabelDeclaration<Sh::EC1>,
+    ) -> BlockLabelDeclaration<Sh::EC2> {
+        match label {
+            BlockLabelDeclaration::Block(label) => {
+                BlockLabelDeclaration::Block(self.shift_block_label(label))
+            }
+            BlockLabelDeclaration::Loop(labels) => {
+                BlockLabelDeclaration::Loop(self.shift_loop_labels(labels))
+            }
+        }
+    }
+
+    fn shift_block_label(&self, label: BlockLabel<Sh::EC1>) -> BlockLabel<Sh::EC2> {
+        let mut shifter = self.shifter;
+        BlockLabel {
+            id: label.id,
+            name: label.name,
+            kind: label.kind,
+            block_result_type: shifter.shift(label.block_result_type),
+        }
+    }
+
+    fn shift_loop_labels(&self, labels: LoopLabels<Sh::EC1>) -> LoopLabels<Sh::EC2> {
+        match labels {
+            LoopLabels::Loop(label) => LoopLabels::Loop(self.shift_block_label(label)),
+            LoopLabels::While { outer, inner } => LoopLabels::While {
+                outer: self.shift_block_label(outer),
+                inner: self.shift_block_label(inner),
+            },
+        }
+    }
 }
 
 impl<'a, Sc, Sh> Scope for ShiftedScope<'a, Sc, Sh>
@@ -265,5 +374,26 @@ where
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         let lookup = self.inner.lookup_assign(name, access);
         self.shift_lookup(lookup)
+    }
+
+    fn lookup_block_label(
+        &self,
+        name: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
+        self.inner
+            .lookup_block_label(name)
+            .map(|label| self.shift_block_label_declaration(label))
+    }
+
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
+        self.inner
+            .latest_loop_labels()
+            .map(|labels| self.shift_loop_labels(labels))
+    }
+
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
+        self.inner
+            .latest_block_label()
+            .map(|label| self.shift_block_label(label))
     }
 }

@@ -15,7 +15,7 @@ use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
-use argon_io::{EmbeddedIoWrite, InputDirectory, InputFile, OutputDirectory, OutputFile};
+use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
 use argon_util::sync::{ThreadSafe, parallel::*};
 use embedded_io::{Write, WriteFmtError};
@@ -78,7 +78,7 @@ where
             break 'errors;
         }
 
-        let out_file = match options.output_file.open() {
+        let mut out_file = match options.output_file.open() {
             Ok(file) => file,
             Err(err) => {
                 context.reporter().report_error(err);
@@ -86,11 +86,7 @@ where
             }
         };
 
-        let mut out_file = EmbeddedIoWrite::new(out_file);
-        let mut expr_gen =
-            esexpr_binary::ExprGenerator::<_, argon_util::InternalCompilerError>::new(
-                &mut out_file,
-            );
+        let mut expr_gen = esexpr_binary::ExprGenerator::new(&mut out_file);
 
         for entry in argon_tube::encoder::encode_tube(context.clone(), tube) {
             let entry = match entry {
@@ -176,16 +172,20 @@ where
             break 'errors;
         }
 
-        let out_file = match options.output_file.open() {
+        let mut out_file = match options.output_file.open() {
             Ok(file) => file,
             Err(e) => {
                 context.reporter().report_error(e);
                 break 'errors;
             }
         };
-        let mut out_file = EmbeddedIoWrite::new(out_file);
 
-        match argon_tube::vm::encode_vm_tube(&mut out_file, tube, &options.platform) {
+        match argon_tube::vm::encode_vm_tube(
+            &mut out_file,
+            context.clone(),
+            tube,
+            &options.platform,
+        ) {
             Ok(_) => {}
             Err(e) => {
                 context.reporter().report_error(e);

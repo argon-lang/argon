@@ -56,7 +56,7 @@ pub fn erase_signature(
 
 fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedSignatureType {
     let mut normalizer = NormalizerScanner::new(context.normalize_fuel(), DefaultExprNormalizer);
-    normalizer.scan(&mut t);
+    normalizer.normalize(&mut t);
 
     match t {
         Expr::Builtin { builtin, arguments } => erase_builtin(builtin, arguments),

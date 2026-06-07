@@ -1,16 +1,18 @@
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::{
-    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, EffectInfo, ErasureMode,
-    Expr, Function, FunctionImplementation, FunctionParameterListType, FunctionSignature,
-    Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField,
-    RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier,
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
+    EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionParameterListType,
+    FunctionSignature, Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath,
+    Record, RecordField, RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
 use crate::ids::TubeIdProvider;
-use argon_expr::{ExpressionOwner, LocalVariable, RecordType, Variable};
+use argon_expr::{
+    BlockLabel, BlockLabelKind, ExpressionOwner, LocalVariable, RecordType, Variable,
+};
 use argon_format::tube as tf;
 
 use argon_compiler::erased_sig::{
@@ -120,6 +122,32 @@ impl TubeEncoder {
         }
 
         id
+    }
+
+    fn get_block_label_id(&mut self, label: &BlockLabel<DefaultExprContext>) -> usize {
+        self.ids.block_label_ids.get(label.clone())
+    }
+
+    fn emit_block_label(
+        &mut self,
+        label: &BlockLabel<DefaultExprContext>,
+    ) -> Result<tf::BlockLabel, InternalCompilerError> {
+        Ok(tf::BlockLabel {
+            id: self.get_block_label_id(label).into(),
+            name: label
+                .name
+                .as_ref()
+                .map(|name| encode_identifier(name).map(Box::new))
+                .transpose()?,
+            kind: encode_block_label_kind(label.kind),
+            block_result_type: Box::new(self.emit_expr(&label.block_result_type)?),
+        })
+    }
+
+    fn emit_block_id(&mut self, label: &BlockLabel<DefaultExprContext>) -> tf::BlockId {
+        tf::BlockId {
+            id: self.get_block_label_id(label).into(),
+        }
     }
 
     fn encode_entry(
@@ -576,6 +604,14 @@ impl TubeEncoder {
                 t: Box::new(self.emit_expr(t)?),
                 value: Box::new(self.emit_expr(value)?),
             },
+            Expr::Block { label, body } => tf::Expr::Block {
+                label: Box::new(self.emit_block_label(label)?),
+                body: Box::new(self.emit_expr(body)?),
+            },
+            Expr::Break { label, value } => tf::Expr::Break {
+                block_id: Box::new(self.emit_block_id(label)),
+                value: Box::new(self.emit_expr(value)?),
+            },
             Expr::Unbox { t, value } => tf::Expr::Unbox {
                 t: Box::new(self.emit_expr(t)?),
                 value: Box::new(self.emit_expr(value)?),
@@ -610,6 +646,9 @@ impl TubeEncoder {
             Expr::Or(a, b) => tf::Expr::Or {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
+            },
+            Expr::Retry { label } => tf::Expr::Retry {
+                block_id: Box::new(self.emit_block_id(label)),
             },
             Expr::RecordFieldLoad {
                 record_type,
@@ -882,6 +921,15 @@ fn encode_access_modifier_global(access: AccessModifierGlobal) -> tf::AccessModi
         AccessModifierGlobal::Public => tf::AccessModifierGlobal::Public {},
         AccessModifierGlobal::Internal => tf::AccessModifierGlobal::Internal {},
         AccessModifierGlobal::ModulePrivate => tf::AccessModifierGlobal::ModulePrivate {},
+    }
+}
+
+fn encode_block_label_kind(kind: BlockLabelKind) -> tf::BlockLabelKind {
+    match kind {
+        BlockLabelKind::Block => tf::BlockLabelKind::Block,
+        BlockLabelKind::Loop => tf::BlockLabelKind::Loop,
+        BlockLabelKind::WhileOuter => tf::BlockLabelKind::WhileOuter,
+        BlockLabelKind::WhileInner => tf::BlockLabelKind::WhileInner,
     }
 }
 

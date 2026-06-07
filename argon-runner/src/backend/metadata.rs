@@ -1,7 +1,7 @@
 use crate::context::RunnerContext;
 use alloc::boxed::Box;
 use argon_compiler::platform::{Extern as PlatformExtern, ExternType, PlatformMetadata};
-use argon_io::{EmbeddedIoRead, InputFile};
+use argon_io::InputFile;
 use argon_util::{ErrorReporter, InternalCompilerError, TubeFormatError};
 use esexpr::ESExprCodec;
 use esexpr_binary::{ExprParserSync, ParseError};
@@ -10,7 +10,7 @@ use hashbrown::HashMap;
 noble_idl_runtime::include_noble_idl!();
 
 pub fn load_platform_metadata(context: &mut RunnerContext, input_file: impl InputFile) {
-    let file = match input_file.open() {
+    let mut file = match input_file.open() {
         Ok(file) => file,
         Err(err) => {
             context.runner_reporter().report_error(err);
@@ -18,7 +18,6 @@ pub fn load_platform_metadata(context: &mut RunnerContext, input_file: impl Inpu
         }
     };
 
-    let mut file = EmbeddedIoRead::new(file);
     let mut expr_stream = esexpr_binary::parse_sync(&mut file);
     let expr = match expr_stream.try_read_next_expr() {
         Ok(Some(expr)) => expr,

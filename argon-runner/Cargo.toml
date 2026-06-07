@@ -15,6 +15,7 @@ std = [
     "esexpr/std",
     "esexpr-binary/std",
     "dep:walkdir",
+    "dep:embedded-io-adapters",
 ]
 
 [dependencies]
@@ -26,6 +27,7 @@ argon-tube = { workspace = true, default-features = false }
 argon-util = { workspace = true, default-features = false }
 
 embedded-io = { workspace = true }
+embedded-io-adapters = { workspace = true, optional = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true, default-features = false }
 hashbrown = { workspace = true }

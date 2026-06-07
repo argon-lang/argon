@@ -115,6 +115,8 @@ pub enum Token {
     KwNext,
     #[strum(serialize = "KwRedo")]
     KwRedo,
+    #[strum(serialize = "KwRetry")]
+    KwRetry,
     #[strum(serialize = "KwAnd")]
     KwAnd,
     #[strum(serialize = "KwOr")]
@@ -263,6 +265,8 @@ pub enum Token {
     SymPipe,
     #[strum(serialize = "SymAt")]
     SymAt,
+    #[strum(serialize = "SymSingleQuote")]
+    SymSingleQuote,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, strum::Display)]
@@ -288,6 +292,7 @@ enum Rule {
     BreakExpr,
     NextExpr,
     RedoExpr,
+    RetryExpr,
 
     StringExpr,
     StringExprRest,
@@ -331,12 +336,14 @@ enum Rule {
     PropDisjunctionExpr,
     PropEqualityExpr,
     AsExpr,
+    IsExpr,
     RaiseExpr,
     ClosureExpr,
     TupleExpr,
     TupleExprRest,
     AssignExpr,
     AssertExpr,
+    ControlExpr,
     Expression,
     TypeBinding,
 
@@ -597,30 +604,9 @@ impl GrammarFactory for ParserFactory {
             LoopLabel => ruleset(
                 "Option<WithLocation<Identifier>>",
                 [
-                    rule([ term(SymAt).discard(), nonterm(Identifier).with_location() ], "Some"),
+                    rule([ term(SymSingleQuote).discard(), nonterm(Identifier).with_location() ], "Some"),
                     rule([], "(|| None)"),
                 ],
-            ),
-
-            BreakExpr => ruleset(
-                "Expr",
-                [
-                    rule([ term(KwBreak).discard(), nonterm(LoopLabel) ], "expr_break"),
-                ]
-            ),
-
-            NextExpr => ruleset(
-                "Expr",
-                [
-                    rule([ term(KwNext).discard(), nonterm(LoopLabel) ], "expr_next"),
-                ]
-            ),
-
-            RedoExpr => ruleset(
-                "Expr",
-                [
-                    rule([ term(KwRedo).discard(), nonterm(LoopLabel) ], "expr_redo"),
-                ]
             ),
 
 
@@ -721,9 +707,6 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwArgonBuiltin).discard(), term(IdentifierToken) ], "expr_builtin_token"),
                     rule([ nonterm(LoopExpr) ], "identity"),
                     rule([ nonterm(WhileExpr) ], "identity"),
-                    rule([ nonterm(BreakExpr) ], "identity"),
-                    rule([ nonterm(NextExpr) ], "identity"),
-                    rule([ nonterm(RedoExpr) ], "identity"),
                     expr_error(),
                 ],
             ),
@@ -1067,6 +1050,13 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ nonterm(PropEqualityExpr).with_location() ], "with_location_value"),
                     rule([ nonterm(AsExpr).with_location(), term(KwAs).discard(), nonterm(PropEqualityExpr).with_location() ], "expr_as"),
+                    expr_error(),
+                ],
+            ),
+            IsExpr => ruleset(
+                "Expr",
+                [
+                    rule([ nonterm(AsExpr).with_location() ], "with_location_value"),
                     rule([ nonterm(AsExpr).with_location(), term(KwIs).discard(), nonterm(NonTuplePattern).with_location() ], "expr_is"),
                     expr_error(),
                 ],
@@ -1074,8 +1064,8 @@ impl GrammarFactory for ParserFactory {
             RaiseExpr => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(AsExpr) ], "identity"),
-                    rule([ term(KwRaise).discard(), nonterm(AsExpr).with_location() ], "expr_raise"),
+                    rule([ nonterm(IsExpr) ], "identity"),
+                    rule([ term(KwRaise).discard(), nonterm(IsExpr).with_location() ], "expr_raise"),
                     expr_error(),
                 ],
             ),
@@ -1123,10 +1113,45 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwAssert).discard(), nonterm(NewLines).discard(), nonterm(Expression).with_location() ], "expr_assert"),
                 ]
             ),
-            Expression => ruleset(
+            BreakExpr => ruleset(
+                "Expr",
+                [
+                    rule([ term(KwBreak).discard(), nonterm(LoopLabel) ], "expr_break_no_arg"),
+                    rule([ term(KwBreak).discard(), nonterm(LoopLabel), nonterm(TupleExpr).with_location() ], "expr_break"),
+                ]
+            ),
+            NextExpr => ruleset(
+                "Expr",
+                [
+                    rule([ term(KwNext).discard(), nonterm(LoopLabel) ], "expr_next"),
+                ]
+            ),
+            RedoExpr => ruleset(
+                "Expr",
+                [
+                    rule([ term(KwRedo).discard(), nonterm(LoopLabel) ], "expr_redo"),
+                ]
+            ),
+            RetryExpr => ruleset(
+                "Expr",
+                [
+                    rule([ term(KwRetry).discard(), nonterm(LoopLabel) ], "expr_retry"),
+                ]
+            ),
+            ControlExpr => ruleset(
                 "Expr",
                 [
                     rule([ nonterm(AssertExpr) ], "identity"),
+                    rule([ nonterm(BreakExpr) ], "identity"),
+                    rule([ nonterm(NextExpr) ], "identity"),
+                    rule([ nonterm(RedoExpr) ], "identity"),
+                    rule([ nonterm(RetryExpr) ], "identity"),
+                ]
+            ),
+            Expression => ruleset(
+                "Expr",
+                [
+                    rule([ nonterm(ControlExpr) ], "identity"),
                     rule([ nonterm(AssignExpr) ], "identity"),
                     expr_error(),
                 ],
@@ -1198,7 +1223,7 @@ impl GrammarFactory for ParserFactory {
                         [
                             nonterm(MutSpec),
                             nonterm(Identifier).with_location(),
-                            term(SymAt).discard(),
+                            term(KwAs).discard(),
                             nonterm(SimplePattern(ParenAllowedState::Allowed)).with_location()
                         ],
                         "(move |mut_spec, id, pattern| pattern_binding(mut_spec, id, pattern))",
@@ -1726,7 +1751,7 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ nonterm(TubeName), term(SymColonColon).discard(), nonterm(ImportPathSegment) ], "import_stmt_tube"),
                     rule([ term(SymColonColon).discard(), nonterm(ImportPathSegment) ], "import_stmt_absolute"),
-                    rule([ term(SymAt).discard(), term(SymColonColon).discard(), nonterm(ImportPathRelativePrefix), nonterm(ImportPathSegment) ], "import_stmt_relative"),
+                    rule([ term(KwAs).discard(), term(SymColonColon).discard(), nonterm(ImportPathRelativePrefix), nonterm(ImportPathSegment) ], "import_stmt_relative"),
                 ],
             ),
 
@@ -1743,8 +1768,8 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ term(IdentifierToken).with_location() ], "import_path_segment_imported_token"),
                     rule([ nonterm(ComplexIdentifier).with_location() ], "import_path_segment_imported"),
-                    rule([ term(IdentifierToken).with_location(), term(SymAt).discard(), nonterm(IdentifierOptional).with_location() ], "import_path_segment_renaming_token"),
-                    rule([ nonterm(ComplexIdentifier).with_location(), term(SymAt).discard(), nonterm(IdentifierOptional).with_location() ], "import_path_segment_renaming"),
+                    rule([ term(IdentifierToken).with_location(), term(KwAs).discard(), nonterm(IdentifierOptional).with_location() ], "import_path_segment_renaming_token"),
+                    rule([ nonterm(ComplexIdentifier).with_location(), term(KwAs).discard(), nonterm(IdentifierOptional).with_location() ], "import_path_segment_renaming"),
                     rule([ term(IdentifierToken).with_location(), term(SymColonColon).discard(), nonterm(ImportPathSegment) ], "import_path_segment_cons_token"),
                     rule([ term(SymOpenCurly).discard(), nonterm(ImportPathMulti), term(SymCloseCurly).discard() ], "import_path_segment_many"),
                     rule([ term(OpStar).with_location()], "import_path_segment_wildcard_token"),

@@ -8,6 +8,7 @@ use argon_compiler::{
     Context, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding, ModuleExportEntry,
     ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
 };
+use argon_expr::{BlockLabel, BlockLabelDeclaration, LoopLabels};
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
@@ -107,6 +108,21 @@ impl Scope for GlobalScope {
 
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup(&Identifier::Update(Box::new(name.clone())), access)
+    }
+
+    fn lookup_block_label(
+        &self,
+        _name: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
+        None
+    }
+
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
+        None
+    }
+
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
+        None
     }
 }
 
@@ -268,15 +284,11 @@ impl GlobalScopeBuilder {
                 importing,
                 viewed_name,
             } => {
-                let viewed_name = viewed_name
-                    .value
-                    .clone()
-                    .unwrap_or_else(|| importing.value.clone());
                 self.import_named_export(
                     tube,
                     &ModulePath(module_path),
                     &importing.value,
-                    viewed_name,
+                    &viewed_name.value.as_ref().unwrap_or(&importing.value),
                     &importing.location,
                     resolved,
                 );
@@ -287,7 +299,7 @@ impl GlobalScopeBuilder {
                     tube,
                     &ModulePath(module_path),
                     &id.value,
-                    id.value.clone(),
+                    &id.value,
                     &id.location,
                     resolved,
                 );
@@ -304,7 +316,7 @@ impl GlobalScopeBuilder {
         tube: Arc<Tube>,
         module_path: &ModulePath,
         export_name: &Identifier,
-        viewed_name: Identifier,
+        viewed_name: &Identifier,
         location: &Location,
         resolved: &mut ResolvedImports,
     ) {
@@ -329,7 +341,7 @@ impl GlobalScopeBuilder {
 
         let group = self.resolved_import_group(&tube, module_path);
         resolved
-            .entry(viewed_name)
+            .entry_ref(viewed_name)
             .or_default()
             .extend(group, visible_exports);
     }
@@ -357,7 +369,7 @@ impl GlobalScopeBuilder {
 
             let group = self.resolved_import_group(&tube, module_path);
             resolved
-                .entry(name.clone())
+                .entry_ref(name)
                 .or_default()
                 .extend(group, visible_exports);
         }

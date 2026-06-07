@@ -6,10 +6,12 @@ extern crate std;
 
 mod expr;
 mod flags;
+mod label;
 mod scanner;
 mod shifter;
 
 pub use expr::*;
+pub use label::*;
 pub use scanner::*;
 pub use shifter::*;
 

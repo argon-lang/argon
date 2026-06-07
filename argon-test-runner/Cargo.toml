@@ -8,10 +8,16 @@ name = "compiler_tests"
 path = "tests/compiler_tests.rs"
 harness = false
 
+[[bin]]
+name = "compile-testcases"
+path = "src/bin/compile_testcases.rs"
+
 [dependencies]
 argon-testcases = { workspace = true }
+clap = { workspace = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
+hashbrown = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }
 tempfile = { workspace = true }

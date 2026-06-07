@@ -656,6 +656,10 @@ fn expr_redo(label: Option<WithLocation<Identifier>>) -> Expr {
     Expr::Redo { label }
 }
 
+fn expr_retry(label: Option<WithLocation<Identifier>>) -> Expr {
+    Expr::Retry { label }
+}
+
 fn expr_string_literal(value: StringLiteral) -> Expr {
     Expr::StringLiteral(value)
 }
@@ -703,8 +707,15 @@ fn expr_unbox(value: WithLocation<Expr>) -> Expr {
     }
 }
 
-fn expr_break(label: Option<WithLocation<Identifier>>) -> Expr {
-    Expr::Break { label }
+fn expr_break_no_arg(label: Option<WithLocation<Identifier>>) -> Expr {
+    Expr::Break { label, value: None }
+}
+
+fn expr_break(label: Option<WithLocation<Identifier>>, value: WithLocation<Expr>) -> Expr {
+    Expr::Break {
+        label,
+        value: Some(Box::new(value)),
+    }
 }
 
 fn identifier_expr_named(name: impl Into<String>) -> Identifier {

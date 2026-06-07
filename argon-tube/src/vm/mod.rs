@@ -1,37 +1,47 @@
 use crate::ids::TubeIdProvider;
 use alloc::borrow::ToOwned;
 use alloc::collections::VecDeque;
+use alloc::format;
 use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::{
-    BinaryOperatorIdentifier, Builtin, DefaultExprContext, DefaultExprNormalizer, Enum, Function,
-    FunctionImplementation, FunctionSignature, Identifier, Instance, Module, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Trait, Tube, TubeName,
-    UnaryOperatorIdentifier,
+    BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
+    Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module,
+    ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner,
+    Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    ErasureMode, Expr, ExprScannerMut, ExpressionOwner, NormalizerScanner,
+    BlockLabel, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, NormalizerScanner,
     ParameterVariable, Variable,
 };
 use argon_format::vm as vf;
-use argon_util::{Fuel, InternalCompilerError, UniqueIdentifier};
+use argon_util::{Fuel, InternalCompilerError, TubeFormatError, UniqueIdentifier};
 use core::mem;
+use embedded_io::Write;
 use esexpr::{ESExprCodec, ESExprStatic};
-use esexpr_binary::io::Write;
 use esexpr_binary::{ExprGenerator, ExprGeneratorSync, GeneratorError};
 use hashbrown::{HashMap, HashSet};
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 
-pub fn encode_vm_tube<W: Write<InternalCompilerError>>(
+pub mod analysis;
+
+use analysis::BlockJumpScan;
+
+pub fn encode_vm_tube<W>(
     out: &mut W,
+    context: Context,
     tube: Arc<Tube>,
     platform_id: impl Into<alloc::string::String>,
-) -> Result<(), InternalCompilerError> {
+) -> Result<(), InternalCompilerError>
+where
+    W: Write,
+    InternalCompilerError: From<W::Error>,
+{
     let mut generator = ExprGenerator::new(out);
-    for entry in encode_vm_tube_stream(tube, platform_id) {
+    for entry in encode_vm_tube_stream(context, tube, platform_id) {
         let entry = entry?;
 
         let expr = entry.encode_esexpr();
@@ -45,13 +55,15 @@ pub fn encode_vm_tube<W: Write<InternalCompilerError>>(
 }
 
 pub fn encode_vm_tube_stream(
+    context: Context,
     tube: Arc<Tube>,
     platform_id: impl Into<alloc::string::String>,
 ) -> impl Iterator<Item = Result<vf::TubeFileEntry, InternalCompilerError>> {
-    VmEncoder::new(tube, platform_id.into())
+    VmEncoder::new(context, tube, platform_id.into())
 }
 
 pub struct VmEncoder {
+    context: Context,
     tube: Arc<Tube>,
     platform_id: alloc::string::String,
 
@@ -64,7 +76,7 @@ pub struct VmEncoder {
 }
 
 impl VmEncoder {
-    pub fn new(tube: Arc<Tube>, platform_id: alloc::string::String) -> Self {
+    pub fn new(context: Context, tube: Arc<Tube>, platform_id: alloc::string::String) -> Self {
         let mut modules = tube
             .modules()
             .iter()
@@ -74,6 +86,7 @@ impl VmEncoder {
         modules.sort_by(|m1, m2| m1.path().cmp(m2.path()));
 
         let mut encoder = Self {
+            context,
             tube,
             platform_id,
             modules,
@@ -540,13 +553,14 @@ impl VmEncoder {
 
         let mut emitter = ExprEmitter {
             encoder: self,
+            allow_tail_call: true,
             var_offset,
             known_vars: mem::take(&mut signature.known_vars),
             declared_vars: Vec::new(),
             instructions: Vec::new(),
             parent_import_specifier: import_specifier,
             captured_vars: HashSet::new(),
-            loop_ids: HashMap::new(),
+            block_labels: HashMap::new(),
         };
 
         match emitter.expr_return(expr) {
@@ -781,6 +795,8 @@ impl From<InternalCompilerError> for EmitStop {
 type EmitResult<A> = Result<A, EmitStop>;
 
 trait TokenEmitterCommon {
+    fn context(&self) -> &Context;
+
     fn get_parameter_as_token(
         &mut self,
         v: &Variable<DefaultExprContext>,
@@ -800,7 +816,8 @@ trait TokenEmitterCommon {
         t: &Expr<argon_compiler::DefaultExprContext>,
     ) -> Result<vf::Token, InternalCompilerError> {
         let mut t = t.clone();
-        NormalizerScanner::new(Fuel::new(5), DefaultExprNormalizer).scan(&mut t);
+        NormalizerScanner::new(self.context().normalize_fuel(), DefaultExprNormalizer)
+            .normalize(&mut t);
 
         match &t {
             Expr::BoxedType { .. } => Ok(vf::Token::Boxed {}),
@@ -874,6 +891,10 @@ struct TokenEmitter<'a> {
 }
 
 impl TokenEmitterCommon for TokenEmitter<'_> {
+    fn context(&self) -> &Context {
+        &self.encoder.context
+    }
+
     fn get_parameter_as_token(
         &mut self,
         v: &Variable<DefaultExprContext>,
@@ -888,16 +909,21 @@ impl TokenEmitterCommon for TokenEmitter<'_> {
 
 struct ExprEmitter<'a> {
     encoder: &'a mut VmEncoder,
+    allow_tail_call: bool,
     var_offset: usize,
     known_vars: HashMap<Variable<DefaultExprContext>, VariableRealization>,
     declared_vars: Vec<Box<vf::VariableDeclaration>>,
     instructions: Vec<Box<vf::Instruction>>,
     parent_import_specifier: ImportSpecifier,
     captured_vars: HashSet<Variable<DefaultExprContext>>,
-    loop_ids: HashMap<UniqueIdentifier, usize>,
+    block_labels: HashMap<BlockLabel<DefaultExprContext>, (vf::BlockId, ExprOutputKnown)>,
 }
 
 impl TokenEmitterCommon for ExprEmitter<'_> {
+    fn context(&self) -> &Context {
+        &self.encoder.context
+    }
+
     fn get_parameter_as_token(
         &mut self,
         _v: &Variable<DefaultExprContext>,
@@ -927,6 +953,17 @@ impl<'a> ExprEmitter<'a> {
         Ok((block, result))
     }
 
+    fn prohibit_tail_call<A>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> EmitResult<A>,
+    ) -> EmitResult<A> {
+        let allow_tail_call = self.allow_tail_call;
+        self.allow_tail_call = false;
+        let result = f(self);
+        self.allow_tail_call = allow_tail_call;
+        result
+    }
+
     fn declare_var(
         &mut self,
         v: Variable<DefaultExprContext>,
@@ -954,12 +991,32 @@ impl<'a> ExprEmitter<'a> {
         vf::RegisterId { id }
     }
 
-    fn get_loop_id(&mut self, loop_id: UniqueIdentifier) -> BigUint {
-        BigUint::from(self.loop_ids.get(&loop_id).cloned().unwrap_or_else(|| {
-            let id = self.loop_ids.len();
-            self.loop_ids.insert(loop_id, id);
-            id
-        }))
+    fn declare_block(
+        &mut self,
+        label: BlockLabel<DefaultExprContext>,
+        output: ExprOutputKnown,
+    ) -> Result<vf::BlockId, InternalCompilerError> {
+        let n = self.block_labels.len();
+        let id = vf::BlockId {
+            id: BigUint::from(n),
+        };
+        self.block_labels.insert(label, (id.clone(), output));
+        Ok(id)
+    }
+
+    fn get_block_id(
+        &mut self,
+        label: &BlockLabel<DefaultExprContext>,
+    ) -> Result<(&vf::BlockId, &ExprOutputKnown), InternalCompilerError> {
+        self.block_labels
+            .get(label)
+            .map(|(id, output)| (id, output))
+            .ok_or_else(|| {
+                InternalCompilerError::TubeFormatError(TubeFormatError::InvalidTube(format!(
+                    "Block label not found: {:?}",
+                    label
+                )))
+            })
     }
 
     fn into_function_body(self) -> vf::FunctionBody {
@@ -1015,7 +1072,90 @@ impl<'a> ExprEmitter<'a> {
             }
 
             // Box
-            // Break
+            Expr::Block { label, body } => {
+                let (output_result, output) = output.into_known_location(self, e)?;
+
+                let block_id = self.declare_block((**label).clone(), output)?;
+
+                let (mut body, body_result) =
+                    self.with_nested_block(|emitter| emitter.expr(body, ExprOutputKnown::Discard))?;
+
+                match body_result {
+                    Ok(_) => Err(InternalCompilerError::TubeFormatError(
+                        TubeFormatError::InvalidTube(
+                            "Block body must exit with a branch".to_owned(),
+                        ),
+                    ))?,
+                    Err(EmitStop::Branch) => {}
+                    Err(EmitStop::Error(err)) => Err(err)?,
+                }
+
+                // If the block ends with a break for the current loop, we can just skip it.
+                let mut is_loop = false;
+                loop {
+                    match body.instructions.last().map(Box::as_ref) {
+                        Some(vf::Instruction::BlockBreak {
+                            block_id: last_break_id,
+                        }) if (**last_break_id).id == block_id.id => {
+                            body.instructions.pop();
+                            is_loop = false;
+                        }
+
+                        Some(vf::Instruction::BlockRetry {
+                            block_id: last_break_id,
+                        }) if (**last_break_id).id == block_id.id => {
+                            body.instructions.pop();
+                            is_loop = true;
+                        }
+
+                        _ => break,
+                    }
+                }
+
+                while let Some(vf::Instruction::BlockBreak {
+                    block_id: last_break_id,
+                }) = body.instructions.last().map(Box::as_ref)
+                    && (**last_break_id).id == block_id.id
+                {
+                    body.instructions.pop();
+                }
+
+                let mut scan = BlockJumpScan::new(&block_id);
+                scan.scan_block(&body);
+
+                if !is_loop && !scan.has_break && !scan.has_retry {
+                    self.instructions.extend(body.instructions);
+                } else {
+                    let flags = vf::BlockFlags {
+                        has_break: scan.has_break,
+                        has_retry: scan.has_retry,
+                        is_loop,
+                    };
+
+                    self.emit(vf::Instruction::Block {
+                        block_id: Box::new(block_id),
+                        flags,
+                        body: Box::new(body),
+                    });
+                }
+
+                output_result
+            }
+
+            Expr::Break { label, value } => {
+                let (block_id, break_output) = self.get_block_id(label)?;
+                let block_id = block_id.clone();
+                let break_output = break_output.clone();
+
+                self.expr(value, break_output)?;
+
+                self.emit(vf::Instruction::BlockBreak {
+                    block_id: Box::new(block_id),
+                });
+
+                Err(EmitStop::Branch)?
+            }
+
             Expr::Builtin { builtin, arguments } => {
                 fn emit_op<O: ExprOutput>(
                     emitter: &mut ExprEmitter<'_>,
@@ -1175,11 +1315,14 @@ impl<'a> ExprEmitter<'a> {
                 block_body,
                 finally_body,
             } => {
-                let (block_body, block_result) =
-                    self.with_nested_block(|emitter| emitter.expr(block_body, output))?;
+                let (block_body, block_result) = self.with_nested_block(|emitter| {
+                    emitter.prohibit_tail_call(|emitter| emitter.expr(block_body, output))
+                })?;
 
                 let (finally_body, finally_result) = self.with_nested_block(|emitter| {
-                    emitter.expr(finally_body, ExprOutputKnown::Discard)
+                    emitter.prohibit_tail_call(|emitter| {
+                        emitter.expr(finally_body, ExprOutputKnown::Discard)
+                    })
                 })?;
 
                 self.emit(vf::Instruction::Finally {
@@ -1197,6 +1340,7 @@ impl<'a> ExprEmitter<'a> {
                 arguments,
             } => {
                 let frb = output.output_function_result(self, e)?;
+
                 let id = self.encoder.get_function_id(function.clone());
 
                 let sig = function.clone().signature();
@@ -1257,7 +1401,6 @@ impl<'a> ExprEmitter<'a> {
 
             // Is
             // Lambda
-            // Loop
             // Match
             // NewInstance
             // Next
@@ -1284,6 +1427,17 @@ impl<'a> ExprEmitter<'a> {
 
             // Raise
             // RecordType
+            Expr::Retry { label } => {
+                let (block_id, _) = self.get_block_id(label)?;
+                let block_id = block_id.clone();
+
+                self.emit(vf::Instruction::BlockRetry {
+                    block_id: Box::new(block_id),
+                });
+
+                Err(EmitStop::Branch)?
+            }
+
             // EnumType
             // RefCellType
             // TraitType
@@ -1654,7 +1808,17 @@ impl ExprOutput for ExprOutputKnown {
                 }
             }
             ExprOutputKnown::Discard => OutputFunctionResultBuilderType::Discard,
-            ExprOutputKnown::Return => OutputFunctionResultBuilderType::Return,
+            ExprOutputKnown::Return if !expr_emitter.allow_tail_call => {
+                let t = get_expr_type(e);
+                let t = expr_emitter.token_expr(&t)?;
+                let r = expr_emitter.add_var(t);
+                OutputFunctionResultBuilderType::ReturnNonTail(r)
+            }
+            ExprOutputKnown::Return => {
+                let t = get_expr_type(e);
+                let t = expr_emitter.token_expr(&t)?;
+                OutputFunctionResultBuilderType::Return
+            }
         };
 
         Ok(OutputFunctionResultBuilder {
@@ -1789,7 +1953,8 @@ struct OutputFunctionResultBuilder<R> {
 impl<R> OutputFunctionResultBuilder<R> {
     fn function_result(&self) -> vf::FunctionResult {
         match &self.builder_type {
-            OutputFunctionResultBuilderType::Register(r) => vf::FunctionResult::Register {
+            OutputFunctionResultBuilderType::Register(r)
+            | OutputFunctionResultBuilderType::ReturnNonTail(r) => vf::FunctionResult::Register {
                 id: Box::new(r.clone()),
             },
             OutputFunctionResultBuilderType::RefCell {
@@ -1802,7 +1967,7 @@ impl<R> OutputFunctionResultBuilder<R> {
         }
     }
 
-    fn into_result(self, expr_emitter: &mut ExprEmitter<'_>) -> Result<R, InternalCompilerError> {
+    fn into_result(self, expr_emitter: &mut ExprEmitter<'_>) -> EmitResult<R> {
         match self.builder_type {
             OutputFunctionResultBuilderType::RefCell {
                 cell,
@@ -1812,6 +1977,15 @@ impl<R> OutputFunctionResultBuilder<R> {
                     r#ref: Box::new(cell),
                     value: Box::new(function_output),
                 });
+            }
+
+            OutputFunctionResultBuilderType::ReturnNonTail(r) => {
+                expr_emitter.emit(vf::Instruction::Return { src: Box::new(r) });
+                return Err(EmitStop::Branch);
+            }
+
+            OutputFunctionResultBuilderType::Return => {
+                return Err(EmitStop::Branch);
             }
 
             _ => {}
@@ -1829,6 +2003,7 @@ enum OutputFunctionResultBuilderType {
     },
     Discard,
     Return,
+    ReturnNonTail(vf::RegisterId),
 }
 
 fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode {

@@ -1,7 +1,7 @@
+use crate::BlockLabel;
 use alloc::{boxed::Box, vec, vec::Vec};
 use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
 use argon_util::UniqueIdentifier;
-use core::convert::Infallible;
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
 use core::str::FromStr;
@@ -60,8 +60,13 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Hole(EC::Hole),
     And(Box<Expr<EC>>, Box<Expr<EC>>),
     BoolLiteral(bool),
+    Block {
+        label: Box<BlockLabel<EC>>,
+        body: Box<Expr<EC>>,
+    },
     Break {
-        label: Option<Infallible>, // TODO: Use a proper label type
+        label: Box<BlockLabel<EC>>,
+        value: Box<Expr<EC>>,
     },
     Builtin {
         builtin: Builtin,
@@ -101,10 +106,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         value: Box<Expr<EC>>,
         pattern: Pattern,
     },
-    Loop {
-        label: Option<Infallible>, // TODO: Use a proper label type
-        body: Box<Expr<EC>>,
-    },
     Match {
         value: Box<Expr<EC>>,
         cases: Vec<MatchCase<EC>>,
@@ -117,9 +118,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     NewTraitObject {
         trait_ec: EC::Trait,
         body: Vec<NewTraitObjectBodyStmt>,
-    },
-    Next {
-        label: Option<Infallible>, // TODO: Use a proper label type
     },
     Or(Box<Expr<EC>>, Box<Expr<EC>>),
     Raise {
@@ -141,8 +139,8 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         fields: Vec<RecordFieldLiteral<EC>>,
     },
     RecordType(RecordType<EC>),
-    Redo {
-        label: Option<Infallible>, // TODO: Use a proper label type
+    Retry {
+        label: Box<BlockLabel<EC>>,
     },
     Sequence(Vec1<Expr<EC>>),
     StoreVariable(Variable<EC>),
@@ -157,11 +155,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Variable(Variable<EC>),
     VariableBinding(Variable<EC>, Box<Expr<EC>>),
     VariableStore(Variable<EC>, Box<Expr<EC>>),
-    While {
-        label: Option<Identifier>,
-        condition: Box<Expr<EC>>,
-        body: Box<Expr<EC>>,
-    },
     BoxedType {
         t: Box<Expr<EC>>,
     },
@@ -211,7 +204,7 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
         }
     }
 
-    pub fn unit_type() -> Expr<EC> {
+    pub fn unit() -> Expr<EC> {
         Expr::Tuple { items: vec![] }
     }
 

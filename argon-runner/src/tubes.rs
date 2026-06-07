@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use argon_compiler::{Context, Tube, TubeCollectionBuilder};
 use argon_format::tube::TubeFileEntry;
-use argon_io::{EmbeddedIoRead, InputFile};
+use argon_io::InputFile;
 use argon_util::{InternalCompilerError, TubeFormatError};
 use core::iter;
 use esexpr::ESExprCodec;
@@ -16,7 +16,7 @@ pub fn load_referenced_tube<F>(
 where
     F: InputFile,
 {
-    let file = match referenced_tube.open() {
+    let mut file = match referenced_tube.open() {
         Ok(file) => file,
         Err(e) => {
             context.reporter().report_error(e);
@@ -24,7 +24,6 @@ where
         }
     };
 
-    let mut file = EmbeddedIoRead::new(file);
     let mut tube_expr_stream = esexpr_binary::parse_sync(&mut file);
     let tube_entries = {
         let context = context.clone();

@@ -52,6 +52,7 @@ pub enum TokenCategory {
     KwBreak,
     KwNext,
     KwRedo,
+    KwRetry,
     KwErased,
     KwToken,
     KwWitness,
@@ -121,6 +122,7 @@ pub enum TokenCategory {
     SymClosecurly,
     SymPipe,
     SymAt,
+    SymSingleQuote,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -222,6 +224,7 @@ pub enum Token {
     KwBreak,
     KwNext,
     KwRedo,
+    KwRetry,
     KwErased,
     KwToken,
     KwWitness,
@@ -291,6 +294,7 @@ pub enum Token {
     SymClosecurly,
     SymPipe,
     SymAt,
+    SymSingleQuote,
 }
 
 impl Token {
@@ -345,6 +349,7 @@ impl Token {
             Token::KwBreak => TokenCategory::KwBreak,
             Token::KwNext => TokenCategory::KwNext,
             Token::KwRedo => TokenCategory::KwRedo,
+            Token::KwRetry => TokenCategory::KwRetry,
             Token::KwErased => TokenCategory::KwErased,
             Token::KwToken => TokenCategory::KwToken,
             Token::KwWitness => TokenCategory::KwWitness,
@@ -414,60 +419,7 @@ impl Token {
             Token::SymClosecurly => TokenCategory::SymClosecurly,
             Token::SymPipe => TokenCategory::SymPipe,
             Token::SymAt => TokenCategory::SymAt,
-        }
-    }
-
-    pub fn binary_operator(&self) -> Option<BinaryOperator> {
-        match self {
-            Token::OpLogicalAnd => Some(BinaryOperator::LogicalAnd),
-            Token::OpLogicalOr => Some(BinaryOperator::LogicalOr),
-            Token::OpEquals => Some(BinaryOperator::Equal),
-            Token::OpNotequals => Some(BinaryOperator::NotEqual),
-            Token::OpLessthaneq => Some(BinaryOperator::LessThanEq),
-            Token::OpGreaterthaneq => Some(BinaryOperator::GreaterThanEq),
-            Token::OpShiftleft => Some(BinaryOperator::ShiftLeft),
-            Token::OpShiftright => Some(BinaryOperator::ShiftRight),
-            Token::OpPlus => Some(BinaryOperator::Plus),
-            Token::OpMinus => Some(BinaryOperator::Minus),
-            Token::OpStar | Token::OpMul => Some(BinaryOperator::Mul),
-            Token::OpSlash | Token::OpDiv => Some(BinaryOperator::Div),
-            Token::OpBitand => Some(BinaryOperator::BitAnd),
-            Token::OpBitor => Some(BinaryOperator::BitOr),
-            Token::OpBitxor => Some(BinaryOperator::BitXOr),
-            Token::OpLessthan => Some(BinaryOperator::LessThan),
-            Token::OpGreaterthan => Some(BinaryOperator::GreaterThan),
-            Token::OpConcat => Some(BinaryOperator::Concat),
-            Token::OpPropEqual => Some(BinaryOperator::PropEqual),
-            Token::OpPropDisjunction => Some(BinaryOperator::PropDisjunction),
-            Token::OpPropConjunction => Some(BinaryOperator::PropConjunction),
-            _ => None,
-        }
-    }
-
-    pub fn unary_operator(&self) -> Option<UnaryOperator> {
-        match self {
-            Token::OpLogicalNot => Some(UnaryOperator::LogicalNot),
-            Token::OpPlus => Some(UnaryOperator::Plus),
-            Token::OpMinus => Some(UnaryOperator::Minus),
-            Token::OpBitnot => Some(UnaryOperator::BitNot),
-            _ => None,
-        }
-    }
-
-    pub fn modifier(&self) -> Option<Modifier> {
-        match self {
-            Token::KwPublic => Some(Modifier::Public),
-            Token::KwProtected => Some(Modifier::Protected),
-            Token::KwPrivate => Some(Modifier::Private),
-            Token::KwInternal => Some(Modifier::Internal),
-            Token::KwFinal => Some(Modifier::Final),
-            Token::KwOverride => Some(Modifier::Override),
-            Token::KwVirtual => Some(Modifier::Virtual),
-            Token::KwErased => Some(Modifier::Erased),
-            Token::KwToken => Some(Modifier::Token),
-            Token::KwWitness => Some(Modifier::Witness),
-            Token::KwInline => Some(Modifier::Inline),
-            _ => None,
+            Token::SymSingleQuote => TokenCategory::SymSingleQuote,
         }
     }
 }

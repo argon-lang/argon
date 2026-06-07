@@ -1,4 +1,6 @@
-use crate::{Expr, ExprContext, MatchCase, RecordFieldLiteral, RecordType, Variable};
+use crate::{
+    BlockLabel, Expr, ExprContext, LoopLabels, MatchCase, RecordFieldLiteral, RecordType, Variable,
+};
 
 mod normalizer;
 mod subst;
@@ -51,7 +53,8 @@ where
             finally_body: ensures_body,
         } => scanner.scan(block_body) && scanner.scan(ensures_body),
         Expr::BoolLiteral(_) => true,
-        Expr::Break { .. } => true,
+        Expr::Block { label, body } => default_scan_label(scanner, label) && scanner.scan(body),
+        Expr::Break { label, value } => default_scan_label(scanner, label) && scanner.scan(value),
         Expr::Builtin { arguments, .. } => arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::EnumType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::FunctionLiteral { body, .. } => scanner.scan(body),
@@ -82,7 +85,6 @@ where
         }
         Expr::IntLiteral(_) => true,
         Expr::Is { value, .. } => scanner.scan(value),
-        Expr::Loop { body, .. } => scanner.scan(body),
         Expr::Match { value, cases } => {
             scanner.scan(value)
                 && cases
@@ -95,7 +97,6 @@ where
             ..
         } => scanner.scan(receiver) && arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::NewTraitObject { .. } => true,
-        Expr::Next { .. } => true,
         Expr::Or(a, b) => scanner.scan(a) && scanner.scan(b),
         Expr::Raise { ex } => scanner.scan(ex),
         Expr::RecordFieldLoad {
@@ -119,7 +120,7 @@ where
                     .all(|field: &RecordFieldLiteral<S::EC>| scanner.scan(&field.value))
         }
         Expr::RecordType(record_type) => default_scan_record_type(scanner, record_type),
-        Expr::Redo { .. } => true,
+        Expr::Retry { label } => default_scan_label(scanner, label),
         Expr::Sequence(exprs) => exprs.iter().all(|expr| scanner.scan(expr)),
         Expr::StoreVariable(variable) => scanner.scan_variable(variable),
         Expr::StringLiteral(_) => true,
@@ -135,12 +136,28 @@ where
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value)
         }
-        Expr::While {
-            condition, body, ..
-        } => scanner.scan(condition) && scanner.scan(body),
         Expr::BoxedType { t } => scanner.scan(t),
         Expr::Box { t, value } => scanner.scan(t) && scanner.scan(value),
         Expr::Unbox { t, value } => scanner.scan(t) && scanner.scan(value),
+    }
+}
+
+fn default_scan_label<S>(scanner: &mut S, label: &BlockLabel<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    scanner.scan(&label.block_result_type)
+}
+
+pub fn default_scan_loop_labels<S>(scanner: &mut S, labels: &LoopLabels<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    match labels {
+        LoopLabels::Loop(label) => default_scan_label(scanner, label),
+        LoopLabels::While { outer, inner } => {
+            default_scan_label(scanner, outer) && default_scan_label(scanner, inner)
+        }
     }
 }
 
@@ -177,7 +194,12 @@ where
             finally_body: ensures_body,
         } => scanner.scan(block_body.as_mut()) && scanner.scan(ensures_body.as_mut()),
         Expr::BoolLiteral(_) => true,
-        Expr::Break { .. } => true,
+        Expr::Block { label, body } => {
+            default_scan_label_mut(scanner, label) && scanner.scan(body.as_mut())
+        }
+        Expr::Break { label, value } => {
+            default_scan_label_mut(scanner, label) && scanner.scan(value.as_mut())
+        }
         Expr::Builtin { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
@@ -210,7 +232,6 @@ where
         }
         Expr::IntLiteral(_) => true,
         Expr::Is { value, .. } => scanner.scan(value.as_mut()),
-        Expr::Loop { body, .. } => scanner.scan(body.as_mut()),
         Expr::Match { value, cases } => {
             scanner.scan(value.as_mut())
                 && cases
@@ -226,7 +247,6 @@ where
                 && arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
         Expr::NewTraitObject { .. } => true,
-        Expr::Next { .. } => true,
         Expr::Or(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
         Expr::Raise { ex } => scanner.scan(ex.as_mut()),
         Expr::RecordFieldLoad {
@@ -254,7 +274,7 @@ where
                     .all(|field: &mut RecordFieldLiteral<S::EC>| scanner.scan(&mut field.value))
         }
         Expr::RecordType(record_type) => default_scan_record_type_mut(scanner, record_type),
-        Expr::Redo { .. } => true,
+        Expr::Retry { label } => default_scan_label_mut(scanner, label),
         Expr::Sequence(exprs) => exprs.iter_mut().all(|expr| scanner.scan(expr)),
         Expr::StoreVariable(variable) => scanner.scan_variable(variable),
         Expr::StringLiteral(_) => true,
@@ -272,12 +292,28 @@ where
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value.as_mut())
         }
-        Expr::While {
-            condition, body, ..
-        } => scanner.scan(condition.as_mut()) && scanner.scan(body.as_mut()),
         Expr::BoxedType { t } => scanner.scan(t.as_mut()),
         Expr::Box { t, value } => scanner.scan(t.as_mut()) && scanner.scan(value.as_mut()),
         Expr::Unbox { t, value } => scanner.scan(t.as_mut()) && scanner.scan(value.as_mut()),
+    }
+}
+
+fn default_scan_label_mut<S>(scanner: &mut S, label: &mut BlockLabel<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    scanner.scan(&mut label.block_result_type)
+}
+
+pub fn default_scan_loop_labels_mut<S>(scanner: &mut S, labels: &mut LoopLabels<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    match labels {
+        LoopLabels::Loop(label) => default_scan_label_mut(scanner, label),
+        LoopLabels::While { outer, inner } => {
+            default_scan_label_mut(scanner, outer) && default_scan_label_mut(scanner, inner)
+        }
     }
 }
 

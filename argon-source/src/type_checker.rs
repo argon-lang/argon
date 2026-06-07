@@ -10,9 +10,10 @@ use argon_compiler::{
     RecordFieldOwner, SubstFunctionSignature,
 };
 use argon_expr::{
-    Builtin, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    LocalVariable, Normalizer, NormalizerScanner, RecordFieldLiteral, RecordType, SubstScanner,
-    Variable, VariableTupleElement,
+    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ErasureMode, Expr, ExprContext,
+    ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels, Normalizer,
+    NormalizerScanner, RecordFieldLiteral, RecordType, SubstScanner, Variable,
+    VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -21,7 +22,8 @@ use core::cmp::Ordering;
 use core::fmt::{Debug, Formatter};
 use core::hash::{Hash, Hasher};
 use core::{mem, ptr};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::{DefaultHashBuilder, HashMap, HashSet, hash_map};
+use mitsein::vec1;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
@@ -34,11 +36,17 @@ pub fn type_check_type_expr(
     let TypeCheckOptions { access, scope } = options;
     let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
     let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
-    let mut checker = TypeChecker::new(context.clone(), access, &mut local_scope);
+    let mut model = Model::new();
+    let mut checker = TypeChecker {
+        context: context.clone(),
+        access,
+        scope: &mut local_scope,
+        model: &mut model,
+    };
 
     let expr = checker.check_type(e);
 
-    TypeCheckToDefaultExprContextShifter.shift(expr)
+    TypeCheckToDefaultExprContextShifter { context, model }.shift(expr)
 }
 
 pub fn type_check_expr(
@@ -50,12 +58,18 @@ pub fn type_check_expr(
     let TypeCheckOptions { access, scope } = options;
     let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
     let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
-    let mut checker = TypeChecker::new(context.clone(), access, &mut local_scope);
+    let mut model = Model::new();
+    let mut checker = TypeChecker {
+        context: context.clone(),
+        access,
+        scope: &mut local_scope,
+        model: &mut model,
+    };
 
     let expected_type = DefaultToTypeCheckExprContextShifter.shift(expected_type.clone());
     let expr = checker.check(e, &expected_type);
 
-    TypeCheckToDefaultExprContextShifter.shift(expr)
+    TypeCheckToDefaultExprContextShifter { context, model }.shift(expr)
 }
 
 pub struct TypeCheckOptions<'a> {
@@ -73,7 +87,7 @@ impl<'a> TypeCheckOptions<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct TypeCheckExprContext {}
+struct TypeCheckExprContext {}
 
 impl ExprContext for TypeCheckExprContext {
     type Hole = Hole;
@@ -87,19 +101,33 @@ impl ExprContext for TypeCheckExprContext {
     type Instance = <DefaultExprContext as ExprContext>::Instance;
 }
 
-pub struct TypeCheckToDefaultExprContextShifter;
+struct TypeCheckToDefaultExprContextShifter {
+    context: Context,
+    model: Model,
+}
 
 impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
     type EC1 = TypeCheckExprContext;
     type EC2 = DefaultExprContext;
 
     fn shift_hole(&mut self, hole: Hole) -> Expr<DefaultExprContext> {
-        todo!()
+        match self.model.hole_values.get(&hole) {
+            Some(value) => self.shift(value.clone()),
+            None => {
+                self.context
+                    .reporter()
+                    .report_error(CompileError::could_not_infer(
+                        hole.hole_info.location.clone(),
+                    ));
+
+                Expr::Error
+            }
+        }
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct DefaultToTypeCheckExprContextShifter;
+struct DefaultToTypeCheckExprContextShifter;
 
 impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
     type EC1 = DefaultExprContext;
@@ -110,9 +138,17 @@ impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
     }
 }
 
-pub struct ExprNormalizer;
+struct ExprNormalizer<'a> {
+    model: &'a mut Model,
+}
 
-impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
+impl Normalizer for ExprNormalizer<'_> {
+    type EC = TypeCheckExprContext;
+
+    fn resolve_hole(&mut self, hole: &<Self::EC as ExprContext>::Hole) -> Option<Expr<Self::EC>> {
+        self.model.hole_values.get(hole).cloned()
+    }
+
     fn get_function_body(
         &mut self,
         function: &Arc<dyn Function>,
@@ -144,7 +180,8 @@ impl Normalizer<TypeCheckExprContext> for ExprNormalizer {
 }
 
 struct HoleInfo {
-    hole_type: Expr<TypeCheckExprContext>,
+    location: Location,
+    hole_type: Expr<TypeCheckExprContext>, // TODO: Change to ExpectedType
 }
 
 #[derive(Clone)]
@@ -153,9 +190,12 @@ pub struct Hole {
 }
 
 impl Hole {
-    pub fn new(hole_type: Expr<TypeCheckExprContext>) -> Self {
+    pub fn new(location: Location, hole_type: Expr<TypeCheckExprContext>) -> Self {
         Self {
-            hole_info: Arc::new(HoleInfo { hole_type }),
+            hole_info: Arc::new(HoleInfo {
+                location,
+                hole_type,
+            }),
         }
     }
 }
@@ -186,7 +226,7 @@ impl Hash for Hole {
 
 #[derive(Clone)]
 struct Model {
-    hole_values: HashMap<UniqueIdentifier, Expr<TypeCheckExprContext>>,
+    hole_values: HashMap<Hole, Expr<TypeCheckExprContext>>,
 }
 
 impl Model {
@@ -362,7 +402,7 @@ impl<'a> Overloadable<'a> {
                     param_type: field_type.clone(),
                     bindings: vec![],
                 }],
-                return_type: Expr::unit_type(),
+                return_type: Expr::unit(),
                 ensures_clauses: vec![],
             },
             Overloadable::EnumVariant() => todo!(),
@@ -376,11 +416,11 @@ impl From<scope::Overloadable> for Overloadable<'_> {
     }
 }
 
-struct TypeChecker<'access, 'scope> {
+struct TypeChecker<'access, 'scope, 'model> {
     context: Context,
     access: &'access AccessToken,
     scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
-    model: Model,
+    model: &'model mut Model,
 }
 
 macro_rules! with_nested_scope {
@@ -389,25 +429,12 @@ macro_rules! with_nested_scope {
             context: $tc.context.clone(),
             access: $tc.access,
             scope: &mut LocalVariableScope::new($tc.scope),
-            model: $tc.model.clone(),
+            model: $tc.model,
         }
     };
 }
 
-impl<'access, 'scope> TypeChecker<'access, 'scope> {
-    fn new(
-        context: Context,
-        access: &'access AccessToken,
-        scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
-    ) -> Self {
-        Self {
-            context,
-            access,
-            scope,
-            model: Model::new(),
-        }
-    }
-
+impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check<'e>(
         &mut self,
         expr: &'e WithLocation<ast::Expr>,
@@ -450,21 +477,178 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 inferred_type: Expr::int_type(),
             }),
 
-            ast::Expr::Break { label: Some(_) } => todo!(),
-            ast::Expr::Break { label: None } => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::Break { label: None },
-                inferred_type: Expr::never_type(),
-            }),
-            ast::Expr::Next { label: Some(_) } => todo!(),
-            ast::Expr::Next { label: None } => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::Next { label: None },
-                inferred_type: Expr::never_type(),
-            }),
-            ast::Expr::Redo { label: Some(_) } => todo!(),
-            ast::Expr::Redo { label: None } => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::Redo { label: None },
-                inferred_type: Expr::never_type(),
-            }),
+            ast::Expr::Break { label, value } => {
+                let block_label = match label {
+                    Some(label) => {
+                        self.scope
+                            .lookup_block_label(&label.value)
+                            .map(|decl| match decl {
+                                BlockLabelDeclaration::Block(label) => label,
+                                BlockLabelDeclaration::Loop(labels) => labels.break_label(),
+                            })
+                    }
+                    None => self
+                        .scope
+                        .latest_loop_labels()
+                        .map(LoopLabels::break_label),
+                };
+
+                let Some(block_label) = block_label else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::loop_label_not_found(
+                            label
+                                .as_ref()
+                                .map(|label| &label.location)
+                                .unwrap_or(&expr.location)
+                                .clone(),
+                        ));
+
+                    return TypeInferResult::error();
+                };
+
+                let t = block_label.block_result_type.clone();
+                let value = match value {
+                    Some(value) => self.check(value, &t),
+                    None => {
+                        let infer = TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::unit(),
+                            inferred_type: Expr::unit(),
+                        });
+                        self.check_inferred_type(&expr.location, infer, ExpectedType::Exact(&t))
+                            .checked_expr
+                    }
+                };
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Break {
+                        label: Box::new(block_label),
+                        value: Box::new(value),
+                    },
+                    inferred_type: Expr::never_type(),
+                })
+            }
+
+            ast::Expr::Next { label } => {
+                let block_label = match label {
+                    Some(label) => self
+                        .scope
+                        .lookup_block_label(&label.value)
+                        .and_then(|decl| match decl {
+                            BlockLabelDeclaration::Block(_) => None,
+                            BlockLabelDeclaration::Loop(labels) => {
+                                Some(labels.next_label())
+                            }
+                        }),
+                    None => self
+                        .scope
+                        .latest_loop_labels()
+                        .map(LoopLabels::next_label),
+                };
+
+                let Some((block_label, is_break)) = block_label else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::loop_label_not_found(
+                            label
+                                .as_ref()
+                                .map(|label| &label.location)
+                                .unwrap_or(&expr.location)
+                                .clone(),
+                        ));
+
+                    return TypeInferResult::error();
+                };
+
+                if is_break {
+                    TypeInferResult::Complete(InferredType {
+                        checked_expr: Expr::Break {
+                            label: Box::new(block_label),
+                            value: Box::new(Expr::unit()),
+                        },
+                        inferred_type: Expr::never_type(),
+                    })
+                }
+                else {
+                    TypeInferResult::Complete(InferredType {
+                        checked_expr: Expr::Retry {
+                            label: Box::new(block_label),
+                        },
+                        inferred_type: Expr::never_type(),
+                    })
+                }
+            }
+            ast::Expr::Redo { label } => {
+                let block_label = match label {
+                    Some(label) => self
+                        .scope
+                        .lookup_block_label(&label.value)
+                        .and_then(|decl| match decl {
+                            BlockLabelDeclaration::Block(_) => None,
+                            BlockLabelDeclaration::Loop(labels) => {
+                                Some(labels.redo_label())
+                            }
+                        }),
+                    None => self
+                        .scope
+                        .latest_loop_labels()
+                        .map(LoopLabels::redo_label),
+                };
+
+                let Some(block_label) = block_label else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::loop_label_not_found(
+                            label
+                                .as_ref()
+                                .map(|label| &label.location)
+                                .unwrap_or(&expr.location)
+                                .clone(),
+                        ));
+
+                    return TypeInferResult::error();
+                };
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Retry {
+                        label: Box::new(block_label),
+                    },
+                    inferred_type: Expr::never_type(),
+                })
+            }
+            ast::Expr::Retry { label } => {
+                let block_label = match label {
+                    Some(label) => self
+                        .scope
+                        .lookup_block_label(&label.value)
+                        .and_then(|decl| match decl {
+                            BlockLabelDeclaration::Block(label) => Some(label),
+                            BlockLabelDeclaration::Loop(_) => None,
+                        }),
+                    None => self.scope.latest_block_label(),
+                };
+
+                let Some(block_label) = block_label else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::loop_label_not_found(
+                            label
+                                .as_ref()
+                                .map(|label| &label.location)
+                                .unwrap_or(&expr.location)
+                                .clone(),
+                        ));
+
+                    return TypeInferResult::error();
+                };
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Retry {
+                        label: Box::new(block_label),
+                    },
+                    inferred_type: Expr::never_type(),
+                })
+            }
 
             ast::Expr::Builtin(_)
             | ast::Expr::Dot { .. }
@@ -563,10 +747,8 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         _ => break 'not_record,
                     };
 
-                    let resolved = OverloadResolver::new(self, record_call.location).resolve_overload_lookup(
-                        overloads,
-                        record_call.arguments,
-                    );
+                    let resolved = OverloadResolver::new(self, record_call.location)
+                        .resolve_overload_lookup(overloads, record_call.arguments);
 
                     let Some(selected_overload) = resolved.overload else {
                         return TypeInferResult::error();
@@ -726,7 +908,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 let mut result = self.infer_block(body);
 
                 if let Some(finally_body) = finally_body {
-                    let checked_finally_body = self.check_block(finally_body, &Expr::unit_type());
+                    let checked_finally_body = self.check_block(finally_body, &Expr::unit());
 
                     result = match result {
                         TypeInferResult::Complete(InferredType {
@@ -762,42 +944,115 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
 
                 let (when_true_var, when_false_var) = self.create_if_cond_vars(&conv_condition);
 
-                if let TypeInferResult::Complete(InferredType {
-                    checked_expr: checked_true_body,
-                    inferred_type: inferred_true_body_type,
-                }) = true_body_result
-                {
-                    let checked_false_body = self
-                        .check_inferred_type(
-                            &when_false.location,
-                            false_body_result,
-                            ExpectedType::Exact(&inferred_true_body_type),
-                        )
-                        .checked_expr;
+                match (&true_body_result, &false_body_result) {
+                    (
+                        TypeInferResult::Complete(false_body_inferred),
+                        TypeInferResult::Complete(true_body_inferred),
+                    ) => {
+                        let mut branch_typer = BranchTyper::new();
+                        branch_typer.add_branch(self, &true_body_inferred.inferred_type);
+                        branch_typer.add_branch(self, &false_body_inferred.inferred_type);
 
-                    TypeInferResult::Complete(InferredType {
-                        checked_expr: Expr::IfElse {
-                            when_true_var,
-                            when_false_var,
-                            condition: Box::new(conv_condition),
-                            when_true: Box::new(checked_true_body),
-                            when_false: Box::new(checked_false_body),
-                        },
-                        inferred_type: inferred_true_body_type,
-                    })
-                } else {
-                    TypeInferResult::IfElse {
+                        let branch_type = branch_typer.into_branch_type();
+
+                        let checked_true_body = self
+                            .check_inferred_type(
+                                &when_true.location,
+                                true_body_result,
+                                ExpectedType::Exact(&branch_type),
+                            )
+                            .checked_expr;
+
+                        let checked_false_body = self
+                            .check_inferred_type(
+                                &when_false.location,
+                                false_body_result,
+                                ExpectedType::Exact(&branch_type),
+                            )
+                            .checked_expr;
+
+                        TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::IfElse {
+                                when_true_var,
+                                when_false_var,
+                                condition: Box::new(conv_condition),
+                                when_true: Box::new(checked_true_body),
+                                when_false: Box::new(checked_false_body),
+                            },
+                            inferred_type: branch_type,
+                        })
+                    }
+
+                    _ => TypeInferResult::IfElse {
                         condition: Box::new(conv_condition),
                         when_true_var,
                         when_false_var,
                         true_body: Box::new(true_body_result),
                         false_body_location: &when_false.location,
                         false_body: Box::new(false_body_result),
-                    }
+                    },
                 }
             }
             ast::Expr::Is { .. } => todo!("infer is expressions"),
-            ast::Expr::Loop { .. } => todo!("infer loops"),
+
+            ast::Expr::Loop { body, label } => {
+                let mut checker = with_nested_scope!(self);
+
+                let label_location = label
+                    .as_ref()
+                    .map(|label| &label.location)
+                    .unwrap_or(&expr.location)
+                    .clone();
+
+                let block_label_hole = Hole::new(label_location, Expr::type_n(0));
+                let mut block_label = BlockLabel {
+                    id: UniqueIdentifier::new(),
+                    name: label.as_ref().map(|l| l.value.clone()),
+                    kind: BlockLabelKind::Loop,
+                    block_result_type: Expr::Hole(block_label_hole.clone()),
+                };
+
+                checker
+                    .scope
+                    .add_block_label(BlockLabelDeclaration::Loop(LoopLabels::Loop(
+                        block_label.clone(),
+                    )));
+
+                let mut body = checker.check_block(body, &Expr::unit());
+                match body {
+                    Expr::Sequence(ref mut items) => {
+                        items.push(Expr::Retry {
+                            label: Box::new(block_label.clone()),
+                        });
+                    }
+
+                    _ => {
+                        body = Expr::Sequence(vec1![
+                            body,
+                            Expr::Retry {
+                                label: Box::new(block_label.clone()),
+                            },
+                        ]);
+                    }
+                }
+
+                let loop_type = match checker.model.hole_values.get(&block_label_hole) {
+                    Some(t) => t.clone(),
+                    None => {
+                        block_label.block_result_type = Expr::never_type();
+                        Expr::never_type()
+                    }
+                };
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Block {
+                        label: Box::new(block_label),
+                        body: Box::new(body),
+                    },
+                    inferred_type: loop_type,
+                })
+            }
+
             ast::Expr::Match { .. } => todo!("infer match expressions"),
             ast::Expr::NewTraitObject { .. } => todo!("infer trait object construction"),
             ast::Expr::Raise { .. } => todo!("infer raise expressions"),
@@ -823,14 +1078,14 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
 
         let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
             return TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::unit_type(),
-                inferred_type: Expr::unit_type(),
+                checked_expr: Expr::unit(),
+                inferred_type: Expr::unit(),
             });
         };
 
         let checked_stmts = leading_stmts
             .iter()
-            .map(|stmt| nested.check_stmt(stmt, &Expr::unit_type()))
+            .map(|stmt| nested.check_stmt(stmt, &Expr::unit()))
             .collect::<Vec<_>>();
 
         let Ok(mut checked_stmts) = Vec1::try_from(checked_stmts) else {
@@ -910,7 +1165,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::VariableBinding(v, Box::new(variable_value)),
-                    inferred_type: Expr::unit_type(),
+                    inferred_type: Expr::unit(),
                 })
             }
             _ => todo!("inferring non-expression statements in blocks: {:#?}", stmt),
@@ -924,15 +1179,15 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                 self.infer_builtin(call.location, builtin, call.arguments)
             }
             CalleeInfo::Variable(v) => self.infer_variable(v, call.arguments),
-            CalleeInfo::VariableStore(v) => self.infer_variable_store(call.location, v, call.arguments),
+            CalleeInfo::VariableStore(v) => {
+                self.infer_variable_store(call.location, v, call.arguments)
+            }
             CalleeInfo::VariableTupleElement(vte) => {
                 self.infer_variable_tuple_element(vte, call.arguments)
             }
             CalleeInfo::Overloadable(overloads) => {
-                let resolved = OverloadResolver::new(self, call.location).resolve_overload_lookup(
-                    overloads,
-                    call.arguments,
-                );
+                let resolved = OverloadResolver::new(self, call.location)
+                    .resolve_overload_lookup(overloads, call.arguments);
 
                 let Some(inferred_type) = resolved.overload else {
                     return TypeInferResult::error();
@@ -1092,7 +1347,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         element_type.clone(),
                     ]
                 },
-                |_, _| Expr::unit_type(),
+                |_, _| Expr::unit(),
             ),
 
             Builtin::ConjunctionType | Builtin::DisjunctionType | Builtin::EqualToType => {
@@ -1212,17 +1467,15 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
         let value = self.check(value.arg, &t);
 
         if !v.is_mutable() {
-            self.context.reporter().report_error(
-                CompileError::can_not_mutate(
-                    location.clone()
-                )
-            )
+            self.context
+                .reporter()
+                .report_error(CompileError::can_not_mutate(location.clone()))
         }
 
         let expr = Expr::VariableStore(v, Box::new(value));
         TypeInferResult::Complete(InferredType {
             checked_expr: expr,
-            inferred_type: Expr::unit_type(),
+            inferred_type: Expr::unit(),
         })
     }
 
@@ -1423,9 +1676,9 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
                         {
                             let mut norm = NormalizerScanner::new(
                                 self.context.normalize_fuel(),
-                                ExprNormalizer,
+                                ExprNormalizer { model: self.model },
                             );
-                            norm.scan(&mut instance.inferred_type);
+                            norm.normalize(&mut instance.inferred_type);
                         }
 
                         match &instance.inferred_type {
@@ -1790,7 +2043,7 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
     ) -> InferredType {
         let inferred = self.resolve_inferred_type(infer, expected_type);
 
-        if !type_matches_expected(&self.context, &inferred.inferred_type, expected_type) {
+        if !self.type_matches_expected(&inferred.inferred_type, expected_type) {
             self.context
                 .reporter()
                 .report_error(CompileError::type_mismatch(
@@ -1869,145 +2122,234 @@ impl<'access, 'scope> TypeChecker<'access, 'scope> {
             ),
         );
     }
-}
 
-fn unify(a: &Expr<TypeCheckExprContext>, b: &Expr<TypeCheckExprContext>) -> bool {
-    match (a, b) {
-        (Expr::Error, _) | (_, Expr::Error) => true,
-        (Expr::Hole(a), Expr::Hole(b)) => a == b,
-        (Expr::And(a1, b1), Expr::And(a2, b2)) | (Expr::Or(a1, b1), Expr::Or(a2, b2)) => {
-            unify(a1, a2) && unify(b1, b2)
+    fn unify(
+        &mut self,
+        mut a: Expr<TypeCheckExprContext>,
+        mut b: Expr<TypeCheckExprContext>,
+    ) -> bool {
+        {
+            let mut norm = NormalizerScanner::new(
+                self.context.normalize_fuel(),
+                ExprNormalizer {
+                    model: &mut self.model,
+                },
+            );
+            norm.normalize(&mut a);
         }
-        (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
-        (
-            Expr::Builtin {
-                builtin: a,
-                arguments: a_args,
-            },
-            Expr::Builtin {
-                builtin: b,
-                arguments: b_args,
-            },
-        ) => a == b && unify_all(a_args, b_args),
-        (Expr::EnumType(a, a_args), Expr::EnumType(b, b_args)) => {
-            a == b && unify_all(a_args, b_args)
+        {
+            let mut norm = NormalizerScanner::new(
+                self.context.normalize_fuel(),
+                ExprNormalizer {
+                    model: &mut self.model,
+                },
+            );
+            norm.normalize(&mut b);
         }
-        (
-            Expr::FunctionType {
-                a: a_arg,
-                r: a_result,
-            },
-            Expr::FunctionType {
-                a: b_arg,
-                r: b_result,
-            },
-        ) => unify(a_arg, b_arg) && unify(a_result, b_result),
-        (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
-        (Expr::RecordType(a), Expr::RecordType(b)) => {
-            &a.record == &b.record && unify_all(&a.arguments, &b.arguments)
+
+        match (a, b) {
+            (Expr::Error, _) | (_, Expr::Error) => true,
+            (Expr::Hole(a), Expr::Hole(b)) if a == b => true,
+
+            (Expr::Hole(a), b) => {
+                match self.model.hole_values.entry_ref(&a) {
+                    hash_map::EntryRef::Occupied(oea) => {
+                        let a_value = oea.get().clone();
+                        self.unify(a_value, b)
+                    }
+                    hash_map::EntryRef::Vacant(vea) => {
+                        // TODO: Type check the hole
+                        match b {
+                            Expr::Hole(b) => match self.model.hole_values.entry_ref(&b) {
+                                hash_map::EntryRef::Occupied(oeb) => {
+                                    let b_value = oeb.get().clone();
+                                    self.model.hole_values.insert(a, b_value);
+                                    true
+                                }
+                                hash_map::EntryRef::Vacant(veb) => {
+                                    veb.insert(Expr::Hole(a));
+                                    true
+                                }
+                            },
+                            _ => {
+                                vea.insert(b.clone());
+                                true
+                            }
+                        }
+                    }
+                }
+            }
+
+            (a, Expr::Hole(b)) => {
+                match self.model.hole_values.entry_ref(&b) {
+                    hash_map::EntryRef::Occupied(oeb) => {
+                        let b_value = oeb.get().clone();
+                        self.unify(b_value, a)
+                    }
+                    hash_map::EntryRef::Vacant(veb) => {
+                        // TODO: Type check the hole
+                        veb.insert(a.clone());
+                        true
+                    }
+                }
+            }
+
+            (Expr::And(a1, b1), Expr::And(a2, b2)) | (Expr::Or(a1, b1), Expr::Or(a2, b2)) => {
+                self.unify(*a1, *a2) && self.unify(*b1, *b2)
+            }
+            (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
+            (
+                Expr::Builtin {
+                    builtin: a,
+                    arguments: a_args,
+                },
+                Expr::Builtin {
+                    builtin: b,
+                    arguments: b_args,
+                },
+            ) => a == b && self.unify_all(a_args, b_args),
+            (Expr::EnumType(a, a_args), Expr::EnumType(b, b_args)) => {
+                a == b && self.unify_all(a_args, b_args)
+            }
+            (
+                Expr::FunctionType {
+                    a: a_arg,
+                    r: a_result,
+                },
+                Expr::FunctionType {
+                    a: b_arg,
+                    r: b_result,
+                },
+            ) => self.unify(*a_arg, *b_arg) && self.unify(*a_result, *b_result),
+            (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
+            (Expr::RecordType(a), Expr::RecordType(b)) => {
+                &a.record == &b.record && self.unify_all(a.arguments, b.arguments)
+            }
+            (Expr::StringLiteral(a), Expr::StringLiteral(b)) => a == b,
+            (Expr::TraitType(a, a_args), Expr::TraitType(b, b_args)) => {
+                a == b && self.unify_all(a_args, b_args)
+            }
+            (Expr::Tuple { items: a }, Expr::Tuple { items: b }) => self.unify_all(a, b),
+            (Expr::Type(a), Expr::Type(b)) => self.unify(*a, *b),
+            (Expr::BigType(a), Expr::BigType(b)) => a == b,
+            (Expr::Variable(a), Expr::Variable(b)) => a == b,
+            _ => false,
         }
-        (Expr::StringLiteral(a), Expr::StringLiteral(b)) => a == b,
-        (Expr::TraitType(a, a_args), Expr::TraitType(b, b_args)) => {
-            a == b && unify_all(a_args, b_args)
-        }
-        (Expr::Tuple { items: a }, Expr::Tuple { items: b }) => unify_all(a, b),
-        (Expr::Type(a), Expr::Type(b)) => unify(a, b),
-        (Expr::BigType(a), Expr::BigType(b)) => a == b,
-        (Expr::Variable(a), Expr::Variable(b)) => a == b,
-        _ => false,
     }
-}
 
-fn unify_all(a: &[Expr<TypeCheckExprContext>], b: &[Expr<TypeCheckExprContext>]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| unify(a, b))
-}
-
-fn is_type(expr: &Expr<TypeCheckExprContext>) -> bool {
-    match expr {
-        Expr::Type(_) => true,
-        Expr::BigType(_) => true,
-        Expr::Tuple { items } => items.iter().all(is_type),
-        _ => false,
+    fn unify_all(
+        &mut self,
+        a: Vec<Expr<TypeCheckExprContext>>,
+        b: Vec<Expr<TypeCheckExprContext>>,
+    ) -> bool {
+        a.len() == b.len() && a.into_iter().zip(b).all(|(a, b)| self.unify(a, b))
     }
-}
 
-fn type_matches_expected(
-    context: &Context,
-    actual_type: &Expr<TypeCheckExprContext>,
-    expected_type: ExpectedType<'_>,
-) -> bool {
-    match expected_type {
-        ExpectedType::AnyMetaType => {
-            let mut norm = NormalizerScanner::new(context.normalize_fuel(), ExprNormalizer);
-            let mut actual_type = actual_type.clone();
-            norm.scan(&mut actual_type);
-            is_type(&actual_type)
+    fn is_type(&mut self, mut expr: Expr<TypeCheckExprContext>) -> bool {
+        let mut norm = NormalizerScanner::new(
+            self.context.normalize_fuel(),
+            ExprNormalizer {
+                model: &mut self.model,
+            },
+        );
+        norm.normalize(&mut expr);
+
+        match expr {
+            Expr::Type(_) => true,
+            Expr::BigType(_) => true,
+            Expr::Tuple { items } => items.into_iter().all(|item| self.is_type(item)),
+            _ => false,
         }
+    }
 
-        ExpectedType::Exact(expected_type) => {
-            let mut actual_type = actual_type.clone();
-            let mut expected_type = expected_type.clone();
-            {
-                let mut norm = NormalizerScanner::new(context.normalize_fuel(), ExprNormalizer);
-                norm.scan(&mut actual_type);
-                norm.scan(&mut expected_type);
-            };
+    fn type_matches_expected(
+        &mut self,
+        actual_type: &Expr<TypeCheckExprContext>,
+        expected_type: ExpectedType<'_>,
+    ) -> bool {
+        match expected_type {
+            ExpectedType::AnyMetaType => self.is_type(actual_type.clone()),
 
-            'exact_check: {
+            ExpectedType::Exact(expected_type) => {
+                let mut expected_type = expected_type.clone();
+                {
+                    let mut norm = NormalizerScanner::new(
+                        self.context.normalize_fuel(),
+                        ExprNormalizer {
+                            model: &mut self.model,
+                        },
+                    );
+                    norm.normalize(&mut expected_type);
+                }
+
+                let mut actual_type = actual_type.clone();
+                {
+                    let mut norm = NormalizerScanner::new(
+                        self.context.normalize_fuel(),
+                        ExprNormalizer {
+                            model: &mut self.model,
+                        },
+                    );
+                    norm.normalize(&mut actual_type);
+                }
+
                 match &actual_type {
                     Expr::Type(n) => match &expected_type {
-                        Expr::BigType(_) => break 'exact_check true,
+                        Expr::BigType(_) => return true,
                         Expr::Type(n2) => match (&**n, &**n2) {
                             (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
-                                break 'exact_check n >= &BigInt::ZERO
-                                    && n2 >= &BigInt::ZERO
-                                    && n <= n2;
+                                return n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2;
                             }
                             _ => {}
                         },
                         _ => {}
                     },
 
+                    Expr::Builtin {
+                        builtin: Builtin::NeverType,
+                        ..
+                    } => {
+                        return true;
+                    }
+
                     _ => {}
                 }
 
-                unify(&mut expected_type, &mut actual_type)
+                self.unify(expected_type, actual_type)
             }
         }
     }
-}
 
-fn partially_inferred_type_matches_expected(
-    context: &Context,
-    actual_type: &PartiallyInferredType<'_>,
-    expected_type: ExpectedType<'_>,
-) -> bool {
-    match actual_type {
-        PartiallyInferredType::Full(actual_type) => {
-            type_matches_expected(context, actual_type, expected_type)
-        }
-        PartiallyInferredType::Closure => {
-            todo!()
-        }
-        PartiallyInferredType::Tuple(elements) => match expected_type {
-            ExpectedType::AnyMetaType | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => {
-                elements
+    fn partially_inferred_type_matches_expected(
+        &mut self,
+        actual_type: &PartiallyInferredType<'_>,
+        expected_type: ExpectedType<'_>,
+    ) -> bool {
+        match actual_type {
+            PartiallyInferredType::Full(actual_type) => {
+                self.type_matches_expected(actual_type, expected_type)
+            }
+            PartiallyInferredType::Closure => {
+                todo!()
+            }
+            PartiallyInferredType::Tuple(elements) => match expected_type {
+                ExpectedType::AnyMetaType
+                | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => elements
                     .iter()
-                    .all(|e| partially_inferred_type_matches_expected(context, e, expected_type))
-            }
+                    .all(|e| self.partially_inferred_type_matches_expected(e, expected_type)),
 
-            ExpectedType::Exact(Expr::Tuple { items }) if items.len() == elements.len() => {
-                elements.iter().zip(items.iter()).all(|(actual, expected)| {
-                    partially_inferred_type_matches_expected(
-                        context,
-                        actual,
-                        ExpectedType::Exact(expected),
-                    )
-                })
-            }
+                ExpectedType::Exact(Expr::Tuple { items }) if items.len() == elements.len() => {
+                    elements.iter().zip(items.iter()).all(|(actual, expected)| {
+                        self.partially_inferred_type_matches_expected(
+                            actual,
+                            ExpectedType::Exact(expected),
+                        )
+                    })
+                }
 
-            _ => false,
-        },
+                _ => false,
+            },
+        }
     }
 }
 
@@ -2041,14 +2383,17 @@ struct CallInfo<'a> {
     arguments: VecDeque<ArgumentInfo<'a>>,
 }
 
-struct OverloadResolver<'parent, 'access, 'scope, 'e> {
-    type_checker: &'parent mut TypeChecker<'access, 'scope>,
+struct OverloadResolver<'parent, 'access, 'scope, 'model, 'e> {
+    type_checker: &'parent mut TypeChecker<'access, 'scope, 'model>,
     call_location: &'e Location,
     rejected_overloads: Vec<(Overloadable<'e>, OverloadRejectionReason)>,
 }
 
-impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e> {
-    fn new(type_checker: &'parent mut TypeChecker<'access, 'scope>, call_location: &'e Location) -> Self {
+impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 'scope, 'model, 'e> {
+    fn new(
+        type_checker: &'parent mut TypeChecker<'access, 'scope, 'model>,
+        call_location: &'e Location,
+    ) -> Self {
         Self {
             type_checker,
             call_location,
@@ -2088,10 +2433,9 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                     };
 
                     if !group.is_empty() {
-                        self.type_checker
-                            .context
-                            .reporter()
-                            .report_error(CompileError::ambiguous_overload(self.call_location.clone()));
+                        self.type_checker.context.reporter().report_error(
+                            CompileError::ambiguous_overload(self.call_location.clone()),
+                        );
                     }
 
                     break 'find_overload selected_overload;
@@ -2186,6 +2530,15 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
     ) -> Option<OverloadRejectionReason> {
         let sig = overload.signature();
 
+        let mut model = self.type_checker.model.clone();
+        let mut scope = LocalVariableScope::new(self.type_checker.scope);
+        let mut type_checker = TypeChecker {
+            context: self.type_checker.context.clone(),
+            model: &mut model,
+            access: self.type_checker.access,
+            scope: &mut scope,
+        };
+
         let mut param_types = sig
             .parameters
             .iter()
@@ -2223,8 +2576,7 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
             if let (Some(arg), Some(inferred_arg)) = (args.first(), inferred_args.first())
                 && param.list_type == arg.list_type
             {
-                if !partially_inferred_type_matches_expected(
-                    &self.type_checker.context,
+                if !type_checker.partially_inferred_type_matches_expected(
                     &inferred_arg.partially_inferred_type(),
                     ExpectedType::Exact(&param_type),
                 ) {
@@ -2251,7 +2603,7 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                     }
                     FunctionParameterListType::InferrableList
                     | FunctionParameterListType::QuoteList => {
-                        let hole = Hole::new(param_type);
+                        let hole = Hole::new(self.call_location.clone(), param_type);
                         if let Some(v) = v {
                             self.substitute_arg_in_param_types(
                                 &mut param_types,
@@ -2353,14 +2705,12 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                 break;
             };
 
-            let v: Option<Variable<TypeCheckExprContext>> = overload.as_expression_owner().map(|owner| {
-                Variable::Parameter(Box::new(
-                    param.clone().to_parameter_var(
-                        owner,
-                        parameter_index,
-                    ),
-                ))
-            });
+            let v: Option<Variable<TypeCheckExprContext>> =
+                overload.as_expression_owner().map(|owner| {
+                    Variable::Parameter(Box::new(
+                        param.clone().to_parameter_var(owner, parameter_index),
+                    ))
+                });
 
             if let Some(arg) = args.front()
                 && param.list_type == arg.list_type
@@ -2396,7 +2746,7 @@ impl<'parent, 'access, 'scope, 'e> OverloadResolver<'parent, 'access, 'scope, 'e
                     }
                     FunctionParameterListType::InferrableList
                     | FunctionParameterListType::QuoteList => {
-                        let hole = Hole::new(param_type);
+                        let hole = Hole::new(self.call_location.clone(), param_type);
 
                         if let Some(v) = v {
                             self.substitute_arg_in_param_types(
@@ -2475,7 +2825,7 @@ struct SelectedOverload<'e> {
 }
 
 impl<'a> SelectedOverload<'a> {
-    fn into_inferred_type(mut self, checker: &TypeChecker<'_, '_>) -> InferredType {
+    fn into_inferred_type(mut self, checker: &TypeChecker<'_, '_, '_>) -> InferredType {
         let expr = match self.overload {
             Overloadable::Base(scope::Overloadable::Function(f)) => Expr::FunctionCall {
                 function: f,
@@ -2505,14 +2855,16 @@ impl<'a> SelectedOverload<'a> {
                 record_value,
                 ..
             } => {
-                let value = self.args.pop().expect("Record field store should have an argument");
+                let value = self
+                    .args
+                    .pop()
+                    .expect("Record field store should have an argument");
 
                 if !field.metadata().is_mutable {
-                    checker.context.reporter().report_error(
-                        CompileError::can_not_mutate(
-                            self.call_location.clone()
-                        )
-                    );
+                    checker
+                        .context
+                        .reporter()
+                        .report_error(CompileError::can_not_mutate(self.call_location.clone()));
                 }
 
                 Expr::RecordFieldStore {
@@ -2521,7 +2873,7 @@ impl<'a> SelectedOverload<'a> {
                     record_value: Box::new(record_value),
                     new_value: Box::new(value),
                 }
-            },
+            }
             _ => todo!(
                 "into_inferred_type: unimplemented overloadable {:?}",
                 self.overload
@@ -2532,5 +2884,38 @@ impl<'a> SelectedOverload<'a> {
             checked_expr: expr,
             inferred_type: self.return_type,
         }
+    }
+}
+
+struct BranchTyper {
+    branch_type: Expr<TypeCheckExprContext>,
+}
+
+impl BranchTyper {
+    fn new() -> Self {
+        Self {
+            branch_type: Expr::never_type(),
+        }
+    }
+
+    fn add_branch(
+        &mut self,
+        _checker: &mut TypeChecker<'_, '_, '_>,
+        t: &Expr<TypeCheckExprContext>,
+    ) {
+        match self.branch_type {
+            Expr::Builtin {
+                builtin: Builtin::NeverType,
+                ..
+            } => {
+                self.branch_type = t.clone();
+            }
+
+            _ => {}
+        }
+    }
+
+    fn into_branch_type(self) -> Expr<TypeCheckExprContext> {
+        self.branch_type
     }
 }

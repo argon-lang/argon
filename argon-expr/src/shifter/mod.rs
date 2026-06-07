@@ -1,6 +1,6 @@
 use crate::{
-    Expr, ExprContext, ExpressionOwner, LocalVariable, MatchCase, ParameterVariable,
-    RecordFieldLiteral, RecordType, Variable,
+    BlockLabel, Expr, ExprContext, ExpressionOwner, LocalVariable, LoopLabels, MatchCase,
+    ParameterVariable, RecordFieldLiteral, RecordType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -49,7 +49,14 @@ where
             finally_body: Box::new(shifter.shift(*ensures_body)),
         },
         Expr::BoolLiteral(value) => Expr::BoolLiteral(value),
-        Expr::Break { label } => Expr::Break { label },
+        Expr::Block { label, body } => Expr::Block {
+            label: Box::new(default_shift_label(shifter, *label)),
+            body: Box::new(shifter.shift(*body)),
+        },
+        Expr::Break { label, value } => Expr::Break {
+            label: Box::new(default_shift_label(shifter, *label)),
+            value: Box::new(shifter.shift(*value)),
+        },
         Expr::Builtin { builtin, arguments } => Expr::Builtin {
             builtin,
             arguments: arguments
@@ -108,10 +115,6 @@ where
             value: Box::new(shifter.shift(*value)),
             pattern,
         },
-        Expr::Loop { label, body } => Expr::Loop {
-            label,
-            body: Box::new(shifter.shift(*body)),
-        },
         Expr::Match { value, cases } => Expr::Match {
             value: Box::new(shifter.shift(*value)),
             cases: cases
@@ -135,7 +138,6 @@ where
                 .collect(),
         },
         Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },
-        Expr::Next { label } => Expr::Next { label },
         Expr::Or(a, b) => Expr::Or(Box::new(shifter.shift(*a)), Box::new(shifter.shift(*b))),
         Expr::Raise { ex } => Expr::Raise {
             ex: Box::new(shifter.shift(*ex)),
@@ -176,7 +178,9 @@ where
         Expr::RecordType(record_type) => {
             Expr::RecordType(default_shift_record_type(shifter, record_type))
         }
-        Expr::Redo { label } => Expr::Redo { label },
+        Expr::Retry { label } => Expr::Retry {
+            label: Box::new(default_shift_label(shifter, *label)),
+        },
         Expr::Sequence(exprs) => Expr::Sequence(
             Vec1::try_from(
                 exprs
@@ -212,15 +216,6 @@ where
             shifter.shift_variable(variable),
             Box::new(shifter.shift(*value)),
         ),
-        Expr::While {
-            label,
-            condition,
-            body,
-        } => Expr::While {
-            label,
-            condition: Box::new(shifter.shift(*condition)),
-            body: Box::new(shifter.shift(*body)),
-        },
         Expr::BoxedType { t } => Expr::BoxedType {
             t: Box::new(shifter.shift(*t)),
         },
@@ -231,6 +226,34 @@ where
         Expr::Unbox { t, value } => Expr::Unbox {
             t: Box::new(shifter.shift(*t)),
             value: Box::new(shifter.shift(*value)),
+        },
+    }
+}
+
+fn default_shift_label<S>(shifter: &mut S, label: BlockLabel<S::EC1>) -> BlockLabel<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    BlockLabel {
+        id: label.id,
+        name: label.name,
+        kind: label.kind,
+        block_result_type: shifter.shift(label.block_result_type),
+    }
+}
+
+pub fn default_shift_loop_labels<S>(
+    shifter: &mut S,
+    labels: LoopLabels<S::EC1>,
+) -> LoopLabels<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    match labels {
+        LoopLabels::Loop(label) => LoopLabels::Loop(default_shift_label(shifter, label)),
+        LoopLabels::While { outer, inner } => LoopLabels::While {
+            outer: default_shift_label(shifter, outer),
+            inner: default_shift_label(shifter, inner),
         },
     }
 }

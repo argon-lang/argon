@@ -12,14 +12,11 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             Expr::bool_type()
         }
 
-        Expr::Loop { .. }
-        | Expr::VariableBinding(_, _)
-        | Expr::VariableStore(_, _)
-        | Expr::While { .. } => Expr::unit_type(),
+        Expr::Block { label, .. } => label.block_result_type.clone(),
 
-        Expr::Break { .. } | Expr::Next { .. } | Expr::Raise { .. } | Expr::Redo { .. } => {
-            Expr::never_type()
-        }
+        Expr::VariableBinding(_, _) | Expr::VariableStore(_, _) => Expr::unit(),
+
+        Expr::Break { .. } | Expr::Raise { .. } | Expr::Retry { .. } => Expr::never_type(),
 
         Expr::BigType(value) => Expr::BigType(value + 1),
 
@@ -79,7 +76,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::RecordFieldLoad { field, .. } => (*field.clone().field_type()).clone(),
 
-        Expr::RecordFieldStore { .. } => Expr::unit_type(),
+        Expr::RecordFieldStore { .. } => Expr::unit(),
 
         Expr::RecordType(record_type) => {
             let owner = ExpressionOwner::Record(record_type.record.clone());
@@ -158,7 +155,7 @@ fn get_builtin_type(
 
         Builtin::ArrayGet => arguments.into_iter().next().cloned().unwrap_or(Expr::Error),
 
-        Builtin::ArraySet => Expr::unit_type(),
+        Builtin::ArraySet => Expr::unit(),
 
         Builtin::ConjunctionType | Builtin::DisjunctionType | Builtin::EqualToType => Expr::Error,
     }

@@ -1,6 +1,6 @@
 use crate::{CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult};
 use fs_extra::dir::CopyOptions;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
@@ -24,7 +24,7 @@ impl JSPlatform {
         let context = library_info.test_suite_context.clone();
 
         tube_map
-            .entry(library_info.name.clone())
+            .entry_ref(&library_info.name)
             .or_insert_with(|| {
                 let library = context.library_info(&library_info.name);
 
@@ -45,6 +45,7 @@ impl JSPlatform {
                 cmd.arg("--output");
                 cmd.arg(&output_dir);
 
+                library.test_suite_context.print_command(&cmd);
                 let output = cmd.output().unwrap();
 
                 assert!(
@@ -88,6 +89,7 @@ impl CompileTargetPlatform for JSPlatform {
         cmd.arg("--output-file");
         cmd.arg(&path);
 
+        library.test_suite_context.print_command(&cmd);
         let output = cmd.output().unwrap();
 
         assert!(
@@ -146,6 +148,7 @@ impl CompileTargetPlatform for JSPlatform {
         cmd.arg("--output");
         cmd.arg(&output_dir);
 
+        test_context.test_suite_context.print_command(&cmd);
         let output = cmd.output().unwrap();
 
         assert!(

@@ -18,6 +18,7 @@ argon-compiler = { workspace = true, default-features = false }
 argon-expr = { workspace = true, default-features = false }
 argon-format = { workspace = true }
 argon-util = { workspace = true, default-features = false }
+embedded-io = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true, default-features = false }
 hashbrown = { workspace = true }

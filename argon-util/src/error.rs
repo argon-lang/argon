@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
-use parse18_runtime::{write_location_file, Location, LocationFile};
+use parse18_runtime::{Location, LocationFile, write_location_file};
 #[cfg(feature = "std")]
 use std::path::PathBuf;
 
@@ -465,6 +465,7 @@ pub enum TubeFormatError {
     ExprParseError(esexpr_binary::ParseError<std::io::Error>),
     ExprParseErrorNoIo(esexpr_binary::ParseError<core::convert::Infallible>),
     ExprDecodeError(esexpr::DecodeError),
+    InvalidTube(String),
 }
 
 impl core::fmt::Display for TubeFormatError {
@@ -478,6 +479,7 @@ impl core::fmt::Display for TubeFormatError {
             Self::ExprParseError(err) => write!(f, "tube format parse error: {err:?}"),
             Self::ExprParseErrorNoIo(err) => write!(f, "tube format parse error: {err:?}"),
             Self::ExprDecodeError(err) => write!(f, "tube format decode error: {err:?}"),
+            Self::InvalidTube(tube) => write!(f, "invalid tube: {}", tube),
         }
     }
 }
