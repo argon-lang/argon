@@ -13,11 +13,11 @@ use argon_compiler::{
     Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, NormalizerScanner,
+    BlockLabel, ErasureMode, Expr, ExpressionOwner, NormalizerScanner,
     ParameterVariable, Variable,
 };
 use argon_format::vm as vf;
-use argon_util::{Fuel, InternalCompilerError, TubeFormatError, UniqueIdentifier};
+use argon_util::{InternalCompilerError, TubeFormatError};
 use core::mem;
 use embedded_io::Write;
 use esexpr::{ESExprCodec, ESExprStatic};
@@ -570,17 +570,6 @@ impl VmEncoder {
 
         Ok(emitter.into_function_body())
     }
-
-    fn emit_token_expr(
-        &mut self,
-        expr: &Expr<argon_compiler::DefaultExprContext>,
-    ) -> Result<vf::Token, InternalCompilerError> {
-        TokenEmitter {
-            encoder: self,
-            token_params: HashMap::new(),
-        }
-        .token_expr(expr)
-    }
 }
 
 impl Iterator for VmEncoder {
@@ -1099,14 +1088,14 @@ impl<'a> ExprEmitter<'a> {
                         }) if (**last_break_id).id == block_id.id => {
                             body.instructions.pop();
                             is_loop = false;
-                        },
+                        }
 
                         Some(vf::Instruction::BlockRetry {
                             block_id: last_break_id,
                         }) if (**last_break_id).id == block_id.id => {
                             body.instructions.pop();
                             is_loop = true;
-                        },
+                        }
 
                         _ => break,
                     }
@@ -1442,7 +1431,7 @@ impl<'a> ExprEmitter<'a> {
             // RefCellType
             // TraitType
             Expr::RecordFieldLoad {
-                record_type,
+                record_type: _,
                 field,
                 record_value,
             } => {
@@ -1458,7 +1447,7 @@ impl<'a> ExprEmitter<'a> {
             }
 
             Expr::RecordFieldStore {
-                record_type,
+                record_type: _,
                 field,
                 record_value,
                 new_value,

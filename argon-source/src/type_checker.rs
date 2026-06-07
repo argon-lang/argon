@@ -22,7 +22,7 @@ use core::cmp::Ordering;
 use core::fmt::{Debug, Formatter};
 use core::hash::{Hash, Hasher};
 use core::{mem, ptr};
-use hashbrown::{DefaultHashBuilder, HashMap, HashSet, hash_map};
+use hashbrown::{HashMap, HashSet, hash_map};
 use mitsein::vec1;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
@@ -185,12 +185,12 @@ struct HoleInfo {
 }
 
 #[derive(Clone)]
-pub struct Hole {
+struct Hole {
     hole_info: Arc<HoleInfo>,
 }
 
 impl Hole {
-    pub fn new(location: Location, hole_type: Expr<TypeCheckExprContext>) -> Self {
+    fn new(location: Location, hole_type: Expr<TypeCheckExprContext>) -> Self {
         Self {
             hole_info: Arc::new(HoleInfo {
                 location,
@@ -487,10 +487,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 BlockLabelDeclaration::Loop(labels) => labels.break_label(),
                             })
                     }
-                    None => self
-                        .scope
-                        .latest_loop_labels()
-                        .map(LoopLabels::break_label),
+                    None => self.scope.latest_loop_labels().map(LoopLabels::break_label),
                 };
 
                 let Some(block_label) = block_label else {
@@ -536,14 +533,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .lookup_block_label(&label.value)
                         .and_then(|decl| match decl {
                             BlockLabelDeclaration::Block(_) => None,
-                            BlockLabelDeclaration::Loop(labels) => {
-                                Some(labels.next_label())
-                            }
+                            BlockLabelDeclaration::Loop(labels) => Some(labels.next_label()),
                         }),
-                    None => self
-                        .scope
-                        .latest_loop_labels()
-                        .map(LoopLabels::next_label),
+                    None => self.scope.latest_loop_labels().map(LoopLabels::next_label),
                 };
 
                 let Some((block_label, is_break)) = block_label else {
@@ -568,8 +560,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         },
                         inferred_type: Expr::never_type(),
                     })
-                }
-                else {
+                } else {
                     TypeInferResult::Complete(InferredType {
                         checked_expr: Expr::Retry {
                             label: Box::new(block_label),
@@ -585,14 +576,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .lookup_block_label(&label.value)
                         .and_then(|decl| match decl {
                             BlockLabelDeclaration::Block(_) => None,
-                            BlockLabelDeclaration::Loop(labels) => {
-                                Some(labels.redo_label())
-                            }
+                            BlockLabelDeclaration::Loop(labels) => Some(labels.redo_label()),
                         }),
-                    None => self
-                        .scope
-                        .latest_loop_labels()
-                        .map(LoopLabels::redo_label),
+                    None => self.scope.latest_loop_labels().map(LoopLabels::redo_label),
                 };
 
                 let Some(block_label) = block_label else {
@@ -1063,10 +1049,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 elements: items.iter().map(|item| self.infer(item)).collect(),
             },
 
-            ast::Expr::While { label, condition, body } => {
+            ast::Expr::While {
+                label,
+                condition,
+                body,
+            } => {
                 let mut checker = with_nested_scope!(self);
 
-                let mut block_label = BlockLabel {
+                let block_label = BlockLabel {
                     id: UniqueIdentifier::new(),
                     name: label.as_ref().map(|l| l.value.clone()),
                     kind: BlockLabelKind::WhileOuter,
@@ -1080,9 +1070,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         block_label.clone(),
                     )));
 
-                let mut cond = checker.check_block(condition, &Expr::bool_type());
+                let cond = checker.check_block(condition, &Expr::bool_type());
 
-                let mut inner_label = BlockLabel {
+                let inner_label = BlockLabel {
                     id: UniqueIdentifier::new(),
                     name: block_label.name.clone(),
                     kind: BlockLabelKind::WhileInner,
@@ -1141,7 +1131,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: while_loop,
                     inferred_type: Expr::unit(),
                 })
-            },
+            }
 
             ast::Expr::BoxedType { .. } => todo!("infer boxed types"),
             ast::Expr::Box { .. } => todo!("infer box expressions"),

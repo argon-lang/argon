@@ -7,8 +7,16 @@ use std::{
     marker::PhantomData,
 };
 
+pub trait TerminalInfo: Sized {
+    fn has_payload(self) -> bool;
+
+    fn payload_type(self) -> Option<&'static str> {
+        None
+    }
+}
+
 pub trait GrammarTypes {
-    type Terminal: Debug + Copy + Eq + Hash + Display;
+    type Terminal: Debug + Copy + Eq + Hash + Display + TerminalInfo;
     type Rule: Debug + Copy + Eq + Hash + Display;
     type ExternalRuleType: Debug + Clone + Eq;
     type ExternalFunction: Debug + Clone + Eq;

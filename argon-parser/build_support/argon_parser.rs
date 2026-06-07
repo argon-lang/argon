@@ -1,7 +1,7 @@
 use parse18_ll_gen::codegen::rust::{RustSettings, emit_rust};
 use parse18_ll_gen::grammar::{
-    Grammar, GrammarFactory, GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, error, nonterm,
-    rule as base_rule, ruleset as base_ruleset, term,
+    Grammar, GrammarFactory, GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, TerminalInfo, error,
+    nonterm, rule as base_rule, ruleset as base_ruleset, term,
 };
 use std::io::{self, Write};
 
@@ -31,7 +31,7 @@ pub enum Token {
     // Layout
     #[strum(serialize = "NewLine")]
     NewLine,
-    #[strum(serialize = "SymSemicolon")]
+    #[strum(serialize = "Semicolon")]
     Semicolon,
 
     // Keywords
@@ -267,6 +267,23 @@ pub enum Token {
     SymAt,
     #[strum(serialize = "SymSingleQuote")]
     SymSingleQuote,
+}
+
+impl TerminalInfo for Token {
+    fn has_payload(self) -> bool {
+        matches!(
+            self,
+            Token::StringText | Token::IntToken | Token::IdentifierToken
+        )
+    }
+
+    fn payload_type(self) -> Option<&'static str> {
+        match self {
+            Token::StringText | Token::IdentifierToken => Some("Box<str>"),
+            Token::IntToken => Some("BigUint"),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, strum::Display)]

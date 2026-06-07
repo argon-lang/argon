@@ -142,17 +142,4 @@ impl<'a> SignatureParser<'a> {
             ExpressionOwner::Instance(_) => todo!(),
         }
     }
-
-    fn owner_is_erased(&self) -> bool {
-        match &self.owner {
-            ExpressionOwner::Function(f) => f.metadata().erasure_mode == ErasureMode::Erased,
-
-            ExpressionOwner::Record(_)
-            | ExpressionOwner::Enum(_)
-            | ExpressionOwner::Trait(_)
-            | ExpressionOwner::EnumVariant(_)
-            | ExpressionOwner::Method(_)
-            | ExpressionOwner::Instance(_) => false,
-        }
-    }
 }

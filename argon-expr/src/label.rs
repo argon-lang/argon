@@ -51,7 +51,7 @@ pub enum LoopLabels<EC: ExprContext + ?Sized> {
     // Loop has a single label
     // break exits, redo and next go back to the beginning
     Loop(BlockLabel<EC>),
-    
+
     // While has two labels
     // break exits
     // retry goes back to the beginning of the inner block
@@ -76,14 +76,14 @@ impl<EC: ExprContext + ?Sized> LoopLabels<EC> {
             LoopLabels::While { outer, .. } => outer,
         }
     }
-    
+
     pub fn next_label(self) -> (BlockLabel<EC>, bool) {
         match self {
             LoopLabels::Loop(label) => (label, false),
             LoopLabels::While { inner, .. } => (inner, true),
         }
     }
-    
+
     pub fn redo_label(self) -> BlockLabel<EC> {
         match self {
             LoopLabels::Loop(label) => label,

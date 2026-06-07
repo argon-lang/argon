@@ -1,5 +1,6 @@
 use crate::grammar::{
     Grammar, GrammarTypes, LL1Conflict, LL1RuleSet, LL1RuleType, LL1RuleValue, LL1SymbolType,
+    TerminalInfo,
 };
 use std::io::{self, Write};
 
@@ -212,13 +213,13 @@ where
         emit_indent(w, indent + 1)?;
         write!(
             w,
-            "::parse18_runtime::ParseResult::Success(token) if matches!(token.value.category(), "
+            "::parse18_runtime::ParseResult::Success(token) if matches!(&token.value, "
         )?;
         for (i, term) in terminals.iter().enumerate() {
             if i > 0 {
                 write!(w, " | ")?;
             }
-            emit_terminal_or_eof_category_expr::<W, G>(w, *term)?;
+            emit_terminal_or_eof_pattern_expr::<W, G>(w, *term, settings)?;
         }
         writeln!(w, ") => {{")?;
         emit_rule_body(
@@ -336,7 +337,15 @@ where
 
     emit_indent(w, indent)?;
     write!(w, "(")?;
-    emit_symbol_parse_expr(w, indent + 1, receiver, sym, rule_name, symbol_index)?;
+    emit_symbol_parse_expr(
+        w,
+        indent + 1,
+        receiver,
+        sym,
+        settings,
+        rule_name,
+        symbol_index,
+    )?;
 
     if symbol_index + 1 == symbols.len() {
         writeln!(w, ").map(move |{var_name}| {{")?;
@@ -378,6 +387,7 @@ fn emit_symbol_parse_expr<'a, W, G>(
     indent: usize,
     receiver: &str,
     sym: &crate::grammar::LL1Symbol<'a, G>,
+    settings: &RustSettings,
     rule_name: &str,
     symbol_index: usize,
 ) -> io::Result<()>
@@ -390,7 +400,14 @@ where
         writeln!(w, "{{")?;
         emit_indent(w, indent)?;
         write!(w, "let __parse18_with_location_{symbol_index} = ")?;
-        emit_symbol_parse_expr_inner(w, indent + 1, receiver, &sym.symbol_type, rule_name)?;
+        emit_symbol_parse_expr_inner(
+            w,
+            indent + 1,
+            receiver,
+            &sym.symbol_type,
+            settings,
+            rule_name,
+        )?;
         writeln!(w, ";")?;
         emit_indent(w, indent)?;
         writeln!(
@@ -400,7 +417,7 @@ where
         emit_indent(w, indent - 1)?;
         write!(w, "}}")?;
     } else {
-        emit_symbol_parse_expr_inner(w, indent, receiver, &sym.symbol_type, rule_name)?;
+        emit_symbol_parse_expr_inner(w, indent, receiver, &sym.symbol_type, settings, rule_name)?;
     }
 
     Ok(())
@@ -411,6 +428,7 @@ fn emit_symbol_parse_expr_inner<W, G>(
     indent: usize,
     receiver: &str,
     sym_type: &LL1SymbolType<'_, G>,
+    settings: &RustSettings,
     rule_name: &str,
 ) -> io::Result<()>
 where
@@ -422,12 +440,25 @@ where
         LL1SymbolType::Terminal(term) => {
             writeln!(w, "match {receiver}.parser_next() {{")?;
             emit_indent(w, indent)?;
-            write!(
-                w,
-                "::parse18_runtime::ParseResult::Success(token) if token.value.category() == "
-            )?;
-            emit_terminal_category_expr::<W, G>(w, term)?;
-            writeln!(w, " => ::parse18_runtime::ParseResult::Success(token),")?;
+            if (**term).has_payload() {
+                write!(
+                    w,
+                    "::parse18_runtime::ParseResult::Success(::parse18_runtime::WithRange {{ value: {}::{}(__parse18_payload), range }}) => ::parse18_runtime::ParseResult::Success(::parse18_runtime::WithRange {{ value: __parse18_payload, range }}),",
+                    settings.token_type,
+                    terminal_category_name::<G>(term),
+                )?;
+                writeln!(w)?;
+            } else {
+                write!(
+                    w,
+                    "::parse18_runtime::ParseResult::Success(token @ ::parse18_runtime::WithRange {{ value: "
+                )?;
+                emit_terminal_pattern_expr::<W, G>(w, term, settings)?;
+                writeln!(
+                    w,
+                    ", .. }}) => ::parse18_runtime::ParseResult::Success(token),"
+                )?;
+            }
 
             emit_indent(w, indent)?;
             write!(w, "_ => {receiver}.error(\"{rule_name}\", &[")?;
@@ -458,7 +489,19 @@ where
 {
     match t {
         LL1RuleType::ExternalType(t) => write!(w, "{t}")?,
-        LL1RuleType::TerminalType(_) => write!(w, "{}", settings.token_type)?,
+        LL1RuleType::TerminalType(term) => {
+            if (**term).has_payload() {
+                write!(
+                    w,
+                    "{}",
+                    (**term)
+                        .payload_type()
+                        .expect("payload terminals must define payload_type")
+                )?;
+            } else {
+                write!(w, "{}", settings.token_type)?;
+            }
+        }
         LL1RuleType::Function(a, b) => {
             write!(w, "Box<dyn FnOnce(")?;
             emit_type(w, a.as_ref(), settings)?;
@@ -618,6 +661,48 @@ where
             w,
             "<Self as ::parse18_runtime::ParserRuntime>::TokenCategory::EndOfFile"
         )?,
+    }
+
+    Ok(())
+}
+
+fn emit_terminal_or_eof_pattern_expr<W, G>(
+    w: &mut W,
+    term: Option<&G::Terminal>,
+    settings: &RustSettings,
+) -> io::Result<()>
+where
+    W: Write,
+    G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
+{
+    match term {
+        Some(term) => {
+            write!(w, "&")?;
+            emit_terminal_pattern_expr::<W, G>(w, term, settings)?;
+        }
+        None => write!(w, "&{}::EndOfFile", settings.token_type)?,
+    }
+
+    Ok(())
+}
+
+fn emit_terminal_pattern_expr<W, G>(
+    w: &mut W,
+    term: &G::Terminal,
+    settings: &RustSettings,
+) -> io::Result<()>
+where
+    W: Write,
+    G: GrammarTypes<ExternalFunction = String, ExternalLexMode = String, ExternalRuleType = String>,
+{
+    write!(
+        w,
+        "{}::{}",
+        settings.token_type,
+        terminal_category_name::<G>(term)
+    )?;
+    if (*term).has_payload() {
+        write!(w, "(..)")?;
     }
 
     Ok(())

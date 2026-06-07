@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext, ExprScannerMut};
+use crate::{Expr, ExprContext};
 use alloc::vec::Vec;
 use argon_util::Fuel;
 

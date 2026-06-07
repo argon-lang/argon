@@ -5,7 +5,7 @@ use crate::token::{Token, TokenCategory};
 use alloc::borrow::ToOwned;
 use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
 use argon_util::{CompileError, ErrorReporter};
-use num_bigint::BigInt;
+use num_bigint::{BigInt, BigUint};
 use parse18_runtime::{
     FilePosition, FilePositionRange, Location, LocationFileView, ParseResult, ParserRuntime,
     WithLocation, WithRange,
@@ -153,29 +153,20 @@ fn simplify_fragments(fragments: Vec<StringFragment>) -> StringLiteral {
     StringLiteral { parts }
 }
 
-fn token_identifier_name(token: Token) -> String {
-    match token {
-        Token::Identifier { name } => name.into(),
-        _ => panic!("expected identifier token"),
-    }
+fn token_identifier_name(name: Box<str>) -> String {
+    name.into()
 }
 
-fn token_int_bigint(token: Token) -> BigInt {
-    match token {
-        Token::IntToken { value } => value.into(),
-        _ => panic!("expected int token"),
-    }
+fn token_int_bigint(value: BigUint) -> BigInt {
+    value.into()
 }
 
-fn token_string_text(token: Token) -> String {
-    match token {
-        Token::StringText { text } => text.into(),
-        _ => panic!("expected string text token"),
-    }
+fn token_string_text(text: Box<str>) -> String {
+    text.into()
 }
 
-fn identifier_expr_named_token(token: Token) -> Identifier {
-    identifier_expr_named(token_identifier_name(token))
+fn identifier_expr_named_token(name: Box<str>) -> Identifier {
+    identifier_expr_named(token_identifier_name(name))
 }
 
 fn if_expr_from_cond_apply(
@@ -225,20 +216,20 @@ fn expr_while_no_body(
     )
 }
 
-fn string_fragment_text_token(token: Token) -> StringFragment {
-    string_fragment_text(token_string_text(token))
+fn string_fragment_text_token(text: Box<str>) -> StringFragment {
+    string_fragment_text(token_string_text(text))
 }
 
-fn expr_int_literal_token(token: Token) -> Expr {
-    expr_int_literal(token_int_bigint(token))
+fn expr_int_literal_token(value: BigUint) -> Expr {
+    expr_int_literal(token_int_bigint(value))
 }
 
-fn expr_big_type_token(token: Token) -> Expr {
-    expr_big_type(token_int_bigint(token))
+fn expr_big_type_token(value: BigUint) -> Expr {
+    expr_big_type(token_int_bigint(value))
 }
 
-fn expr_builtin_token(token: Token) -> Expr {
-    expr_builtin(token_identifier_name(token))
+fn expr_builtin_token(name: Box<str>) -> Expr {
+    expr_builtin(token_identifier_name(name))
 }
 
 fn enclosed_arg_list_paren_empty(
@@ -259,8 +250,8 @@ fn enclosed_arg_list_square_empty(
     )
 }
 
-fn pattern_int_token(token: Token) -> Pattern {
-    pattern_int(token_int_bigint(token))
+fn pattern_int_token(value: BigUint) -> Pattern {
+    pattern_int(token_int_bigint(value))
 }
 
 fn pattern_binding_discard(mut_spec: bool, id: WithLocation<Identifier>) -> Pattern {
@@ -337,7 +328,7 @@ fn method_declaration_stmt_rest_function(
     })
 }
 
-fn function_body_extern_body_token(id: WithLocation<Token>) -> FunctionBody {
+fn function_body_extern_body_token(id: WithLocation<Box<str>>) -> FunctionBody {
     function_body_extern_body(id.map(token_identifier_name))
 }
 
@@ -421,27 +412,27 @@ fn instance_declaration_stmt_rest_builder(
     })
 }
 
-fn tube_name_single(token: Token) -> NonEmptyVec<String> {
-    non_empty_single(token_identifier_name(token))
+fn tube_name_single(name: Box<str>) -> NonEmptyVec<String> {
+    non_empty_single(token_identifier_name(name))
 }
 
-fn tube_name_prepend(token: Token, tail: NonEmptyVec<String>) -> NonEmptyVec<String> {
-    non_empty_prepend(token_identifier_name(token), tail)
+fn tube_name_prepend(name: Box<str>, tail: NonEmptyVec<String>) -> NonEmptyVec<String> {
+    non_empty_prepend(token_identifier_name(name), tail)
 }
 
-fn import_path_segment_imported_token(id: WithLocation<Token>) -> ImportPathSegment {
+fn import_path_segment_imported_token(id: WithLocation<Box<str>>) -> ImportPathSegment {
     import_path_segment_imported(id.map(identifier_expr_named_token))
 }
 
 fn import_path_segment_renaming_token(
-    id: WithLocation<Token>,
+    id: WithLocation<Box<str>>,
     viewed_name: WithLocation<Option<Identifier>>,
 ) -> ImportPathSegment {
     import_path_segment_renaming(id.map(identifier_expr_named_token), viewed_name)
 }
 
 fn import_path_segment_cons_token(
-    id: WithLocation<Token>,
+    id: WithLocation<Box<str>>,
     path: ImportPathSegment,
 ) -> ImportPathSegment {
     import_path_segment_cons(token_identifier_name(id.value), path)
@@ -513,8 +504,8 @@ fn new_trait_object_body_stmt_from_declaration_builder(
     declaration_stmt_to_new_trait_object_body_stmt(build_decl((modifiers, method_purity)))
 }
 
-fn module_path_prepend(token: Token, tail: Vec<String>) -> Vec<String> {
-    prepend(token_identifier_name(token), tail)
+fn module_path_prepend(name: Box<str>, tail: Vec<String>) -> Vec<String> {
+    prepend(token_identifier_name(name), tail)
 }
 
 fn expr_error() -> Expr {

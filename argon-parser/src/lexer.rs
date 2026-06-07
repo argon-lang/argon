@@ -95,9 +95,7 @@ trait TokenProcessor {
                 }));
             lexer.text_buffer.clear();
             lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-            let error_token = Token::Error {
-                invalid_text: Box::from(lexer.text_buffer.as_str()),
-            };
+            let error_token = Token::Error(Box::from(lexer.text_buffer.as_str()));
             let range = FilePositionRange {
                 start: lexer.token_start_pos,
                 end: lexer.current_pos,
@@ -184,7 +182,7 @@ impl TokenProcessor for NormalTokenProcessor {
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
                 let n = BigUint::from_str_radix(&lexer.text_buffer, 10)
                     .expect("Lexer produced token with invalid decimal integer value");
-                Some(Token::IntToken { value: n })
+                Some(Token::IntToken(n))
             }
             TokenType::BinInteger => {
                 lexer.text_buffer.clear();
@@ -193,7 +191,7 @@ impl TokenProcessor for NormalTokenProcessor {
                     .extend(lexer.acc_text.iter().copied().skip(2));
                 let n = BigUint::from_str_radix(&lexer.text_buffer, 2)
                     .expect("Lexer produced token with invalid binary integer value");
-                Some(Token::IntToken { value: n })
+                Some(Token::IntToken(n))
             }
             TokenType::OctInteger => {
                 lexer.text_buffer.clear();
@@ -202,7 +200,7 @@ impl TokenProcessor for NormalTokenProcessor {
                     .extend(lexer.acc_text.iter().copied().skip(2));
                 let n = BigUint::from_str_radix(&lexer.text_buffer, 8)
                     .expect("Lexer produced token with invalid octal integer value");
-                Some(Token::IntToken { value: n })
+                Some(Token::IntToken(n))
             }
             TokenType::HexInteger => {
                 lexer.text_buffer.clear();
@@ -211,14 +209,12 @@ impl TokenProcessor for NormalTokenProcessor {
                     .extend(lexer.acc_text.iter().copied().skip(2));
                 let n = BigUint::from_str_radix(&lexer.text_buffer, 16)
                     .expect("Lexer produced token with invalid hexadecimal integer value");
-                Some(Token::IntToken { value: n })
+                Some(Token::IntToken(n))
             }
             TokenType::Identifier => {
                 lexer.text_buffer.clear();
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-                Some(Token::Identifier {
-                    name: Box::from(lexer.text_buffer.as_str()),
-                })
+                Some(Token::Identifier(Box::from(lexer.text_buffer.as_str())))
             }
             TokenType::InvalidInteger => {
                 lexer.text_buffer.clear();
@@ -230,9 +226,7 @@ impl TokenProcessor for NormalTokenProcessor {
                         start: lexer.token_start_pos,
                         end: lexer.current_pos,
                     }));
-                Some(Token::Error {
-                    invalid_text: Box::from(lexer.text_buffer.as_str()),
-                })
+                Some(Token::Error(Box::from(lexer.text_buffer.as_str())))
             }
         };
 
@@ -285,7 +279,7 @@ impl TokenProcessor for StringTokenProcessor {
 
         let string_token = |s: &str| {
             WithRange::new(
-                Token::StringText { text: Box::from(s) },
+                Token::StringText(Box::from(s)),
                 FilePositionRange {
                     start: lexer.token_start_pos,
                     end: pos,
@@ -449,9 +443,7 @@ mod tests {
     fn let_prefix_letter() {
         assert_eq!(
             lex_normal("lets"),
-            vec![Token::Identifier {
-                name: Box::from("lets")
-            }]
+            vec![Token::Identifier(Box::from("lets"))]
         );
     }
 
@@ -459,9 +451,7 @@ mod tests {
     fn let_prefix_bang() {
         assert_eq!(
             lex_normal("let!"),
-            vec![Token::Identifier {
-                name: Box::from("let!")
-            }]
+            vec![Token::Identifier(Box::from("let!"))]
         );
     }
 
@@ -469,12 +459,7 @@ mod tests {
     fn let_keyword_identifier() {
         assert_eq!(
             lex_normal("let s"),
-            vec![
-                Token::KwLet,
-                Token::Identifier {
-                    name: Box::from("s")
-                }
-            ]
+            vec![Token::KwLet, Token::Identifier(Box::from("s"))]
         );
     }
 
@@ -512,9 +497,7 @@ mod tests {
     fn simple_decimal_integer() {
         assert_eq!(
             lex_normal("123"),
-            vec![Token::IntToken {
-                value: BigUint::from(123u32)
-            }]
+            vec![Token::IntToken(BigUint::from(123u32))]
         );
     }
 
@@ -522,9 +505,7 @@ mod tests {
     fn decimal_integer_with_leading_zero() {
         assert_eq!(
             lex_normal("0123"),
-            vec![Token::IntToken {
-                value: BigUint::from(123u32)
-            }]
+            vec![Token::IntToken(BigUint::from(123u32))]
         );
     }
 
@@ -532,24 +513,14 @@ mod tests {
     fn negative_decimal_integer() {
         assert_eq!(
             lex_normal("-123"),
-            vec![
-                Token::OpMinus,
-                Token::IntToken {
-                    value: BigUint::from(123u32)
-                }
-            ]
+            vec![Token::OpMinus, Token::IntToken(BigUint::from(123u32))]
         );
     }
 
     #[test]
     fn invalid_decimal_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "123A");
-        assert_eq!(
-            tokens,
-            vec![Token::Error {
-                invalid_text: Box::from("123A")
-            }]
-        );
+        assert_eq!(tokens, vec![Token::Error(Box::from("123A"))]);
         assert_eq!(errors.len(), 1);
     }
 
@@ -557,9 +528,7 @@ mod tests {
     fn binary_integer_lowercase() {
         assert_eq!(
             lex_normal("0b101010"),
-            vec![Token::IntToken {
-                value: BigUint::from(42u32)
-            }]
+            vec![Token::IntToken(BigUint::from(42u32))]
         );
     }
 
@@ -567,9 +536,7 @@ mod tests {
     fn binary_integer_uppercase_b() {
         assert_eq!(
             lex_normal("0B101010"),
-            vec![Token::IntToken {
-                value: BigUint::from(42u32)
-            }]
+            vec![Token::IntToken(BigUint::from(42u32))]
         );
     }
 
@@ -577,24 +544,14 @@ mod tests {
     fn negative_binary_integer() {
         assert_eq!(
             lex_normal("-0b101010"),
-            vec![
-                Token::OpMinus,
-                Token::IntToken {
-                    value: BigUint::from(42u32)
-                }
-            ]
+            vec![Token::OpMinus, Token::IntToken(BigUint::from(42u32))]
         );
     }
 
     #[test]
     fn invalid_binary_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "0b101010A");
-        assert_eq!(
-            tokens,
-            vec![Token::Error {
-                invalid_text: Box::from("0b101010A")
-            }]
-        );
+        assert_eq!(tokens, vec![Token::Error(Box::from("0b101010A"))]);
         assert_eq!(errors.len(), 1);
     }
 
@@ -602,9 +559,9 @@ mod tests {
     fn octal_integer() {
         assert_eq!(
             lex_normal("0o1234567"),
-            vec![Token::IntToken {
-                value: BigUint::from_str_radix("1234567", 8).unwrap()
-            }]
+            vec![Token::IntToken(
+                BigUint::from_str_radix("1234567", 8).unwrap()
+            )]
         );
     }
 
@@ -614,9 +571,7 @@ mod tests {
             lex_normal("-0o1234567"),
             vec![
                 Token::OpMinus,
-                Token::IntToken {
-                    value: BigUint::from_str_radix("1234567", 8).unwrap()
-                }
+                Token::IntToken(BigUint::from_str_radix("1234567", 8).unwrap())
             ]
         );
     }
@@ -624,12 +579,7 @@ mod tests {
     #[test]
     fn invalid_octal_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "0o1234567A");
-        assert_eq!(
-            tokens,
-            vec![Token::Error {
-                invalid_text: Box::from("0o1234567A")
-            }]
-        );
+        assert_eq!(tokens, vec![Token::Error(Box::from("0o1234567A"))]);
         assert_eq!(errors.len(), 1);
     }
 
@@ -637,9 +587,9 @@ mod tests {
     fn hex_integer_lowercase() {
         assert_eq!(
             lex_normal("0x123456789abcdef"),
-            vec![Token::IntToken {
-                value: BigUint::from_str_radix("123456789abcdef", 16).unwrap()
-            }]
+            vec![Token::IntToken(
+                BigUint::from_str_radix("123456789abcdef", 16).unwrap()
+            )]
         );
     }
 
@@ -647,9 +597,9 @@ mod tests {
     fn hex_integer_uppercase_x() {
         assert_eq!(
             lex_normal("0X123456789abcdef"),
-            vec![Token::IntToken {
-                value: BigUint::from_str_radix("123456789abcdef", 16).unwrap()
-            }]
+            vec![Token::IntToken(
+                BigUint::from_str_radix("123456789abcdef", 16).unwrap()
+            )]
         );
     }
 
@@ -657,9 +607,9 @@ mod tests {
     fn hex_integer_uppercase_digits() {
         assert_eq!(
             lex_normal("0x123456789ABCDEF"),
-            vec![Token::IntToken {
-                value: BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
-            }]
+            vec![Token::IntToken(
+                BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
+            )]
         );
     }
 
@@ -667,9 +617,9 @@ mod tests {
     fn hex_integer_uppercase_x_and_digits() {
         assert_eq!(
             lex_normal("0X123456789ABCDEF"),
-            vec![Token::IntToken {
-                value: BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
-            }]
+            vec![Token::IntToken(
+                BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
+            )]
         );
     }
 
@@ -679,9 +629,7 @@ mod tests {
             lex_normal("-0x123456789abcdef"),
             vec![
                 Token::OpMinus,
-                Token::IntToken {
-                    value: BigUint::from_str_radix("123456789abcdef", 16).unwrap()
-                }
+                Token::IntToken(BigUint::from_str_radix("123456789abcdef", 16).unwrap())
             ]
         );
     }
@@ -689,42 +637,25 @@ mod tests {
     #[test]
     fn invalid_hex_integer() {
         let (tokens, errors) = lex_with_errors(LexerMode::Normal, "0x123456789abcdefG");
-        assert_eq!(
-            tokens,
-            vec![Token::Error {
-                invalid_text: Box::from("0x123456789abcdefG")
-            }]
-        );
+        assert_eq!(tokens, vec![Token::Error(Box::from("0x123456789abcdefG"))]);
         assert_eq!(errors.len(), 1);
     }
 
     #[test]
     fn simple_identifier() {
-        assert_eq!(
-            lex_normal("s"),
-            vec![Token::Identifier {
-                name: Box::from("s")
-            }]
-        );
+        assert_eq!(lex_normal("s"), vec![Token::Identifier(Box::from("s"))]);
     }
 
     #[test]
     fn identifier_with_digits() {
-        assert_eq!(
-            lex_normal("s1"),
-            vec![Token::Identifier {
-                name: Box::from("s1")
-            }]
-        );
+        assert_eq!(lex_normal("s1"), vec![Token::Identifier(Box::from("s1"))]);
     }
 
     #[test]
     fn identifier_with_underscore_in_middle() {
         assert_eq!(
             lex_normal("some_name"),
-            vec![Token::Identifier {
-                name: Box::from("some_name")
-            }]
+            vec![Token::Identifier(Box::from("some_name"))]
         );
     }
 
@@ -732,9 +663,7 @@ mod tests {
     fn identifier_starting_with_underscore_not_lone_underscore() {
         assert_eq!(
             lex_normal("_value1"),
-            vec![Token::Identifier {
-                name: Box::from("_value1")
-            }]
+            vec![Token::Identifier(Box::from("_value1"))]
         );
     }
 
@@ -747,9 +676,7 @@ mod tests {
     fn identifier_ending_with_question_mark() {
         assert_eq!(
             lex_normal("isEmpty?"),
-            vec![Token::Identifier {
-                name: Box::from("isEmpty?")
-            }]
+            vec![Token::Identifier(Box::from("isEmpty?"))]
         );
     }
 
@@ -757,9 +684,7 @@ mod tests {
     fn identifier_ending_with_exclamation_mark() {
         assert_eq!(
             lex_normal("bang!"),
-            vec![Token::Identifier {
-                name: Box::from("bang!")
-            }]
+            vec![Token::Identifier(Box::from("bang!"))]
         );
     }
 
@@ -767,12 +692,7 @@ mod tests {
     fn only_one_trailing_terminator_following_bang_is_operator() {
         assert_eq!(
             lex_normal("a?!"),
-            vec![
-                Token::Identifier {
-                    name: Box::from("a?")
-                },
-                Token::OpLogicalNot
-            ]
+            vec![Token::Identifier(Box::from("a?")), Token::OpLogicalNot]
         );
     }
 
@@ -782,9 +702,7 @@ mod tests {
             lex_normal("|a|"),
             vec![
                 Token::SymPipe,
-                Token::Identifier {
-                    name: Box::from("a")
-                },
+                Token::Identifier(Box::from("a")),
                 Token::SymPipe
             ]
         );
@@ -799,12 +717,7 @@ mod tests {
     fn simple_string() {
         assert_eq!(
             lex_string("abc\""),
-            vec![
-                Token::StringText {
-                    text: Box::from("abc")
-                },
-                Token::StringEnd
-            ]
+            vec![Token::StringText(Box::from("abc")), Token::StringEnd]
         );
     }
 
@@ -813,15 +726,9 @@ mod tests {
         assert_eq!(
             lex_string("abc\\ndef\""),
             vec![
-                Token::StringText {
-                    text: Box::from("abc")
-                },
-                Token::StringText {
-                    text: Box::from("\n")
-                },
-                Token::StringText {
-                    text: Box::from("def")
-                },
+                Token::StringText(Box::from("abc")),
+                Token::StringText(Box::from("\n")),
+                Token::StringText(Box::from("def")),
                 Token::StringEnd,
             ]
         );
@@ -832,9 +739,7 @@ mod tests {
         assert_eq!(
             lex_string("a #{"),
             vec![
-                Token::StringText {
-                    text: Box::from("a ")
-                },
+                Token::StringText(Box::from("a ")),
                 Token::StringInterpolationStart,
             ]
         );
