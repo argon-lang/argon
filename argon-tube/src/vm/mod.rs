@@ -1099,14 +1099,14 @@ impl<'a> ExprEmitter<'a> {
                         }) if (**last_break_id).id == block_id.id => {
                             body.instructions.pop();
                             is_loop = false;
-                        }
+                        },
 
                         Some(vf::Instruction::BlockRetry {
                             block_id: last_break_id,
                         }) if (**last_break_id).id == block_id.id => {
                             body.instructions.pop();
                             is_loop = true;
-                        }
+                        },
 
                         _ => break,
                     }

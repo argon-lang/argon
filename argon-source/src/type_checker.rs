@@ -1063,7 +1063,86 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 elements: items.iter().map(|item| self.infer(item)).collect(),
             },
 
-            ast::Expr::While { .. } => todo!("infer while expressions"),
+            ast::Expr::While { label, condition, body } => {
+                let mut checker = with_nested_scope!(self);
+
+                let mut block_label = BlockLabel {
+                    id: UniqueIdentifier::new(),
+                    name: label.as_ref().map(|l| l.value.clone()),
+                    kind: BlockLabelKind::WhileOuter,
+                    block_result_type: Expr::unit(),
+                };
+
+                // Treat the label as a loop label when checking the condition
+                checker
+                    .scope
+                    .add_block_label(BlockLabelDeclaration::Loop(LoopLabels::Loop(
+                        block_label.clone(),
+                    )));
+
+                let mut cond = checker.check_block(condition, &Expr::bool_type());
+
+                let mut inner_label = BlockLabel {
+                    id: UniqueIdentifier::new(),
+                    name: block_label.name.clone(),
+                    kind: BlockLabelKind::WhileInner,
+                    block_result_type: Expr::unit(),
+                };
+
+                checker
+                    .scope
+                    .add_block_label(BlockLabelDeclaration::Loop(LoopLabels::While {
+                        outer: block_label.clone(),
+                        inner: inner_label.clone(),
+                    }));
+
+                let mut body = checker.check_block(body, &Expr::unit());
+                match body {
+                    Expr::Sequence(ref mut items) => {
+                        items.push(Expr::Retry {
+                            label: Box::new(block_label.clone()),
+                        });
+                    }
+
+                    _ => {
+                        body = Expr::Sequence(vec1![
+                            body,
+                            Expr::Retry {
+                                label: Box::new(block_label.clone()),
+                            },
+                        ]);
+                    }
+                }
+
+                let while_loop = Expr::Block {
+                    label: Box::new(block_label.clone()),
+                    body: Box::new(Expr::Sequence(vec1![
+                        Expr::IfElse {
+                            condition: Box::new(cond),
+                            when_true_var: None,
+                            when_false_var: None,
+                            when_true: Box::new(Expr::unit()),
+                            when_false: Box::new(Expr::Break {
+                                label: Box::new(block_label.clone()),
+                                value: Box::new(Expr::unit()),
+                            }),
+                        },
+                        Expr::Block {
+                            label: Box::new(inner_label.clone()),
+                            body: Box::new(body),
+                        },
+                        Expr::Retry {
+                            label: Box::new(block_label.clone()),
+                        },
+                    ])),
+                };
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: while_loop,
+                    inferred_type: Expr::unit(),
+                })
+            },
+
             ast::Expr::BoxedType { .. } => todo!("infer boxed types"),
             ast::Expr::Box { .. } => todo!("infer box expressions"),
             ast::Expr::Unbox { .. } => todo!("infer unbox expressions"),

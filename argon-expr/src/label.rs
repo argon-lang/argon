@@ -51,12 +51,11 @@ pub enum LoopLabels<EC: ExprContext + ?Sized> {
     // Loop has a single label
     // break exits, redo and next go back to the beginning
     Loop(BlockLabel<EC>),
-
+    
     // While has two labels
     // break exits
     // retry goes back to the beginning of the inner block
     // next goes back to the beginning of the outer block
-    // it is assumed that there is no jump to the end of the inner block
     While {
         outer: BlockLabel<EC>,
         inner: BlockLabel<EC>,
