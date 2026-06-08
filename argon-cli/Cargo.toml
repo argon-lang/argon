@@ -9,5 +9,9 @@ argon-compiler = { workspace = true, features = ["std"] }
 argon-runner = { workspace = true, features = ["std"] }
 clap = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Environment", "Win32_System_SystemInformation"] }
+
 [lints]
 workspace = true
+

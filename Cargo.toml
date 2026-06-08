@@ -48,6 +48,7 @@ subprocess = "1.1.0"
 tempfile = "3.27.0"
 unicode-general-category = { version = "1.1.0", default-features = false }
 walkdir = "2.5.0"
+windows-sys = "0.61.2"
 
 [workspace.lints.rust]
 macro_use_extern_crate = "deny"
@@ -82,3 +83,11 @@ struct_field_names = "allow"
 too_many_arguments = "allow"
 new_without_default = "allow"
 enum_glob_use = "allow"
+
+[profile.small]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

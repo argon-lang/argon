@@ -2,7 +2,7 @@
 
 import { mkdir, open, rm, type FileHandle } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
-import { Command, type CommandUnknownOpts } from "@commander-js/extra-typings";
+import { Command } from "@commander-js/extra-typings";
 import { writeExprs } from "@argon-lang/esexpr/binary_format";
 import type { InputFile, InputStream, OutputDirectory, OutputFile, OutputStream } from "@argon-lang/js-backend-api";
 import { PlatformMetadataResult } from "@argon-lang/js-backend-api/metadata.js";
@@ -130,23 +130,6 @@ async function codegenJs(
     })
 }
 
-function printHelpDescription(commandPath: readonly string[]): void {
-    let current: CommandUnknownOpts = program;
-
-    for(const commandName of commandPath) {
-        const next = current.commands.find(command => command.name() === commandName);
-        if(next === undefined) {
-            console.error(`argon-js-backend: unknown command: ${commandPath.join(" ")}`);
-            process.exitCode = 1;
-            return;
-        }
-
-        current = next;
-    }
-
-    console.log(current.description());
-}
-
 const program = new Command();
 
 program
@@ -171,12 +154,6 @@ program
     .requiredOption("-i, --input <file>", "Input Argon VM IR file")
     .requiredOption("-o, --output <dir>", "Output directory")
     .action(codegenJs);
-
-program
-    .command("help-description")
-    .description("Print a command help description")
-    .argument("<command...>", "Command path")
-    .action(printHelpDescription);
 
 try {
     await program.parseAsync(process.argv);

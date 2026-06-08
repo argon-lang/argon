@@ -80,6 +80,7 @@ dependencies = [
  "argon-compiler",
  "argon-runner",
  "clap",
+ "windows-sys",
 ]
 
 [[package]]

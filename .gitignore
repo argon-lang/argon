@@ -2,6 +2,7 @@
 
 target/
 bin/
+!**/src/bin/
 src-gen/
 out/
 lib/
