@@ -1,7 +1,8 @@
 use crate::access::AccessToken;
 use crate::signature::SignatureParameter;
 use crate::{
-    DefaultExprContext, Enum, Function, FunctionSignature, Instance, Method, Record, Trait,
+    DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Method, Record,
+    Trait,
 };
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
@@ -62,6 +63,7 @@ pub enum Overloadable {
     Method(Arc<dyn Method>),
     Record(Arc<dyn Record>),
     Enum(Arc<dyn Enum>),
+    EnumVariant(Arc<dyn EnumVariant>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
@@ -84,6 +86,7 @@ impl Overloadable {
             Overloadable::Method(m) => ExpressionOwner::Method(m.clone()),
             Overloadable::Record(r) => ExpressionOwner::Record(r.clone()),
             Overloadable::Enum(e) => ExpressionOwner::Enum(e.clone()),
+            Overloadable::EnumVariant(v) => ExpressionOwner::EnumVariant(v.clone()),
             Overloadable::Trait(t) => ExpressionOwner::Trait(t.clone()),
             Overloadable::Instance(i) => ExpressionOwner::Instance(i.clone()),
         }
@@ -95,6 +98,7 @@ impl Overloadable {
             Overloadable::Record(r) => r.clone().signature(),
             Overloadable::Method(_) => todo!(),
             Overloadable::Enum(e) => e.clone().signature(),
+            Overloadable::EnumVariant(v) => v.clone().signature(),
             Overloadable::Trait(t) => t.clone().signature(),
             Overloadable::Instance(_) => todo!(),
         }
@@ -102,14 +106,14 @@ impl Overloadable {
 }
 
 pub struct ParameterScope<'a, EC: ExprContext + ?Sized> {
-    parent: &'a mut dyn Scope<ExprContext = EC>,
+    parent: &'a dyn Scope<ExprContext = EC>,
     variable_lookup: HashMap<Identifier, Variable<EC>>,
     binding_lookup: HashMap<Identifier, VariableTupleElement<EC>>,
 }
 
 impl<'a, EC: ExprContext + ?Sized> ParameterScope<'a, EC> {
     pub fn new(
-        parent: &'a mut dyn Scope<ExprContext = EC>,
+        parent: &'a dyn Scope<ExprContext = EC>,
         owner: ExpressionOwner<EC>,
         parameters: &[SignatureParameter<EC>],
     ) -> Self {
@@ -289,12 +293,12 @@ impl<'a, EC: ExprContext + ?Sized> LocalScope for LocalVariableScope<'a, EC> {
 }
 
 pub struct ShiftedScope<'a, Sc: ?Sized, Sh> {
-    inner: &'a mut Sc,
+    inner: &'a Sc,
     shifter: Sh,
 }
 
 impl<'a, Sc: ?Sized, Sh> ShiftedScope<'a, Sc, Sh> {
-    pub fn new(inner: &'a mut Sc, shifter: Sh) -> Self {
+    pub fn new(inner: &'a Sc, shifter: Sh) -> Self {
         Self { inner, shifter }
     }
 }

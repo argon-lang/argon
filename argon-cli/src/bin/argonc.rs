@@ -1,9 +1,9 @@
+use argon_cli::backend::Backend;
 use argon_cli::options::{
     CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
 };
 use argon_runner::local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite};
 use clap::Parser;
-use argon_cli::backend::Backend;
 
 fn main() {
     let options = CommandLineOptions::parse();
@@ -63,12 +63,13 @@ fn main() {
 
 #[cfg(unix)]
 fn execute_backend_subcommand(backend: Backend) {
-    use std::process::Command;
     use std::os::unix::process::CommandExt;
+    use std::process::Command;
 
     let mut command;
 
-    let mut executable_path = std::env::current_exe().expect("failed to get current executable path");
+    let mut executable_path =
+        std::env::current_exe().expect("failed to get current executable path");
     executable_path.pop();
     executable_path.pop();
     executable_path.pop();
@@ -93,4 +94,3 @@ fn execute_backend_subcommand(backend: Backend) {
 fn execute_backend_subcommand(_backend: Backend) {
     eprintln!("backend subcommands are not implemented on this platform");
 }
-

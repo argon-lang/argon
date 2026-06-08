@@ -1,3 +1,4 @@
+use crate::enums::SourceEnum;
 use crate::function::SourceFunction;
 use crate::record::SourceRecord;
 use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
@@ -799,6 +800,27 @@ impl<'a> SourceFileProcessor<'a> {
                 let entry = ModuleExportEntry {
                     access: record_res.access,
                     binding: ModuleExportBinding::Record(record_res.result),
+                    is_reexport: false,
+                };
+
+                self.module.add_export(name, entry);
+            }
+
+            Stmt::EnumDeclaration(decl) => {
+                let scope = self.get_scope();
+
+                let closure = Box::new(ModuleClosure {
+                    tube_name: self.tb.tube().name().clone(),
+                    module_path: self.result.path.clone(),
+                    scope,
+                });
+
+                let name = decl.name.value.clone();
+                let enum_res = SourceEnum::from_ast(self.context.clone(), closure, decl);
+
+                let entry = ModuleExportEntry {
+                    access: enum_res.access,
+                    binding: ModuleExportBinding::Enum(enum_res.result),
                     is_reexport: false,
                 };
 

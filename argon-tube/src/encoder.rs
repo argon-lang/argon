@@ -2,9 +2,10 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
-    EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionParameterListType,
-    FunctionSignature, Identifier, Module, ModuleExportBinding, ModuleExportEntry, ModulePath,
-    Record, RecordField, RecordFieldOwner, Tube, TubeName, UnaryOperatorIdentifier,
+    EffectInfo, Enum, EnumVariant, ErasureMode, Expr, Function, FunctionImplementation,
+    FunctionParameterListType, FunctionSignature, Identifier, Module, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Tube, TubeName,
+    UnaryOperatorIdentifier,
 };
 use core::mem;
 use num_bigint::{BigInt, BigUint};
@@ -119,6 +120,27 @@ impl TubeEncoder {
         if is_new {
             self.entry_emitters
                 .push_back(EntryEmitter::RecordField(field));
+        }
+
+        id
+    }
+
+    fn get_enum_id(&mut self, enum_: Arc<dyn Enum>) -> usize {
+        let (id, is_new) = self.ids.enum_ids.get_with_new(enum_.clone());
+
+        if is_new {
+            self.entry_emitters.push_back(EntryEmitter::Enum(enum_));
+        }
+
+        id
+    }
+
+    fn get_enum_variant_id(&mut self, variant: Arc<dyn EnumVariant>) -> usize {
+        let (id, is_new) = self.ids.enum_variant_ids.get_with_new(variant.clone());
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::EnumVariant(variant));
         }
 
         id
@@ -305,10 +327,84 @@ impl TubeEncoder {
                         name: Box::new(name),
                     }
                 }
-                RecordFieldOwner::EnumVariant(_) => {
-                    todo!("emit enum variant record field references")
+                RecordFieldOwner::EnumVariant(variant) => {
+                    let record_field_id =
+                        BigUint::from(self.ids.record_field_ids.get(field.clone()));
+                    let variant_id = BigUint::from(self.get_enum_variant_id(variant));
+                    let name = encode_identifier(&field.metadata().name)?;
+
+                    tf::TubeFileEntry::EnumVariantRecordFieldReference {
+                        record_field_id,
+                        variant_id,
+                        name: Box::new(name),
+                    }
                 }
             },
+            EntryEmitter::Enum(enum_) => {
+                let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
+                let import_specifier = enum_.clone().import_specifier();
+                let import = self.encode_import_specifier(&import_specifier)?;
+
+                if import_specifier_tube(&import_specifier) != self.tube.name() {
+                    tf::TubeFileEntry::EnumReference {
+                        enum_id,
+                        import: Box::new(import),
+                    }
+                } else {
+                    let variants = enum_
+                        .clone()
+                        .variants()
+                        .iter()
+                        .map(|variant| {
+                            self.get_enum_variant_id(variant.clone());
+                            let fields = variant
+                                .clone()
+                                .fields()
+                                .iter()
+                                .map(|field| {
+                                    self.get_record_field_id(field.clone());
+                                    let metadata = field.metadata();
+                                    Ok(Box::new(tf::RecordFieldDefinition {
+                                        name: Box::new(encode_identifier(&metadata.name)?),
+                                        field_type: Box::new(
+                                            self.emit_expr(&field.clone().field_type())?,
+                                        ),
+                                        mutable: metadata.is_mutable,
+                                    }))
+                                })
+                                .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+                            Ok(Box::new(tf::EnumVariantDefinition {
+                                name: Box::new(encode_identifier(&variant.metadata().name)?),
+                                signature: Box::new(
+                                    self.emit_function_signature(&variant.clone().signature())?,
+                                ),
+                                fields,
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+                    tf::TubeFileEntry::EnumDefinition {
+                        definition: Box::new(tf::EnumDefinition {
+                            enum_id,
+                            import: Box::new(import),
+                            signature: Box::new(self.emit_function_signature(&enum_.signature())?),
+                            variants,
+                        }),
+                    }
+                }
+            }
+            EntryEmitter::EnumVariant(variant) => {
+                let variant_id = BigUint::from(self.ids.enum_variant_ids.get(variant.clone()));
+                let enum_id = BigUint::from(self.get_enum_id(variant.clone().owning_enum()));
+                let name = encode_identifier(&variant.metadata().name)?;
+
+                tf::TubeFileEntry::EnumVariantReference {
+                    variant_id,
+                    enum_id,
+                    name: Box::new(name),
+                }
+            }
         }))
     }
 
@@ -369,8 +465,16 @@ impl TubeEncoder {
                     signature: Box::new(signature),
                 }
             }
-            ModuleExportBinding::Enum(_) => {
-                todo!()
+            ModuleExportBinding::Enum(enum_) => {
+                let enum_id = self.get_enum_id(enum_.clone());
+                let sig = enum_.signature();
+                let erased_sig = erase_signature(self.context.clone(), sig.as_ref());
+                let signature = self.encode_erased_signature(&erased_sig)?;
+                tf::ModuleExport::Enum {
+                    enum_id: BigUint::from(enum_id),
+                    access: Box::new(encode_access_modifier_global(exp.access)),
+                    signature: Box::new(signature),
+                }
             }
             ModuleExportBinding::Trait(_) => {
                 todo!()
@@ -742,6 +846,59 @@ impl TubeEncoder {
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
             },
+            Expr::EnumType(enum_type) => tf::Expr::EnumType {
+                enum_type: Box::new(tf::EnumType {
+                    id: BigUint::from(self.get_enum_id(enum_type.enum_.clone())),
+                    args: enum_type
+                        .arguments
+                        .iter()
+                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+            },
+            Expr::EnumVariantLiteral {
+                enum_type,
+                variant,
+                arguments,
+                fields,
+            } => {
+                let declared_fields = variant.clone().fields();
+                tf::Expr::EnumVariantLiteral {
+                    enum_type: Box::new(tf::EnumType {
+                        id: BigUint::from(self.get_enum_id(enum_type.enum_.clone())),
+                        args: enum_type
+                            .arguments
+                            .iter()
+                            .map(|arg| self.emit_expr(arg).map(Box::new))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    }),
+                    variant_id: BigUint::from(self.get_enum_variant_id(variant.clone())),
+                    args: arguments
+                        .iter()
+                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                    fields: fields
+                        .iter()
+                        .map(|field| {
+                            let declared_field = declared_fields
+                                .iter()
+                                .find(|declared_field| declared_field.metadata().name == field.name)
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "enum variant literal references unknown field {:?}",
+                                        field.name
+                                    )
+                                });
+                            Ok(Box::new(tf::RecordFieldLiteral {
+                                field_id: BigUint::from(
+                                    self.get_record_field_id(declared_field.clone()),
+                                ),
+                                value: Box::new(self.emit_expr(&field.value)?),
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, InternalCompilerError>>()?,
+                }
+            }
             Expr::Variable(variable) => tf::Expr::Variable {
                 v: Box::new(self.emit_var(variable)?),
             },
@@ -791,9 +948,13 @@ impl TubeEncoder {
             ExpressionOwner::Record(record) => tf::ExpressionOwner::Rec {
                 index: self.get_record_id(record.clone()).into(),
             },
-            ExpressionOwner::Enum(_) => todo!("emit enum expression owners"),
+            ExpressionOwner::Enum(enum_) => tf::ExpressionOwner::Enum {
+                index: self.get_enum_id(enum_.clone()).into(),
+            },
             ExpressionOwner::Trait(_) => todo!("emit trait expression owners"),
-            ExpressionOwner::EnumVariant(_) => todo!("emit enum variant expression owners"),
+            ExpressionOwner::EnumVariant(variant) => tf::ExpressionOwner::EnumVariant {
+                index: self.get_enum_variant_id(variant.clone()).into(),
+            },
             ExpressionOwner::Method(_) => todo!("emit method expression owners"),
             ExpressionOwner::Instance(_) => todo!("emit instance expression owners"),
         })
@@ -850,6 +1011,8 @@ enum EntryEmitter {
     Function(Arc<dyn Function>),
     Record(Arc<dyn Record>),
     RecordField(Arc<dyn RecordField>),
+    Enum(Arc<dyn Enum>),
+    EnumVariant(Arc<dyn EnumVariant>),
 }
 
 fn encode_module_path(path: &argon_compiler::ModulePath) -> tf::ModulePath {

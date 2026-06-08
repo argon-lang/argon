@@ -87,10 +87,16 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             )
         }
 
-        Expr::EnumType(enum_, arguments) => {
-            let owner = ExpressionOwner::Enum(enum_.clone());
-            return_type_for_args(owner, enum_.clone().signature(), arguments)
+        Expr::EnumType(enum_type) => {
+            let owner = ExpressionOwner::Enum(enum_type.enum_.clone());
+            return_type_for_args(
+                owner,
+                enum_type.enum_.clone().signature(),
+                &enum_type.arguments,
+            )
         }
+
+        Expr::EnumVariantLiteral { enum_type, .. } => Expr::EnumType(enum_type.clone()),
 
         Expr::TraitType(trait_, arguments) => {
             let owner = ExpressionOwner::Trait(trait_.clone());

@@ -14,6 +14,7 @@ use argon_compiler::{
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
+use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, mutex_lock};
 use core::fmt::Debug;
 
@@ -91,7 +92,7 @@ impl Function for SourceFunction {
             return sig.clone();
         }
 
-        let mut scope = self.closure.scope();
+        let scope = self.closure.scope();
         let access_token = self.closure.access_token();
 
         let owner_ref: Arc<dyn Function> = self.clone();
@@ -99,11 +100,14 @@ impl Function for SourceFunction {
 
         let sig = SignatureParser {
             context: self.context.clone(),
-            scope: &mut scope,
+            scope: &scope,
             access_token,
             owner,
         }
-        .parse(&self.decl.parameters, &self.decl.return_type);
+        .parse(
+            MultiSlice::from(self.decl.parameters.as_slice()),
+            &self.decl.return_type,
+        );
 
         let result = Arc::new(sig);
         *sig_store = Some(result.clone());
@@ -121,16 +125,16 @@ impl Function for SourceFunction {
                 let access_token = self.closure.access_token();
 
                 let signature = self.clone().signature();
-                let mut scope = self.closure.scope();
-                let mut scope = ParameterScope::new(
-                    &mut scope,
+                let scope = self.closure.scope();
+                let scope = ParameterScope::new(
+                    &scope,
                     ExpressionOwner::<DefaultExprContext>::Function(self.clone()),
                     &signature.parameters,
                 );
 
                 let expr = type_check_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&access_token, &mut scope),
+                    TypeCheckOptions::new(&access_token, &scope),
                     body.as_ref(),
                     &signature.return_type,
                 );

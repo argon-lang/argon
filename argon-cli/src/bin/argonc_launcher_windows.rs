@@ -1,4 +1,3 @@
-
 #[cfg(not(windows))]
 fn main() {
     eprintln!("argonc_launcher_windows is only supported on Windows");
@@ -7,25 +6,26 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
-    use argon_cli::options::{Command, CommandLineOptions, CodeGenBackendCommand, PlatformMetadataBackendCommand};
     use argon_cli::backend::Backend;
+    use argon_cli::options::{
+        CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
+    };
     use clap::Parser;
     use std::ffi::OsString;
     use std::os::windows::ffi::OsStringExt;
+    use std::os::windows::process::CommandExt;
     use std::path::PathBuf;
     use std::process::Command as ProcessCommand;
-    use std::os::windows::process::CommandExt;
     use windows_sys::Win32::System::Environment::GetCommandLineW;
     use windows_sys::Win32::System::SystemInformation::{
-        GetNativeSystemInfo,
+        GetNativeSystemInfo, PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_ARM64,
         SYSTEM_INFO,
-        PROCESSOR_ARCHITECTURE_AMD64,
-        PROCESSOR_ARCHITECTURE_ARM64,
     };
 
     let options = CommandLineOptions::parse();
 
-    let mut executable_path = std::env::current_exe().expect("failed to get current executable path");
+    let mut executable_path =
+        std::env::current_exe().expect("failed to get current executable path");
     executable_path.pop();
 
     fn backend_command(backend: Backend, mut executable_path: PathBuf) -> ProcessCommand {
@@ -39,18 +39,16 @@ fn main() {
         }
     }
 
-
     let mut command = match options.command {
         Command::Compile(_) | Command::GenIR(_) => {
-
             let arch_name = unsafe {
                 let mut info = SYSTEM_INFO::default();
                 GetNativeSystemInfo(&mut info);
 
                 match info.Anonymous.Anonymous.wProcessorArchitecture {
-                    PROCESSOR_ARCHITECTURE_AMD64  => "x86_64-pc-windows-gnu",
+                    PROCESSOR_ARCHITECTURE_AMD64 => "x86_64-pc-windows-gnu",
                     PROCESSOR_ARCHITECTURE_ARM64 => "aarch64-pc-windows-gnu",
-                    _ => "i686-pc-windows-gnu"
+                    _ => "i686-pc-windows-gnu",
                 }
             };
 
@@ -59,12 +57,10 @@ fn main() {
             executable_path.push("argonc.exe");
 
             ProcessCommand::new(executable_path)
-        },
+        }
 
         Command::CodeGen(cmd) => match cmd.backend_command {
-            CodeGenBackendCommand::JS(_) => {
-                backend_command(Backend::JavaScript, executable_path)
-            }
+            CodeGenBackendCommand::JS(_) => backend_command(Backend::JavaScript, executable_path),
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
             PlatformMetadataBackendCommand::JS(_) => {
@@ -72,7 +68,6 @@ fn main() {
             }
         },
     };
-
 
     let command_line = unsafe {
         let ptr = GetCommandLineW();
@@ -91,4 +86,3 @@ fn main() {
     let exit_status = child.wait().expect("failed to wait for child process");
     std::process::exit(exit_status.code().unwrap_or(1));
 }
-

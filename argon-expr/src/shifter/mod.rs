@@ -1,5 +1,5 @@
 use crate::{
-    BlockLabel, Expr, ExprContext, ExpressionOwner, LocalVariable, LoopLabels, MatchCase,
+    BlockLabel, EnumType, Expr, ExprContext, ExpressionOwner, LocalVariable, LoopLabels, MatchCase,
     ParameterVariable, RecordFieldLiteral, RecordType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -64,13 +64,27 @@ where
                 .map(|argument| shifter.shift(argument))
                 .collect(),
         },
-        Expr::EnumType(enum_ec, arguments) => Expr::EnumType(
-            enum_ec,
-            arguments
+        Expr::EnumType(enum_type) => Expr::EnumType(default_shift_enum_type(shifter, enum_type)),
+        Expr::EnumVariantLiteral {
+            enum_type,
+            variant,
+            arguments,
+            fields,
+        } => Expr::EnumVariantLiteral {
+            enum_type: default_shift_enum_type(shifter, enum_type),
+            variant,
+            arguments: arguments
                 .into_iter()
                 .map(|argument| shifter.shift(argument))
                 .collect(),
-        ),
+            fields: fields
+                .into_iter()
+                .map(|field| RecordFieldLiteral {
+                    name: field.name,
+                    value: shifter.shift(field.value),
+                })
+                .collect(),
+        },
         Expr::FunctionLiteral {
             parameter_name,
             body,
@@ -268,6 +282,20 @@ where
     RecordType {
         record: record_type.record,
         arguments: record_type
+            .arguments
+            .into_iter()
+            .map(|argument| shifter.shift(argument))
+            .collect(),
+    }
+}
+
+fn default_shift_enum_type<S>(shifter: &mut S, enum_type: EnumType<S::EC1>) -> EnumType<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    EnumType {
+        enum_: enum_type.enum_,
+        arguments: enum_type
             .arguments
             .into_iter()
             .map(|argument| shifter.shift(argument))

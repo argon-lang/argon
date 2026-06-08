@@ -6,15 +6,15 @@ use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
-    EffectInfo, ErasureMode, Expr, Function, FunctionImplementation, FunctionMetadata,
-    FunctionParameterListType, FunctionSignature, Identifier, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldMetadata, RecordFieldOwner,
-    Tube, TubeCollection, TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier,
-    Unload,
+    EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr, Function,
+    FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature,
+    Identifier, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField,
+    RecordFieldMetadata, RecordFieldOwner, Tube, TubeCollection, TubeCollectionBuilder,
+    TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
 };
 use argon_expr::{
-    BlockLabel, BlockLabelKind, LocalVariable, ParameterVariable, RecordFieldLiteral, RecordType,
-    Variable,
+    BlockLabel, BlockLabelKind, EnumType, LocalVariable, ParameterVariable, RecordFieldLiteral,
+    RecordType, Variable,
 };
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
@@ -58,6 +58,8 @@ struct TubeDecoder {
     module_ids: RwLock<HashMap<BigUint, (TubeName, ModulePath)>>,
     functions: RwLock<HashMap<BigUint, Arc<dyn Function>>>,
     records: RwLock<HashMap<BigUint, Arc<dyn Record>>>,
+    enums: RwLock<HashMap<BigUint, Arc<dyn Enum>>>,
+    enum_variants: RwLock<HashMap<BigUint, Arc<dyn EnumVariant>>>,
     record_fields: RwLock<HashMap<BigUint, Arc<dyn RecordField>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
@@ -123,6 +125,8 @@ impl TubeDecoder {
             module_ids: RwLock::new(HashMap::new()),
             functions: RwLock::new(HashMap::new()),
             records: RwLock::new(HashMap::new()),
+            enums: RwLock::new(HashMap::new()),
+            enum_variants: RwLock::new(HashMap::new()),
             record_fields: RwLock::new(HashMap::new()),
             local_import_ids: RwLock::new(HashMap::new()),
             local_variables: RwLock::new(HashMap::new()),
@@ -553,35 +557,127 @@ impl TubeDecoder {
             return record_field;
         }
 
-        let (record_id, name) = self
-            .record_field_references
-            .get(&id)
-            .unwrap_or_else(|| panic!("unknown record field id {id}"))
-            .clone();
-        let name = decode_identifier(name);
-        let record = self.record(record_id);
-        let record_field = record
-            .clone()
-            .fields()
-            .iter()
-            .find(|field| field.metadata().name == name)
-            .unwrap_or_else(|| panic!("record field reference has unknown field {name:?}"))
-            .clone();
+        let record_field = if let Some((record_id, name)) = self.record_field_references.get(&id) {
+            let name = decode_identifier(name.clone());
+            let record = self.record(record_id.clone());
+            record
+                .clone()
+                .fields()
+                .iter()
+                .find(|field| field.metadata().name == name)
+                .unwrap_or_else(|| panic!("record field reference has unknown field {name:?}"))
+                .clone()
+        } else if let Some((variant_id, name)) = self.enum_variant_record_field_references.get(&id)
+        {
+            let name = decode_identifier(name.clone());
+            let variant = self.enum_variant(variant_id.clone());
+            variant
+                .clone()
+                .fields()
+                .iter()
+                .find(|field| field.metadata().name == name)
+                .unwrap_or_else(|| {
+                    panic!("enum variant field reference has unknown field {name:?}")
+                })
+                .clone()
+        } else {
+            panic!("unknown record field id {id}");
+        };
 
         rwlock_write(&self.record_fields).insert(id, record_field.clone());
         record_field
     }
 
     fn enum_decl(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Enum> {
-        match self
+        if let Some(enum_) = rwlock_read(&self.enums).get(&id).cloned() {
+            return enum_;
+        }
+
+        let enum_ = match self
             .enum_entries
             .get(&id)
             .unwrap_or_else(|| panic!("unknown enum id {id}"))
             .clone()
         {
-            EnumEntry::Definition(_) => todo!("decode enum definition"),
-            EnumEntry::Reference(_) => todo!("decode enum reference"),
+            EnumEntry::Definition(definition) => {
+                let mut enums = rwlock_write(&self.enums);
+                if let Some(enum_) = enums.get(&id) {
+                    return enum_.clone();
+                }
+
+                let enum_: Arc<dyn Enum> = Arc::new(DecodedEnum::new(self.clone(), definition));
+                enums.insert(id, enum_.clone());
+                return enum_;
+            }
+            EnumEntry::Reference(import) => self.resolve_enum_import(import),
+        };
+
+        rwlock_write(&self.enums).insert(id, enum_.clone());
+        enum_
+    }
+
+    fn resolve_enum_import(self: &Arc<Self>, import: tf::ImportSpecifier) -> Arc<dyn Enum> {
+        match self.decode_import_specifier(import) {
+            ImportSpecifier::Global {
+                tube,
+                module,
+                name,
+                signature,
+            } => {
+                let tube = self
+                    .tube_collection
+                    .tube(&tube)
+                    .unwrap_or_else(|| panic!("enum import references unknown tube {tube}"));
+                let module = tube
+                    .module(&module)
+                    .unwrap_or_else(|| panic!("enum import references unknown module {module}"));
+
+                let export_groups = module.export_groups();
+                let exports = export_groups
+                    .get(&name)
+                    .unwrap_or_else(|| panic!("enum import references unknown export"));
+
+                exports
+                    .iter()
+                    .find_map(|entry| match &entry.binding {
+                        ModuleExportBinding::Enum(enum_)
+                            if &erase_signature(
+                                self.context.clone(),
+                                enum_.clone().signature().as_ref(),
+                            ) == signature.as_ref() =>
+                        {
+                            Some(enum_.clone())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("enum import references unknown overload"))
+            }
+            ImportSpecifier::Local { .. } => todo!("resolve local enum import"),
         }
+    }
+
+    fn enum_variant(self: &Arc<Self>, id: BigUint) -> Arc<dyn EnumVariant> {
+        if let Some(variant) = rwlock_read(&self.enum_variants).get(&id).cloned() {
+            return variant;
+        }
+
+        let (enum_id, name) = self
+            .enum_variant_references
+            .get(&id)
+            .unwrap_or_else(|| panic!("unknown enum variant id {id}"))
+            .clone();
+        let name = decode_identifier(name);
+        let enum_ = self.enum_decl(enum_id);
+        let variant = enum_
+            .clone()
+            .variants()
+            .iter()
+            .find(|variant| variant.metadata().name == name)
+            .unwrap_or_else(|| panic!("enum variant reference has unknown variant {name:?}"))
+            .clone();
+
+        rwlock_write(&self.enum_variants).insert(id, variant.clone());
+        variant
     }
 
     fn trait_decl(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Trait> {
@@ -799,9 +895,41 @@ impl TubeDecoder {
                 label: self.decode_block_id(*block_id),
                 value: Box::new(self.decode_expr(*value)),
             },
-            tf::Expr::EnumType { .. } | tf::Expr::EnumVariantLiteral { .. } => {
-                todo!("decode enum expressions")
-            }
+            tf::Expr::EnumType { enum_type } => Expr::EnumType(EnumType {
+                enum_: self.enum_decl(enum_type.id),
+                arguments: enum_type
+                    .args
+                    .into_iter()
+                    .map(|arg| self.decode_expr(*arg))
+                    .collect(),
+            }),
+            tf::Expr::EnumVariantLiteral {
+                enum_type,
+                variant_id,
+                args,
+                fields,
+            } => Expr::EnumVariantLiteral {
+                enum_type: EnumType {
+                    enum_: self.enum_decl(enum_type.id),
+                    arguments: enum_type
+                        .args
+                        .into_iter()
+                        .map(|arg| self.decode_expr(*arg))
+                        .collect(),
+                },
+                variant: self.enum_variant(variant_id),
+                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+                fields: fields
+                    .into_iter()
+                    .map(|field| {
+                        let record_field = self.record_field(field.field_id);
+                        RecordFieldLiteral {
+                            name: record_field.metadata().name.clone(),
+                            value: self.decode_expr(*field.value),
+                        }
+                    })
+                    .collect(),
+            },
             tf::Expr::Finally { .. } => todo!("decode finally expression"),
             tf::Expr::FunctionCall { id, args } => Expr::FunctionCall {
                 function: self.function(id),
@@ -986,11 +1114,13 @@ impl TubeDecoder {
             tf::ExpressionOwner::Rec { index } => {
                 argon_expr::ExpressionOwner::Record(self.record(index))
             }
-            tf::ExpressionOwner::Enum { .. } => todo!("decode enum expression owner"),
+            tf::ExpressionOwner::Enum { index } => {
+                argon_expr::ExpressionOwner::Enum(self.enum_decl(index))
+            }
             tf::ExpressionOwner::Trait { .. } => todo!("decode trait expression owner"),
             tf::ExpressionOwner::Instance { .. } => todo!("decode instance expression owner"),
-            tf::ExpressionOwner::EnumVariant { .. } => {
-                todo!("decode enum variant expression owner")
+            tf::ExpressionOwner::EnumVariant { index } => {
+                argon_expr::ExpressionOwner::EnumVariant(self.enum_variant(index))
             }
             tf::ExpressionOwner::Method { .. } => todo!("decode method expression owner"),
         }
@@ -1122,6 +1252,206 @@ impl Function for DecodedFunction {
                     .map(|implementation| {
                         Arc::new(self.decoder.decode_function_implementation(*implementation))
                     })
+            })
+            .clone()
+    }
+}
+
+struct DecodedEnum {
+    decoder: Arc<TubeDecoder>,
+    definition: tf::EnumDefinition,
+    import: OnceLock<ImportSpecifier>,
+    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
+    variants: OnceLock<Arc<Vec<Arc<dyn EnumVariant>>>>,
+}
+
+impl DecodedEnum {
+    fn new(decoder: Arc<TubeDecoder>, definition: tf::EnumDefinition) -> Self {
+        Self {
+            decoder,
+            definition,
+            import: OnceLock::new(),
+            signature: OnceLock::new(),
+            variants: OnceLock::new(),
+        }
+    }
+}
+
+impl Debug for DecodedEnum {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "enum {:?}", self.definition.import)
+    }
+}
+
+impl Unload for DecodedEnum {
+    fn unload(&self) {}
+}
+
+impl Enum for DecodedEnum {
+    fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
+        self.import
+            .get_or_init(|| {
+                self.decoder
+                    .decode_import_specifier((*self.definition.import).clone())
+            })
+            .clone()
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        self.signature
+            .get_or_init(|| {
+                Arc::new(
+                    self.decoder
+                        .decode_function_signature((*self.definition.signature).clone()),
+                )
+            })
+            .clone()
+    }
+
+    fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>> {
+        self.variants
+            .get_or_init(|| {
+                Arc::new(
+                    self.definition
+                        .variants
+                        .iter()
+                        .map(|variant| {
+                            Arc::new(DecodedEnumVariant::new(self.clone(), (**variant).clone()))
+                                as Arc<dyn EnumVariant>
+                        })
+                        .collect(),
+                )
+            })
+            .clone()
+    }
+}
+
+struct DecodedEnumVariant {
+    owner: Arc<DecodedEnum>,
+    definition: tf::EnumVariantDefinition,
+    metadata: EnumVariantMetadata,
+    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
+    fields: OnceLock<Arc<Vec<Arc<dyn RecordField>>>>,
+}
+
+impl DecodedEnumVariant {
+    fn new(owner: Arc<DecodedEnum>, definition: tf::EnumVariantDefinition) -> Self {
+        let metadata = EnumVariantMetadata {
+            name: decode_identifier((*definition.name).clone()),
+        };
+
+        Self {
+            owner,
+            definition,
+            metadata,
+            signature: OnceLock::new(),
+            fields: OnceLock::new(),
+        }
+    }
+}
+
+impl Debug for DecodedEnumVariant {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "enum variant {:?}", self.metadata.name)
+    }
+}
+
+impl Unload for DecodedEnumVariant {
+    fn unload(&self) {}
+}
+
+impl EnumVariant for DecodedEnumVariant {
+    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum> {
+        self.owner.clone()
+    }
+
+    fn metadata(&self) -> &EnumVariantMetadata {
+        &self.metadata
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        self.signature
+            .get_or_init(|| {
+                Arc::new(
+                    self.owner
+                        .decoder
+                        .decode_function_signature((*self.definition.signature).clone()),
+                )
+            })
+            .clone()
+    }
+
+    fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
+        self.fields
+            .get_or_init(|| {
+                Arc::new(
+                    self.definition
+                        .fields
+                        .iter()
+                        .map(|field| {
+                            Arc::new(DecodedEnumVariantField::new(
+                                self.clone(),
+                                (**field).clone(),
+                            )) as Arc<dyn RecordField>
+                        })
+                        .collect(),
+                )
+            })
+            .clone()
+    }
+}
+
+struct DecodedEnumVariantField {
+    owner: Arc<DecodedEnumVariant>,
+    definition: tf::RecordFieldDefinition,
+    metadata: RecordFieldMetadata,
+    field_type: OnceLock<Arc<Expr<DefaultExprContext>>>,
+}
+
+impl DecodedEnumVariantField {
+    fn new(owner: Arc<DecodedEnumVariant>, definition: tf::RecordFieldDefinition) -> Self {
+        let metadata = RecordFieldMetadata {
+            is_mutable: definition.mutable,
+            name: decode_identifier((*definition.name).clone()),
+        };
+
+        Self {
+            owner,
+            definition,
+            metadata,
+            field_type: OnceLock::new(),
+        }
+    }
+}
+
+impl Debug for DecodedEnumVariantField {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "enum variant field {:?}", self.metadata.name)
+    }
+}
+
+impl Unload for DecodedEnumVariantField {
+    fn unload(&self) {}
+}
+
+impl RecordField for DecodedEnumVariantField {
+    fn owning_record(&self) -> RecordFieldOwner {
+        RecordFieldOwner::EnumVariant(self.owner.clone())
+    }
+
+    fn metadata(&self) -> &RecordFieldMetadata {
+        &self.metadata
+    }
+
+    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
+        self.field_type
+            .get_or_init(|| {
+                Arc::new(
+                    self.owner
+                        .owner
+                        .decoder
+                        .decode_expr((*self.definition.field_type).clone()),
+                )
             })
             .clone()
     }

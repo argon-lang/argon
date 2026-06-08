@@ -72,7 +72,13 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         builtin: Builtin,
         arguments: Vec<Expr<EC>>,
     },
-    EnumType(EC::Enum, Vec<Expr<EC>>),
+    EnumType(EnumType<EC>),
+    EnumVariantLiteral {
+        enum_type: EnumType<EC>,
+        variant: EC::EnumVariant,
+        arguments: Vec<Expr<EC>>,
+        fields: Vec<RecordFieldLiteral<EC>>,
+    },
     Finally {
         block_body: Box<Expr<EC>>,
         finally_body: Box<Expr<EC>>,
@@ -380,6 +386,14 @@ pub enum ErasureMode {
 #[derivative(Clone(bound = ""))]
 pub struct RecordType<EC: ExprContext + ?Sized> {
     pub record: EC::Record,
+    pub arguments: Vec<Expr<EC>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+pub struct EnumType<EC: ExprContext + ?Sized> {
+    pub enum_: EC::Enum,
     pub arguments: Vec<Expr<EC>>,
 }
 

@@ -454,9 +454,20 @@ pub struct RecordFieldMetadata {
 pub trait Enum: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+
+    fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>>;
 }
 
-pub trait EnumVariant: Debug + Unload + ThreadSafe {}
+pub trait EnumVariant: Debug + Unload + ThreadSafe {
+    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum>;
+    fn metadata(&self) -> &EnumVariantMetadata;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+    fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>>;
+}
+
+pub struct EnumVariantMetadata {
+    pub name: Identifier,
+}
 
 pub trait Trait: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;

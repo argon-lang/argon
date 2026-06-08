@@ -268,6 +268,14 @@ impl<'a, T: ToOwned<Owned = T>> MultiSliceParts<'a, T> {
     }
 }
 
+impl<'a, T> From<&'a [T]> for MultiSliceParts<'a, T> {
+    fn from(value: &'a [T]) -> Self {
+        let mut parts = MultiSliceParts::new();
+        parts.push(value.into());
+        parts
+    }
+}
+
 #[derive(Debug, Clone)]
 enum MultiSlicePartsIntoIter<'a, T> {
     Inline {
@@ -468,18 +476,6 @@ impl<'m, 'a, T> IntoIterator for &'m MultiSlice<'a, T> {
     }
 }
 
-impl<'a, T: Clone> IntoIterator for MultiSlice<'a, T> {
-    type Item = T;
-    type IntoIter = MultiSliceIntoIter<'a, T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        MultiSliceIntoIter {
-            parts: self.parts.into_iter(),
-            current: None,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct MultiSliceIter<'m, 'a, T> {
     parts: MultiSlicePartsIter<'m, 'a, T>,
@@ -513,81 +509,6 @@ impl<'m, 'a, T> Iterator for MultiSliceIter<'m, 'a, T> {
 
 impl<'m, 'a, T> ExactSizeIterator for MultiSliceIter<'m, 'a, T> {}
 
-#[derive(Debug, Clone)]
-pub struct MultiSliceIntoIter<'a, T> {
-    parts: MultiSlicePartsIntoIter<'a, T>,
-    current: Option<MultiSlicePartIntoIter<'a, T>>,
-}
-
-#[derive(Debug, Clone)]
-enum MultiSlicePartIntoIter<'a, T> {
-    Slice(core::iter::Cloned<core::slice::Iter<'a, T>>),
-    Vec(alloc::vec::IntoIter<T>),
-}
-
-impl<'a, T: Clone> MultiSlicePartIntoIter<'a, T> {
-    fn new(part: MultiSlicePart<'a, T>) -> Self {
-        match part {
-            MultiSlicePart::Slice(slice) => Self::Slice(slice.iter().cloned()),
-            MultiSlicePart::Vec(vec) => Self::Vec(vec.into_iter()),
-        }
-    }
-
-    fn len(&self) -> usize {
-        match self {
-            Self::Slice(iter) => iter.len(),
-            Self::Vec(iter) => iter.len(),
-        }
-    }
-}
-
-impl<'a, T: Clone> Iterator for MultiSlicePartIntoIter<'a, T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Slice(iter) => iter.next(),
-            Self::Vec(iter) => iter.next(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = self.len();
-        (len, Some(len))
-    }
-}
-
-impl<'a, T: Clone> ExactSizeIterator for MultiSlicePartIntoIter<'a, T> {}
-
-impl<'a, T: Clone> Iterator for MultiSliceIntoIter<'a, T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if let Some(current) = &mut self.current {
-                if let Some(item) = current.next() {
-                    return Some(item);
-                }
-            }
-
-            self.current = Some(MultiSlicePartIntoIter::new(self.parts.next()?));
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let current_len = self.current.as_ref().map_or(0, MultiSlicePartIntoIter::len);
-        let remaining_parts_len = self
-            .parts
-            .clone()
-            .map(|part| part.as_slice().len())
-            .sum::<usize>();
-        let len = current_len + remaining_parts_len;
-        (len, Some(len))
-    }
-}
-
-impl<'a, T: Clone> ExactSizeIterator for MultiSliceIntoIter<'a, T> {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -613,7 +534,7 @@ mod tests {
         multi_slice.push_slice(&borrowed);
         multi_slice.push_vec(vec![3, 4]);
 
-        let values = multi_slice.into_iter().collect::<Vec<_>>();
+        let values = multi_slice.into_iter().copied().collect::<Vec<_>>();
 
         assert_eq!(values, vec![1, 2, 3, 4]);
     }

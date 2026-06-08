@@ -11,6 +11,7 @@ use argon_io::InputDirectory;
 use argon_util::sync::{ThreadSafe, parallel::*};
 use hashbrown::HashMap;
 
+mod enums;
 mod function;
 mod modifiers;
 mod module;
@@ -74,7 +75,8 @@ mod tests {
     use alloc::{format, string::String, string::ToString, vec, vec::Vec};
     use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
-        CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder, TubeName,
+        CompileErrorReporter, Context, ContextObject, ModuleExportBinding, ModulePath,
+        TubeCollectionBuilder, TubeName,
     };
     use argon_io::{InputDirectory, InputFile};
     use argon_parser::ast::Identifier;
@@ -83,7 +85,7 @@ mod tests {
     use embedded_io::{ErrorType, Read};
     use hashbrown::HashMap;
     use mitsein::vec1::Vec1;
-    use parse18_runtime::WithLocation;
+    use parse18_runtime::{LocationFileView, WithLocation};
     use std::fs;
     use std::path::Path;
     use std::sync::Arc;
@@ -163,6 +165,7 @@ mod tests {
     #[derive(Clone)]
     struct TestSourcePath {
         path: std::path::PathBuf,
+        location_file: String,
     }
 
     #[derive(Clone)]
@@ -172,7 +175,6 @@ mod tests {
 
     struct TestSourceFileReader {
         file: std::fs::File,
-        path: std::path::PathBuf,
     }
 
     impl ErrorType for TestSourceFileReader {
@@ -181,25 +183,21 @@ mod tests {
 
     impl Read for TestSourceFileReader {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
-            std::io::Read::read(&mut self.file, buf)
-                .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
+            std::io::Read::read(&mut self.file, buf).map_err(|_| InternalCompilerError::WriteZero)
         }
     }
 
     impl InputFile for TestSourcePath {
         type Reader = TestSourceFileReader;
 
-        fn path(&self) -> &Path {
-            &self.path
+        fn location_file(&self) -> &LocationFileView {
+            &self.location_file
         }
 
         fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
-            std::fs::File::open(&self.path)
-                .map(|file| TestSourceFileReader {
-                    file,
-                    path: self.path.clone(),
-                })
-                .map_err(|err| InternalCompilerError::IoError(self.path.clone(), err))
+            let file =
+                std::fs::File::open(&self.path).map_err(|_| InternalCompilerError::WriteZero)?;
+            Ok(TestSourceFileReader { file })
         }
     }
 
@@ -215,6 +213,7 @@ mod tests {
                 .map(|entry| {
                     Ok(TestSourcePath {
                         path: entry.path().to_path_buf(),
+                        location_file: entry.path().to_string_lossy().into_owned(),
                     })
                 })
                 .collect()
@@ -317,6 +316,73 @@ export ::A::*
                 .iter()
                 .any(|error| error.code == ErrorCode::CircularReexport)
         );
+
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn enum_declarations_are_exported_with_variants() {
+        let dir = temp_source_dir("enum-declarations");
+        write_source(
+            &dir,
+            "Option.argon",
+            r#"
+module Option
+
+public enum Option [token T: type]
+    Some(value: T)
+    None
+end
+"#,
+        );
+
+        let (reporter_context, context) = test_context();
+        let tube_collection = TubeCollectionBuilder::new(context.clone());
+        let tube = define_source_tube(
+            context,
+            SourceCodeTubeOptions {
+                name: tube_name(),
+                referenced_tubes: Vec::new(),
+                input_dirs: vec![source_dir(&dir)],
+            },
+            &tube_collection,
+        );
+
+        assert!(reporter_context.reporter.compile_errors().is_empty());
+
+        let module = tube
+            .module(&ModulePath(vec!["Option".to_string()]))
+            .unwrap();
+        let export_groups = module.export_groups();
+        let option_exports = export_groups
+            .get(&Identifier::Named("Option".to_string()))
+            .unwrap();
+        let enum_ = option_exports
+            .iter()
+            .find_map(|entry| match &entry.binding {
+                ModuleExportBinding::Enum(enum_) => Some(enum_.clone()),
+                _ => None,
+            })
+            .unwrap();
+        drop(export_groups);
+
+        let variants = enum_.variants();
+        assert_eq!(variants.len(), 2);
+        assert_eq!(
+            variants[0].metadata().name,
+            Identifier::Named("Some".to_string())
+        );
+        let some_fields = variants[0].clone().fields();
+        assert_eq!(some_fields.len(), 1);
+        assert_eq!(
+            some_fields[0].metadata().name,
+            Identifier::Named("value".to_string())
+        );
+        assert_eq!(
+            variants[1].metadata().name,
+            Identifier::Named("None".to_string())
+        );
+        assert!(variants[1].clone().fields().is_empty());
 
         fs::remove_dir_all(dir).unwrap();
     }

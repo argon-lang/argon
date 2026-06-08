@@ -168,12 +168,11 @@ mod tests {
     use argon_compiler::test_utils::{TestContext, TestReporter};
     use argon_util::ErrorCode;
     use parse18_runtime::FilePosition;
-    use std::path::PathBuf;
     use std::sync::Arc;
 
     fn test_location(line: usize, column: usize) -> Location {
         Location {
-            file: PathBuf::from("test.argon"),
+            file: "test.argon".to_string(),
             start: FilePosition { line, column },
             end: FilePosition {
                 line,

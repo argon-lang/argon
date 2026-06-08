@@ -1,5 +1,6 @@
 use crate::{
-    BlockLabel, Expr, ExprContext, LoopLabels, MatchCase, RecordFieldLiteral, RecordType, Variable,
+    BlockLabel, EnumType, Expr, ExprContext, LoopLabels, MatchCase, RecordFieldLiteral, RecordType,
+    Variable,
 };
 
 mod normalizer;
@@ -56,7 +57,19 @@ where
         Expr::Block { label, body } => default_scan_label(scanner, label) && scanner.scan(body),
         Expr::Break { label, value } => default_scan_label(scanner, label) && scanner.scan(value),
         Expr::Builtin { arguments, .. } => arguments.iter().all(|argument| scanner.scan(argument)),
-        Expr::EnumType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
+        Expr::EnumType(enum_type) => default_scan_enum_type(scanner, enum_type),
+        Expr::EnumVariantLiteral {
+            enum_type,
+            arguments,
+            fields,
+            ..
+        } => {
+            default_scan_enum_type(scanner, enum_type)
+                && arguments.iter().all(|argument| scanner.scan(argument))
+                && fields
+                    .iter()
+                    .all(|field: &RecordFieldLiteral<S::EC>| scanner.scan(&field.value))
+        }
         Expr::FunctionLiteral { body, .. } => scanner.scan(body),
         Expr::FunctionCall { arguments, .. } => {
             arguments.iter().all(|argument| scanner.scan(argument))
@@ -171,6 +184,16 @@ where
         .all(|argument| scanner.scan(argument))
 }
 
+fn default_scan_enum_type<S>(scanner: &mut S, enum_type: &EnumType<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    enum_type
+        .arguments
+        .iter()
+        .all(|argument| scanner.scan(argument))
+}
+
 pub fn default_scan_variable<S>(scanner: &mut S, v: &Variable<S::EC>) -> bool
 where
     S: ExprScanner + ?Sized,
@@ -203,7 +226,19 @@ where
         Expr::Builtin { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
-        Expr::EnumType(_, arguments) => arguments.iter_mut().all(|argument| scanner.scan(argument)),
+        Expr::EnumType(enum_type) => default_scan_enum_type_mut(scanner, enum_type),
+        Expr::EnumVariantLiteral {
+            enum_type,
+            arguments,
+            fields,
+            ..
+        } => {
+            default_scan_enum_type_mut(scanner, enum_type)
+                && arguments.iter_mut().all(|argument| scanner.scan(argument))
+                && fields
+                    .iter_mut()
+                    .all(|field: &mut RecordFieldLiteral<S::EC>| scanner.scan(&mut field.value))
+        }
         Expr::FunctionLiteral { body, .. } => scanner.scan(body.as_mut()),
         Expr::FunctionCall { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
@@ -322,6 +357,16 @@ where
     S: ExprScannerMut + ?Sized,
 {
     record_type
+        .arguments
+        .iter_mut()
+        .all(|argument| scanner.scan(argument))
+}
+
+fn default_scan_enum_type_mut<S>(scanner: &mut S, enum_type: &mut EnumType<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    enum_type
         .arguments
         .iter_mut()
         .all(|argument| scanner.scan(argument))

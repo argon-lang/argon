@@ -8,13 +8,12 @@ use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpe
 use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
-    Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module,
+    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module,
     ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner,
     Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExpressionOwner, NormalizerScanner,
-    ParameterVariable, Variable,
+    BlockLabel, ErasureMode, Expr, ExpressionOwner, NormalizerScanner, ParameterVariable, Variable,
 };
 use argon_format::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError};
@@ -163,6 +162,17 @@ impl VmEncoder {
 
         if is_new {
             self.entry_emitters.push_back(EntryEmitter::Enum(enum_));
+        }
+
+        id
+    }
+
+    fn get_enum_variant_id(&mut self, variant: Arc<dyn EnumVariant>) -> usize {
+        let (id, is_new) = self.ids.enum_variant_ids.get_with_new(variant.clone());
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::EnumVariant(variant));
         }
 
         id
@@ -350,7 +360,17 @@ impl VmEncoder {
                         record_field_id,
                     }
                 }
-                RecordFieldOwner::EnumVariant(_) => todo!(),
+                RecordFieldOwner::EnumVariant(variant) => {
+                    let record_field_id =
+                        BigUint::from(self.get_record_field_id(record_field.clone()));
+                    let variant_id = BigUint::from(self.get_enum_variant_id(variant.clone()));
+
+                    vf::TubeFileEntry::EnumVariantRecordFieldReference {
+                        name: Box::new(encode_identifier(&record_field.metadata().name)),
+                        variant_id,
+                        record_field_id,
+                    }
+                }
             },
 
             EntryEmitter::Enum(enum_) => {
@@ -365,6 +385,17 @@ impl VmEncoder {
                     }
                 } else {
                     todo!("emit VM enum definitions")
+                }
+            }
+
+            EntryEmitter::EnumVariant(variant) => {
+                let variant_id = BigUint::from(self.ids.enum_variant_ids.get(variant.clone()));
+                let enum_id = BigUint::from(self.get_enum_id(variant.clone().owning_enum()));
+
+                vf::TubeFileEntry::EnumVariantReference {
+                    variant_id,
+                    enum_id,
+                    name: Box::new(encode_identifier(&variant.metadata().name)),
                 }
             }
 
@@ -595,6 +626,7 @@ enum EntryEmitter {
     Record(Arc<dyn Record>),
     RecordField(Arc<dyn RecordField>),
     Enum(Arc<dyn Enum>),
+    EnumVariant(Arc<dyn EnumVariant>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
@@ -835,9 +867,9 @@ trait TokenEmitterCommon {
                 args: self.token_exprs(&record_type.arguments)?,
             }),
 
-            Expr::EnumType(enum_, arguments) => Ok(vf::Token::Enum {
-                enum_id: BigUint::from(self.vm_encoder().get_enum_id(enum_.clone())),
-                args: self.token_exprs(arguments)?,
+            Expr::EnumType(enum_type) => Ok(vf::Token::Enum {
+                enum_id: BigUint::from(self.vm_encoder().get_enum_id(enum_type.enum_.clone())),
+                args: self.token_exprs(&enum_type.arguments)?,
             }),
 
             Expr::TraitType(trait_, arguments) => Ok(vf::Token::Trait {
@@ -1299,7 +1331,55 @@ impl<'a> ExprEmitter<'a> {
                 }
             }
 
-            // EnumVariantLiteral
+            Expr::EnumVariantLiteral {
+                enum_type,
+                variant,
+                arguments,
+                fields,
+            } => {
+                let rb = output.output_register(self, e)?;
+                let declared_fields = variant.clone().fields();
+
+                let mut vm_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let declared_field = declared_fields
+                        .iter()
+                        .find(|declared_field| declared_field.metadata().name == field.name)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "enum variant literal references unknown field {:?}",
+                                field.name
+                            )
+                        });
+                    let field_id =
+                        BigUint::from(self.encoder.get_record_field_id(declared_field.clone()));
+                    let value = self.expr(&field.value, AnyRegister)?;
+                    vm_fields.push(Box::new(vf::RecordFieldLiteral {
+                        field_id,
+                        value: Box::new(value),
+                    }));
+                }
+
+                let enum_type_token = self.token_expr(&Expr::EnumType(enum_type.clone()))?;
+                let args = self.emit_arguments(
+                    ExpressionOwner::EnumVariant(variant.clone()),
+                    variant.clone().signature(),
+                    arguments,
+                )?;
+                let variant_id = BigUint::from(self.encoder.get_enum_variant_id(variant.clone()));
+
+                self.emit(vf::Instruction::EnumVariantLiteral {
+                    dest: Box::new(rb.register().clone()),
+                    enum_type: Box::new(enum_type_token),
+                    variant_id,
+                    token_args: args.token_arguments,
+                    args: args.arguments,
+                    fields: vm_fields,
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Finally {
                 block_body,
                 finally_body,

@@ -10,9 +10,9 @@ use argon_compiler::{
     RecordFieldOwner, SubstFunctionSignature,
 };
 use argon_expr::{
-    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ErasureMode, Expr, ExprContext,
-    ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels, Normalizer,
-    NormalizerScanner, RecordFieldLiteral, RecordType, SubstScanner, Variable,
+    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, EnumType, ErasureMode, Expr,
+    ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels,
+    Normalizer, NormalizerScanner, RecordFieldLiteral, RecordType, SubstScanner, Variable,
     VariableTupleElement,
 };
 use argon_parser::ast;
@@ -34,8 +34,8 @@ pub fn type_check_type_expr(
     e: &WithLocation<ast::Expr>,
 ) -> Expr<DefaultExprContext> {
     let TypeCheckOptions { access, scope } = options;
-    let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
-    let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
+    let shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
+    let mut local_scope = LocalVariableScope::new(&shifted_scope);
     let mut model = Model::new();
     let mut checker = TypeChecker {
         context: context.clone(),
@@ -56,8 +56,8 @@ pub fn type_check_expr(
     expected_type: &Expr<DefaultExprContext>,
 ) -> Expr<DefaultExprContext> {
     let TypeCheckOptions { access, scope } = options;
-    let mut shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
-    let mut local_scope = LocalVariableScope::new(&mut shifted_scope);
+    let shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
+    let mut local_scope = LocalVariableScope::new(&shifted_scope);
     let mut model = Model::new();
     let mut checker = TypeChecker {
         context: context.clone(),
@@ -74,13 +74,13 @@ pub fn type_check_expr(
 
 pub struct TypeCheckOptions<'a> {
     access: &'a AccessToken,
-    scope: &'a mut dyn Scope<ExprContext = DefaultExprContext>,
+    scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
 }
 
 impl<'a> TypeCheckOptions<'a> {
     pub fn new(
         access: &'a AccessToken,
-        scope: &'a mut dyn Scope<ExprContext = DefaultExprContext>,
+        scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
     ) -> Self {
         Self { access, scope }
     }
@@ -276,10 +276,7 @@ enum TypeInferResult<'a> {
 
 impl<'a> TypeInferResult<'a> {
     fn error() -> Self {
-        Self::Complete(InferredType {
-            inferred_type: Expr::Error,
-            checked_expr: Expr::Error,
-        })
+        Self::Complete(InferredType::error())
     }
 
     fn partially_inferred_type<'b>(&'b self) -> PartiallyInferredType<'b> {
@@ -314,6 +311,15 @@ struct InferredType {
     checked_expr: Expr<TypeCheckExprContext>,
 }
 
+impl InferredType {
+    fn error() -> Self {
+        InferredType {
+            inferred_type: Expr::Error,
+            checked_expr: Expr::Error,
+        }
+    }
+}
+
 #[derive(Debug)]
 enum PartiallyInferredType<'b> {
     Full(&'b Expr<TypeCheckExprContext>),
@@ -343,7 +349,6 @@ enum Overloadable<'a> {
         field_type: Expr<TypeCheckExprContext>,
         record_value: Expr<TypeCheckExprContext>,
     },
-    EnumVariant(),
 }
 
 impl<'a> Overloadable<'a> {
@@ -353,7 +358,6 @@ impl<'a> Overloadable<'a> {
             Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
             Overloadable::RecordField { .. } => vec![],
             Overloadable::RecordFieldStore { .. } => vec![],
-            Overloadable::EnumVariant() => vec![],
         }
     }
 
@@ -365,7 +369,6 @@ impl<'a> Overloadable<'a> {
             }
             Overloadable::RecordField { .. } => vec![],
             Overloadable::RecordFieldStore { .. } => vec![],
-            Overloadable::EnumVariant() => todo!(),
         }
     }
 
@@ -375,7 +378,6 @@ impl<'a> Overloadable<'a> {
             Overloadable::ExtensionMethod(f, _, _) => Some(ExpressionOwner::Function(f.clone())),
             Overloadable::RecordField { .. } => None,
             Overloadable::RecordFieldStore { .. } => None,
-            Overloadable::EnumVariant() => todo!(),
         }
     }
 
@@ -405,7 +407,6 @@ impl<'a> Overloadable<'a> {
                 return_type: Expr::unit(),
                 ensures_clauses: vec![],
             },
-            Overloadable::EnumVariant() => todo!(),
         }
     }
 }
@@ -752,8 +753,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             record_fields = r.clone().fields();
                             record_type_signature = r.clone().signature();
                         }
-                        Overloadable::EnumVariant() => {
-                            todo!()
+                        Overloadable::Base(scope::Overloadable::EnumVariant(v)) => {
+                            owner = RecordFieldOwner::EnumVariant(v.clone());
+                            expr_owner = ExpressionOwner::EnumVariant(v.clone());
+                            record_fields = v.clone().fields();
+                            record_type_signature = v.clone().signature();
                         }
 
                         _ => break 'not_record,
@@ -820,6 +824,19 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                         converted_fields.push(RecordFieldLiteral { name, value });
                     }
+                    drop(subst);
+
+                    if !remaining_fields.is_empty() {
+                        self.context.reporter().report_error(
+                            CompileError::missing_record_literal_field(
+                                expr.location.clone(),
+                                &remaining_fields
+                                    .into_keys()
+                                    .map(|name| name.to_string())
+                                    .collect::<Vec<_>>(),
+                            ),
+                        )
+                    }
 
                     let expr: Expr<TypeCheckExprContext>;
                     let expr_type: Expr<TypeCheckExprContext>;
@@ -834,11 +851,23 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             };
                             expr_type = Expr::RecordType(RecordType {
                                 record: r.clone(),
-                                arguments: selected_overload.args.clone(),
+                                arguments: selected_overload.args,
                             });
                         }
-                        RecordFieldOwner::EnumVariant(_) => {
-                            todo!()
+                        RecordFieldOwner::EnumVariant(v) => {
+                            let enum_type = match selected_overload.return_type {
+                                Expr::Error => return TypeInferResult::error(),
+                                Expr::EnumType(t) => t,
+                                _ => panic!("Expected enum type"),
+                            };
+
+                            expr_type = Expr::EnumType(enum_type.clone());
+                            expr = Expr::EnumVariantLiteral {
+                                enum_type,
+                                variant: v.clone(),
+                                arguments: selected_overload.args,
+                                fields: converted_fields,
+                            };
                         }
                     }
 
@@ -2277,8 +2306,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     arguments: b_args,
                 },
             ) => a == b && self.unify_all(a_args, b_args),
-            (Expr::EnumType(a, a_args), Expr::EnumType(b, b_args)) => {
-                a == b && self.unify_all(a_args, b_args)
+            (Expr::EnumType(a), Expr::EnumType(b)) => {
+                a.enum_ == b.enum_ && self.unify_all(a.arguments, b.arguments)
             }
             (
                 Expr::FunctionType {
@@ -2904,6 +2933,31 @@ impl<'a> SelectedOverload<'a> {
                 record: r,
                 arguments: self.args,
             }),
+            Overloadable::Base(scope::Overloadable::Enum(e)) => Expr::EnumType(EnumType {
+                enum_: e,
+                arguments: self.args,
+            }),
+            Overloadable::Base(scope::Overloadable::EnumVariant(v)) => {
+                if !v.clone().fields().is_empty() {
+                    checker
+                        .context
+                        .reporter()
+                        .report_error(CompileError::invalid_overload(self.call_location.clone()));
+                }
+
+                let enum_type = match &self.return_type {
+                    Expr::Error => return InferredType::error(),
+                    Expr::EnumType(e) => e.clone(),
+                    _ => panic!("Expected enum type"),
+                };
+
+                Expr::EnumVariantLiteral {
+                    enum_type,
+                    variant: v,
+                    arguments: self.args,
+                    fields: vec![],
+                }
+            }
             Overloadable::ExtensionMethod(f, _, _) => Expr::FunctionCall {
                 function: f,
                 arguments: self.args,

@@ -52,6 +52,7 @@ pub enum ErrorCode {
     RecordLiteralExtraArguments = 0x0026,
     DuplicateRecordLiteralField = 0x0027,
     UnknownRecordLiteralField = 0x0028,
+    MissingRecordLiteralField = 0x0029,
 }
 
 impl ErrorCode {
@@ -418,6 +419,17 @@ impl CompileError {
         Self::new(
             ErrorCode::UnknownRecordLiteralField,
             format!("Unknown field in record literal: {}", name.as_ref()),
+            Some(loc),
+        )
+    }
+
+    pub fn missing_record_literal_field(loc: Location, names: &[String]) -> Self {
+        Self::new(
+            ErrorCode::MissingRecordLiteralField,
+            format!(
+                "Missing required fields in record literal: {}",
+                names.join(", ")
+            ),
             Some(loc),
         )
     }

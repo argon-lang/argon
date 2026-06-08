@@ -1,3 +1,4 @@
+use crate::enums::SourceEnumVariant;
 use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
@@ -7,10 +8,12 @@ use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
-    Context, DefaultExprContext, Record, RecordField, RecordFieldMetadata, RecordFieldOwner, Unload,
+    Context, DefaultExprContext, EnumVariant, Record, RecordField, RecordFieldMetadata,
+    RecordFieldOwner, Unload,
 };
 use argon_expr::{Expr, ExpressionOwner};
 use argon_parser::ast;
+use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, mutex_lock};
 use core::fmt::Debug;
 use parse18_runtime::WithLocation;
@@ -45,28 +48,6 @@ impl SourceRecord {
             }),
         }
     }
-
-    fn return_type_specifier(&self) -> WithLocation<ast::ReturnTypeSpecifier> {
-        match &self.decl.return_type {
-            Some(return_type) => WithLocation {
-                location: return_type.location.clone(),
-                value: ast::ReturnTypeSpecifier {
-                    return_type: return_type.clone(),
-                    ensures_clauses: Vec::new(),
-                },
-            },
-            None => WithLocation {
-                location: self.decl.name.location.clone(),
-                value: ast::ReturnTypeSpecifier {
-                    return_type: WithLocation {
-                        location: self.decl.name.location.clone(),
-                        value: ast::Expr::Type,
-                    },
-                    ensures_clauses: Vec::new(),
-                },
-            },
-        }
-    }
 }
 
 impl Debug for SourceRecord {
@@ -95,19 +76,23 @@ impl Record for SourceRecord {
             return sig.clone();
         }
 
-        let mut scope = self.closure.scope();
+        let scope = self.closure.scope();
         let access_token = self.closure.access_token();
         let owner_ref: Arc<dyn Record> = self.clone();
         let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Record(owner_ref);
-        let return_type = self.return_type_specifier();
+        let return_type =
+            SignatureParser::get_type_sig_return_type(&self.decl.name, &self.decl.return_type);
 
         let sig = SignatureParser {
             context: self.context.clone(),
-            scope: &mut scope,
+            scope: &scope,
             access_token,
             owner,
         }
-        .parse(&self.decl.parameters, &return_type);
+        .parse(
+            MultiSlice::from(self.decl.parameters.as_slice()),
+            &return_type,
+        );
 
         let result = Arc::new(sig);
         *sig_store = Some(result.clone());
@@ -120,19 +105,20 @@ impl Record for SourceRecord {
             return fields.clone();
         }
 
-        let fields: Vec<Arc<dyn RecordField>> =
-            self.decl
-                .body
-                .iter()
-                .filter_map(|stmt| match &stmt.value {
-                    ast::RecordBodyStmt::RecordField(field) => Some(Arc::new(
-                        SourceRecordField::new(self.clone(), (**field).clone()),
-                    )
-                        as Arc<dyn RecordField>),
-                    ast::RecordBodyStmt::FunctionDeclaration(_)
-                    | ast::RecordBodyStmt::MethodDeclaration(_) => None,
-                })
-                .collect();
+        let fields: Vec<Arc<dyn RecordField>> = self
+            .decl
+            .body
+            .iter()
+            .filter_map(|stmt| match &stmt.value {
+                ast::RecordBodyStmt::RecordField(field) => Some(Arc::new(SourceRecordField::new(
+                    SourceRecordFieldOwner::SourceRecord(self.clone()),
+                    (**field).clone(),
+                ))
+                    as Arc<dyn RecordField>),
+                ast::RecordBodyStmt::FunctionDeclaration(_)
+                | ast::RecordBodyStmt::MethodDeclaration(_) => None,
+            })
+            .collect();
 
         let result = Arc::new(fields);
         *fields_store = Some(result.clone());
@@ -140,15 +126,65 @@ impl Record for SourceRecord {
     }
 }
 
+pub enum SourceRecordFieldOwner {
+    SourceRecord(Arc<SourceRecord>),
+    EnumVariant(Arc<SourceEnumVariant>),
+}
+
+impl SourceRecordFieldOwner {
+    pub fn to_record_field_owner(&self) -> RecordFieldOwner {
+        match self {
+            SourceRecordFieldOwner::SourceRecord(record) => {
+                RecordFieldOwner::Record(record.clone())
+            }
+            SourceRecordFieldOwner::EnumVariant(variant) => {
+                RecordFieldOwner::EnumVariant(variant.clone())
+            }
+        }
+    }
+
+    pub fn to_expression_owner(&self) -> ExpressionOwner<DefaultExprContext> {
+        match self {
+            SourceRecordFieldOwner::SourceRecord(record) => {
+                ExpressionOwner::<DefaultExprContext>::Record(record.clone())
+            }
+            SourceRecordFieldOwner::EnumVariant(variant) => {
+                ExpressionOwner::<DefaultExprContext>::EnumVariant(variant.clone())
+            }
+        }
+    }
+
+    pub fn closure(&self) -> &dyn DeclarationClosure {
+        match self {
+            SourceRecordFieldOwner::SourceRecord(record) => record.closure.as_ref(),
+            SourceRecordFieldOwner::EnumVariant(variant) => variant.owner.closure.as_ref(),
+        }
+    }
+
+    pub fn context(&self) -> Context {
+        match self {
+            SourceRecordFieldOwner::SourceRecord(record) => record.context.clone(),
+            SourceRecordFieldOwner::EnumVariant(variant) => variant.owner.context.clone(),
+        }
+    }
+
+    pub fn signature(&self) -> Arc<FunctionSignature<DefaultExprContext>> {
+        match self {
+            SourceRecordFieldOwner::SourceRecord(record) => record.clone().signature(),
+            SourceRecordFieldOwner::EnumVariant(variant) => variant.clone().signature(),
+        }
+    }
+}
+
 pub struct SourceRecordField {
-    owner: Arc<SourceRecord>,
-    field: ast::RecordField,
-    metadata: RecordFieldMetadata,
-    field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
+    pub owner: SourceRecordFieldOwner,
+    pub field: ast::RecordField,
+    pub metadata: RecordFieldMetadata,
+    pub field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
 }
 
 impl SourceRecordField {
-    fn new(owner: Arc<SourceRecord>, field: ast::RecordField) -> Self {
+    pub fn new(owner: SourceRecordFieldOwner, field: ast::RecordField) -> Self {
         let metadata = RecordFieldMetadata {
             is_mutable: field.is_mutable,
             name: field.name.value.clone(),
@@ -177,7 +213,7 @@ impl Unload for SourceRecordField {
 
 impl RecordField for SourceRecordField {
     fn owning_record(&self) -> RecordFieldOwner {
-        RecordFieldOwner::Record(self.owner.clone())
+        self.owner.to_record_field_owner()
     }
 
     fn metadata(&self) -> &RecordFieldMetadata {
@@ -185,24 +221,24 @@ impl RecordField for SourceRecordField {
     }
 
     fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
-        let access_token = self.owner.closure.access_token();
+        let access_token = self.owner.closure().access_token();
 
         let mut field_type_store = mutex_lock(&self.field_type);
         if let Some(ref field_type) = *field_type_store {
             return field_type.clone();
         }
 
-        let signature = self.owner.clone().signature();
-        let mut scope = self.owner.closure.scope();
-        let mut scope = ParameterScope::new(
-            &mut scope,
-            ExpressionOwner::<DefaultExprContext>::Record(self.owner.clone()),
+        let signature = self.owner.signature();
+        let scope = self.owner.closure().scope();
+        let scope = ParameterScope::new(
+            &scope,
+            self.owner.to_expression_owner(),
             &signature.parameters,
         );
 
         let field_type = type_check_type_expr(
-            self.owner.context.clone(),
-            TypeCheckOptions::new(&access_token, &mut scope),
+            self.owner.context().clone(),
+            TypeCheckOptions::new(&access_token, &scope),
             &self.field.field_type,
         );
 

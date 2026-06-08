@@ -66,9 +66,10 @@ fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedSigna
             Box::new(erase_type(context, *r)),
         ),
 
-        Expr::EnumType(decl, arguments) => ErasedSignatureType::Declared(
-            decl.clone().import_specifier(),
-            arguments
+        Expr::EnumType(enum_type) => ErasedSignatureType::Declared(
+            enum_type.enum_.clone().import_specifier(),
+            enum_type
+                .arguments
                 .into_iter()
                 .map(|arg| erase_type(context, arg))
                 .collect::<Vec<_>>(),

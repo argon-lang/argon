@@ -6,29 +6,29 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
 use argon_compiler::{Context, DefaultExprContext};
-use argon_expr::{ErasureMode, Expr, ExpressionOwner};
+use argon_expr::{ErasureMode, Expr, ExpressionOwner, ParameterVariable};
 use argon_parser::ast;
-use argon_util::CompileError;
+use argon_util::{CompileError, MultiSlice};
 use parse18_runtime::WithLocation;
 
 pub struct SignatureParser<'a> {
     pub context: Context,
-    pub scope: &'a mut GlobalScope,
+    pub scope: &'a GlobalScope,
     pub access_token: AccessToken,
     pub owner: ExpressionOwner<DefaultExprContext>,
 }
 
 impl<'a> SignatureParser<'a> {
     pub fn parse(
-        &mut self,
-        params: &[WithLocation<ast::FunctionParameterList>],
+        &self,
+        params: MultiSlice<'_, WithLocation<ast::FunctionParameterList>>,
         return_type: &WithLocation<ast::ReturnTypeSpecifier>,
     ) -> FunctionSignature<DefaultExprContext> {
         let allow_concrete_params = self.allow_concrete_params();
 
         let mut parameters = Vec::with_capacity(params.len());
 
-        for param in params {
+        for param in &params {
             let mut mp = ModifierParser::new(
                 self.context.clone(),
                 &param.value.modifiers,
@@ -141,5 +141,53 @@ impl<'a> SignatureParser<'a> {
 
             ExpressionOwner::Instance(_) => todo!(),
         }
+    }
+
+    pub fn expr_to_return_type(
+        expr: &WithLocation<ast::Expr>,
+    ) -> WithLocation<ast::ReturnTypeSpecifier> {
+        WithLocation {
+            location: expr.location.clone(),
+            value: ast::ReturnTypeSpecifier {
+                return_type: expr.clone(),
+                ensures_clauses: Vec::new(),
+            },
+        }
+    }
+
+    pub fn get_type_sig_return_type(
+        name: &WithLocation<ast::Identifier>,
+        rt: &Option<WithLocation<ast::Expr>>,
+    ) -> WithLocation<ast::ReturnTypeSpecifier> {
+        match rt {
+            Some(rt) => WithLocation {
+                location: rt.location.clone(),
+                value: ast::ReturnTypeSpecifier {
+                    return_type: rt.clone(),
+                    ensures_clauses: Vec::new(),
+                },
+            },
+
+            None => WithLocation {
+                location: name.location.clone(),
+                value: ast::ReturnTypeSpecifier {
+                    return_type: WithLocation {
+                        location: name.location.clone(),
+                        value: ast::Expr::Type,
+                    },
+                    ensures_clauses: Vec::new(),
+                },
+            },
+        }
+    }
+
+    pub fn get_parameter_variables<'b>(
+        owner: &'a ExpressionOwner<DefaultExprContext>,
+        params: &'a [SignatureParameter<DefaultExprContext>],
+    ) -> impl Iterator<Item = ParameterVariable<DefaultExprContext>> + 'a {
+        params
+            .iter()
+            .enumerate()
+            .map(|(index, param)| param.clone().to_parameter_var(owner.clone(), index))
     }
 }
