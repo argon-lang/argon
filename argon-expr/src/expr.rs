@@ -1,6 +1,6 @@
-use crate::BlockLabel;
+use crate::{BlockLabel, Pattern};
 use alloc::{boxed::Box, vec, vec::Vec};
-use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt, Pattern};
+use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt};
 use argon_util::UniqueIdentifier;
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
@@ -113,7 +113,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     IntLiteral(BigInt),
     Is {
         value: Box<Expr<EC>>,
-        pattern: Pattern,
+        pattern: Box<Pattern<EC>>,
     },
     Match {
         value: Box<Expr<EC>>,
@@ -345,7 +345,7 @@ impl FromStr for Builtin {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 pub struct MatchCase<EC: ExprContext + ?Sized> {
-    pub pattern: Pattern,
+    pub pattern: Pattern<EC>,
     pub body: Expr<EC>,
 }
 

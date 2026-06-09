@@ -1,6 +1,6 @@
 use crate::{
     BlockLabel, EnumType, Expr, ExprContext, ExpressionOwner, LocalVariable, LoopLabels, MatchCase,
-    ParameterVariable, RecordFieldLiteral, RecordType, Variable,
+    ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -132,14 +132,14 @@ where
         Expr::IntLiteral(value) => Expr::IntLiteral(value),
         Expr::Is { value, pattern } => Expr::Is {
             value: Box::new(shifter.shift(*value)),
-            pattern,
+            pattern: Box::new(default_shift_pattern(shifter, *pattern)),
         },
         Expr::Match { value, cases } => Expr::Match {
             value: Box::new(shifter.shift(*value)),
             cases: cases
                 .into_iter()
                 .map(|case| MatchCase {
-                    pattern: case.pattern,
+                    pattern: default_shift_pattern(shifter, case.pattern),
                     body: shifter.shift(case.body),
                 })
                 .collect(),
@@ -308,19 +308,75 @@ where
     }
 }
 
+fn default_shift_pattern<S>(shifter: &mut S, pattern: Pattern<S::EC1>) -> Pattern<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    match pattern {
+        Pattern::Discard { t } => Pattern::Discard {
+            t: Box::new(shifter.shift(*t)),
+        },
+        Pattern::Tuple(items) => Pattern::Tuple(
+            items
+                .into_iter()
+                .map(|item| default_shift_pattern(shifter, item))
+                .collect(),
+        ),
+        Pattern::Binding(variable, pattern) => Pattern::Binding(
+            default_shift_local_variable(shifter, variable),
+            Box::new(default_shift_pattern(shifter, *pattern)),
+        ),
+        Pattern::EnumVariant {
+            enum_type,
+            variant,
+            args,
+            fields,
+        } => Pattern::EnumVariant {
+            enum_type: default_shift_enum_type(shifter, enum_type),
+            variant,
+            args: args
+                .into_iter()
+                .map(|arg| default_shift_pattern(shifter, arg))
+                .collect(),
+            fields: fields
+                .into_iter()
+                .map(|field| RecordFieldPattern {
+                    field: field.field,
+                    pattern: default_shift_pattern(shifter, field.pattern),
+                })
+                .collect(),
+        },
+        Pattern::String(value) => Pattern::String(value),
+        Pattern::Int(value) => Pattern::Int(value),
+        Pattern::Bool(value) => Pattern::Bool(value),
+    }
+}
+
+fn default_shift_local_variable<S>(
+    shifter: &mut S,
+    variable: LocalVariable<S::EC1>,
+) -> LocalVariable<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    LocalVariable {
+        id: variable.id,
+        name: variable.name,
+        var_type: shifter.shift(variable.var_type),
+        erasure_mode: variable.erasure_mode,
+        is_witness: variable.is_witness,
+        is_mutable: variable.is_mutable,
+    }
+}
+
 pub fn default_shift_variable<S>(shifter: &mut S, v: Variable<S::EC1>) -> Variable<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
 {
     match v {
-        Variable::Local(variable) => Variable::Local(Box::new(LocalVariable {
-            id: variable.id,
-            name: variable.name,
-            var_type: shifter.shift(variable.var_type),
-            erasure_mode: variable.erasure_mode,
-            is_witness: variable.is_witness,
-            is_mutable: variable.is_mutable,
-        })),
+        Variable::Local(variable) => {
+            Variable::Local(Box::new(default_shift_local_variable(shifter, *variable)))
+        }
         Variable::Parameter(variable) => Variable::Parameter(Box::new(ParameterVariable {
             owner: match variable.owner {
                 ExpressionOwner::Function(function) => ExpressionOwner::Function(function),

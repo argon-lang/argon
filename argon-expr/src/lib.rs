@@ -5,14 +5,13 @@ extern crate alloc;
 extern crate std;
 
 mod expr;
-mod flags;
 mod label;
+mod pattern;
 mod scanner;
 mod shifter;
 
 pub use expr::*;
 pub use label::*;
+pub use pattern::*;
 pub use scanner::*;
 pub use shifter::*;
-
-pub use flags::{Flags, Mode};
