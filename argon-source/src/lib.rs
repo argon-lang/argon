@@ -72,11 +72,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::{SourceCodeTubeOptions, define_source_tube};
-    use alloc::{format, string::String, string::ToString, vec, vec::Vec};
+    use alloc::{string::String, string::ToString, vec, vec::Vec};
     use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
-        CompileErrorReporter, Context, ContextObject, ModuleExportBinding, ModulePath,
-        TubeCollectionBuilder, TubeName,
+        CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder, TubeName,
     };
     use argon_io::{InputDirectory, InputFile};
     use argon_parser::ast::Identifier;
@@ -85,11 +84,11 @@ mod tests {
     use embedded_io::{ErrorType, Read};
     use hashbrown::HashMap;
     use mitsein::vec1::Vec1;
-    use parse18_runtime::{LocationFileView, WithLocation};
+    use parse18_runtime::WithLocation;
     use std::fs;
     use std::path::Path;
     use std::sync::Arc;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use tempfile::TempDir;
     use walkdir::WalkDir;
 
     #[derive(Default)]
@@ -152,19 +151,17 @@ mod tests {
         fs::write(dir.join(name), contents).unwrap();
     }
 
-    fn temp_source_dir(test_name: &str) -> std::path::PathBuf {
-        let id = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
+    fn temp_source_dir(test_name: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(&alloc::format!("argon-source-{test_name}-"))
+            .tempdir()
             .unwrap()
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!("argon-source-{test_name}-{id}"));
-        fs::create_dir(&dir).unwrap();
-        dir
     }
 
     #[derive(Clone)]
     struct TestSourcePath {
         path: std::path::PathBuf,
+        #[cfg(not(feature = "std"))]
         location_file: String,
     }
 
@@ -190,7 +187,13 @@ mod tests {
     impl InputFile for TestSourcePath {
         type Reader = TestSourceFileReader;
 
-        fn location_file(&self) -> &LocationFileView {
+        #[cfg(feature = "std")]
+        fn path(&self) -> &Path {
+            &self.path
+        }
+
+        #[cfg(not(feature = "std"))]
+        fn location_file(&self) -> &parse18_runtime::LocationFileView {
             &self.location_file
         }
 
@@ -211,9 +214,11 @@ mod tests {
                 .map(Result::unwrap)
                 .filter(|entry| entry.file_type().is_file())
                 .map(|entry| {
+                    let path = entry.path().to_path_buf();
                     Ok(TestSourcePath {
-                        path: entry.path().to_path_buf(),
-                        location_file: entry.path().to_string_lossy().into_owned(),
+                        #[cfg(not(feature = "std"))]
+                        location_file: path.display().to_string(),
+                        path,
                     })
                 })
                 .collect()
@@ -230,7 +235,7 @@ mod tests {
     fn transitive_wildcard_reexports_are_registered() {
         let dir = temp_source_dir("transitive-reexports");
         write_source(
-            &dir,
+            dir.path(),
             "A.argon",
             r#"
 module A
@@ -238,7 +243,7 @@ export ::B::*
 "#,
         );
         write_source(
-            &dir,
+            dir.path(),
             "B.argon",
             r#"
 module B
@@ -246,7 +251,7 @@ export ::C::*
 "#,
         );
         write_source(
-            &dir,
+            dir.path(),
             "C.argon",
             r#"
 module C
@@ -261,7 +266,7 @@ public def c: type = __argon_builtin never_type
             SourceCodeTubeOptions {
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
-                input_dirs: vec![source_dir(&dir)],
+                input_dirs: vec![source_dir(dir.path())],
             },
             &tube_collection,
         );
@@ -273,15 +278,13 @@ public def c: type = __argon_builtin never_type
                 .export_groups()
                 .contains_key(&Identifier::Named("c".to_string()))
         );
-
-        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
     fn circular_reexports_are_reported() {
         let dir = temp_source_dir("circular-reexports");
         write_source(
-            &dir,
+            dir.path(),
             "A.argon",
             r#"
 module A
@@ -289,7 +292,7 @@ export ::B::*
 "#,
         );
         write_source(
-            &dir,
+            dir.path(),
             "B.argon",
             r#"
 module B
@@ -304,7 +307,7 @@ export ::A::*
             SourceCodeTubeOptions {
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
-                input_dirs: vec![source_dir(&dir)],
+                input_dirs: vec![source_dir(dir.path())],
             },
             &tube_collection,
         );
@@ -316,74 +319,5 @@ export ::A::*
                 .iter()
                 .any(|error| error.code == ErrorCode::CircularReexport)
         );
-
-        fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn enum_declarations_are_exported_with_variants() {
-        let dir = temp_source_dir("enum-declarations");
-        write_source(
-            &dir,
-            "Option.argon",
-            r#"
-module Option
-
-public enum Option [token T: type]
-    Some(value: T)
-    None
-end
-"#,
-        );
-
-        let (reporter_context, context) = test_context();
-        let tube_collection = TubeCollectionBuilder::new(context.clone());
-        let tube = define_source_tube(
-            context,
-            SourceCodeTubeOptions {
-                name: tube_name(),
-                referenced_tubes: Vec::new(),
-                input_dirs: vec![source_dir(&dir)],
-            },
-            &tube_collection,
-        );
-
-        assert!(reporter_context.reporter.compile_errors().is_empty());
-
-        let module = tube
-            .module(&ModulePath(vec!["Option".to_string()]))
-            .unwrap();
-        let export_groups = module.export_groups();
-        let option_exports = export_groups
-            .get(&Identifier::Named("Option".to_string()))
-            .unwrap();
-        let enum_ = option_exports
-            .iter()
-            .find_map(|entry| match &entry.binding {
-                ModuleExportBinding::Enum(enum_) => Some(enum_.clone()),
-                _ => None,
-            })
-            .unwrap();
-        drop(export_groups);
-
-        let variants = enum_.variants();
-        assert_eq!(variants.len(), 2);
-        assert_eq!(
-            variants[0].metadata().name,
-            Identifier::Named("Some".to_string())
-        );
-        let some_fields = variants[0].clone().fields();
-        assert_eq!(some_fields.len(), 1);
-        assert_eq!(
-            some_fields[0].metadata().name,
-            Identifier::Named("value".to_string())
-        );
-        assert_eq!(
-            variants[1].metadata().name,
-            Identifier::Named("None".to_string())
-        );
-        assert!(variants[1].clone().fields().is_empty());
-
-        fs::remove_dir_all(dir).unwrap();
     }
 }

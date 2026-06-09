@@ -535,17 +535,18 @@ pub enum UnaryOperatorIdentifier {
     Plus,
     Minus,
     BitNot,
-    LogicalNot,
 }
 
-impl From<UnaryOperator> for UnaryOperatorIdentifier {
-    fn from(op: UnaryOperator) -> Self {
-        match op {
+impl TryFrom<UnaryOperator> for UnaryOperatorIdentifier {
+    type Error = ();
+
+    fn try_from(value: UnaryOperator) -> Result<Self, Self::Error> {
+        Ok(match value {
             UnaryOperator::Plus => UnaryOperatorIdentifier::Plus,
             UnaryOperator::Minus => UnaryOperatorIdentifier::Minus,
             UnaryOperator::BitNot => UnaryOperatorIdentifier::BitNot,
-            UnaryOperator::LogicalNot => UnaryOperatorIdentifier::LogicalNot,
-        }
+            UnaryOperator::LogicalNot => return Err(()),
+        })
     }
 }
 
@@ -555,7 +556,6 @@ impl From<UnaryOperatorIdentifier> for UnaryOperator {
             UnaryOperatorIdentifier::Plus => UnaryOperator::Plus,
             UnaryOperatorIdentifier::Minus => UnaryOperator::Minus,
             UnaryOperatorIdentifier::BitNot => UnaryOperator::BitNot,
-            UnaryOperatorIdentifier::LogicalNot => UnaryOperator::LogicalNot,
         }
     }
 }
@@ -662,7 +662,7 @@ pub enum UnaryOperator {
 
 impl UnaryOperator {
     pub fn is_valid_identifier(self) -> bool {
-        true
+        self != UnaryOperator::LogicalNot
     }
 }
 

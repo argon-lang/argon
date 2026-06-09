@@ -1092,6 +1092,8 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
+            Expr::Condition { value, .. } => self.expr(value, output)?,
+
             // Box
             Expr::Block { label, body } => {
                 let (output_result, output) = output.into_known_location(self, e)?;
@@ -1319,7 +1321,6 @@ impl<'a> ExprEmitter<'a> {
                     Builtin::StringConcat => op!(StringConcat),
                     Builtin::StringEq => op!(StringEq),
                     Builtin::StringNe => op!(StringNe),
-                    Builtin::BoolNot => op!(BoolNot),
                     Builtin::BoolEq => op!(BoolEq),
                     Builtin::BoolNe => op!(BoolNe),
                     Builtin::ArrayCreateUnsafeUninitialized => {
@@ -1473,6 +1474,35 @@ impl<'a> ExprEmitter<'a> {
             // Match
             // NewInstance
             // Next
+            Expr::Not(value) => {
+                let rb = output.output_register(self, e)?;
+                self.expr(value, ExprOutputKnown::Register(rb.register().clone()))?;
+
+                let (when_true, _) = self.with_nested_block(|emitter| {
+                    emitter.emit(vf::Instruction::ConstBool {
+                        dest: Box::new(rb.register().clone()),
+                        value: false,
+                    });
+                    Ok(())
+                })?;
+
+                let (when_false, _) = self.with_nested_block(|emitter| {
+                    emitter.emit(vf::Instruction::ConstBool {
+                        dest: Box::new(rb.register().clone()),
+                        value: true,
+                    });
+                    Ok(())
+                })?;
+
+                self.emit(vf::Instruction::IfElse {
+                    condition: Box::new(rb.register().clone()),
+                    when_true: Box::new(when_true),
+                    when_false: Box::new(when_false),
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Or(a, b) => {
                 let rb = output.output_register(self, e)?;
                 self.expr(a, ExprOutputKnown::Register(rb.register().clone()))?;
@@ -1884,8 +1914,6 @@ impl ExprOutput for ExprOutputKnown {
                 OutputFunctionResultBuilderType::ReturnNonTail(r)
             }
             ExprOutputKnown::Return => {
-                let t = get_expr_type(e);
-                let t = expr_emitter.token_expr(&t)?;
                 OutputFunctionResultBuilderType::Return
             }
         };
@@ -2142,7 +2170,6 @@ fn encode_unary_operator(op: UnaryOperatorIdentifier) -> vf::UnaryOperator {
         UnaryOperatorIdentifier::Plus => vf::UnaryOperator::Plus,
         UnaryOperatorIdentifier::Minus => vf::UnaryOperator::Minus,
         UnaryOperatorIdentifier::BitNot => vf::UnaryOperator::BitNot,
-        UnaryOperatorIdentifier::LogicalNot => vf::UnaryOperator::LogicalNot,
     }
 }
 

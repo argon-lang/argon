@@ -943,17 +943,22 @@ impl TubeDecoder {
                 a: Box::new(self.decode_expr(*a.var_type)),
                 r: Box::new(self.decode_expr(*r)),
             },
+            tf::Expr::Condition {
+                value,
+                when_true_witness,
+                when_false_witness,
+            } => Expr::Condition {
+                value: Box::new(self.decode_expr(*value)),
+                when_true_witness: when_true_witness
+                    .map(|var| Variable::Local(self.decode_local_var(*var))),
+                when_false_witness: when_false_witness
+                    .map(|var| Variable::Local(self.decode_local_var(*var))),
+            },
             tf::Expr::IfElse {
                 condition,
                 true_body,
                 false_body,
-                when_true_witness,
-                when_false_witness,
             } => Expr::IfElse {
-                when_true_var: when_true_witness
-                    .map(|var| Variable::Local(self.decode_local_var(*var))),
-                when_false_var: when_false_witness
-                    .map(|var| Variable::Local(self.decode_local_var(*var))),
                 condition: Box::new(self.decode_expr(*condition)),
                 when_true: Box::new(self.decode_expr(*true_body)),
                 when_false: Box::new(self.decode_expr(*false_body)),
@@ -969,6 +974,7 @@ impl TubeDecoder {
                 Box::new(self.decode_expr(*a)),
                 Box::new(self.decode_expr(*b)),
             ),
+            tf::Expr::Not { a } => Expr::Not(Box::new(self.decode_expr(*a))),
             tf::Expr::Raise { ex } => Expr::Raise {
                 ex: Box::new(self.decode_expr(*ex)),
             },
@@ -1663,7 +1669,6 @@ fn decode_unary_operator(op: tf::UnaryOperator) -> UnaryOperatorIdentifier {
         tf::UnaryOperator::Plus => UnaryOperatorIdentifier::Plus,
         tf::UnaryOperator::Minus => UnaryOperatorIdentifier::Minus,
         tf::UnaryOperator::BitNot => UnaryOperatorIdentifier::BitNot,
-        tf::UnaryOperator::LogicalNot => UnaryOperatorIdentifier::LogicalNot,
     }
 }
 
@@ -1738,7 +1743,6 @@ fn decode_builtin(builtin: tf::Builtin) -> Builtin {
         tf::Builtin::StringConcat => Builtin::StringConcat,
         tf::Builtin::StringEq => Builtin::StringEq,
         tf::Builtin::StringNe => Builtin::StringNe,
-        tf::Builtin::BoolNot => Builtin::BoolNot,
         tf::Builtin::BoolEq => Builtin::BoolEq,
         tf::Builtin::BoolNe => Builtin::BoolNe,
         tf::Builtin::ArrayCreateUnsafeUninitialized => Builtin::ArrayCreateUnsafeUninitialized,

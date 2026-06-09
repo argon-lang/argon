@@ -57,6 +57,19 @@ where
         Expr::Block { label, body } => default_scan_label(scanner, label) && scanner.scan(body),
         Expr::Break { label, value } => default_scan_label(scanner, label) && scanner.scan(value),
         Expr::Builtin { arguments, .. } => arguments.iter().all(|argument| scanner.scan(argument)),
+        Expr::Condition {
+            value,
+            when_true_witness,
+            when_false_witness,
+        } => {
+            scanner.scan(value)
+                && when_true_witness
+                    .as_ref()
+                    .is_none_or(|variable| scanner.scan_variable(variable))
+                && when_false_witness
+                    .as_ref()
+                    .is_none_or(|variable| scanner.scan_variable(variable))
+        }
         Expr::EnumType(enum_type) => default_scan_enum_type(scanner, enum_type),
         Expr::EnumVariantLiteral {
             enum_type,
@@ -80,22 +93,10 @@ where
         Expr::FunctionResultValue => true,
         Expr::FunctionType { a, r } => scanner.scan(a) && scanner.scan(r),
         Expr::IfElse {
-            when_true_var,
-            when_false_var,
             condition,
             when_true,
             when_false,
-        } => {
-            when_true_var
-                .as_ref()
-                .is_none_or(|variable| scanner.scan_variable(variable))
-                && when_false_var
-                    .as_ref()
-                    .is_none_or(|variable| scanner.scan_variable(variable))
-                && scanner.scan(condition)
-                && scanner.scan(when_true)
-                && scanner.scan(when_false)
-        }
+        } => scanner.scan(condition) && scanner.scan(when_true) && scanner.scan(when_false),
         Expr::IntLiteral(_) => true,
         Expr::Is { value, .. } => scanner.scan(value),
         Expr::Match { value, cases } => {
@@ -110,6 +111,7 @@ where
             ..
         } => scanner.scan(receiver) && arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::NewTraitObject { .. } => true,
+        Expr::Not(value) => scanner.scan(value),
         Expr::Or(a, b) => scanner.scan(a) && scanner.scan(b),
         Expr::Raise { ex } => scanner.scan(ex),
         Expr::RecordFieldLoad {
@@ -135,7 +137,6 @@ where
         Expr::RecordType(record_type) => default_scan_record_type(scanner, record_type),
         Expr::Retry { label } => default_scan_label(scanner, label),
         Expr::Sequence(exprs) => exprs.iter().all(|expr| scanner.scan(expr)),
-        Expr::StoreVariable(variable) => scanner.scan_variable(variable),
         Expr::StringLiteral(_) => true,
         Expr::TraitType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
         Expr::Tuple { items } => items.iter().all(|item| scanner.scan(item)),
@@ -226,6 +227,19 @@ where
         Expr::Builtin { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
+        Expr::Condition {
+            value,
+            when_true_witness,
+            when_false_witness,
+        } => {
+            scanner.scan(value.as_mut())
+                && when_true_witness
+                    .as_mut()
+                    .is_none_or(|variable| scanner.scan_variable(variable))
+                && when_false_witness
+                    .as_mut()
+                    .is_none_or(|variable| scanner.scan_variable(variable))
+        }
         Expr::EnumType(enum_type) => default_scan_enum_type_mut(scanner, enum_type),
         Expr::EnumVariantLiteral {
             enum_type,
@@ -249,19 +263,11 @@ where
         Expr::FunctionResultValue => true,
         Expr::FunctionType { a, r } => scanner.scan(a.as_mut()) && scanner.scan(r.as_mut()),
         Expr::IfElse {
-            when_true_var,
-            when_false_var,
             condition,
             when_true,
             when_false,
         } => {
-            when_true_var
-                .as_mut()
-                .is_none_or(|variable| scanner.scan_variable(variable))
-                && when_false_var
-                    .as_mut()
-                    .is_none_or(|variable| scanner.scan_variable(variable))
-                && scanner.scan(condition.as_mut())
+            scanner.scan(condition.as_mut())
                 && scanner.scan(when_true.as_mut())
                 && scanner.scan(when_false.as_mut())
         }
@@ -282,6 +288,7 @@ where
                 && arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
         Expr::NewTraitObject { .. } => true,
+        Expr::Not(value) => scanner.scan(value.as_mut()),
         Expr::Or(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
         Expr::Raise { ex } => scanner.scan(ex.as_mut()),
         Expr::RecordFieldLoad {
@@ -311,7 +318,6 @@ where
         Expr::RecordType(record_type) => default_scan_record_type_mut(scanner, record_type),
         Expr::Retry { label } => default_scan_label_mut(scanner, label),
         Expr::Sequence(exprs) => exprs.iter_mut().all(|expr| scanner.scan(expr)),
-        Expr::StoreVariable(variable) => scanner.scan_variable(variable),
         Expr::StringLiteral(_) => true,
         Expr::TraitType(_, arguments) => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))

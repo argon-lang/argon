@@ -265,7 +265,6 @@ simple enum unary-operator {
     plus,
     minus,
     bit-not,
-    logical-not,
 }
 
 @esexpr:(derive-codec)
@@ -612,6 +611,17 @@ enum expr {
         block-id: block-id;
         value: expr;
     },
+    condition {
+        value: expr;
+
+        @esexpr:(keyword)
+        @esexpr:(optional)
+        when-true-witness: optional-field[local-var];
+
+        @esexpr:(keyword)
+        @esexpr:(optional)
+        when-false-witness: optional-field[local-var];
+    },
     @esexpr:(inline-value)
     enum-type {
         enum-type: enum-type;
@@ -648,14 +658,6 @@ enum expr {
         condition: expr;
         true-body: expr;
         false-body: expr;
-
-        @esexpr:(keyword)
-        @esexpr:(optional)
-        when-true-witness: optional-field[local-var];
-
-        @esexpr:(keyword)
-        @esexpr:(optional)
-        when-false-witness: optional-field[local-var];
     },
     instance-method-call {
         method-id: nat;
@@ -688,6 +690,9 @@ enum expr {
     new-instance {
         instance-id: nat;
         args: list[expr];
+    },
+    not {
+        a: expr;
     },
     or {
         a: expr;
@@ -852,8 +857,7 @@ simple enum builtin {
     string-concat,
     string-eq,
     string-ne,
-    
-    bool-not,
+
     bool-eq,
     bool-ne,
 
@@ -1029,4 +1033,3 @@ simple enum block-label-kind {
 record block-id {
     id: nat;
 }
-

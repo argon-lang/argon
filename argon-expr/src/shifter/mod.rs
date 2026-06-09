@@ -64,6 +64,15 @@ where
                 .map(|argument| shifter.shift(argument))
                 .collect(),
         },
+        Expr::Condition {
+            value,
+            when_true_witness,
+            when_false_witness,
+        } => Expr::Condition {
+            value: Box::new(shifter.shift(*value)),
+            when_true_witness: when_true_witness.map(|v| shifter.shift_variable(v)),
+            when_false_witness: when_false_witness.map(|v| shifter.shift_variable(v)),
+        },
         Expr::EnumType(enum_type) => Expr::EnumType(default_shift_enum_type(shifter, enum_type)),
         Expr::EnumVariantLiteral {
             enum_type,
@@ -112,14 +121,10 @@ where
             r: Box::new(shifter.shift(*r)),
         },
         Expr::IfElse {
-            when_true_var,
-            when_false_var,
             condition,
             when_true,
             when_false,
         } => Expr::IfElse {
-            when_true_var: when_true_var.map(|v| shifter.shift_variable(v)),
-            when_false_var: when_false_var.map(|v| shifter.shift_variable(v)),
             condition: Box::new(shifter.shift(*condition)),
             when_true: Box::new(shifter.shift(*when_true)),
             when_false: Box::new(shifter.shift(*when_false)),
@@ -152,6 +157,7 @@ where
                 .collect(),
         },
         Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },
+        Expr::Not(value) => Expr::Not(Box::new(shifter.shift(*value))),
         Expr::Or(a, b) => Expr::Or(Box::new(shifter.shift(*a)), Box::new(shifter.shift(*b))),
         Expr::Raise { ex } => Expr::Raise {
             ex: Box::new(shifter.shift(*ex)),
@@ -204,7 +210,6 @@ where
             )
             .expect("shifting a non-empty expression sequence preserves non-emptiness"),
         ),
-        Expr::StoreVariable(variable) => Expr::StoreVariable(shifter.shift_variable(variable)),
         Expr::StringLiteral(value) => Expr::StringLiteral(value),
         Expr::TraitType(trait_ec, arguments) => Expr::TraitType(
             trait_ec,

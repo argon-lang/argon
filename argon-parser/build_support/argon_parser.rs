@@ -535,7 +535,6 @@ impl GrammarFactory for ParserFactory {
                 [
                     unary_operator_name_rule(OpPlus, "Plus"),
                     unary_operator_name_rule(OpMinus, "Minus"),
-                    unary_operator_name_rule(OpLogicalNot, "LogicalNot"),
                     unary_operator_name_rule(OpBitNot, "BitNot"),
                 ],
             ),

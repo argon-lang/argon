@@ -728,9 +728,22 @@ impl TubeEncoder {
                     .map(|expr| self.emit_expr(expr).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
+            Expr::Condition {
+                value,
+                when_true_witness,
+                when_false_witness,
+            } => tf::Expr::Condition {
+                value: Box::new(self.emit_expr(value)?),
+                when_true_witness: when_true_witness
+                    .as_ref()
+                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
+                    .transpose()?,
+                when_false_witness: when_false_witness
+                    .as_ref()
+                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
+                    .transpose()?,
+            },
             Expr::IfElse {
-                when_true_var,
-                when_false_var,
                 condition,
                 when_true,
                 when_false,
@@ -738,18 +751,13 @@ impl TubeEncoder {
                 condition: Box::new(self.emit_expr(condition)?),
                 true_body: Box::new(self.emit_expr(when_true)?),
                 false_body: Box::new(self.emit_expr(when_false)?),
-                when_true_witness: when_true_var
-                    .as_ref()
-                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
-                    .transpose()?,
-                when_false_witness: when_false_var
-                    .as_ref()
-                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
-                    .transpose()?,
             },
             Expr::Or(a, b) => tf::Expr::Or {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
+            },
+            Expr::Not(value) => tf::Expr::Not {
+                a: Box::new(self.emit_expr(value)?),
             },
             Expr::Retry { label } => tf::Expr::Retry {
                 block_id: Box::new(self.emit_block_id(label)),
@@ -1075,7 +1083,6 @@ fn encode_unary_operator(op: UnaryOperatorIdentifier) -> tf::UnaryOperator {
         UnaryOperatorIdentifier::Plus => tf::UnaryOperator::Plus,
         UnaryOperatorIdentifier::Minus => tf::UnaryOperator::Minus,
         UnaryOperatorIdentifier::BitNot => tf::UnaryOperator::BitNot,
-        UnaryOperatorIdentifier::LogicalNot => tf::UnaryOperator::LogicalNot,
     }
 }
 
@@ -1157,7 +1164,6 @@ fn encode_builtin(builtin: Builtin) -> Result<tf::Builtin, InternalCompilerError
         Builtin::StringConcat => tf::Builtin::StringConcat,
         Builtin::StringEq => tf::Builtin::StringEq,
         Builtin::StringNe => tf::Builtin::StringNe,
-        Builtin::BoolNot => tf::Builtin::BoolNot,
         Builtin::BoolEq => tf::Builtin::BoolEq,
         Builtin::BoolNe => tf::Builtin::BoolNe,
         Builtin::ArrayCreateUnsafeUninitialized => tf::Builtin::ArrayCreateUnsafeUninitialized,

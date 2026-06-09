@@ -813,7 +813,6 @@ simple enum builtin-op {
     string-eq,
     string-ne,
 
-    bool-not,
     bool-eq,
     bool-ne,
 

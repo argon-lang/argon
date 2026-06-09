@@ -191,6 +191,7 @@ dependencies = [
  "mitsein",
  "num-bigint",
  "parse18-runtime",
+ "tempfile",
  "walkdir",
 ]
 

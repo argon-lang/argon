@@ -8,9 +8,12 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
         Expr::Error => Expr::Error,
         Expr::Hole(hole) => match *hole {},
 
-        Expr::And(_, _) | Expr::BoolLiteral(_) | Expr::Is { .. } | Expr::Or(_, _) => {
-            Expr::bool_type()
-        }
+        Expr::And(_, _)
+        | Expr::BoolLiteral(_)
+        | Expr::Condition { .. }
+        | Expr::Is { .. }
+        | Expr::Not(_)
+        | Expr::Or(_, _) => Expr::bool_type(),
 
         Expr::Block { label, .. } => label.block_result_type.clone(),
 
@@ -72,7 +75,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Unbox { t, .. } => (**t).clone(),
 
-        Expr::Variable(variable) | Expr::StoreVariable(variable) => variable.var_type().clone(),
+        Expr::Variable(variable) => variable.var_type().clone(),
 
         Expr::RecordFieldLoad { field, .. } => (*field.clone().field_type()).clone(),
 
@@ -146,7 +149,6 @@ fn get_builtin_type(
         | Builtin::IntGe
         | Builtin::StringEq
         | Builtin::StringNe
-        | Builtin::BoolNot
         | Builtin::BoolEq
         | Builtin::BoolNe => Expr::bool_type(),
 

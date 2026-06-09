@@ -29,6 +29,7 @@ parse18-runtime = { workspace = true, default-features = false }
 argon-compiler = { workspace = true, features = ["test-utils"] }
 embedded-io = { workspace = true, features = ["std"] }
 num-bigint = { workspace = true }
+tempfile = { workspace = true }
 walkdir = { workspace = true }
 
 [lints]

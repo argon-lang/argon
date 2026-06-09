@@ -171,11 +171,11 @@ mod tests {
     #[test]
     fn does_not_substitute_store_targets() {
         let variable = variable();
-        let mut expr = Expr::StoreVariable(variable.clone());
+        let mut expr = Expr::VariableStore(variable.clone(), Box::new(Expr::IntLiteral(1.into())));
         let replacement = Expr::BoolLiteral(true);
 
         assert!(SubstScanner::subst(variable, &replacement, &mut expr));
 
-        assert!(matches!(expr, Expr::StoreVariable(_)));
+        assert!(matches!(expr, Expr::VariableStore(_, _)));
     }
 }

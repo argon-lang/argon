@@ -261,8 +261,6 @@ enum TypeInferResult<'a> {
 
     IfElse {
         condition: Box<Expr<TypeCheckExprContext>>,
-        when_true_var: Option<Variable<TypeCheckExprContext>>,
-        when_false_var: Option<Variable<TypeCheckExprContext>>,
         true_body: Box<TypeInferResult<'a>>,
         false_body_location: &'a Location,
         false_body: Box<TypeInferResult<'a>>,
@@ -659,16 +657,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     }
 
                     ast::BinaryOperator::LogicalOr => {
-                        let a = self.check(a, &Expr::bool_type());
-                        let b = self.check(b, &Expr::bool_type());
+                        let a = self.check_condition_expr(a);
+                        let b = self.check_condition_expr(b);
                         return TypeInferResult::Complete(InferredType {
                             checked_expr: Expr::Or(Box::new(a), Box::new(b)),
                             inferred_type: Expr::bool_type(),
                         });
                     }
                     ast::BinaryOperator::LogicalAnd => {
-                        let a = self.check(a, &Expr::bool_type());
-                        let b = self.check(b, &Expr::bool_type());
+                        let a = self.check_condition_expr(a);
+                        let b = self.check_condition_expr(b);
                         return TypeInferResult::Complete(InferredType {
                             checked_expr: Expr::And(Box::new(a), Box::new(b)),
                             inferred_type: Expr::bool_type(),
@@ -705,10 +703,17 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
             ast::Expr::UnaryOperation { op, a } => {
                 let op_id = match op.value {
+                    ast::UnaryOperator::LogicalNot => {
+                        let value = self.check_condition_expr(a);
+                        return TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::Not(Box::new(value)),
+                            inferred_type: Expr::bool_type(),
+                        });
+                    }
+
                     ast::UnaryOperator::Plus => ast::UnaryOperatorIdentifier::Plus,
                     ast::UnaryOperator::Minus => ast::UnaryOperatorIdentifier::Minus,
                     ast::UnaryOperator::BitNot => ast::UnaryOperatorIdentifier::BitNot,
-                    ast::UnaryOperator::LogicalNot => ast::UnaryOperatorIdentifier::LogicalNot,
                 };
 
                 let call = self.process_unary_operator(&expr.location, op_id, &op.location, a);
@@ -953,11 +958,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 when_true,
                 when_false,
             } => {
-                let conv_condition = self.check(condition, &Expr::bool_type());
+                let conv_condition = self.check_condition_expr(condition);
                 let true_body_result = with_nested_scope!(self).infer_block(when_true);
                 let false_body_result = with_nested_scope!(self).infer_block(when_false);
-
-                let (when_true_var, when_false_var) = self.create_if_cond_vars(&conv_condition);
 
                 match (&true_body_result, &false_body_result) {
                     (
@@ -988,8 +991,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                         TypeInferResult::Complete(InferredType {
                             checked_expr: Expr::IfElse {
-                                when_true_var,
-                                when_false_var,
                                 condition: Box::new(conv_condition),
                                 when_true: Box::new(checked_true_body),
                                 when_false: Box::new(checked_false_body),
@@ -1000,8 +1001,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                     _ => TypeInferResult::IfElse {
                         condition: Box::new(conv_condition),
-                        when_true_var,
-                        when_false_var,
                         true_body: Box::new(true_body_result),
                         false_body_location: &when_false.location,
                         false_body: Box::new(false_body_result),
@@ -1138,8 +1137,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     body: Box::new(Expr::Sequence(vec1![
                         Expr::IfElse {
                             condition: Box::new(cond),
-                            when_true_var: None,
-                            when_false_var: None,
                             when_true: Box::new(Expr::unit()),
                             when_false: Box::new(Expr::Break {
                                 label: Box::new(block_label.clone()),
@@ -1391,14 +1388,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 builtin,
                 args,
                 [Expr::string_type(), Expr::string_type()],
-                Expr::bool_type(),
-            ),
-
-            Builtin::BoolNot => self.infer_fixed_builtin(
-                location,
-                builtin,
-                args,
-                [Expr::bool_type()],
                 Expr::bool_type(),
             ),
 
@@ -2092,8 +2081,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
             }
             TypeInferResult::IfElse {
-                when_true_var,
-                when_false_var,
                 condition,
                 true_body,
                 false_body_location,
@@ -2110,8 +2097,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                 InferredType {
                     checked_expr: Expr::IfElse {
-                        when_true_var,
-                        when_false_var,
                         condition,
                         when_true: Box::new(true_body_inferred.checked_expr),
                         when_false: Box::new(checked_false_body),
@@ -2154,6 +2139,37 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         inferred
     }
 
+    fn check_condition_expr(
+        &mut self,
+        expr: &WithLocation<ast::Expr>,
+    ) -> Expr<TypeCheckExprContext> {
+        let condition = self.infer(expr);
+        self.check_condition(condition)
+    }
+
+    fn check_condition(&mut self, condition: TypeInferResult) -> Expr<TypeCheckExprContext> {
+        let mut cond_expr = self
+            .resolve_inferred_type(condition, ExpectedType::Exact(&Expr::bool_type()))
+            .checked_expr;
+
+        if !matches!(
+            cond_expr,
+            Expr::BoolLiteral(_) | Expr::And(..) | Expr::Or(..) | Expr::Not(_) | Expr::Is { .. }
+        ) {
+            let (when_true_witness, when_false_witness) = self.create_if_cond_vars(&cond_expr);
+
+            if when_true_witness.is_some() || when_false_witness.is_some() {
+                cond_expr = Expr::Condition {
+                    value: Box::new(cond_expr),
+                    when_true_witness,
+                    when_false_witness,
+                };
+            }
+        }
+
+        cond_expr
+    }
+
     fn create_if_cond_vars(
         &mut self,
         cond_expr: &Expr<TypeCheckExprContext>,
@@ -2163,7 +2179,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     ) {
         let is_pure_cond = PurityScanner::contains_impure_function_call(cond_expr);
 
-        // TODO: Get conditional vars from pattern expressions
         let when_true_var = is_pure_cond.then(|| self.create_if_branch_var(cond_expr, true));
         let when_false_var = is_pure_cond.then(|| self.create_if_branch_var(cond_expr, false));
 

@@ -172,7 +172,7 @@ mod tests {
 
     fn test_location(line: usize, column: usize) -> Location {
         Location {
-            file: "test.argon".to_string(),
+            file: "test.argon".into(),
             start: FilePosition { line, column },
             end: FilePosition {
                 line,

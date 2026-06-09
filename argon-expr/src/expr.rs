@@ -72,6 +72,11 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         builtin: Builtin,
         arguments: Vec<Expr<EC>>,
     },
+    Condition {
+        value: Box<Expr<EC>>,
+        when_true_witness: Option<Variable<EC>>,
+        when_false_witness: Option<Variable<EC>>,
+    },
     EnumType(EnumType<EC>),
     EnumVariantLiteral {
         enum_type: EnumType<EC>,
@@ -101,8 +106,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         r: Box<Expr<EC>>,
     },
     IfElse {
-        when_true_var: Option<Variable<EC>>,
-        when_false_var: Option<Variable<EC>>,
         condition: Box<Expr<EC>>,
         when_true: Box<Expr<EC>>,
         when_false: Box<Expr<EC>>,
@@ -125,6 +128,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         trait_ec: EC::Trait,
         body: Vec<NewTraitObjectBodyStmt>,
     },
+    Not(Box<Expr<EC>>),
     Or(Box<Expr<EC>>, Box<Expr<EC>>),
     Raise {
         ex: Box<Expr<EC>>,
@@ -149,7 +153,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         label: Box<BlockLabel<EC>>,
     },
     Sequence(Vec1<Expr<EC>>),
-    StoreVariable(Variable<EC>),
     StringLiteral(Box<str>),
     TraitType(EC::Trait, Vec<Expr<EC>>),
     Tuple {
@@ -245,7 +248,6 @@ pub enum Builtin {
     StringConcat,
     StringEq,
     StringNe,
-    BoolNot,
     BoolEq,
     BoolNe,
     ArrayCreateUnsafeUninitialized,
@@ -284,7 +286,6 @@ impl Builtin {
             Builtin::StringConcat => "string_concat",
             Builtin::StringEq => "string_eq",
             Builtin::StringNe => "string_ne",
-            Builtin::BoolNot => "bool_not",
             Builtin::BoolEq => "bool_eq",
             Builtin::BoolNe => "bool_ne",
             Builtin::ArrayCreateUnsafeUninitialized => "array_create_unsafe_uninitialized",
@@ -327,7 +328,6 @@ impl FromStr for Builtin {
             "string_concat" => Ok(Builtin::StringConcat),
             "string_eq" => Ok(Builtin::StringEq),
             "string_ne" => Ok(Builtin::StringNe),
-            "bool_not" => Ok(Builtin::BoolNot),
             "bool_eq" => Ok(Builtin::BoolEq),
             "bool_ne" => Ok(Builtin::BoolNe),
             "array_create_unsafe_uninitialized" => Ok(Builtin::ArrayCreateUnsafeUninitialized),
