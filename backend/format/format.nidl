@@ -780,6 +780,7 @@ enum expr {
 
 @esexpr:(derive-codec)
 enum pattern {
+    error,
     discard {
         t: expr;
     },

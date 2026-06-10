@@ -1085,11 +1085,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             ast::Expr::Summon { .. } => todo!("infer summon expressions"),
 
             ast::Expr::Tuple { items } => {
-                let element_results = items.iter()
+                let element_results = items
+                    .iter()
                     .map(|item| self.infer(item))
                     .collect::<Vec<_>>();
 
-                if element_results.iter().all(|elem_res| matches!(elem_res, TypeInferResult::Complete(_))) {
+                if element_results
+                    .iter()
+                    .all(|elem_res| matches!(elem_res, TypeInferResult::Complete(_)))
+                {
                     let mut values = Vec::new();
                     let mut types = Vec::new();
 
@@ -1104,12 +1108,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     }
 
                     return TypeInferResult::Complete(InferredType {
-                        checked_expr: Expr::Tuple {
-                            items: values,
-                        },
-                        inferred_type: Expr::Tuple {
-                            items: types,
-                        },
+                        checked_expr: Expr::Tuple { items: values },
+                        inferred_type: Expr::Tuple { items: types },
                     });
                 }
 
@@ -1117,7 +1117,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     location: &expr.location,
                     elements: element_results,
                 }
-            },
+            }
 
             ast::Expr::While {
                 label,
@@ -1769,7 +1769,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
 
                 ast::Expr::Dot { o, member } => {
-                    let mut overload_groups = Vec::new();
+                    let mut overload_groups: Vec<Vec<Overloadable>> = Vec::new();
 
                     'done: {
                         let mut instance = self.process_call(o, None);
@@ -1782,23 +1782,33 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         };
 
                         // Find enum variants
-                        // if arguments.is_empty() && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee {
-                        //     if let Some(e) = instance_overloads.item_groups
-                        //         .iter()
-                        //         .flatten()
-                        //         .find_map(|overload| match overload {
-                        //             Overloadable::Enum(e) => Some(e),
-                        //             _ => None,
-                        //         })
-                        //     {
-                        //         todo!("Find enum variants");
-                        //
-                        //         let sig = r.signature();
-                        //         if sig.parameters.is_empty() {
-                        //             break 'done;
-                        //         }
-                        //     }
-                        // }
+                        if arguments.is_empty()
+                            && let CalleeInfo::Overloadable(instance_overloads) =
+                                &mut instance.callee
+                        {
+                            if let Some(e) =
+                                instance_overloads.iter().flatten().find_map(|overload| {
+                                    match overload {
+                                        Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
+                                        _ => None,
+                                    }
+                                })
+                            {
+                                overload_groups.push(
+                                    e.clone()
+                                        .variants()
+                                        .iter()
+                                        .cloned()
+                                        .filter(|v| v.metadata().name == member.value)
+                                        .map(|v| {
+                                            Overloadable::Base(scope::Overloadable::EnumVariant(
+                                                v.clone(),
+                                            ))
+                                        })
+                                        .collect(),
+                                );
+                            }
+                        }
 
                         let mut instance = self.infer_call(instance).infer_fully();
 
@@ -2309,8 +2319,21 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         );
                         normalizer.normalize(&mut pattern_type);
 
-                        let Expr::EnumType(enum_type) = &pattern_type else {
-                            todo!()
+                        let enum_type = match &pattern_type {
+                            Expr::EnumType(enum_type) => enum_type,
+                            Expr::Error => {
+                                return Pattern::Error;
+                            }
+                            _ => {
+                                self.context
+                                    .reporter()
+                                    .report_error(CompileError::type_mismatch(
+                                        pattern.location.clone(),
+                                        format!("{:?}", pattern_type),
+                                        "an enum type".to_string(),
+                                    ));
+                                return Pattern::Error;
+                            }
                         };
 
                         let enum_type = enum_type.clone();

@@ -932,7 +932,7 @@ impl TubeEncoder {
         pattern: &Pattern<argon_compiler::DefaultExprContext>,
     ) -> Result<tf::Pattern, InternalCompilerError> {
         Ok(match pattern {
-            Pattern::Error => todo!("emit error pattern"),
+            Pattern::Error => tf::Pattern::Error {},
             Pattern::Discard { t } => tf::Pattern::Discard {
                 t: Box::new(self.emit_expr(t)?),
             },

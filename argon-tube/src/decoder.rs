@@ -1084,6 +1084,7 @@ impl TubeDecoder {
 
     fn decode_pattern(self: &Arc<Self>, pattern: tf::Pattern) -> Pattern<DefaultExprContext> {
         match pattern {
+            tf::Pattern::Error {} => Pattern::Error,
             tf::Pattern::Discard { t } => Pattern::Discard {
                 t: Box::new(self.decode_expr(*t)),
             },

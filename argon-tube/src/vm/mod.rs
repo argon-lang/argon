@@ -204,70 +204,72 @@ impl VmEncoder {
         &mut self,
         emitter: EntryEmitter,
     ) -> Result<Option<vf::TubeFileEntry>, InternalCompilerError> {
-        Ok(Some(match emitter {
-            EntryEmitter::Header => vf::TubeFileEntry::Header {
-                header: Box::new(vf::TubeHeader {
-                    format_version_major: BigInt::ZERO,
-                    format_version_minor: BigInt::ZERO,
-                }),
-            },
-
-            EntryEmitter::Metadata => {
-                let modules = mem::take(&mut self.modules)
-                    .into_iter()
-                    .map(|module| self.emit_module(module).map(Box::new))
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                vf::TubeFileEntry::Metadata {
-                    metadata: Box::new(vf::TubeMetadata {
-                        name: Box::new(encode_tube_name(self.tube.name())),
-                        referenced_tubes: self
-                            .tube
-                            .referenced_tubes()
-                            .iter()
-                            .map(|tube| {
-                                Box::new(vf::TubeReference {
-                                    name: Box::new(encode_tube_name(tube)),
-                                    metadata: None,
-                                })
-                            })
-                            .collect(),
-                        platform_metadata: self
-                            .tube
-                            .metadata()
-                            .platform
-                            .get(&self.platform_id)
-                            .cloned()
-                            .map(ESExprStatic::new),
-                        modules,
+        let entry = 'entry: {
+            match emitter {
+                EntryEmitter::Header => vf::TubeFileEntry::Header {
+                    header: Box::new(vf::TubeHeader {
+                        format_version_major: BigInt::ZERO,
+                        format_version_minor: BigInt::ZERO,
                     }),
-                }
-            }
+                },
 
-            EntryEmitter::ModuleReference(tube, module) => {
-                let module_id =
-                    BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
-                let tube_id = BigUint::from(self.ids.tube_ids.get(tube.clone()));
-                let path = encode_module_path(&module);
+                EntryEmitter::Metadata => {
+                    let modules = mem::take(&mut self.modules)
+                        .into_iter()
+                        .map(|module| self.emit_module(module).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
 
-                vf::TubeFileEntry::ModuleReference {
-                    module_id,
-                    tube_id,
-                    path: Box::new(path),
-                }
-            }
-
-            EntryEmitter::Function(function) => {
-                let function_id = BigUint::from(self.ids.function_ids.get(function.clone()));
-                let import_specifier = function.clone().import_specifier();
-                let import = self.encode_import_specifier(&import_specifier)?;
-
-                if import_specifier_tube(&import_specifier) != self.tube.name() {
-                    vf::TubeFileEntry::FunctionReference {
-                        function_id,
-                        import: Box::new(import),
+                    vf::TubeFileEntry::Metadata {
+                        metadata: Box::new(vf::TubeMetadata {
+                            name: Box::new(encode_tube_name(self.tube.name())),
+                            referenced_tubes: self
+                                .tube
+                                .referenced_tubes()
+                                .iter()
+                                .map(|tube| {
+                                    Box::new(vf::TubeReference {
+                                        name: Box::new(encode_tube_name(tube)),
+                                        metadata: None,
+                                    })
+                                })
+                                .collect(),
+                            platform_metadata: self
+                                .tube
+                                .metadata()
+                                .platform
+                                .get(&self.platform_id)
+                                .cloned()
+                                .map(ESExprStatic::new),
+                            modules,
+                        }),
                     }
-                } else {
+                }
+
+                EntryEmitter::ModuleReference(tube, module) => {
+                    let module_id =
+                        BigUint::from(self.ids.module_ids.get((tube.clone(), module.clone())));
+                    let tube_id = BigUint::from(self.ids.tube_ids.get(tube.clone()));
+                    let path = encode_module_path(&module);
+
+                    vf::TubeFileEntry::ModuleReference {
+                        module_id,
+                        tube_id,
+                        path: Box::new(path),
+                    }
+                }
+
+                EntryEmitter::Function(function) => {
+                    let function_id = BigUint::from(self.ids.function_ids.get(function.clone()));
+                    let import_specifier = function.clone().import_specifier();
+                    let import = self.encode_import_specifier(&import_specifier)?;
+
+                    if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        break 'entry vf::TubeFileEntry::FunctionReference {
+                            function_id,
+                            import: Box::new(import),
+                        };
+                    }
+
                     let mut signature = self.emit_function_signature(
                         &ExpressionOwner::Function(function.clone()),
                         &function.clone().signature(),
@@ -294,19 +296,19 @@ impl VmEncoder {
                         }),
                     }
                 }
-            }
 
-            EntryEmitter::Record(record) => {
-                let record_id = BigUint::from(self.ids.record_ids.get(record.clone()));
-                let import_specifier = record.clone().import_specifier();
-                let import = self.encode_import_specifier(&import_specifier)?;
+                EntryEmitter::Record(record) => {
+                    let record_id = BigUint::from(self.ids.record_ids.get(record.clone()));
+                    let import_specifier = record.clone().import_specifier();
+                    let import = self.encode_import_specifier(&import_specifier)?;
 
-                if import_specifier_tube(&import_specifier) != self.tube.name() {
-                    vf::TubeFileEntry::RecordReference {
-                        record_id,
-                        import: Box::new(import),
+                    if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        break 'entry vf::TubeFileEntry::RecordReference {
+                            record_id,
+                            import: Box::new(import),
+                        };
                     }
-                } else {
+
                     let signature = record.clone().signature();
                     let owner = ExpressionOwner::Record(record.clone());
                     let mut builder = FunctionSignatureBuilder::new(self);
@@ -347,78 +349,141 @@ impl VmEncoder {
                         }),
                     }
                 }
-            }
 
-            EntryEmitter::RecordField(record_field) => match record_field.owning_record() {
-                RecordFieldOwner::Record(r) => {
-                    let record_field_id =
-                        BigUint::from(self.get_record_field_id(record_field.clone()));
-                    let record_id = BigUint::from(self.get_record_id(r.clone()));
+                EntryEmitter::RecordField(record_field) => match record_field.owning_record() {
+                    RecordFieldOwner::Record(r) => {
+                        let record_field_id =
+                            BigUint::from(self.get_record_field_id(record_field.clone()));
+                        let record_id = BigUint::from(self.get_record_id(r.clone()));
 
-                    vf::TubeFileEntry::RecordFieldReference {
-                        name: Box::new(encode_identifier(&record_field.metadata().name)),
-                        record_id,
-                        record_field_id,
+                        vf::TubeFileEntry::RecordFieldReference {
+                            name: Box::new(encode_identifier(&record_field.metadata().name)),
+                            record_id,
+                            record_field_id,
+                        }
+                    }
+                    RecordFieldOwner::EnumVariant(variant) => {
+                        let record_field_id =
+                            BigUint::from(self.get_record_field_id(record_field.clone()));
+                        let variant_id = BigUint::from(self.get_enum_variant_id(variant.clone()));
+
+                        vf::TubeFileEntry::EnumVariantRecordFieldReference {
+                            name: Box::new(encode_identifier(&record_field.metadata().name)),
+                            variant_id,
+                            record_field_id,
+                        }
+                    }
+                },
+
+                EntryEmitter::Enum(enum_) => {
+                    let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
+                    let import_specifier = enum_.clone().import_specifier();
+                    let import = self.encode_import_specifier(&import_specifier)?;
+
+                    if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        break 'entry vf::TubeFileEntry::EnumReference {
+                            enum_id,
+                            import: Box::new(import),
+                        };
+                    }
+
+                    let signature = self.emit_function_signature(
+                        &ExpressionOwner::Enum(enum_.clone()),
+                        &enum_.clone().signature(),
+                    )?;
+                    let variants = enum_
+                        .clone()
+                        .variants()
+                        .iter()
+                        .map(|variant| {
+                            self.get_enum_variant_id(variant.clone());
+                            let variant_fields = variant.clone().fields();
+                            for field in variant_fields.iter() {
+                                self.get_record_field_id(field.clone());
+                            }
+
+                            let variant_signature = variant.clone().signature();
+                            let mut builder = FunctionSignatureBuilder::new(self);
+                            for (index, param) in variant_signature.parameters.iter().enumerate() {
+                                builder.add_parameter(
+                                    Box::new(param.clone().to_parameter_var(
+                                        ExpressionOwner::EnumVariant(variant.clone()),
+                                        index,
+                                    )),
+                                    false,
+                                )?;
+                            }
+
+                            let fields = variant_fields
+                                .iter()
+                                .map(|field| {
+                                    let metadata = field.metadata();
+                                    let field_type = builder
+                                        .token_emitter()
+                                        .token_expr(&field.clone().field_type())?;
+
+                                    Ok(Box::new(vf::RecordFieldDefinition {
+                                        name: Box::new(encode_identifier(&metadata.name)),
+                                        field_type: Box::new(field_type),
+                                        mutable: metadata.is_mutable,
+                                    }))
+                                })
+                                .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+                            let variant_signature =
+                                builder.finish(&variant_signature.return_type)?;
+
+                            Ok(Box::new(vf::EnumVariantDefinition {
+                                name: Box::new(encode_identifier(&variant.metadata().name)),
+                                signature: Box::new(variant_signature.sig),
+                                fields,
+                            }))
+                        })
+                        .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+                    vf::TubeFileEntry::EnumDefinition {
+                        definition: Box::new(vf::EnumDefinition {
+                            enum_id,
+                            import: Box::new(import),
+                            signature: Box::new(signature.sig),
+                            variants,
+                        }),
                     }
                 }
-                RecordFieldOwner::EnumVariant(variant) => {
-                    let record_field_id =
-                        BigUint::from(self.get_record_field_id(record_field.clone()));
-                    let variant_id = BigUint::from(self.get_enum_variant_id(variant.clone()));
 
-                    vf::TubeFileEntry::EnumVariantRecordFieldReference {
-                        name: Box::new(encode_identifier(&record_field.metadata().name)),
+                EntryEmitter::EnumVariant(variant) => {
+                    let variant_id = BigUint::from(self.ids.enum_variant_ids.get(variant.clone()));
+                    let enum_id = BigUint::from(self.get_enum_id(variant.clone().owning_enum()));
+
+                    vf::TubeFileEntry::EnumVariantReference {
                         variant_id,
-                        record_field_id,
-                    }
-                }
-            },
-
-            EntryEmitter::Enum(enum_) => {
-                let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
-                let import_specifier = enum_.clone().import_specifier();
-                let import = self.encode_import_specifier(&import_specifier)?;
-
-                if import_specifier_tube(&import_specifier) != self.tube.name() {
-                    vf::TubeFileEntry::EnumReference {
                         enum_id,
-                        import: Box::new(import),
+                        name: Box::new(encode_identifier(&variant.metadata().name)),
                     }
-                } else {
-                    todo!("emit VM enum definitions")
                 }
-            }
 
-            EntryEmitter::EnumVariant(variant) => {
-                let variant_id = BigUint::from(self.ids.enum_variant_ids.get(variant.clone()));
-                let enum_id = BigUint::from(self.get_enum_id(variant.clone().owning_enum()));
+                EntryEmitter::Trait(trait_) => {
+                    let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
+                    let import_specifier = trait_.clone().import_specifier();
+                    let import = self.encode_import_specifier(&import_specifier)?;
 
-                vf::TubeFileEntry::EnumVariantReference {
-                    variant_id,
-                    enum_id,
-                    name: Box::new(encode_identifier(&variant.metadata().name)),
-                }
-            }
-
-            EntryEmitter::Trait(trait_) => {
-                let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
-                let import_specifier = trait_.clone().import_specifier();
-                let import = self.encode_import_specifier(&import_specifier)?;
-
-                if import_specifier_tube(&import_specifier) != self.tube.name() {
-                    vf::TubeFileEntry::TraitReference {
-                        trait_id,
-                        import: Box::new(import),
+                    if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        break 'entry vf::TubeFileEntry::TraitReference {
+                            trait_id,
+                            import: Box::new(import),
+                        };
                     }
-                } else {
+
                     todo!("emit VM trait definitions")
                 }
-            }
 
-            EntryEmitter::Instance(_instance) => {
-                todo!("emit VM instance references and definitions")
+                EntryEmitter::Instance(_instance) => {
+                    todo!("emit VM instance references and definitions")
+                }
             }
-        }))
+        };
+
+        Ok(Some(entry))
     }
 
     fn emit_module(&mut self, module: Arc<Module>) -> Result<vf::Module, InternalCompilerError> {
@@ -1880,8 +1945,103 @@ impl<'a> ExprEmitter<'a> {
             Pattern::Binding(_, _) => {
                 todo!()
             }
-            Pattern::EnumVariant { .. } => {
-                todo!()
+            Pattern::EnumVariant {
+                enum_type,
+                variant,
+                args,
+                fields,
+            } => {
+                let arg_patterns = args
+                    .iter()
+                    .map(|arg| -> EmitResult<_> {
+                        let t = self.token_expr(&get_pattern_type(arg))?;
+                        let arg_reg = self.add_var(t);
+                        Ok((arg_reg, arg))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let field_patterns = fields
+                    .iter()
+                    .map(|field| -> EmitResult<_> {
+                        let t = self.token_expr(&get_pattern_type(&field.pattern))?;
+                        let field_reg = self.add_var(t);
+                        Ok((field_reg, field))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                let enum_type_token = self.token_expr(&Expr::EnumType(enum_type.clone()))?;
+                let variant_id = BigUint::from(self.encoder.get_enum_variant_id(variant.clone()));
+                let field_extractors = field_patterns
+                    .iter()
+                    .map(|(field_reg, field)| {
+                        Box::new(vf::FieldExtractor {
+                            r: Box::new(field_reg.clone()),
+                            field_id: BigUint::from(
+                                self.encoder.get_record_field_id(field.field.clone()),
+                            ),
+                        })
+                    })
+                    .collect();
+
+                self.emit(vf::Instruction::IsEnumVariant {
+                    dest: Box::new(dest.clone()),
+                    enum_type: Box::new(enum_type_token),
+                    variant_id,
+                    value: Box::new(value_reg),
+                    args: arg_patterns
+                        .iter()
+                        .map(|(arg_reg, _)| Box::new(arg_reg.clone()))
+                        .collect(),
+                    field_extractors,
+                });
+
+                if !arg_patterns.is_empty() || !field_patterns.is_empty() {
+                    let label = BlockLabel {
+                        id: UniqueIdentifier::new(),
+                        name: None,
+                        kind: BlockLabelKind::Condition,
+                        block_result_type: Expr::bool_type(),
+                    };
+
+                    let block_id =
+                        self.declare_block(label, ExprOutputKnown::Register(dest.clone()))?;
+
+                    let (block, _) =
+                        self.with_nested_block(|emitter| {
+                            emitter.emit(vf::Instruction::IfElse {
+                                condition: Box::new(dest.clone()),
+                                when_true: Box::new(vf::Block {
+                                    instructions: vec![],
+                                }),
+                                when_false: Box::new(vf::Block {
+                                    instructions: vec![Box::new(vf::Instruction::BlockBreak {
+                                        block_id: Box::new(block_id.clone()),
+                                    })],
+                                }),
+                            });
+
+                            emitter.emit_pattern_sequence_with_break(
+                                dest.clone(),
+                                block_id.clone(),
+                                arg_patterns
+                                    .iter()
+                                    .map(|(arg_reg, pattern)| (arg_reg.clone(), *pattern))
+                                    .chain(field_patterns.iter().map(|(field_reg, field)| {
+                                        (field_reg.clone(), &field.pattern)
+                                    })),
+                            )
+                        })?;
+
+                    self.emit(vf::Instruction::Block {
+                        block_id: Box::new(block_id),
+                        flags: vf::BlockFlags {
+                            has_break: true,
+                            has_retry: false,
+                            is_loop: false,
+                        },
+                        body: Box::new(block),
+                    });
+                }
             }
             Pattern::String(s) => {
                 let sr = self.expr(&Expr::StringLiteral(Box::from(s.as_str())), AnyRegister)?;
@@ -1908,6 +2068,35 @@ impl<'a> ExprEmitter<'a> {
                 });
             }
         })
+    }
+
+    fn emit_pattern_sequence_with_break<'p>(
+        &mut self,
+        dest: vf::RegisterId,
+        block_id: vf::BlockId,
+        patterns: impl IntoIterator<Item = (vf::RegisterId, &'p Pattern<DefaultExprContext>)>,
+    ) -> EmitResult<()> {
+        let mut patterns = patterns.into_iter().peekable();
+
+        while let Some((value_reg, pattern)) = patterns.next() {
+            self.emit_pattern(dest.clone(), value_reg, pattern)?;
+
+            if patterns.peek().is_some() && !self.is_irrefutable_pattern(pattern) {
+                self.emit(vf::Instruction::IfElse {
+                    condition: Box::new(dest.clone()),
+                    when_true: Box::new(vf::Block {
+                        instructions: vec![],
+                    }),
+                    when_false: Box::new(vf::Block {
+                        instructions: vec![Box::new(vf::Instruction::BlockBreak {
+                            block_id: Box::new(block_id.clone()),
+                        })],
+                    }),
+                });
+            }
+        }
+
+        Ok(())
     }
 
     fn is_irrefutable_pattern(&self, pattern: &Pattern<DefaultExprContext>) -> bool {
