@@ -1,4 +1,5 @@
 use crate::modifiers::{ERASURE_MODE, IS_WITNESS, ModifierParser};
+use alloc::borrow::{Cow, ToOwned};
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::access::AccessToken;
@@ -6,13 +7,13 @@ use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{
-    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, RecordField,
-    RecordFieldOwner, SubstFunctionSignature,
+    Context, DefaultExprContext, Enum, Function, FunctionImplementation, FunctionSignature, Record,
+    RecordField, RecordFieldOwner, SubstFunctionSignature,
 };
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, EnumType, ErasureMode, Expr,
     ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels,
-    Normalizer, NormalizerScanner, RecordFieldLiteral, RecordType, SubstScanner, Variable,
+    Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, Variable,
     VariableTupleElement,
 };
 use argon_parser::ast;
@@ -237,7 +238,7 @@ impl Model {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum TypeInferResult<'a> {
     // Fully inferred type
     Complete(InferredType),
@@ -298,7 +299,7 @@ impl<'a> TypeInferResult<'a> {
     fn infer_fully(self) -> InferredType {
         match self {
             TypeInferResult::Complete(inferred_type) => inferred_type,
-            _ => todo!(),
+            _ => todo!("infer_fully: {:?}", self),
         }
     }
 }
@@ -786,7 +787,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         let v = param.clone().to_parameter_var(expr_owner.clone(), i);
                         let v = DefaultToTypeCheckExprContextShifter
                             .shift_variable(Variable::Parameter(Box::new(v)));
-                        subst.add_substitution(v, arg);
+                        subst.add_substitution(v, Cow::Borrowed(arg));
                     }
 
                     let mut seen_field_names = HashSet::new();
@@ -1007,7 +1008,18 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     },
                 }
             }
-            ast::Expr::Is { .. } => todo!("infer is expressions"),
+            ast::Expr::Is { value, pattern } => {
+                let conv_value = self.infer(value).infer_fully();
+                let conv_pattern = self.check_pattern(pattern, conv_value.inferred_type);
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Is {
+                        value: Box::new(conv_value.checked_expr),
+                        pattern: Box::new(conv_pattern),
+                    },
+                    inferred_type: Expr::bool_type(),
+                })
+            }
 
             ast::Expr::Loop { body, label } => {
                 let mut checker = with_nested_scope!(self);
@@ -1072,9 +1084,39 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             ast::Expr::Raise { .. } => todo!("infer raise expressions"),
             ast::Expr::Summon { .. } => todo!("infer summon expressions"),
 
-            ast::Expr::Tuple { items } => TypeInferResult::Tuple {
-                location: &expr.location,
-                elements: items.iter().map(|item| self.infer(item)).collect(),
+            ast::Expr::Tuple { items } => {
+                let element_results = items.iter()
+                    .map(|item| self.infer(item))
+                    .collect::<Vec<_>>();
+
+                if element_results.iter().all(|elem_res| matches!(elem_res, TypeInferResult::Complete(_))) {
+                    let mut values = Vec::new();
+                    let mut types = Vec::new();
+
+                    for elem_res in element_results {
+                        let inferred_type = match elem_res {
+                            TypeInferResult::Complete(inferred_type) => inferred_type,
+                            _ => unreachable!(),
+                        };
+
+                        values.push(inferred_type.checked_expr);
+                        types.push(inferred_type.inferred_type);
+                    }
+
+                    return TypeInferResult::Complete(InferredType {
+                        checked_expr: Expr::Tuple {
+                            items: values,
+                        },
+                        inferred_type: Expr::Tuple {
+                            items: types,
+                        },
+                    });
+                }
+
+                TypeInferResult::Tuple {
+                    location: &expr.location,
+                    elements: element_results,
+                }
             },
 
             ast::Expr::While {
@@ -2203,6 +2245,236 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }))
     }
 
+    fn check_pattern(
+        &mut self,
+        pattern: &WithLocation<ast::Pattern>,
+        mut pattern_type: Expr<TypeCheckExprContext>,
+    ) -> Pattern<TypeCheckExprContext> {
+        match &pattern.value {
+            ast::Pattern::Discard => Pattern::Discard {
+                t: Box::new(pattern_type),
+            },
+
+            ast::Pattern::Tuple { elements } => {
+                let mut normalizer = NormalizerScanner::new(
+                    self.context.normalize_fuel(),
+                    ExprNormalizer { model: self.model },
+                );
+                normalizer.normalize(&mut pattern_type);
+
+                let Expr::Tuple {
+                    items: element_types,
+                } = pattern_type
+                else {
+                    todo!("Tuple pattern type");
+                };
+
+                if element_types.len() != elements.len() {
+                    todo!("Tuple pattern size mismatch");
+                }
+
+                let element_patterns = elements
+                    .iter()
+                    .zip(element_types)
+                    .map(|(element, element_type)| self.check_pattern(element, element_type))
+                    .collect();
+
+                Pattern::Tuple(element_patterns)
+            }
+
+            ast::Pattern::Binding {
+                pattern,
+                is_mutable,
+                name,
+            } => {
+                let v = LocalVariable {
+                    id: UniqueIdentifier::new(),
+                    name: Some(name.value.clone()),
+                    var_type: pattern_type.clone(),
+                    erasure_mode: ErasureMode::Concrete,
+                    is_witness: false,
+                    is_mutable: *is_mutable,
+                };
+
+                let inner = self.check_pattern(pattern, pattern_type);
+                Pattern::Binding(v, Box::new(inner))
+            }
+            ast::Pattern::Constructor { path, args } => {
+                let path_type = self.resolve_pattern_path(path);
+                match path_type {
+                    Overloadable::Base(scope::Overloadable::EnumVariant(v)) => {
+                        let mut normalizer = NormalizerScanner::new(
+                            self.context.normalize_fuel(),
+                            ExprNormalizer { model: self.model },
+                        );
+                        normalizer.normalize(&mut pattern_type);
+
+                        let Expr::EnumType(enum_type) = &pattern_type else {
+                            todo!()
+                        };
+
+                        let enum_type = enum_type.clone();
+
+                        let sig = v.clone().signature().as_ref().clone();
+                        let mut sig = sig.shift(&mut DefaultToTypeCheckExprContextShifter);
+                        substitute_holes_for_args(
+                            &pattern.location,
+                            &ExpressionOwner::EnumVariant(v.clone()),
+                            &mut sig,
+                        );
+
+                        if !self.type_matches_expected(
+                            &pattern_type,
+                            ExpectedType::Exact(&sig.return_type),
+                        ) {
+                            todo!()
+                        }
+
+                        let arg_patterns = self.check_pattern_args(args, &sig.parameters);
+
+                        Pattern::EnumVariant {
+                            enum_type,
+                            variant: v,
+                            args: arg_patterns,
+                            fields: vec![],
+                        }
+                    }
+
+                    _ => todo!(),
+                }
+            }
+            ast::Pattern::Record { .. } => {
+                todo!()
+            }
+
+            ast::Pattern::String(s) => {
+                if !self
+                    .type_matches_expected(&pattern_type, ExpectedType::Exact(&Expr::string_type()))
+                {
+                    todo!()
+                }
+
+                match &s.parts[..] {
+                    [] => Pattern::String("".to_owned()),
+                    [StringFragment::Text(s)] => Pattern::String(s.to_owned()),
+                    _ => todo!(),
+                }
+            }
+            ast::Pattern::Int(i) => {
+                if !self
+                    .type_matches_expected(&pattern_type, ExpectedType::Exact(&Expr::int_type()))
+                {
+                    todo!()
+                }
+
+                Pattern::Int(i.clone())
+            }
+            ast::Pattern::Bool(b) => {
+                if !self
+                    .type_matches_expected(&pattern_type, ExpectedType::Exact(&Expr::bool_type()))
+                {
+                    todo!()
+                }
+
+                Pattern::Bool(*b)
+            }
+        }
+    }
+
+    fn resolve_pattern_path<'e>(
+        &mut self,
+        path: &'e WithLocation<ast::PatternPath>,
+    ) -> Overloadable<'e> {
+        fn process_lookup<'e>(res: Lookup<TypeCheckExprContext>) -> Overloadable<'e> {
+            match res {
+                Lookup::Overloadable(overloadable) => {
+                    for mut group in overloadable.item_groups {
+                        if group.is_empty() {
+                            continue;
+                        }
+
+                        if group.len() == 1
+                            && let Some(overload) = group.pop()
+                        {
+                            return Overloadable::Base(overload);
+                        }
+
+                        todo!()
+                    }
+
+                    todo!()
+                }
+                _ => todo!(),
+            }
+        }
+
+        match &path.value {
+            ast::PatternPath::Member { member, base } => match &base.value {
+                ast::PatternPath::Base { name: base_name } => {
+                    match process_lookup(self.scope.lookup(&base_name.value, self.access)) {
+                        Overloadable::Base(scope::Overloadable::Enum(e)) => {
+                            let Some(variant) = e
+                                .variants()
+                                .iter()
+                                .find(|v| v.metadata().name == member.value)
+                                .cloned()
+                            else {
+                                todo!()
+                            };
+
+                            Overloadable::Base(scope::Overloadable::EnumVariant(variant.clone()))
+                        }
+                        _ => todo!(),
+                    }
+                }
+
+                _ => todo!(),
+            },
+
+            ast::PatternPath::Base { name } => {
+                process_lookup(self.scope.lookup(&name.value, self.access))
+            }
+        }
+    }
+
+    fn check_pattern_args(
+        &mut self,
+        mut args: &[ast::PatternArgument],
+        mut params: &[SignatureParameter<TypeCheckExprContext>],
+    ) -> Vec<Pattern<TypeCheckExprContext>> {
+        let mut patterns = Vec::with_capacity(params.len());
+
+        loop {
+            let Some((param, tail_params)) = params.split_first() else {
+                if args.is_empty() {
+                    break;
+                } else {
+                    todo!()
+                }
+            };
+
+            if let Some((arg, tail_args)) = args.split_first()
+                && param.list_type == arg.function_parameter_list_type
+            {
+                if param.list_type == arg.function_parameter_list_type {
+                    let pattern = self.check_pattern(&arg.arg, param.param_type.clone());
+                    patterns.push(pattern);
+                    args = tail_args;
+                }
+            } else if param.list_type == FunctionParameterListType::NormalList {
+                todo!()
+            } else {
+                patterns.push(Pattern::Discard {
+                    t: Box::new(param.param_type.clone()),
+                });
+            }
+
+            params = tail_params;
+        }
+
+        patterns
+    }
+
     fn report_invalid_builtin(&self, location: &Location, name: impl AsRef<str>) {
         self.context
             .reporter()
@@ -2464,6 +2736,42 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             },
         }
     }
+}
+
+fn substitute_holes_for_args(
+    location: &Location,
+    owner: &ExpressionOwner<TypeCheckExprContext>,
+    sig: &mut FunctionSignature<TypeCheckExprContext>,
+) -> Vec<Hole> {
+    let mut subst = SubstScanner::new();
+
+    let holes = sig
+        .parameters
+        .iter()
+        .enumerate()
+        .map(|(i, param)| {
+            let v = param.clone().to_parameter_var(owner.clone(), i);
+            let mut t = v.var_type.clone();
+            subst.scan(&mut t);
+            let hole = Hole::new(location.clone(), t);
+            subst.add_substitution(
+                Variable::Parameter(Box::new(v)),
+                Cow::Owned(Expr::Hole(hole.clone())),
+            );
+            hole
+        })
+        .collect::<Vec<_>>();
+
+    for param in &mut sig.parameters {
+        subst.scan(&mut param.param_type);
+        for binding in &mut param.bindings {
+            subst.scan(&mut binding.param_type);
+        }
+    }
+
+    subst.scan(&mut sig.return_type);
+
+    holes
 }
 
 #[derive(Debug, Clone)]
@@ -2771,7 +3079,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
         arg: &Expr<TypeCheckExprContext>,
     ) {
         let mut scanner = SubstScanner::new();
-        scanner.add_substitution(v, arg);
+        scanner.add_substitution(v, Cow::Borrowed(arg));
 
         for param_type in param_types.iter_mut() {
             scanner.scan(param_type);

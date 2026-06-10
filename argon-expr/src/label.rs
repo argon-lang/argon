@@ -31,6 +31,7 @@ impl<EC: ExprContext + ?Sized> Hash for BlockLabel<EC> {
 #[derive(Debug, Clone, Copy)]
 pub enum BlockLabelKind {
     Block,
+    Condition,
     Loop,
     WhileOuter,
     WhileInner,

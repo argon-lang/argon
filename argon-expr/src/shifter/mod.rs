@@ -313,6 +313,7 @@ where
     S: ExprContextShifter + ?Sized,
 {
     match pattern {
+        Pattern::Error => Pattern::Error,
         Pattern::Discard { t } => Pattern::Discard {
             t: Box::new(shifter.shift(*t)),
         },

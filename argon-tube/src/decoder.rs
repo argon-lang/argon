@@ -13,8 +13,8 @@ use argon_compiler::{
     TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
 };
 use argon_expr::{
-    BlockLabel, BlockLabelKind, EnumType, LocalVariable, ParameterVariable, RecordFieldLiteral,
-    RecordType, Variable,
+    BlockLabel, BlockLabelKind, EnumType, LocalVariable, ParameterVariable, Pattern,
+    RecordFieldLiteral, RecordFieldPattern, RecordType, Variable,
 };
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
@@ -967,7 +967,10 @@ impl TubeDecoder {
             | tf::Expr::InstanceSingletonType { .. }
             | tf::Expr::NewInstance { .. } => todo!("decode instance expressions"),
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
-            tf::Expr::Is { .. } => todo!("decode is expression"),
+            tf::Expr::Is { value, pattern } => Expr::Is {
+                value: Box::new(self.decode_expr(*value)),
+                pattern: Box::new(self.decode_pattern(*pattern)),
+            },
             tf::Expr::Lambda { .. } => todo!("decode lambda expression"),
             tf::Expr::Match { .. } => todo!("decode match expression"),
             tf::Expr::Or { a, b } => Expr::Or(
@@ -1076,6 +1079,61 @@ impl TubeDecoder {
             tf::Expr::VariableStore { v, value } => {
                 Expr::VariableStore(self.decode_var(*v), Box::new(self.decode_expr(*value)))
             }
+        }
+    }
+
+    fn decode_pattern(self: &Arc<Self>, pattern: tf::Pattern) -> Pattern<DefaultExprContext> {
+        match pattern {
+            tf::Pattern::Discard { t } => Pattern::Discard {
+                t: Box::new(self.decode_expr(*t)),
+            },
+            tf::Pattern::Tuple { items } => Pattern::Tuple(
+                items
+                    .into_iter()
+                    .map(|item| self.decode_pattern(*item))
+                    .collect(),
+            ),
+            tf::Pattern::Binding { v, pattern } => {
+                let variable = *self.decode_local_var(*v);
+                Pattern::Binding(variable, Box::new(self.decode_pattern(*pattern)))
+            }
+            tf::Pattern::EnumVariant {
+                enum_type,
+                variant_id,
+                args,
+                fields,
+            } => Pattern::EnumVariant {
+                enum_type: EnumType {
+                    enum_: self.enum_decl(enum_type.id),
+                    arguments: enum_type
+                        .args
+                        .into_iter()
+                        .map(|arg| self.decode_expr(*arg))
+                        .collect(),
+                },
+                variant: self.enum_variant(variant_id),
+                args: args
+                    .into_iter()
+                    .map(|arg| self.decode_pattern(*arg))
+                    .collect(),
+                fields: fields
+                    .into_iter()
+                    .map(|field| self.decode_record_field_pattern(*field))
+                    .collect(),
+            },
+            tf::Pattern::String { s } => Pattern::String(s),
+            tf::Pattern::Int { i } => Pattern::Int(i),
+            tf::Pattern::Bool { b } => Pattern::Bool(b),
+        }
+    }
+
+    fn decode_record_field_pattern(
+        self: &Arc<Self>,
+        field: tf::RecordFieldPattern,
+    ) -> RecordFieldPattern<DefaultExprContext> {
+        RecordFieldPattern {
+            field: self.record_field(field.field_id),
+            pattern: self.decode_pattern(*field.pattern),
         }
     }
 
@@ -1691,6 +1749,7 @@ fn decode_erasure_mode(mode: tf::ErasureMode) -> ErasureMode {
 fn decode_block_label_kind(kind: tf::BlockLabelKind) -> BlockLabelKind {
     match kind {
         tf::BlockLabelKind::Block => BlockLabelKind::Block,
+        tf::BlockLabelKind::Condition => BlockLabelKind::Condition,
         tf::BlockLabelKind::Loop => BlockLabelKind::Loop,
         tf::BlockLabelKind::WhileOuter => BlockLabelKind::WhileOuter,
         tf::BlockLabelKind::WhileInner => BlockLabelKind::WhileInner,

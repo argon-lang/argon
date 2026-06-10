@@ -12,7 +12,8 @@ use num_bigint::{BigInt, BigUint};
 
 use crate::ids::TubeIdProvider;
 use argon_expr::{
-    BlockLabel, BlockLabelKind, ExpressionOwner, LocalVariable, RecordType, Variable,
+    BlockLabel, BlockLabelKind, ExpressionOwner, LocalVariable, Pattern, RecordFieldPattern,
+    RecordType, Variable,
 };
 use argon_format::tube as tf;
 
@@ -752,6 +753,10 @@ impl TubeEncoder {
                 true_body: Box::new(self.emit_expr(when_true)?),
                 false_body: Box::new(self.emit_expr(when_false)?),
             },
+            Expr::Is { value, pattern } => tf::Expr::Is {
+                value: Box::new(self.emit_expr(value)?),
+                pattern: Box::new(self.emit_pattern(pattern)?),
+            },
             Expr::Or(a, b) => tf::Expr::Or {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
@@ -919,6 +924,65 @@ impl TubeEncoder {
                 value: Box::new(self.emit_expr(value)?),
             },
             _ => todo!("Unimplement emit_expr for {:?}", expr),
+        })
+    }
+
+    fn emit_pattern(
+        &mut self,
+        pattern: &Pattern<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::Pattern, InternalCompilerError> {
+        Ok(match pattern {
+            Pattern::Error => todo!("emit error pattern"),
+            Pattern::Discard { t } => tf::Pattern::Discard {
+                t: Box::new(self.emit_expr(t)?),
+            },
+            Pattern::Tuple(items) => tf::Pattern::Tuple {
+                items: items
+                    .iter()
+                    .map(|item| self.emit_pattern(item).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+            Pattern::Binding(variable, pattern) => tf::Pattern::Binding {
+                v: Box::new(self.emit_local_var(variable)?),
+                pattern: Box::new(self.emit_pattern(pattern)?),
+            },
+            Pattern::EnumVariant {
+                enum_type,
+                variant,
+                args,
+                fields,
+            } => tf::Pattern::EnumVariant {
+                enum_type: Box::new(tf::EnumType {
+                    id: BigUint::from(self.get_enum_id(enum_type.enum_.clone())),
+                    args: enum_type
+                        .arguments
+                        .iter()
+                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+                variant_id: BigUint::from(self.get_enum_variant_id(variant.clone())),
+                args: args
+                    .iter()
+                    .map(|arg| self.emit_pattern(arg).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+                fields: fields
+                    .iter()
+                    .map(|field| self.emit_record_field_pattern(field).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+            Pattern::String(s) => tf::Pattern::String { s: s.clone() },
+            Pattern::Int(i) => tf::Pattern::Int { i: i.clone() },
+            Pattern::Bool(b) => tf::Pattern::Bool { b: *b },
+        })
+    }
+
+    fn emit_record_field_pattern(
+        &mut self,
+        field: &RecordFieldPattern<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::RecordFieldPattern, InternalCompilerError> {
+        Ok(tf::RecordFieldPattern {
+            field_id: BigUint::from(self.get_record_field_id(field.field.clone())),
+            pattern: Box::new(self.emit_pattern(&field.pattern)?),
         })
     }
 
@@ -1097,6 +1161,7 @@ fn encode_access_modifier_global(access: AccessModifierGlobal) -> tf::AccessModi
 fn encode_block_label_kind(kind: BlockLabelKind) -> tf::BlockLabelKind {
     match kind {
         BlockLabelKind::Block => tf::BlockLabelKind::Block,
+        BlockLabelKind::Condition => tf::BlockLabelKind::Condition,
         BlockLabelKind::Loop => tf::BlockLabelKind::Loop,
         BlockLabelKind::WhileOuter => tf::BlockLabelKind::WhileOuter,
         BlockLabelKind::WhileInner => tf::BlockLabelKind::WhileInner,

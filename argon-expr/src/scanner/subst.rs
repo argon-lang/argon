@@ -1,8 +1,9 @@
 use crate::{Expr, ExprContext, ExprScannerMut, Variable};
+use alloc::borrow::Cow;
 use hashbrown::HashMap;
 
 pub struct SubstScanner<'a, EC: ExprContext + ?Sized> {
-    substitutions: HashMap<Variable<EC>, &'a Expr<EC>>,
+    substitutions: HashMap<Variable<EC>, Cow<'a, Expr<EC>>>,
 }
 
 impl<'a, EC: ExprContext + ?Sized> SubstScanner<'a, EC> {
@@ -12,11 +13,15 @@ impl<'a, EC: ExprContext + ?Sized> SubstScanner<'a, EC> {
         }
     }
 
-    pub fn add_substitution(&mut self, variable: Variable<EC>, replacement: &'a Expr<EC>) {
+    pub fn add_substitution(&mut self, variable: Variable<EC>, replacement: Cow<'a, Expr<EC>>) {
         self.substitutions.insert(variable, replacement);
     }
 
-    pub fn subst(variable: Variable<EC>, replacement: &'a Expr<EC>, expr: &mut Expr<EC>) -> bool {
+    pub fn subst(
+        variable: Variable<EC>,
+        replacement: Cow<'a, Expr<EC>>,
+        expr: &mut Expr<EC>,
+    ) -> bool {
         let mut scanner = Self::new();
         scanner.add_substitution(variable, replacement);
         scanner.scan(expr)
@@ -29,7 +34,7 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
     fn scan(&mut self, expr: &mut Expr<Self::EC>) -> bool {
         if let Expr::Variable(variable) = expr {
             if let Some(replacement) = self.substitutions.get(variable) {
-                *expr = (*replacement).clone();
+                *expr = replacement.as_ref().clone();
                 true
             } else {
                 crate::default_scan_mut(self, expr)

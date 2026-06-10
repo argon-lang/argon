@@ -5,7 +5,7 @@ use alloc::format;
 use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
-use argon_compiler::expr_type::get_expr_type;
+use argon_compiler::expr_type::{get_expr_type, get_pattern_type};
 use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
     EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module,
@@ -13,10 +13,11 @@ use argon_compiler::{
     Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExpressionOwner, NormalizerScanner, ParameterVariable, Variable,
+    BlockLabel, BlockLabelKind, ErasureMode, Expr, ExpressionOwner, NormalizerScanner,
+    ParameterVariable, Pattern, Variable,
 };
 use argon_format::vm as vf;
-use argon_util::{InternalCompilerError, TubeFormatError};
+use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
 use core::mem;
 use embedded_io::Write;
 use esexpr::{ESExprCodec, ESExprStatic};
@@ -1469,35 +1470,29 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            // Is
+            Expr::Is { value, pattern } => {
+                let rb = output.output_register(self, e)?;
+
+                let value_reg = self.expr(value, AnyRegister)?;
+
+                self.emit_pattern(rb.register().clone(), value_reg, pattern)?;
+
+                rb.into_result(self)?
+            }
+
             // Lambda
             // Match
             // NewInstance
             // Next
             Expr::Not(value) => {
                 let rb = output.output_register(self, e)?;
-                self.expr(value, ExprOutputKnown::Register(rb.register().clone()))?;
 
-                let (when_true, _) = self.with_nested_block(|emitter| {
-                    emitter.emit(vf::Instruction::ConstBool {
-                        dest: Box::new(rb.register().clone()),
-                        value: false,
-                    });
-                    Ok(())
-                })?;
+                let a = self.expr(value, AnyRegister)?;
 
-                let (when_false, _) = self.with_nested_block(|emitter| {
-                    emitter.emit(vf::Instruction::ConstBool {
-                        dest: Box::new(rb.register().clone()),
-                        value: true,
-                    });
-                    Ok(())
-                })?;
-
-                self.emit(vf::Instruction::IfElse {
-                    condition: Box::new(rb.register().clone()),
-                    when_true: Box::new(when_true),
-                    when_false: Box::new(when_false),
+                self.emit(vf::Instruction::Builtin {
+                    op: vf::BuiltinOp::BoolNot,
+                    tokens: vec![],
+                    registers: vec![Box::new(rb.register().clone()), Box::new(a)],
                 });
 
                 rb.into_result(self)?
@@ -1782,6 +1777,153 @@ impl<'a> ExprEmitter<'a> {
     fn expr_return(&mut self, e: &Expr<DefaultExprContext>) -> EmitResult<()> {
         self.expr(e, ExprOutputKnown::Return)
     }
+
+    fn emit_pattern(
+        &mut self,
+        dest: vf::RegisterId,
+        value_reg: vf::RegisterId,
+        pattern: &Pattern<DefaultExprContext>,
+    ) -> EmitResult<()> {
+        Ok(match pattern {
+            Pattern::Error => {
+                todo!("emit error pattern")
+            }
+            Pattern::Discard { .. } => {
+                self.emit(vf::Instruction::ConstBool {
+                    dest: Box::new(dest),
+                    value: true,
+                });
+            }
+            Pattern::Tuple(elements) => {
+                let mut iter = elements.iter();
+                if let Some(mut element) = iter.next() {
+                    let mut block_id: Option<vf::BlockId> = None;
+
+                    let (block, _) = self.with_nested_block(|emitter| {
+                        let mut element_index = 0usize;
+                        loop {
+                            let et = emitter.token_expr(&get_pattern_type(element))?;
+                            let element_reg = emitter.add_var(et);
+                            emitter.emit(vf::Instruction::TupleElement {
+                                dest: Box::new(element_reg.clone()),
+                                element_index: BigUint::from(element_index),
+                                src: Box::new(value_reg.clone()),
+                            });
+                            emitter.emit_pattern(dest.clone(), element_reg, element)?;
+
+                            if let Some(next_element) = iter.next() {
+                                if !emitter.is_irrefutable_pattern(element) {
+                                    let block_id = match &block_id {
+                                        Some(block_id) => block_id.clone(),
+                                        None => {
+                                            let label = BlockLabel {
+                                                id: UniqueIdentifier::new(),
+                                                name: None,
+                                                kind: BlockLabelKind::Condition,
+                                                block_result_type: Expr::bool_type(),
+                                            };
+
+                                            let new_block_id = emitter.declare_block(
+                                                label,
+                                                ExprOutputKnown::Register(dest.clone()),
+                                            )?;
+                                            block_id = Some(new_block_id.clone());
+                                            new_block_id
+                                        }
+                                    };
+
+                                    emitter.emit(vf::Instruction::IfElse {
+                                        condition: Box::new(dest.clone()),
+                                        when_true: Box::new(vf::Block {
+                                            instructions: vec![],
+                                        }),
+                                        when_false: Box::new(vf::Block {
+                                            instructions: vec![Box::new(
+                                                vf::Instruction::BlockBreak {
+                                                    block_id: Box::new(block_id),
+                                                },
+                                            )],
+                                        }),
+                                    });
+                                }
+
+                                element = next_element;
+                                element_index += 1;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        Ok(())
+                    })?;
+
+                    if let Some(block_id) = block_id {
+                        self.emit(vf::Instruction::Block {
+                            block_id: Box::new(block_id),
+                            flags: vf::BlockFlags {
+                                has_break: true,
+                                has_retry: false,
+                                is_loop: false,
+                            },
+                            body: Box::new(block),
+                        });
+                    } else {
+                        self.instructions.extend(block.instructions);
+                    }
+                } else {
+                    self.emit(vf::Instruction::ConstBool {
+                        dest: Box::new(dest),
+                        value: true,
+                    });
+                }
+            }
+            Pattern::Binding(_, _) => {
+                todo!()
+            }
+            Pattern::EnumVariant { .. } => {
+                todo!()
+            }
+            Pattern::String(s) => {
+                let sr = self.expr(&Expr::StringLiteral(Box::from(s.as_str())), AnyRegister)?;
+                self.emit(vf::Instruction::Builtin {
+                    op: vf::BuiltinOp::StringEq,
+                    tokens: vec![],
+                    registers: vec![Box::new(dest), Box::new(sr), Box::new(value_reg)],
+                });
+            }
+            Pattern::Int(i) => {
+                let sr = self.expr(&Expr::IntLiteral(i.clone()), AnyRegister)?;
+                self.emit(vf::Instruction::Builtin {
+                    op: vf::BuiltinOp::IntEq,
+                    tokens: vec![],
+                    registers: vec![Box::new(dest), Box::new(sr), Box::new(value_reg)],
+                });
+            }
+            Pattern::Bool(b) => {
+                let sr = self.expr(&Expr::BoolLiteral(*b), AnyRegister)?;
+                self.emit(vf::Instruction::Builtin {
+                    op: vf::BuiltinOp::BoolEq,
+                    tokens: vec![],
+                    registers: vec![Box::new(dest), Box::new(sr), Box::new(value_reg)],
+                });
+            }
+        })
+    }
+
+    fn is_irrefutable_pattern(&self, pattern: &Pattern<DefaultExprContext>) -> bool {
+        match pattern {
+            Pattern::Error => true,
+            Pattern::Discard { .. } => true,
+            Pattern::Tuple(elements) => elements
+                .iter()
+                .all(|element| self.is_irrefutable_pattern(element)),
+            Pattern::Binding(_, pattern) => self.is_irrefutable_pattern(pattern),
+            Pattern::EnumVariant { .. } => false,
+            Pattern::String(_) => false,
+            Pattern::Int(_) => false,
+            Pattern::Bool(_) => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1913,9 +2055,7 @@ impl ExprOutput for ExprOutputKnown {
                 let r = expr_emitter.add_var(t);
                 OutputFunctionResultBuilderType::ReturnNonTail(r)
             }
-            ExprOutputKnown::Return => {
-                OutputFunctionResultBuilderType::Return
-            }
+            ExprOutputKnown::Return => OutputFunctionResultBuilderType::Return,
         };
 
         Ok(OutputFunctionResultBuilder {

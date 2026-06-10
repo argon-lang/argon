@@ -9,6 +9,7 @@ use num_bigint::BigInt;
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
 pub enum Pattern<EC: ExprContext + ?Sized> {
+    Error,
     Discard {
         t: Box<Expr<EC>>,
     },

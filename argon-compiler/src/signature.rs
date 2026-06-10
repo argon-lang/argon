@@ -1,3 +1,4 @@
+use alloc::borrow::Cow;
 use alloc::{boxed::Box, vec::Vec};
 use argon_expr::{
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExpressionOwner, ParameterVariable,
@@ -62,7 +63,7 @@ impl<'a, EC: ExprContext + ?Sized> SubstFunctionSignature<'a, EC> for SubstScann
                     .to_parameter_var(owner.clone(), parameter_index),
             ));
 
-            self.add_substitution(variable, argument);
+            self.add_substitution(variable, Cow::Borrowed(argument));
         }
     }
 }

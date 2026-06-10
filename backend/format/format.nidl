@@ -1023,6 +1023,7 @@ record block-label {
 @esexpr:(derive-codec)
 simple enum block-label-kind {
     block,
+    condition,
     loop,
     while-outer,
     while-inner,

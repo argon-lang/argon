@@ -1,7 +1,8 @@
 use crate::{DefaultExprContext, FunctionSignature};
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use argon_expr::{Builtin, Expr, ExpressionOwner, SubstScanner, Variable};
+use argon_expr::{Builtin, Expr, ExpressionOwner, Pattern, SubstScanner, Variable};
 
 pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext> {
     match expr {
@@ -114,6 +115,21 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
     }
 }
 
+pub fn get_pattern_type(pattern: &Pattern<DefaultExprContext>) -> Expr<DefaultExprContext> {
+    match pattern {
+        Pattern::Error => Expr::Error,
+        Pattern::Discard { t } => (**t).clone(),
+        Pattern::Tuple(items) => Expr::Tuple {
+            items: items.iter().map(get_pattern_type).collect(),
+        },
+        Pattern::Binding(variable, _) => variable.var_type.clone(),
+        Pattern::EnumVariant { enum_type, .. } => Expr::EnumType(enum_type.clone()),
+        Pattern::String(_) => Expr::string_type(),
+        Pattern::Int(_) => Expr::int_type(),
+        Pattern::Bool(_) => Expr::bool_type(),
+    }
+}
+
 fn get_builtin_type(
     builtin: Builtin,
     arguments: &[Expr<DefaultExprContext>],
@@ -180,7 +196,7 @@ fn return_type_for_args(
         let variable = Variable::Parameter(Box::new(
             parameter.clone().to_parameter_var(owner.clone(), index),
         ));
-        SubstScanner::subst(variable, &argument, &mut return_type);
+        SubstScanner::subst(variable, Cow::Borrowed(&argument), &mut return_type);
     }
 
     return_type
