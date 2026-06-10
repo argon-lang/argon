@@ -199,7 +199,10 @@ dependencies = [
 name = "argon-test-runner"
 version = "0.0.0"
 dependencies = [
+ "argon-io",
+ "argon-runner",
  "argon-testcases",
+ "argon-util",
  "clap",
  "fs_extra",
  "hashbrown 0.17.1",

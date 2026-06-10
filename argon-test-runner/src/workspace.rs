@@ -26,7 +26,13 @@ impl WorkspacePaths {
     }
 
     pub fn argon_bin(&self) -> PathBuf {
-        self.root.join("dist/bin/argonc")
+        let executable_name = if cfg!(windows) {
+            "argonc.exe"
+        } else {
+            "argonc"
+        };
+
+        self.root.join("dist").join("bin").join(executable_name)
     }
 
     pub fn testcases_dir(&self) -> PathBuf {

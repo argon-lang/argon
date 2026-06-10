@@ -1,8 +1,11 @@
-use crate::{CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult};
+use crate::{
+    CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult,
+    cmd::{CommandRunner, CommandRunnerPlatform},
+};
+use argon_runner::local_io::{LocalInputFile, LocalOutputDirectory, LocalOutputFile, StdIoWrite};
 use fs_extra::dir::CopyOptions;
 use hashbrown::HashMap;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 pub struct JSPlatform;
@@ -12,8 +15,21 @@ pub struct JSPlatformState {
     library_codegen: Mutex<HashMap<String, PathBuf>>,
 }
 
+pub struct JsPlatformMetadataOptions<I, O> {
+    pub extern_files: Vec<I>,
+    pub output_file: O,
+}
+
+pub struct JsCodeGenOptions<I, O> {
+    pub input_file: I,
+    pub output_dir: O,
+}
+
 impl JSPlatform {
-    fn codegen_library(&self, library_info: &LibraryInfo<Self>) -> PathBuf {
+    fn codegen_library<R: CommandRunner + CommandRunnerPlatform<Self>>(
+        &self,
+        library_info: &LibraryInfo<Self, R>,
+    ) -> PathBuf {
         let mut tube_map = library_info
             .test_suite_context
             .platform_state
@@ -35,26 +51,25 @@ impl JSPlatform {
                 let output_dir = library.library_output_path.join("js");
                 std::fs::create_dir_all(&output_dir).unwrap();
 
-                let mut cmd = Command::new(&library.test_suite_context.argon_bin);
-                cmd.arg("codegen");
-                cmd.arg("js");
-
-                cmd.arg("--input");
-                cmd.arg(input_file);
-
-                cmd.arg("--output");
-                cmd.arg(&output_dir);
-
-                library.test_suite_context.print_command(&cmd);
-                let output = cmd.output().unwrap();
+                let mut output = Vec::new();
+                let success = library.test_suite_context.command_runner.codegen(
+                    JsCodeGenOptions {
+                        input_file: LocalInputFile::new(input_file),
+                        output_dir: LocalOutputDirectory::new(output_dir.clone()),
+                    },
+                    &mut StdIoWrite::new(&mut output),
+                );
 
                 assert!(
-                    output.status.success(),
-                    "Code generation of library {} failed\n{}\n{}",
+                    success,
+                    "Code generation of library {} failed\n{}",
                     library.name,
-                    String::from_utf8_lossy(&output.stdout),
-                    String::from_utf8_lossy(&output.stderr),
+                    String::from_utf8_lossy(&output),
                 );
+
+                if library.test_suite_context.print_commands && !output.is_empty() {
+                    print!("{}", String::from_utf8_lossy(&output));
+                }
 
                 output_dir
             })
@@ -64,46 +79,56 @@ impl JSPlatform {
 
 impl CompileTargetPlatform for JSPlatform {
     type PlatformState = JSPlatformState;
+    type PlatformMetadataOptions<I, O> = JsPlatformMetadataOptions<I, O>;
+    type CodeGenOptions<I, O> = JsCodeGenOptions<I, O>;
 
     const ID: &'static str = "js";
 
-    fn library_platform_metadata(self: Arc<Self>, library: &LibraryInfo<Self>) -> Vec<PathBuf> {
+    fn library_platform_metadata<R: CommandRunner + CommandRunnerPlatform<Self>>(
+        self: Arc<Self>,
+        library: &LibraryInfo<Self, R>,
+    ) -> Vec<PathBuf> {
         let path = library.library_output_path.join("platform-metadata.esx");
 
-        let mut cmd = Command::new(&library.test_suite_context.argon_bin);
-        cmd.arg("platform-metadata");
-        cmd.arg("js");
-
+        let mut extern_files = Vec::new();
         let js_dir = library.library_path.join("js");
         if js_dir.exists() {
             for entry in std::fs::read_dir(js_dir).unwrap() {
                 let entry = entry.unwrap();
                 let path = entry.path();
                 if path.is_file() {
-                    cmd.arg("--extern");
-                    cmd.arg(path);
+                    extern_files.push(LocalInputFile::new(path));
                 }
             }
         }
 
-        cmd.arg("--output-file");
-        cmd.arg(&path);
-
-        library.test_suite_context.print_command(&cmd);
-        let output = cmd.output().unwrap();
+        let mut output = Vec::new();
+        let success = library.test_suite_context.command_runner.platform_metadata(
+            JsPlatformMetadataOptions {
+                extern_files,
+                output_file: LocalOutputFile::new(path.clone()),
+            },
+            &mut StdIoWrite::new(&mut output),
+        );
 
         assert!(
-            output.status.success(),
-            "Getting metadata for library {} failed:\n{}\n{}",
+            success,
+            "Getting metadata for library {} failed:\n{}",
             library.name,
-            String::from_utf8_lossy(&*output.stdout),
-            String::from_utf8_lossy(&*output.stderr),
+            String::from_utf8_lossy(&output),
         );
+
+        if library.test_suite_context.print_commands && !output.is_empty() {
+            print!("{}", String::from_utf8_lossy(&output));
+        }
 
         vec![path]
     }
 
-    fn codegen(self: Arc<Self>, test_context: &TestContext<Self>) {
+    fn codegen<R: CommandRunner + CommandRunnerPlatform<Self>>(
+        self: Arc<Self>,
+        test_context: &TestContext<Self, R>,
+    ) {
         let output_dir = test_context.test_data_dir.join("js");
         std::fs::create_dir_all(&output_dir).unwrap();
 
@@ -139,24 +164,24 @@ impl CompileTargetPlatform for JSPlatform {
 
         let input_file = test_context.genir_test_case();
 
-        let mut cmd = Command::new(&test_context.test_suite_context.argon_bin);
-        cmd.arg("codegen");
-        cmd.arg("js");
-
-        cmd.arg("--input");
-        cmd.arg(input_file);
-        cmd.arg("--output");
-        cmd.arg(&output_dir);
-
-        test_context.test_suite_context.print_command(&cmd);
-        let output = cmd.output().unwrap();
+        let mut output = Vec::new();
+        let success = test_context.test_suite_context.command_runner.codegen(
+            JsCodeGenOptions {
+                input_file: LocalInputFile::new(input_file),
+                output_dir: LocalOutputDirectory::new(output_dir.clone()),
+            },
+            &mut StdIoWrite::new(&mut output),
+        );
 
         assert!(
-            output.status.success(),
-            "Code generation of test case failed\n{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
+            success,
+            "Code generation of test case failed\n{}",
+            String::from_utf8_lossy(&output),
         );
+
+        if test_context.test_suite_context.print_commands && !output.is_empty() {
+            print!("{}", String::from_utf8_lossy(&output));
+        }
 
         {
             let entrypoint_path = output_dir.join("main.js");
@@ -168,7 +193,10 @@ impl CompileTargetPlatform for JSPlatform {
         }
     }
 
-    fn run(self: Arc<Self>, test_context: &TestContext<Self>) -> TestExecutionResult {
+    fn run<R: CommandRunner + CommandRunnerPlatform<Self>>(
+        self: Arc<Self>,
+        test_context: &TestContext<Self, R>,
+    ) -> TestExecutionResult {
         let main_path = test_context.test_data_dir.join("js/main.js");
 
         let output = subprocess::Exec::cmd("node")

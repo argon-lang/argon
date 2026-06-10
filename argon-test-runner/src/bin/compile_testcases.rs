@@ -1,5 +1,6 @@
 use argon_test_runner::{
-    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext, workspace::WorkspacePaths,
+    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext, cmd::CliCommandRunner,
+    workspace::WorkspacePaths,
 };
 use argon_testcases::load_test_case;
 use clap::{Parser, ValueEnum};
@@ -46,18 +47,18 @@ fn create_temp_dir(output_dir: &Path) -> Result<TempDir, Box<dyn Error>> {
     Ok(temp_dir)
 }
 
-fn create_suite_context<P: CompileTargetPlatform>(
-    platform: Arc<P>,
+fn create_suite_context(
+    platform: Arc<JSPlatform>,
+    command_runner: Arc<CliCommandRunner>,
     temp_dir: TempDir,
     workspace_paths: &WorkspacePaths,
-    argon_bin: PathBuf,
-) -> Arc<TestSuiteContext<P>> {
+) -> Arc<TestSuiteContext<JSPlatform, CliCommandRunner>> {
     Arc::new(TestSuiteContext {
         platform,
+        command_runner,
         test_suite_data_dir: temp_dir,
         lib_dir: workspace_paths.libraries_dir(),
         backend_dir: workspace_paths.backend_dir(),
-        argon_bin,
         print_commands: true,
 
         library_platform_metadata: Mutex::new(HashMap::new()),
@@ -87,8 +88,8 @@ fn test_output_name(index: usize, test_xml_file: &Path) -> String {
     format!("{index:04}-{name}")
 }
 
-fn compile_testcases<P: CompileTargetPlatform>(
-    context: Arc<TestSuiteContext<P>>,
+fn compile_testcases(
+    context: Arc<TestSuiteContext<JSPlatform, CliCommandRunner>>,
     test_xml_files: &[PathBuf],
 ) -> Result<bool, Box<dyn Error>> {
     let mut compiled_all = true;
@@ -142,12 +143,16 @@ fn run() -> Result<i32, Box<dyn Error>> {
     let workspace_paths = WorkspacePaths::from_cargo_manifest_dir()?;
     let temp_dir = create_temp_dir(&args.output_dir)?;
     let output_root = temp_dir.path().to_owned();
-    let argon_bin = workspace_paths.argon_bin();
+    let command_runner = Arc::new(CliCommandRunner::new(workspace_paths.clone()));
 
     let compiled_all = match args.platform {
         Platform::Js => {
-            let context =
-                create_suite_context(Arc::new(JSPlatform), temp_dir, &workspace_paths, argon_bin);
+            let context = create_suite_context(
+                Arc::new(JSPlatform),
+                command_runner,
+                temp_dir,
+                &workspace_paths,
+            );
             compile_testcases(context, &args.test_xml_files)?
         }
     };

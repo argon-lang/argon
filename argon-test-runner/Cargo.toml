@@ -2,10 +2,16 @@
 name = "argon-test-runner"
 publish = false
 edition = "2024"
+build = "build.rs"
 
 [[test]]
 name = "compiler_tests"
 path = "tests/compiler_tests.rs"
+harness = false
+
+[[test]]
+name = "compiler_tests_dist"
+path = "tests/compiler_tests_dist.rs"
 harness = false
 
 [[bin]]
@@ -13,7 +19,10 @@ name = "compile-testcases"
 path = "src/bin/compile_testcases.rs"
 
 [dependencies]
+argon-io = { workspace = true, features = ["std"] }
+argon-runner = { workspace = true, features = ["std"] }
 argon-testcases = { workspace = true }
+argon-util = { workspace = true, features = ["std"] }
 clap = { workspace = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
