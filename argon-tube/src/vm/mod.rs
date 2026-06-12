@@ -1201,7 +1201,7 @@ impl<'a> ExprEmitter<'a> {
 
                 let block_id = self.declare_block((**label).clone(), output)?;
 
-                let (mut body, body_result) =
+                let (body, body_result) =
                     self.with_nested_block(|emitter| emitter.expr(body, ExprOutputKnown::Discard))?;
 
                 match body_result {

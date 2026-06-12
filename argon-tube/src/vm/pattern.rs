@@ -152,18 +152,3 @@ pub(super) fn emit_pattern(
     })
 }
 
-fn is_irrefutable_pattern(pattern: &Pattern<DefaultExprContext>) -> bool {
-    match pattern {
-        Pattern::Error => true,
-        Pattern::Discard { .. } => true,
-        Pattern::Tuple(elements) => elements
-            .iter()
-            .all(|element| is_irrefutable_pattern(element)),
-        Pattern::Binding(_, pattern) => is_irrefutable_pattern(pattern),
-        Pattern::EnumVariant { .. } => false,
-        Pattern::String(_) => false,
-        Pattern::Int(_) => false,
-        Pattern::Bool(_) => false,
-    }
-}
-

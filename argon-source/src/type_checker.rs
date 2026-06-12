@@ -7,7 +7,7 @@ use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{
-    Context, DefaultExprContext, Enum, Function, FunctionImplementation, FunctionSignature, Record,
+    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
     RecordField, RecordFieldOwner, SubstFunctionSignature,
 };
 use argon_expr::{
@@ -1773,136 +1773,134 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 ast::Expr::Dot { o, member } => {
                     let mut overload_groups: Vec<Vec<Overloadable>> = Vec::new();
 
-                    'done: {
-                        let mut instance = self.process_call(o, None);
-                        let call_location = instance.location;
+                    let mut instance = self.process_call(o, None);
+                    let call_location = instance.location;
 
-                        let adjusted_member_name = if assigned_value.is_some() {
-                            Identifier::Update(Box::new(member.value.clone()))
-                        } else {
-                            member.value.clone()
-                        };
+                    let adjusted_member_name = if assigned_value.is_some() {
+                        Identifier::Update(Box::new(member.value.clone()))
+                    } else {
+                        member.value.clone()
+                    };
 
-                        // Find enum variants
-                        if arguments.is_empty()
-                            && let CalleeInfo::Overloadable(instance_overloads) =
-                                &mut instance.callee
+                    // Find enum variants
+                    if arguments.is_empty()
+                        && let CalleeInfo::Overloadable(instance_overloads) =
+                            &mut instance.callee
+                    {
+                        if let Some(e) =
+                            instance_overloads.iter().flatten().find_map(|overload| {
+                                match overload {
+                                    Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
+                                    _ => None,
+                                }
+                            })
                         {
-                            if let Some(e) =
-                                instance_overloads.iter().flatten().find_map(|overload| {
-                                    match overload {
-                                        Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
-                                        _ => None,
-                                    }
-                                })
-                            {
-                                overload_groups.push(
-                                    e.clone()
-                                        .variants()
-                                        .iter()
-                                        .cloned()
-                                        .filter(|v| v.metadata().name == member.value)
-                                        .map(|v| {
-                                            Overloadable::Base(scope::Overloadable::EnumVariant(
-                                                v.clone(),
-                                            ))
-                                        })
-                                        .collect(),
-                                );
-                            }
-                        }
-
-                        let mut instance = self.infer_call(instance).infer_fully();
-
-                        {
-                            let mut norm = NormalizerScanner::new(
-                                self.context.normalize_fuel(),
-                                ExprNormalizer { model: self.model },
-                            );
-                            norm.normalize(&mut instance.inferred_type);
-                        }
-
-                        match &instance.inferred_type {
-                            Expr::RecordType(record_type) => {
-                                let r = &record_type.record;
-                                let args = &record_type.arguments;
-                                overload_groups.extend(
-                                    r.clone()
-                                        .fields()
-                                        .iter()
-                                        .find(|field| field.metadata().name == member.value)
-                                        .map(|field| {
-                                            let mut field_type =
-                                                DefaultToTypeCheckExprContextShifter
-                                                    .shift((*field.clone().field_type()).clone());
-
-                                            let mut subst = SubstScanner::new();
-                                            let record_sig = (*r.clone().signature())
-                                                .clone()
-                                                .shift(&mut DefaultToTypeCheckExprContextShifter);
-
-                                            subst.add_function_parameter_substitutions(
-                                                ExpressionOwner::Record(r.clone()),
-                                                &record_sig,
-                                                args,
-                                            );
-                                            subst.scan(&mut field_type);
-
-                                            let overload = if assigned_value.is_some() {
-                                                Overloadable::RecordFieldStore {
-                                                    record_type: instance.inferred_type.clone(),
-                                                    field: field.clone(),
-                                                    field_type,
-                                                    record_value: instance.checked_expr.clone(),
-                                                }
-                                            } else {
-                                                Overloadable::RecordField {
-                                                    record_type: instance.inferred_type.clone(),
-                                                    field: field.clone(),
-                                                    field_type,
-                                                    record_value: instance.checked_expr.clone(),
-                                                }
-                                            };
-
-                                            vec![overload]
-                                        }),
-                                );
-                            }
-                            Expr::TraitType(..) => todo!("Trait members"),
-                            _ => {}
-                        }
-
-                        // Extension methods
-                        if let Lookup::Overloadable(extension_overloads) = self.scope.lookup(
-                            &Identifier::Extension(Box::new(adjusted_member_name.clone())),
-                            self.access,
-                        ) {
-                            overload_groups.extend(
-                                extension_overloads
-                                    .item_groups
-                                    .into_iter()
-                                    .map(|overload_group| {
-                                        overload_group
-                                            .into_iter()
-                                            .filter_map(|overload| match overload {
-                                                scope::Overloadable::Function(f) => {
-                                                    Some(Overloadable::ExtensionMethod(
-                                                        f,
-                                                        ArgumentInfo {
-                                                            call_location,
-                                                            arg: o,
-                                                            list_type: FunctionParameterListType::NormalList,
-                                                        },
-                                                        instance.clone(),
-                                                    ))
-                                                }
-                                                _ => None,
-                                            })
-                                            .collect::<Vec<_>>()
+                            overload_groups.push(
+                                e.clone()
+                                    .variants()
+                                    .iter()
+                                    .cloned()
+                                    .filter(|v| v.metadata().name == member.value)
+                                    .map(|v| {
+                                        Overloadable::Base(scope::Overloadable::EnumVariant(
+                                            v.clone(),
+                                        ))
                                     })
-                                    .filter(|overload_group| !overload_group.is_empty()),
+                                    .collect(),
                             );
                         }
+                    }
+
+                    let mut instance = self.infer_call(instance).infer_fully();
+
+                    {
+                        let mut norm = NormalizerScanner::new(
+                            self.context.normalize_fuel(),
+                            ExprNormalizer { model: self.model },
+                        );
+                        norm.normalize(&mut instance.inferred_type);
+                    }
+
+                    match &instance.inferred_type {
+                        Expr::RecordType(record_type) => {
+                            let r = &record_type.record;
+                            let args = &record_type.arguments;
+                            overload_groups.extend(
+                                r.clone()
+                                    .fields()
+                                    .iter()
+                                    .find(|field| field.metadata().name == member.value)
+                                    .map(|field| {
+                                        let mut field_type =
+                                            DefaultToTypeCheckExprContextShifter
+                                                .shift((*field.clone().field_type()).clone());
+
+                                        let mut subst = SubstScanner::new();
+                                        let record_sig = (*r.clone().signature())
+                                            .clone()
+                                            .shift(&mut DefaultToTypeCheckExprContextShifter);
+
+                                        subst.add_function_parameter_substitutions(
+                                            ExpressionOwner::Record(r.clone()),
+                                            &record_sig,
+                                            args,
+                                        );
+                                        subst.scan(&mut field_type);
+
+                                        let overload = if assigned_value.is_some() {
+                                            Overloadable::RecordFieldStore {
+                                                record_type: instance.inferred_type.clone(),
+                                                field: field.clone(),
+                                                field_type,
+                                                record_value: instance.checked_expr.clone(),
+                                            }
+                                        } else {
+                                            Overloadable::RecordField {
+                                                record_type: instance.inferred_type.clone(),
+                                                field: field.clone(),
+                                                field_type,
+                                                record_value: instance.checked_expr.clone(),
+                                            }
+                                        };
+
+                                        vec![overload]
+                                    }),
+                            );
+                        }
+                        Expr::TraitType(..) => todo!("Trait members"),
+                        _ => {}
+                    }
+
+                    // Extension methods
+                    if let Lookup::Overloadable(extension_overloads) = self.scope.lookup(
+                        &Identifier::Extension(Box::new(adjusted_member_name.clone())),
+                        self.access,
+                    ) {
+                        overload_groups.extend(
+                            extension_overloads
+                                .item_groups
+                                .into_iter()
+                                .map(|overload_group| {
+                                    overload_group
+                                        .into_iter()
+                                        .filter_map(|overload| match overload {
+                                            scope::Overloadable::Function(f) => {
+                                                Some(Overloadable::ExtensionMethod(
+                                                    f,
+                                                    ArgumentInfo {
+                                                        call_location,
+                                                        arg: o,
+                                                        list_type: FunctionParameterListType::NormalList,
+                                                    },
+                                                    instance.clone(),
+                                                ))
+                                            }
+                                            _ => None,
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .filter(|overload_group| !overload_group.is_empty()),
+                        );
                     }
 
                     if let Some(assigned_value) = assigned_value {

@@ -2,14 +2,12 @@ use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
-use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
-use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
     Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
-    RecordFieldMetadata, RecordFieldOwner, Unload,
+    Unload,
 };
 use argon_expr::{EnumType, Expr, ExpressionOwner, Variable};
 use argon_parser::ast;
@@ -299,12 +297,6 @@ impl EnumVariant for SourceEnumVariant {
             return fields.clone();
         }
 
-        let param_owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
-
-        let sig = self.clone().signature();
-        let scope = self.owner.closure.scope();
-        let scope = ParameterScope::new(scope, param_owner, &sig.parameters);
-
         let body = match &self.decl {
             ast::EnumVariant::Constructor { .. } => MultiSlice::new(),
             ast::EnumVariant::Record(record) => MultiSlice::from(record.body.as_slice()),
@@ -326,80 +318,6 @@ impl EnumVariant for SourceEnumVariant {
 
         let result = Arc::new(fields);
         *fields_store = Some(result.clone());
-        result
-    }
-}
-
-pub struct SourceEnumVariantField {
-    owner: Arc<SourceEnumVariant>,
-    field_type_expr: WithLocation<ast::Expr>,
-    metadata: RecordFieldMetadata,
-    field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
-}
-
-impl SourceEnumVariantField {
-    fn new(
-        owner: Arc<SourceEnumVariant>,
-        name: ast::Identifier,
-        field_type_expr: WithLocation<ast::Expr>,
-    ) -> Self {
-        Self {
-            owner,
-            field_type_expr,
-            metadata: RecordFieldMetadata {
-                is_mutable: false,
-                name,
-            },
-            field_type: Mutex::new(None),
-        }
-    }
-}
-
-impl Debug for SourceEnumVariantField {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "enum variant field {:?}", self.metadata.name)
-    }
-}
-
-impl Unload for SourceEnumVariantField {
-    fn unload(&self) {
-        *mutex_lock(&self.field_type) = None;
-    }
-}
-
-impl RecordField for SourceEnumVariantField {
-    fn owning_record(&self) -> RecordFieldOwner {
-        RecordFieldOwner::EnumVariant(self.owner.clone())
-    }
-
-    fn metadata(&self) -> &RecordFieldMetadata {
-        &self.metadata
-    }
-
-    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
-        let access_token = self.owner.owner.closure.access_token();
-
-        let mut field_type_store = mutex_lock(&self.field_type);
-        if let Some(ref field_type) = *field_type_store {
-            return field_type.clone();
-        }
-
-        let signature = self.owner.clone().signature();
-        let scope = self.owner.owner.closure.scope();
-        let scope = ParameterScope::new(
-            scope,
-            ExpressionOwner::<DefaultExprContext>::EnumVariant(self.owner.clone()),
-            &signature.parameters,
-        );
-
-        let field_type = type_check_type_expr(
-            self.owner.owner.context.clone(),
-            TypeCheckOptions::new(&access_token, &scope),
-            &self.field_type_expr,
-        );
-
-        let result = Arc::new(field_type);
-        *field_type_store = Some(result.clone());
         result
     }
 }
