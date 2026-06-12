@@ -57,6 +57,15 @@ where
             label: Box::new(default_shift_label(shifter, *label)),
             value: Box::new(shifter.shift(*value)),
         },
+        Expr::BreakIf {
+            label,
+            value,
+            condition,
+        } => Expr::BreakIf {
+            label: Box::new(default_shift_label(shifter, *label)),
+            value: Box::new(shifter.shift(*value)),
+            condition: Box::new(shifter.shift(*condition)),
+        },
         Expr::Builtin { builtin, arguments } => Expr::Builtin {
             builtin,
             arguments: arguments

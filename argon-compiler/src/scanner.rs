@@ -75,6 +75,7 @@ where
 
             Expr::Error
             | Expr::Break { .. }
+            | Expr::BreakIf { .. }
             | Expr::Retry { .. }
             | Expr::Finally { .. }
             | Expr::Raise { .. }

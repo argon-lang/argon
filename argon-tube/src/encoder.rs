@@ -717,6 +717,15 @@ impl TubeEncoder {
                 block_id: Box::new(self.emit_block_id(label)),
                 value: Box::new(self.emit_expr(value)?),
             },
+            Expr::BreakIf {
+                label,
+                value,
+                condition,
+            } => tf::Expr::BreakIf {
+                block_id: Box::new(self.emit_block_id(label)),
+                value: Box::new(self.emit_expr(value)?),
+                condition: Box::new(self.emit_expr(condition)?),
+            },
             Expr::Unbox { t, value } => tf::Expr::Unbox {
                 t: Box::new(self.emit_expr(t)?),
                 value: Box::new(self.emit_expr(value)?),
@@ -1161,7 +1170,6 @@ fn encode_access_modifier_global(access: AccessModifierGlobal) -> tf::AccessModi
 fn encode_block_label_kind(kind: BlockLabelKind) -> tf::BlockLabelKind {
     match kind {
         BlockLabelKind::Block => tf::BlockLabelKind::Block,
-        BlockLabelKind::Condition => tf::BlockLabelKind::Condition,
         BlockLabelKind::Loop => tf::BlockLabelKind::Loop,
         BlockLabelKind::WhileOuter => tf::BlockLabelKind::WhileOuter,
         BlockLabelKind::WhileInner => tf::BlockLabelKind::WhileInner,

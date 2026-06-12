@@ -27,8 +27,12 @@ use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
 
 pub mod analysis;
+mod condition;
+mod pattern;
 
 use analysis::BlockJumpScan;
+use crate::vm::condition::ConditionEmitter;
+use crate::vm::pattern::emit_pattern;
 
 pub fn encode_vm_tube<W>(
     out: &mut W,
@@ -658,6 +662,7 @@ impl VmEncoder {
             parent_import_specifier: import_specifier,
             captured_vars: HashSet::new(),
             block_labels: HashMap::new(),
+            next_block_id: 0,
         };
 
         match emitter.expr_return(expr) {
@@ -1004,6 +1009,7 @@ struct ExprEmitter<'a> {
     parent_import_specifier: ImportSpecifier,
     captured_vars: HashSet<Variable<DefaultExprContext>>,
     block_labels: HashMap<BlockLabel<DefaultExprContext>, (vf::BlockId, ExprOutputKnown)>,
+    next_block_id: usize,
 }
 
 impl TokenEmitterCommon for ExprEmitter<'_> {
@@ -1083,12 +1089,17 @@ impl<'a> ExprEmitter<'a> {
         label: BlockLabel<DefaultExprContext>,
         output: ExprOutputKnown,
     ) -> Result<vf::BlockId, InternalCompilerError> {
-        let n = self.block_labels.len();
-        let id = vf::BlockId {
-            id: BigUint::from(n),
-        };
+        let id = self.claim_block_id();
         self.block_labels.insert(label, (id.clone(), output));
         Ok(id)
+    }
+
+    fn claim_block_id(&mut self) -> vf::BlockId {
+        let n = self.next_block_id;
+        self.next_block_id += 1;
+        vf::BlockId {
+            id: BigUint::from(n),
+        }
     }
 
     fn get_block_id(
@@ -1127,21 +1138,46 @@ impl<'a> ExprEmitter<'a> {
         output: O,
     ) -> EmitResult<O::ResultType> {
         Ok(match e {
-            Expr::And(a, b) => {
+            Expr::And(_, _)
+            | Expr::Or(_, _)
+            | Expr::Not(_)
+            | Expr::Is { .. } => {
                 let rb = output.output_register(self, e)?;
-                self.expr(a, ExprOutputKnown::Register(rb.register().clone()))?;
 
-                // ignore branching since it won't branch when a is false
+                let when_true_label = self.claim_block_id();
+                let when_false_label = self.claim_block_id();
+
+
+
                 let (block, _) = self.with_nested_block(|emitter| {
-                    emitter.expr(b, ExprOutputKnown::Register(rb.register().clone()))?;
-                    Ok(())
+                    let mut cond_emitter = ConditionEmitter {
+                        expr_emitter: emitter,
+                        when_true_label: &when_true_label,
+                        when_false_label: &when_false_label,
+                    };
+
+                    cond_emitter.emit_condition(e)
                 })?;
 
                 self.emit(vf::Instruction::IfElse {
-                    condition: Box::new(rb.register().clone()),
-                    when_true: Box::new(block),
+                    condition: Box::new(block),
+                    when_true_block_id: Box::new(when_true_label),
+                    when_false_block_id: Box::new(when_false_label),
+                    when_true: Box::new(vf::Block {
+                        instructions: vec![
+                            Box::new(vf::Instruction::ConstBool {
+                                dest: Box::new(rb.register().clone()),
+                                value: true,
+                            }),
+                        ],
+                    }),
                     when_false: Box::new(vf::Block {
-                        instructions: vec![],
+                        instructions: vec![
+                            Box::new(vf::Instruction::ConstBool {
+                                dest: Box::new(rb.register().clone()),
+                                value: false,
+                            }),
+                        ],
                     }),
                 });
 
@@ -1179,54 +1215,7 @@ impl<'a> ExprEmitter<'a> {
                     Err(EmitStop::Error(err)) => Err(err)?,
                 }
 
-                // If the block ends with a break for the current loop, we can just skip it.
-                let mut is_loop = false;
-                loop {
-                    match body.instructions.last().map(Box::as_ref) {
-                        Some(vf::Instruction::BlockBreak {
-                            block_id: last_break_id,
-                        }) if (**last_break_id).id == block_id.id => {
-                            body.instructions.pop();
-                            is_loop = false;
-                        }
-
-                        Some(vf::Instruction::BlockRetry {
-                            block_id: last_break_id,
-                        }) if (**last_break_id).id == block_id.id => {
-                            body.instructions.pop();
-                            is_loop = true;
-                        }
-
-                        _ => break,
-                    }
-                }
-
-                while let Some(vf::Instruction::BlockBreak {
-                    block_id: last_break_id,
-                }) = body.instructions.last().map(Box::as_ref)
-                    && (**last_break_id).id == block_id.id
-                {
-                    body.instructions.pop();
-                }
-
-                let mut scan = BlockJumpScan::new(&block_id);
-                scan.scan_block(&body);
-
-                if !is_loop && !scan.has_break && !scan.has_retry {
-                    self.instructions.extend(body.instructions);
-                } else {
-                    let flags = vf::BlockFlags {
-                        has_break: scan.has_break,
-                        has_retry: scan.has_retry,
-                        is_loop,
-                    };
-
-                    self.emit(vf::Instruction::Block {
-                        block_id: Box::new(block_id),
-                        flags,
-                        body: Box::new(body),
-                    });
-                }
+                self.emit_block(block_id, body);
 
                 output_result
             }
@@ -1243,6 +1232,26 @@ impl<'a> ExprEmitter<'a> {
                 });
 
                 Err(EmitStop::Branch)?
+            }
+
+            Expr::BreakIf {
+                label,
+                value,
+                condition,
+            } => {
+                let (block_id, break_output) = self.get_block_id(label)?;
+                let block_id = block_id.clone();
+                let break_output = break_output.clone();
+
+                self.expr(value, break_output)?;
+                let condition = self.expr(condition, AnyRegister)?;
+
+                self.emit(vf::Instruction::BlockBreakIf {
+                    block_id: Box::new(block_id),
+                    condition: Box::new(condition),
+                });
+
+                output.output_unit_result(self)?
             }
 
             Expr::Builtin { builtin, arguments } => {
@@ -1504,7 +1513,18 @@ impl<'a> ExprEmitter<'a> {
             } => {
                 let (result, output) = output.into_known_location(self, e)?;
 
-                let cond = self.expr(condition, AnyRegister)?;
+                let when_true_label = self.claim_block_id();
+                let when_false_label = self.claim_block_id();
+
+                let (cond, _) = self.with_nested_block(|emitter| {
+                    let mut cond_emitter = ConditionEmitter {
+                        expr_emitter: emitter,
+                        when_true_label: &when_true_label,
+                        when_false_label: &when_false_label,
+                    };
+
+                    cond_emitter.emit_condition(condition)
+                })?;
 
                 let (when_true, true_result) =
                     self.with_nested_block(|emitter| emitter.expr(when_true, output.clone()))?;
@@ -1514,6 +1534,8 @@ impl<'a> ExprEmitter<'a> {
 
                 self.emit(vf::Instruction::IfElse {
                     condition: Box::new(cond),
+                    when_true_block_id: Box::new(when_true_label),
+                    when_false_block_id: Box::new(when_false_label),
                     when_true: Box::new(when_true),
                     when_false: Box::new(when_false),
                 });
@@ -1535,54 +1557,10 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            Expr::Is { value, pattern } => {
-                let rb = output.output_register(self, e)?;
-
-                let value_reg = self.expr(value, AnyRegister)?;
-
-                self.emit_pattern(rb.register().clone(), value_reg, pattern)?;
-
-                rb.into_result(self)?
-            }
-
             // Lambda
             // Match
             // NewInstance
             // Next
-            Expr::Not(value) => {
-                let rb = output.output_register(self, e)?;
-
-                let a = self.expr(value, AnyRegister)?;
-
-                self.emit(vf::Instruction::Builtin {
-                    op: vf::BuiltinOp::BoolNot,
-                    tokens: vec![],
-                    registers: vec![Box::new(rb.register().clone()), Box::new(a)],
-                });
-
-                rb.into_result(self)?
-            }
-
-            Expr::Or(a, b) => {
-                let rb = output.output_register(self, e)?;
-                self.expr(a, ExprOutputKnown::Register(rb.register().clone()))?;
-
-                // ignore branching since it won't branch when a is true
-                let (block, _) = self.with_nested_block(|emitter| {
-                    emitter.expr(b, ExprOutputKnown::Register(rb.register().clone()))?;
-                    Ok(())
-                })?;
-
-                self.emit(vf::Instruction::IfElse {
-                    condition: Box::new(rb.register().clone()),
-                    when_true: Box::new(vf::Block {
-                        instructions: vec![],
-                    }),
-                    when_false: Box::new(block),
-                });
-
-                rb.into_result(self)?
-            }
 
             // Raise
             // RecordType
@@ -1803,6 +1781,58 @@ impl<'a> ExprEmitter<'a> {
         })
     }
 
+    fn emit_block(&mut self, block_id: vf::BlockId, mut block: vf::Block) {
+        // If the block ends with a break for the current loop, we can just skip it.
+        let mut is_loop = false;
+        loop {
+            match block.instructions.last().map(Box::as_ref) {
+                Some(vf::Instruction::BlockBreak {
+                         block_id: last_break_id,
+                     }) if (**last_break_id).id == block_id.id => {
+                    block.instructions.pop();
+                    is_loop = false;
+                }
+
+                Some(vf::Instruction::BlockRetry {
+                         block_id: last_break_id,
+                     }) if (**last_break_id).id == block_id.id => {
+                    block.instructions.pop();
+                    is_loop = true;
+                }
+
+                _ => break,
+            }
+        }
+
+        while let Some(vf::Instruction::BlockBreak {
+            block_id: last_break_id,
+        }) = block.instructions.last().map(Box::as_ref)
+            && (**last_break_id).id == block_id.id
+        {
+            block.instructions.pop();
+        }
+
+        let mut scan = BlockJumpScan::new(&block_id);
+        scan.scan_block(&block);
+
+        if !is_loop && !scan.has_break && !scan.has_retry {
+            self.instructions.extend(block.instructions);
+        }
+        else {
+            let flags = vf::BlockFlags {
+                has_break: scan.has_break,
+                has_retry: scan.has_retry,
+                is_loop,
+            };
+
+            self.emit(vf::Instruction::Block {
+                block_id: Box::new(block_id),
+                flags,
+                body: Box::new(block),
+            });
+        }
+    }
+
     fn emit_arguments(
         &mut self,
         owner: ExpressionOwner<DefaultExprContext>,
@@ -1841,277 +1871,6 @@ impl<'a> ExprEmitter<'a> {
 
     fn expr_return(&mut self, e: &Expr<DefaultExprContext>) -> EmitResult<()> {
         self.expr(e, ExprOutputKnown::Return)
-    }
-
-    fn emit_pattern(
-        &mut self,
-        dest: vf::RegisterId,
-        value_reg: vf::RegisterId,
-        pattern: &Pattern<DefaultExprContext>,
-    ) -> EmitResult<()> {
-        Ok(match pattern {
-            Pattern::Error => {
-                todo!("emit error pattern")
-            }
-            Pattern::Discard { .. } => {
-                self.emit(vf::Instruction::ConstBool {
-                    dest: Box::new(dest),
-                    value: true,
-                });
-            }
-            Pattern::Tuple(elements) => {
-                let mut iter = elements.iter();
-                if let Some(mut element) = iter.next() {
-                    let mut block_id: Option<vf::BlockId> = None;
-
-                    let (block, _) = self.with_nested_block(|emitter| {
-                        let mut element_index = 0usize;
-                        loop {
-                            let et = emitter.token_expr(&get_pattern_type(element))?;
-                            let element_reg = emitter.add_var(et);
-                            emitter.emit(vf::Instruction::TupleElement {
-                                dest: Box::new(element_reg.clone()),
-                                element_index: BigUint::from(element_index),
-                                src: Box::new(value_reg.clone()),
-                            });
-                            emitter.emit_pattern(dest.clone(), element_reg, element)?;
-
-                            if let Some(next_element) = iter.next() {
-                                if !emitter.is_irrefutable_pattern(element) {
-                                    let block_id = match &block_id {
-                                        Some(block_id) => block_id.clone(),
-                                        None => {
-                                            let label = BlockLabel {
-                                                id: UniqueIdentifier::new(),
-                                                name: None,
-                                                kind: BlockLabelKind::Condition,
-                                                block_result_type: Expr::bool_type(),
-                                            };
-
-                                            let new_block_id = emitter.declare_block(
-                                                label,
-                                                ExprOutputKnown::Register(dest.clone()),
-                                            )?;
-                                            block_id = Some(new_block_id.clone());
-                                            new_block_id
-                                        }
-                                    };
-
-                                    emitter.emit(vf::Instruction::IfElse {
-                                        condition: Box::new(dest.clone()),
-                                        when_true: Box::new(vf::Block {
-                                            instructions: vec![],
-                                        }),
-                                        when_false: Box::new(vf::Block {
-                                            instructions: vec![Box::new(
-                                                vf::Instruction::BlockBreak {
-                                                    block_id: Box::new(block_id),
-                                                },
-                                            )],
-                                        }),
-                                    });
-                                }
-
-                                element = next_element;
-                                element_index += 1;
-                            } else {
-                                break;
-                            }
-                        }
-
-                        Ok(())
-                    })?;
-
-                    if let Some(block_id) = block_id {
-                        self.emit(vf::Instruction::Block {
-                            block_id: Box::new(block_id),
-                            flags: vf::BlockFlags {
-                                has_break: true,
-                                has_retry: false,
-                                is_loop: false,
-                            },
-                            body: Box::new(block),
-                        });
-                    } else {
-                        self.instructions.extend(block.instructions);
-                    }
-                } else {
-                    self.emit(vf::Instruction::ConstBool {
-                        dest: Box::new(dest),
-                        value: true,
-                    });
-                }
-            }
-            Pattern::Binding(_, _) => {
-                todo!()
-            }
-            Pattern::EnumVariant {
-                enum_type,
-                variant,
-                args,
-                fields,
-            } => {
-                let arg_patterns = args
-                    .iter()
-                    .map(|arg| -> EmitResult<_> {
-                        let t = self.token_expr(&get_pattern_type(arg))?;
-                        let arg_reg = self.add_var(t);
-                        Ok((arg_reg, arg))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let field_patterns = fields
-                    .iter()
-                    .map(|field| -> EmitResult<_> {
-                        let t = self.token_expr(&get_pattern_type(&field.pattern))?;
-                        let field_reg = self.add_var(t);
-                        Ok((field_reg, field))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let enum_type_token = self.token_expr(&Expr::EnumType(enum_type.clone()))?;
-                let variant_id = BigUint::from(self.encoder.get_enum_variant_id(variant.clone()));
-                let field_extractors = field_patterns
-                    .iter()
-                    .map(|(field_reg, field)| {
-                        Box::new(vf::FieldExtractor {
-                            r: Box::new(field_reg.clone()),
-                            field_id: BigUint::from(
-                                self.encoder.get_record_field_id(field.field.clone()),
-                            ),
-                        })
-                    })
-                    .collect();
-
-                self.emit(vf::Instruction::IsEnumVariant {
-                    dest: Box::new(dest.clone()),
-                    enum_type: Box::new(enum_type_token),
-                    variant_id,
-                    value: Box::new(value_reg),
-                    args: arg_patterns
-                        .iter()
-                        .map(|(arg_reg, _)| Box::new(arg_reg.clone()))
-                        .collect(),
-                    field_extractors,
-                });
-
-                if !arg_patterns.is_empty() || !field_patterns.is_empty() {
-                    let label = BlockLabel {
-                        id: UniqueIdentifier::new(),
-                        name: None,
-                        kind: BlockLabelKind::Condition,
-                        block_result_type: Expr::bool_type(),
-                    };
-
-                    let block_id =
-                        self.declare_block(label, ExprOutputKnown::Register(dest.clone()))?;
-
-                    let (block, _) =
-                        self.with_nested_block(|emitter| {
-                            emitter.emit(vf::Instruction::IfElse {
-                                condition: Box::new(dest.clone()),
-                                when_true: Box::new(vf::Block {
-                                    instructions: vec![],
-                                }),
-                                when_false: Box::new(vf::Block {
-                                    instructions: vec![Box::new(vf::Instruction::BlockBreak {
-                                        block_id: Box::new(block_id.clone()),
-                                    })],
-                                }),
-                            });
-
-                            emitter.emit_pattern_sequence_with_break(
-                                dest.clone(),
-                                block_id.clone(),
-                                arg_patterns
-                                    .iter()
-                                    .map(|(arg_reg, pattern)| (arg_reg.clone(), *pattern))
-                                    .chain(field_patterns.iter().map(|(field_reg, field)| {
-                                        (field_reg.clone(), &field.pattern)
-                                    })),
-                            )
-                        })?;
-
-                    self.emit(vf::Instruction::Block {
-                        block_id: Box::new(block_id),
-                        flags: vf::BlockFlags {
-                            has_break: true,
-                            has_retry: false,
-                            is_loop: false,
-                        },
-                        body: Box::new(block),
-                    });
-                }
-            }
-            Pattern::String(s) => {
-                let sr = self.expr(&Expr::StringLiteral(Box::from(s.as_str())), AnyRegister)?;
-                self.emit(vf::Instruction::Builtin {
-                    op: vf::BuiltinOp::StringEq,
-                    tokens: vec![],
-                    registers: vec![Box::new(dest), Box::new(sr), Box::new(value_reg)],
-                });
-            }
-            Pattern::Int(i) => {
-                let sr = self.expr(&Expr::IntLiteral(i.clone()), AnyRegister)?;
-                self.emit(vf::Instruction::Builtin {
-                    op: vf::BuiltinOp::IntEq,
-                    tokens: vec![],
-                    registers: vec![Box::new(dest), Box::new(sr), Box::new(value_reg)],
-                });
-            }
-            Pattern::Bool(b) => {
-                let sr = self.expr(&Expr::BoolLiteral(*b), AnyRegister)?;
-                self.emit(vf::Instruction::Builtin {
-                    op: vf::BuiltinOp::BoolEq,
-                    tokens: vec![],
-                    registers: vec![Box::new(dest), Box::new(sr), Box::new(value_reg)],
-                });
-            }
-        })
-    }
-
-    fn emit_pattern_sequence_with_break<'p>(
-        &mut self,
-        dest: vf::RegisterId,
-        block_id: vf::BlockId,
-        patterns: impl IntoIterator<Item = (vf::RegisterId, &'p Pattern<DefaultExprContext>)>,
-    ) -> EmitResult<()> {
-        let mut patterns = patterns.into_iter().peekable();
-
-        while let Some((value_reg, pattern)) = patterns.next() {
-            self.emit_pattern(dest.clone(), value_reg, pattern)?;
-
-            if patterns.peek().is_some() && !self.is_irrefutable_pattern(pattern) {
-                self.emit(vf::Instruction::IfElse {
-                    condition: Box::new(dest.clone()),
-                    when_true: Box::new(vf::Block {
-                        instructions: vec![],
-                    }),
-                    when_false: Box::new(vf::Block {
-                        instructions: vec![Box::new(vf::Instruction::BlockBreak {
-                            block_id: Box::new(block_id.clone()),
-                        })],
-                    }),
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    fn is_irrefutable_pattern(&self, pattern: &Pattern<DefaultExprContext>) -> bool {
-        match pattern {
-            Pattern::Error => true,
-            Pattern::Discard { .. } => true,
-            Pattern::Tuple(elements) => elements
-                .iter()
-                .all(|element| self.is_irrefutable_pattern(element)),
-            Pattern::Binding(_, pattern) => self.is_irrefutable_pattern(pattern),
-            Pattern::EnumVariant { .. } => false,
-            Pattern::String(_) => false,
-            Pattern::Int(_) => false,
-            Pattern::Bool(_) => false,
-        }
     }
 }
 

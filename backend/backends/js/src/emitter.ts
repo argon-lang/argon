@@ -10,6 +10,7 @@ import type { TupleOf } from "type-fest";
 
 import { name as isValidIdName } from "estree-util-is-identifier-name";
 
+
 export interface OutputModuleInfo {
     readonly modulePath: ir.ModulePath;
     emitJsProgram(): ReadonlyDeep<estree.Program>;
@@ -1505,21 +1506,11 @@ class BlockEmitter extends EmitterBase {
                     };
                 }
                 else {
-                    loopStmt = {
-                        type: "DoWhileStatement",
-                        test: {
-                            type: "Literal",
-                            value: false,
-                        },
-                        body,
-                    };
+                    loopStmt = body;
                 }
 
                 if(insn.flags.hasRetry || insn.flags.hasBreak) {
-                    const label: estree.Identifier = {
-                        type: "Identifier",
-                        name: `block_${insn.blockId.id}`,
-                    };
+                    const label = this.getLabel(insn.blockId);
 
                     loopStmt = {
                         type: "LabeledStatement",
@@ -1534,10 +1525,7 @@ class BlockEmitter extends EmitterBase {
             }
 
             case "block-break": {
-                const label: estree.Identifier = {
-                    type: "Identifier",
-                    name: `block_${insn.blockId.id}`,
-                };
+                const label = this.getLabel(insn.blockId);
 
                 this.stmts.push({
                     type: "BreakStatement",
@@ -1547,11 +1535,35 @@ class BlockEmitter extends EmitterBase {
                 break;
             }
 
+            case "block-break-if":
+            case "block-break-unless": {
+                const label = this.getLabel(insn.blockId);
+
+                const test = this.getReg(insn.condition);
+                const condition: estree.Expression = insn.$type === "block-break-if"
+                    ? test
+                    : {
+                        type: "UnaryExpression",
+                        operator: "!",
+                        prefix: true,
+                        argument: test,
+                    };
+
+                this.stmts.push({
+                    type: "IfStatement",
+                    test: condition,
+                    consequent: {
+                        type: "BreakStatement",
+                        label,
+                    },
+                    alternate: null,
+                });
+
+                break;
+            }
+
             case "block-retry": {
-                const label: estree.Identifier = {
-                    type: "Identifier",
-                    name: `block_${insn.blockId.id}`,
-                };
+                const label = this.getLabel(insn.blockId);
 
                 this.stmts.push({
                     type: "ContinueStatement",
@@ -2017,22 +2029,125 @@ class BlockEmitter extends EmitterBase {
                 break;
             }
 
-            case "if-else":
-                if(insn.whenFalse.instructions.length === 0) {
+            case "if-else": {
+                const conditionBlock = this.emitNestedBlock(insn.condition);
+
+                const whenTrueLabel = this.getLabel(insn.whenTrueBlockId);
+                const whenFalseLabel = this.getLabel(insn.whenFalseBlockId);
+
+                const condVar: estree.Identifier = {
+                    type: "Identifier",
+                    name: "cond_" + whenTrueLabel.name,
+                };
+
+                stmts.push({
+                    type: "VariableDeclaration",
+                    kind: "let",
+                    declarations: [
+                        {
+                            type: "VariableDeclarator",
+                            id: condVar,
+                            init: {
+                                type: "Literal",
+                                value: true,
+                            },
+                        },
+                    ],
+                });
+
+                if(!(conditionBlock.body.length > 0 && conditionBlock.body[conditionBlock.body.length - 1]!.type === "BreakStatement")) {
+                    conditionBlock.body.push({
+                        type: "BreakStatement",
+                        label: whenTrueLabel,
+                    });
+                }
+
+
+                stmts.push({
+                    type: "LabeledStatement",
+                    label: whenTrueLabel,
+                    body: {
+                        type: "BlockStatement",
+                        body: [
+                            {
+                                type: "LabeledStatement",
+                                label: whenFalseLabel,
+                                body: conditionBlock
+                            },
+                            {
+                                type: "ExpressionStatement",
+                                expression: {
+                                    type: "AssignmentExpression",
+                                    left: condVar,
+                                    operator: "=",
+                                    right: {
+                                        type: "Literal",
+                                        value: false,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                });
+
+                if(
+                    insn.whenTrue.instructions.length === 1 &&
+                    insn.whenFalse.instructions.length === 1
+                ) {
+                    let whenTrueInsn = insn.whenTrue.instructions[0]!;
+                    let whenFalseInsn = insn.whenFalse.instructions[0]!;
+                    if(
+                        whenTrueInsn.$type === "const-bool" &&
+                        whenFalseInsn.$type === "const-bool" &&
+                        whenTrueInsn.dest === whenFalseInsn.dest
+                    ) {
+                        if(whenTrueInsn.value && !whenFalseInsn.value) {
+                            stmts.push({
+                                type: "ExpressionStatement",
+                                expression: {
+                                    type: "AssignmentExpression",
+                                    operator: "=",
+                                    left: this.getReg(whenTrueInsn.dest),
+                                    right: condVar,
+                                },
+                            });
+                            break;
+                        }
+                        else if(!whenTrueInsn.value && whenFalseInsn.value) {
+                            stmts.push({
+                                type: "ExpressionStatement",
+                                expression: {
+                                    type: "AssignmentExpression",
+                                    operator: "=",
+                                    left: this.getReg(whenTrueInsn.dest),
+                                    right: {
+                                        type: "UnaryExpression",
+                                        operator: "!",
+                                        prefix: true,
+                                        argument: condVar,
+                                    },
+                                },
+                            });
+                            break;
+                        }
+                    }
+                }
+
+                if (insn.whenFalse.instructions.length === 0) {
                     stmts.push({
                         type: "IfStatement",
-                        test: this.getReg(insn.condition),
+                        test: condVar,
                         consequent: this.emitNestedBlock(insn.whenTrue),
                     });
                 }
-                else if(insn.whenTrue.instructions.length === 0) {
+                else if (insn.whenTrue.instructions.length === 0) {
                     stmts.push({
                         type: "IfStatement",
                         test: {
                             type: "UnaryExpression",
                             prefix: true,
                             operator: "!",
-                            argument: this.getReg(insn.condition),
+                            argument: condVar,
                         },
                         consequent: this.emitNestedBlock(insn.whenFalse),
                     });
@@ -2040,12 +2155,13 @@ class BlockEmitter extends EmitterBase {
                 else {
                     stmts.push({
                         type: "IfStatement",
-                        test: this.getReg(insn.condition),
+                        test: condVar,
                         consequent: this.emitNestedBlock(insn.whenTrue),
                         alternate: this.emitNestedBlock(insn.whenFalse),
                     });
                 }
                 break;
+            }
 
             case "instance-method-call":
             {
@@ -2099,25 +2215,28 @@ class BlockEmitter extends EmitterBase {
                 break;
             }
 
-            case "is-enum-variant":
+            case "is-enum-variant-or-break":
                 stmts.push({
-                    type: "ExpressionStatement",
-                    expression: {
-                        type: "AssignmentExpression",
-                        operator: "=",
-                        left: this.getReg(insn.dest),
-                        right: {
+                    type: "IfStatement",
+                    test: {
+                        type: "UnaryExpression",
+                        operator: "!",
+                        prefix: true,
+                        argument: {
                             type: "BinaryExpression",
                             operator: "instanceof",
                             left: this.getReg(insn.value),
                             right: this.getVariantClass(insn.enumType, insn.variantId),
                         },
                     },
+                    consequent: {
+                        type: "BreakStatement",
+                        label: this.getLabel(insn.notVariantBlockId),
+                    },
                 });
 
-                const body: estree.Statement[] = [];
                 for(const [i, arg] of insn.args.entries()) {
-                    body.push({
+                    stmts.push({
                         type: "ExpressionStatement",
                         expression: {
                             type: "AssignmentExpression",
@@ -2139,7 +2258,7 @@ class BlockEmitter extends EmitterBase {
                 for(const fieldExtractor of insn.fieldExtractors) {
                     const fieldInfo = this.options.program.getRecordFieldInfo(fieldExtractor.fieldId);
 
-                    body.push({
+                    stmts.push({
                         type: "ExpressionStatement",
                         expression: {
                             type: "AssignmentExpression",
@@ -2158,15 +2277,6 @@ class BlockEmitter extends EmitterBase {
                         }
                     });
                 }
-
-                stmts.push({
-                    type: "IfStatement",
-                    test: this.getReg(insn.dest),
-                    consequent: {
-                        type: "BlockStatement",
-                        body,
-                    },
-                });
                 break;
 
             case "load-reference":
@@ -2511,6 +2621,13 @@ class BlockEmitter extends EmitterBase {
         };
     }
 
+    private getLabel(label: ir.BlockId): estree.Identifier {
+        return {
+            type: "Identifier",
+            name: `block_${label.id}`,
+        };
+    }
+
     private buildTokenValue(token: ir.Token): estree.Expression {
         return this.tokenEmitter.buildTokenValue(token);
     }
@@ -2594,5 +2711,3 @@ function checkArgs<N extends number>(n: N): <T>(args: readonly T[]) => Readonly<
         return args as TupleOf<N, T>;
     };
 }
-
-

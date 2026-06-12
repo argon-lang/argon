@@ -239,7 +239,6 @@ async function* readDataStream(file: InputFile): AsyncGenerator<Uint8Array> {
         }
     }
     finally {
-        console.error("Closing stream");
         await stream.close();
     }
 }

@@ -22,6 +22,8 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Break { .. } | Expr::Raise { .. } | Expr::Retry { .. } => Expr::never_type(),
 
+        Expr::BreakIf { .. } => Expr::unit(),
+
         Expr::BigType(value) => Expr::BigType(value + 1),
 
         Expr::Box { t, .. } => Expr::BoxedType { t: t.clone() },

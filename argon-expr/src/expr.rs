@@ -68,6 +68,11 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         label: Box<BlockLabel<EC>>,
         value: Box<Expr<EC>>,
     },
+    BreakIf {
+        label: Box<BlockLabel<EC>>,
+        value: Box<Expr<EC>>,
+        condition: Box<Expr<EC>>,
+    },
     Builtin {
         builtin: Builtin,
         arguments: Vec<Expr<EC>>,

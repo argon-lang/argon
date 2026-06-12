@@ -611,6 +611,11 @@ enum expr {
         block-id: block-id;
         value: expr;
     },
+    break-if {
+        block-id: block-id;
+        value: expr;
+        condition: expr;
+    },
     condition {
         value: expr;
 
@@ -1024,7 +1029,6 @@ record block-label {
 @esexpr:(derive-codec)
 simple enum block-label-kind {
     block,
-    condition,
     loop,
     while-outer,
     while-inner,

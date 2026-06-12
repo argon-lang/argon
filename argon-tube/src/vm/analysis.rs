@@ -28,10 +28,12 @@ impl<'a> BlockInstructionIter<'a> {
                 self.stack.push(action.instructions.iter());
             }
             vf::Instruction::IfElse {
+                condition,
                 when_true,
                 when_false,
                 ..
             } => {
+                self.stack.push(condition.instructions.iter());
                 self.stack.push(when_false.instructions.iter());
                 self.stack.push(when_true.instructions.iter());
             }
@@ -92,6 +94,14 @@ impl<'a> BlockJumpScan<'a> {
         match instruction {
             vf::Instruction::BlockBreak {
                 block_id: target_block_id,
+            }
+            | vf::Instruction::BlockBreakIf {
+                block_id: target_block_id,
+                ..
+            }
+            | vf::Instruction::BlockBreakUnless {
+                block_id: target_block_id,
+                ..
             } if target_block_id.id == self.block_id.id => {
                 self.has_break = true;
             }

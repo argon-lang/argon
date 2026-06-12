@@ -527,6 +527,16 @@ enum instruction {
         block-id: block-id;
     },
 
+    block-break-if {
+        block-id: block-id;
+        condition: register-id;
+    },
+
+    block-break-unless {
+        block-id: block-id;
+        condition: register-id;
+    },
+
     block-retry {
         block-id: block-id;
     },
@@ -608,7 +618,9 @@ enum instruction {
     },
 
     if-else {
-        condition: register-id;
+        when-true-block-id: block-id;
+        when-false-block-id: block-id;
+        condition: block;
         when-true: block;
         when-false: block;
     },
@@ -628,8 +640,8 @@ enum instruction {
         args: list[register-id];
     },
 
-    is-enum-variant {
-        dest: register-id;
+    is-enum-variant-or-break {
+        not-variant-block-id: block-id;
         enum-type: token;
         variant-id: nat;
 

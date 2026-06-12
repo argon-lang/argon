@@ -27,10 +27,10 @@ fn main() {
             .display(),
     );
 
-    npm_ci(&api_dir);
+    npm_install(&api_dir);
     npm_run_build(&api_dir);
 
-    npm_ci(&backend_dir);
+    npm_install(&backend_dir);
     npm_run_build(&backend_dir);
 }
 
@@ -54,8 +54,8 @@ fn npm_run_build(package_dir: &Path) {
     npm(package_dir, &["run", "build"]);
 }
 
-fn npm_ci(package_dir: &Path) {
-    npm(package_dir, &["ci"]);
+fn npm_install(package_dir: &Path) {
+    npm(package_dir, &["install"]);
 }
 
 fn npm(package_dir: &Path, args: &[&str]) {

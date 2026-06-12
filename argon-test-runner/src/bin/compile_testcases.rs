@@ -1,5 +1,5 @@
 use argon_test_runner::{
-    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext, cmd::CliCommandRunner,
+    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext,
     workspace::WorkspacePaths,
 };
 use argon_testcases::load_test_case;
@@ -9,6 +9,7 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
+use argon_test_runner::cmd::DirectCommandRunner;
 
 #[derive(Parser)]
 #[command(about = "Compile Argon test XML files without running them")]
@@ -49,10 +50,10 @@ fn create_temp_dir(output_dir: &Path) -> Result<TempDir, Box<dyn Error>> {
 
 fn create_suite_context(
     platform: Arc<JSPlatform>,
-    command_runner: Arc<CliCommandRunner>,
+    command_runner: Arc<DirectCommandRunner>,
     temp_dir: TempDir,
     workspace_paths: &WorkspacePaths,
-) -> Arc<TestSuiteContext<JSPlatform, CliCommandRunner>> {
+) -> Arc<TestSuiteContext<JSPlatform, DirectCommandRunner>> {
     Arc::new(TestSuiteContext {
         platform,
         command_runner,
@@ -89,7 +90,7 @@ fn test_output_name(index: usize, test_xml_file: &Path) -> String {
 }
 
 fn compile_testcases(
-    context: Arc<TestSuiteContext<JSPlatform, CliCommandRunner>>,
+    context: Arc<TestSuiteContext<JSPlatform, DirectCommandRunner>>,
     test_xml_files: &[PathBuf],
 ) -> Result<bool, Box<dyn Error>> {
     let mut compiled_all = true;
@@ -143,7 +144,7 @@ fn run() -> Result<i32, Box<dyn Error>> {
     let workspace_paths = WorkspacePaths::from_cargo_manifest_dir()?;
     let temp_dir = create_temp_dir(&args.output_dir)?;
     let output_root = temp_dir.path().to_owned();
-    let command_runner = Arc::new(CliCommandRunner::new(workspace_paths.clone()));
+    let command_runner = Arc::new(DirectCommandRunner::new(workspace_paths.clone()));
 
     let compiled_all = match args.platform {
         Platform::Js => {

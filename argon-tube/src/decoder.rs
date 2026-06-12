@@ -895,6 +895,15 @@ impl TubeDecoder {
                 label: self.decode_block_id(*block_id),
                 value: Box::new(self.decode_expr(*value)),
             },
+            tf::Expr::BreakIf {
+                block_id,
+                value,
+                condition,
+            } => Expr::BreakIf {
+                label: self.decode_block_id(*block_id),
+                value: Box::new(self.decode_expr(*value)),
+                condition: Box::new(self.decode_expr(*condition)),
+            },
             tf::Expr::EnumType { enum_type } => Expr::EnumType(EnumType {
                 enum_: self.enum_decl(enum_type.id),
                 arguments: enum_type
@@ -1750,7 +1759,6 @@ fn decode_erasure_mode(mode: tf::ErasureMode) -> ErasureMode {
 fn decode_block_label_kind(kind: tf::BlockLabelKind) -> BlockLabelKind {
     match kind {
         tf::BlockLabelKind::Block => BlockLabelKind::Block,
-        tf::BlockLabelKind::Condition => BlockLabelKind::Condition,
         tf::BlockLabelKind::Loop => BlockLabelKind::Loop,
         tf::BlockLabelKind::WhileOuter => BlockLabelKind::WhileOuter,
         tf::BlockLabelKind::WhileInner => BlockLabelKind::WhileInner,
