@@ -13,13 +13,14 @@ use hashbrown::HashMap;
 
 mod enums;
 mod function;
+mod instance;
+mod method;
 mod modifiers;
 mod module;
 mod record;
 mod signature;
 mod traits;
 mod type_checker;
-mod method;
 
 pub struct SourceCodeTubeOptions<I> {
     pub name: TubeName,
@@ -78,8 +79,8 @@ mod tests {
     use argon_compiler::access::AccessModifier;
     use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
-        CompileErrorReporter, Context, ContextObject, FunctionImplementation, MethodOwner, MethodSlot,
-        ModuleExportBinding, ModulePath, TubeCollectionBuilder, TubeName,
+        CompileErrorReporter, Context, ContextObject, FunctionImplementation, MethodOwner,
+        MethodSlot, ModuleExportBinding, ModulePath, TubeCollectionBuilder, TubeName,
     };
     use argon_expr::{Expr, Variable};
     use argon_io::{InputDirectory, InputFile};

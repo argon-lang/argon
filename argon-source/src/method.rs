@@ -4,16 +4,19 @@ use crate::modifiers::{
 };
 use crate::module::DeclarationResult;
 use crate::signature::SignatureParser;
-use crate::type_checker::{type_check_expr, TypeCheckOptions};
+use crate::type_checker::{TypeCheckOptions, type_check_expr};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use argon_compiler::access::{AccessModifier, AccessToken};
 use argon_compiler::scope::{InstanceParameterScope, ParameterScope, Scope};
-use argon_compiler::{Context, DefaultExprContext, EffectInfo, FunctionImplementation, FunctionSignature, Method, MethodInstanceParameter, MethodMetadata, MethodOwner, Unload};
+use argon_compiler::{
+    Context, DefaultExprContext, EffectInfo, FunctionImplementation, FunctionSignature, Method,
+    MethodInstanceParameter, MethodMetadata, MethodOwner, Unload,
+};
 use argon_expr::{Expr, ExpressionOwner, InstanceParameterVariable, Variable};
 use argon_parser::ast;
-use argon_util::sync::{mutex_lock, Mutex, ThreadSafe};
 use argon_util::MultiSlice;
+use argon_util::sync::{Mutex, ThreadSafe, mutex_lock};
 use core::fmt::Debug;
 
 pub trait MethodClosure: ThreadSafe {
@@ -31,7 +34,7 @@ pub struct SourceMethod<MC> {
     implementation: Mutex<Option<Arc<FunctionImplementation>>>,
 }
 
-impl <MC: MethodClosure + 'static> SourceMethod<MC> {
+impl<MC: MethodClosure + 'static> SourceMethod<MC> {
     pub fn from_ast(
         context: Context,
         closure: MC,
@@ -77,8 +80,6 @@ impl <MC: MethodClosure + 'static> SourceMethod<MC> {
         }
     }
 
-
-
     fn receiver_type(&self) -> Expr<DefaultExprContext> {
         match self.closure.owner() {
             MethodOwner::Trait(trait_) => {
@@ -92,24 +93,25 @@ impl <MC: MethodClosure + 'static> SourceMethod<MC> {
                         .collect(),
                 )
             }
+            MethodOwner::Instance(instance) => instance.signature().return_type.clone(),
         }
     }
 }
 
-impl <MC> Debug for SourceMethod<MC> {
+impl<MC> Debug for SourceMethod<MC> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "trait method {}", self.metadata.name)
     }
 }
 
-impl <MC> Unload for SourceMethod<MC> {
+impl<MC> Unload for SourceMethod<MC> {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
         *mutex_lock(&self.implementation) = None;
     }
 }
 
-impl <MC: MethodClosure + 'static> Method for SourceMethod<MC> {
+impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
     fn owner(self: Arc<Self>) -> MethodOwner {
         self.closure.owner()
     }
@@ -172,7 +174,6 @@ impl <MC: MethodClosure + 'static> Method for SourceMethod<MC> {
 
                 let parameter_scope =
                     ParameterScope::new(receiver_scope, method_owner, &signature.parameters);
-
 
                 let expr = type_check_expr(
                     self.context.clone(),

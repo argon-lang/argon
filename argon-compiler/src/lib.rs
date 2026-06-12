@@ -26,7 +26,7 @@ pub use argon_parser::ast::{
     UnaryOperatorIdentifier,
 };
 use argon_util::sync::{
-    rwlock_read, rwlock_write, RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe,
+    RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe, rwlock_read, rwlock_write,
 };
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
@@ -35,8 +35,8 @@ use core::hash::{Hash, Hasher};
 use core::mem;
 use core::str::FromStr;
 use esexpr::ESExpr;
-use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use mitsein::vec1::Vec1;
 use parse18_runtime::WithLocation;
 
@@ -448,6 +448,7 @@ pub struct MethodMetadata {
 #[derive(Clone)]
 pub enum MethodOwner {
     Trait(Arc<dyn Trait>),
+    Instance(Arc<dyn Instance>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -518,7 +519,12 @@ pub trait Trait: Debug + Unload + ThreadSafe {
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
 }
 
-pub trait Instance: Debug + Unload + ThreadSafe {}
+pub trait Instance: Debug + Unload + ThreadSafe {
+    fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
+    fn erasure_mode(&self) -> ErasureMode;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+}
 
 macro_rules! impl_dyn_stub_traits {
     ($trait_name:ident) => {

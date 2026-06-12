@@ -1,5 +1,6 @@
 use crate::enums::SourceEnum;
 use crate::function::SourceFunction;
+use crate::instance::SourceInstance;
 use crate::record::SourceRecord;
 use crate::traits::SourceTrait;
 use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
@@ -13,8 +14,8 @@ use argon_compiler::{
 use argon_expr::{BlockLabel, BlockLabelDeclaration, LoopLabels};
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
-use argon_util::sync::{OnceLock, ThreadSafe};
 use argon_util::CompileError;
+use argon_util::sync::{OnceLock, ThreadSafe};
 use core::{iter, mem};
 use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
@@ -843,6 +844,27 @@ impl<'a> SourceFileProcessor<'a> {
                 let entry = ModuleExportEntry {
                     access: trait_res.access,
                     binding: ModuleExportBinding::Trait(trait_res.result),
+                    is_reexport: false,
+                };
+
+                self.module.add_export(name, entry);
+            }
+
+            Stmt::InstanceDeclaration(decl) => {
+                let scope = self.get_scope();
+
+                let closure = Box::new(ModuleClosure {
+                    tube_name: self.tb.tube().name().clone(),
+                    module_path: self.result.path.clone(),
+                    scope,
+                });
+
+                let name = decl.name.value.clone();
+                let instance_res = SourceInstance::from_ast(self.context.clone(), closure, decl);
+
+                let entry = ModuleExportEntry {
+                    access: instance_res.access,
+                    binding: ModuleExportBinding::Instance(instance_res.result),
                     is_reexport: false,
                 };
 

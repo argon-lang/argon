@@ -141,7 +141,7 @@ impl<'a> SignatureParser<'a> {
             | ExpressionOwner::EnumVariant(_)
             | ExpressionOwner::Method(_) => false,
 
-            ExpressionOwner::Instance(_) => todo!(),
+            ExpressionOwner::Instance(i) => i.erasure_mode() != ErasureMode::Token,
         }
     }
 
