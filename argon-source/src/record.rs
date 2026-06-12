@@ -16,7 +16,6 @@ use argon_parser::ast;
 use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, mutex_lock};
 use core::fmt::Debug;
-use parse18_runtime::WithLocation;
 
 pub struct SourceRecord {
     context: Context,
@@ -231,7 +230,7 @@ impl RecordField for SourceRecordField {
         let signature = self.owner.signature();
         let scope = self.owner.closure().scope();
         let scope = ParameterScope::new(
-            &scope,
+            scope,
             self.owner.to_expression_owner(),
             &signature.parameters,
         );

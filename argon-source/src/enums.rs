@@ -303,7 +303,7 @@ impl EnumVariant for SourceEnumVariant {
 
         let sig = self.clone().signature();
         let scope = self.owner.closure.scope();
-        let scope = ParameterScope::new(&scope, param_owner, &sig.parameters);
+        let scope = ParameterScope::new(scope, param_owner, &sig.parameters);
 
         let body = match &self.decl {
             ast::EnumVariant::Constructor { .. } => MultiSlice::new(),
@@ -387,7 +387,7 @@ impl RecordField for SourceEnumVariantField {
         let signature = self.owner.clone().signature();
         let scope = self.owner.owner.closure.scope();
         let scope = ParameterScope::new(
-            &scope,
+            scope,
             ExpressionOwner::<DefaultExprContext>::EnumVariant(self.owner.clone()),
             &signature.parameters,
         );

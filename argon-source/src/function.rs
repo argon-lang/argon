@@ -127,7 +127,7 @@ impl Function for SourceFunction {
                 let signature = self.clone().signature();
                 let scope = self.closure.scope();
                 let scope = ParameterScope::new(
-                    &scope,
+                    scope,
                     ExpressionOwner::<DefaultExprContext>::Function(self.clone()),
                     &signature.parameters,
                 );

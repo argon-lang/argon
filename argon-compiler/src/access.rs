@@ -8,6 +8,17 @@ pub enum AccessModifierGlobal {
     Internal,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum AccessModifier {
+    Public,
+    Private,
+    Protected,
+    Internal,
+    ProtectedOrInternal,
+    ProtectedAndInternal,
+    ModulePrivate,
+}
+
 pub struct AccessToken {
     pub tube: TubeName,
     pub module: ModulePath,

@@ -207,6 +207,7 @@ where
     match v {
         Variable::Local(variable) => scanner.scan(&variable.var_type),
         Variable::Parameter(variable) => scanner.scan(&variable.var_type),
+        Variable::InstanceParameter(variable) => scanner.scan(&variable.var_type),
     }
 }
 
@@ -399,6 +400,7 @@ where
     match v {
         Variable::Local(variable) => scanner.scan(&mut variable.var_type),
         Variable::Parameter(variable) => scanner.scan(&mut variable.var_type),
+        Variable::InstanceParameter(variable) => scanner.scan(&mut variable.var_type),
     }
 }
 

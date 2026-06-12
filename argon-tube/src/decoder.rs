@@ -13,8 +13,8 @@ use argon_compiler::{
     TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
 };
 use argon_expr::{
-    BlockLabel, BlockLabelKind, EnumType, LocalVariable, ParameterVariable, Pattern,
-    RecordFieldLiteral, RecordFieldPattern, RecordType, Variable,
+    BlockLabel, BlockLabelKind, EnumType, InstanceParameterVariable, LocalVariable,
+    ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, Variable,
 };
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
@@ -1171,7 +1171,15 @@ impl TubeDecoder {
                 erasure_mode: decode_erasure_mode(*erasure),
                 is_witness: witness,
             })),
-            tf::Var::InstanceParameterVar { .. } => todo!("decode instance parameter variable"),
+            tf::Var::InstanceParameterVar {
+                owner,
+                name,
+                var_type,
+            } => Variable::InstanceParameter(Box::new(InstanceParameterVariable {
+                owner: self.decode_expression_owner(*owner),
+                var_type: self.decode_expr(*var_type),
+                name: name.map(|name| decode_identifier(*name)),
+            })),
             tf::Var::LambdaParameterVar { .. } => todo!("decode lambda parameter variable"),
         }
     }

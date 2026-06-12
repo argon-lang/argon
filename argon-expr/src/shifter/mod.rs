@@ -1,6 +1,7 @@
 use crate::{
-    BlockLabel, EnumType, Expr, ExprContext, ExpressionOwner, LocalVariable, LoopLabels, MatchCase,
-    ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, Variable,
+    BlockLabel, EnumType, Expr, ExprContext, ExpressionOwner, InstanceParameterVariable,
+    LocalVariable, LoopLabels, MatchCase, ParameterVariable, Pattern, RecordFieldLiteral,
+    RecordFieldPattern, RecordType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -379,6 +380,25 @@ where
     }
 }
 
+fn default_shift_expression_owner<S>(
+    owner: ExpressionOwner<S::EC1>,
+) -> ExpressionOwner<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    match owner {
+        ExpressionOwner::Function(function) => ExpressionOwner::Function(function),
+        ExpressionOwner::Record(record) => ExpressionOwner::Record(record),
+        ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec),
+        ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec),
+        ExpressionOwner::EnumVariant(enum_variant) => {
+            ExpressionOwner::EnumVariant(enum_variant)
+        }
+        ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
+        ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
+    }
+}
+
 pub fn default_shift_variable<S>(shifter: &mut S, v: Variable<S::EC1>) -> Variable<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
@@ -388,22 +408,19 @@ where
             Variable::Local(Box::new(default_shift_local_variable(shifter, *variable)))
         }
         Variable::Parameter(variable) => Variable::Parameter(Box::new(ParameterVariable {
-            owner: match variable.owner {
-                ExpressionOwner::Function(function) => ExpressionOwner::Function(function),
-                ExpressionOwner::Record(record) => ExpressionOwner::Record(record),
-                ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec),
-                ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec),
-                ExpressionOwner::EnumVariant(enum_variant) => {
-                    ExpressionOwner::EnumVariant(enum_variant)
-                }
-                ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
-                ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
-            },
+            owner: default_shift_expression_owner::<S>(variable.owner),
             parameter_index: variable.parameter_index,
             var_type: shifter.shift(variable.var_type),
             name: variable.name,
             erasure_mode: variable.erasure_mode,
             is_witness: variable.is_witness,
         })),
+        Variable::InstanceParameter(variable) => {
+            Variable::InstanceParameter(Box::new(InstanceParameterVariable {
+                owner: default_shift_expression_owner::<S>(variable.owner),
+                var_type: shifter.shift(variable.var_type),
+                name: variable.name,
+            }))
+        }
     }
 }

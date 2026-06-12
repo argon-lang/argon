@@ -49,7 +49,7 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
 mod tests {
     use super::SubstScanner;
     use crate::{ErasureMode, Expr, ExprContext, ExprScannerMut, LocalVariable, Variable};
-    use alloc::{boxed::Box, vec};
+    use alloc::{borrow::Cow, boxed::Box, vec};
     use argon_util::UniqueIdentifier;
 
     #[derive(Debug, Eq, Hash, PartialEq)]
@@ -90,7 +90,11 @@ mod tests {
         };
         let replacement = Expr::BoolLiteral(true);
 
-        assert!(SubstScanner::subst(variable, &replacement, &mut expr));
+        assert!(SubstScanner::subst(
+            variable,
+            Cow::Borrowed(&replacement),
+            &mut expr
+        ));
 
         assert!(matches!(
             expr,
@@ -122,8 +126,8 @@ mod tests {
         let second_replacement = Expr::IntLiteral(5.into());
 
         let mut scanner = SubstScanner::new();
-        scanner.add_substitution(first_variable, &first_replacement);
-        scanner.add_substitution(second_variable.clone(), &second_replacement);
+        scanner.add_substitution(first_variable, Cow::Borrowed(&first_replacement));
+        scanner.add_substitution(second_variable.clone(), Cow::Borrowed(&second_replacement));
         assert!(scanner.scan(&mut expr));
 
         assert!(matches!(
@@ -155,8 +159,8 @@ mod tests {
         let second_replacement = Expr::BoolLiteral(true);
 
         let mut scanner = SubstScanner::new();
-        scanner.add_substitution(first_variable, &first_replacement);
-        scanner.add_substitution(second_variable.clone(), &second_replacement);
+        scanner.add_substitution(first_variable, Cow::Borrowed(&first_replacement));
+        scanner.add_substitution(second_variable.clone(), Cow::Borrowed(&second_replacement));
         assert!(scanner.scan(&mut expr));
 
         assert!(matches!(
@@ -179,7 +183,11 @@ mod tests {
         let mut expr = Expr::VariableStore(variable.clone(), Box::new(Expr::IntLiteral(1.into())));
         let replacement = Expr::BoolLiteral(true);
 
-        assert!(SubstScanner::subst(variable, &replacement, &mut expr));
+        assert!(SubstScanner::subst(
+            variable,
+            Cow::Borrowed(&replacement),
+            &mut expr
+        ));
 
         assert!(matches!(expr, Expr::VariableStore(_, _)));
     }

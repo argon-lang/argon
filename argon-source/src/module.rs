@@ -1,6 +1,7 @@
 use crate::enums::SourceEnum;
 use crate::function::SourceFunction;
 use crate::record::SourceRecord;
+use crate::traits::SourceTrait;
 use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::access::{AccessModifierGlobal, AccessToken};
 use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
@@ -12,8 +13,8 @@ use argon_compiler::{
 use argon_expr::{BlockLabel, BlockLabelDeclaration, LoopLabels};
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
-use argon_util::CompileError;
 use argon_util::sync::{OnceLock, ThreadSafe};
+use argon_util::CompileError;
 use core::{iter, mem};
 use hashbrown::{HashMap, HashSet};
 use mitsein::vec1::Vec1;
@@ -678,8 +679,8 @@ impl<'a> ModuleProcessResult<'a> {
     }
 }
 
-pub struct DeclarationResult<T> {
-    pub(crate) access: AccessModifierGlobal,
+pub struct DeclarationResult<T: ?Sized, A = AccessModifierGlobal> {
+    pub(crate) access: A,
     pub(crate) result: Arc<T>,
 }
 
@@ -821,6 +822,27 @@ impl<'a> SourceFileProcessor<'a> {
                 let entry = ModuleExportEntry {
                     access: enum_res.access,
                     binding: ModuleExportBinding::Enum(enum_res.result),
+                    is_reexport: false,
+                };
+
+                self.module.add_export(name, entry);
+            }
+
+            Stmt::TraitDeclaration(decl) => {
+                let scope = self.get_scope();
+
+                let closure = Box::new(ModuleClosure {
+                    tube_name: self.tb.tube().name().clone(),
+                    module_path: self.result.path.clone(),
+                    scope,
+                });
+
+                let name = decl.name.value.clone();
+                let trait_res = SourceTrait::from_ast(self.context.clone(), closure, decl);
+
+                let entry = ModuleExportEntry {
+                    access: trait_res.access,
+                    binding: ModuleExportBinding::Trait(trait_res.result),
                     is_reexport: false,
                 };
 

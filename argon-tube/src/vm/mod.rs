@@ -5,7 +5,7 @@ use alloc::format;
 use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
-use argon_compiler::expr_type::{get_expr_type, get_pattern_type};
+use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
     EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module,
@@ -13,11 +13,11 @@ use argon_compiler::{
     Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, BlockLabelKind, ErasureMode, Expr, ExpressionOwner, NormalizerScanner,
-    ParameterVariable, Pattern, Variable,
+    BlockLabel, ErasureMode, Expr, ExpressionOwner, NormalizerScanner,
+    ParameterVariable, Variable,
 };
 use argon_format::vm as vf;
-use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
+use argon_util::{InternalCompilerError, TubeFormatError};
 use core::mem;
 use embedded_io::Write;
 use esexpr::{ESExprCodec, ESExprStatic};
@@ -32,7 +32,6 @@ mod pattern;
 
 use analysis::BlockJumpScan;
 use crate::vm::condition::ConditionEmitter;
-use crate::vm::pattern::emit_pattern;
 
 pub fn encode_vm_tube<W>(
     out: &mut W,
@@ -2195,6 +2194,7 @@ fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode
     match variable {
         Variable::Local(variable) => variable.erasure_mode,
         Variable::Parameter(variable) => variable.erasure_mode,
+        Variable::InstanceParameter(_) => ErasureMode::Concrete,
     }
 }
 

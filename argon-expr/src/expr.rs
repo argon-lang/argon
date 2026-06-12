@@ -411,6 +411,7 @@ pub struct EnumType<EC: ExprContext + ?Sized> {
 pub enum Variable<EC: ExprContext + ?Sized> {
     Local(Box<LocalVariable<EC>>),
     Parameter(Box<ParameterVariable<EC>>),
+    InstanceParameter(Box<InstanceParameterVariable<EC>>),
 }
 
 impl<EC: ExprContext + ?Sized> Variable<EC> {
@@ -418,6 +419,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
         match self {
             Variable::Local(variable) => variable.name.as_ref(),
             Variable::Parameter(variable) => variable.name.as_ref(),
+            Variable::InstanceParameter(variable) => variable.name.as_ref(),
         }
     }
 
@@ -425,6 +427,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
         match self {
             Variable::Local(variable) => &variable.var_type,
             Variable::Parameter(variable) => &variable.var_type,
+            Variable::InstanceParameter(variable) => &variable.var_type,
         }
     }
 
@@ -432,6 +435,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
         match self {
             Variable::Local(variable) => variable.is_mutable,
             Variable::Parameter(_) => false,
+            Variable::InstanceParameter(_) => false,
         }
     }
 }
@@ -502,6 +506,29 @@ impl<EC: ExprContext + ?Sized> Hash for ParameterVariable<EC> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.owner.hash(state);
         self.parameter_index.hash(state);
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+pub struct InstanceParameterVariable<EC: ExprContext + ?Sized> {
+    pub owner: ExpressionOwner<EC>,
+    pub var_type: Expr<EC>,
+    pub name: Option<Identifier>,
+}
+
+impl<EC: ExprContext + ?Sized> PartialEq for InstanceParameterVariable<EC> {
+    fn eq(&self, other: &Self) -> bool {
+        self.owner == other.owner
+    }
+}
+
+impl<EC: ExprContext + ?Sized> Eq for InstanceParameterVariable<EC> {}
+
+impl<EC: ExprContext + ?Sized> Hash for InstanceParameterVariable<EC> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.owner.hash(state);
     }
 }
 

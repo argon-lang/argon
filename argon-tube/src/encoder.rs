@@ -1015,6 +1015,15 @@ impl TubeEncoder {
             Variable::Local(variable) => tf::Var::LocalVar {
                 id: self.ids.local_variable_ids.get(variable.id.clone()).into(),
             },
+            Variable::InstanceParameter(variable) => tf::Var::InstanceParameterVar {
+                owner: Box::new(self.emit_expression_owner(&variable.owner)?),
+                name: variable
+                    .name
+                    .as_ref()
+                    .map(|name| encode_identifier(name).map(Box::new))
+                    .transpose()?,
+                var_type: Box::new(self.emit_expr(&variable.var_type)?),
+            },
         })
     }
 
@@ -1048,6 +1057,7 @@ impl TubeEncoder {
         match variable {
             Variable::Local(variable) => self.emit_local_var(variable),
             Variable::Parameter(_) => todo!("Expected local variable"),
+            Variable::InstanceParameter(_) => todo!("Expected local variable"),
         }
     }
 

@@ -26,7 +26,7 @@ pub use argon_parser::ast::{
     UnaryOperatorIdentifier,
 };
 use argon_util::sync::{
-    RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe, rwlock_read, rwlock_write,
+    rwlock_read, rwlock_write, RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe,
 };
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
@@ -35,8 +35,8 @@ use core::hash::{Hash, Hasher};
 use core::mem;
 use core::str::FromStr;
 use esexpr::ESExpr;
-use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use parse18_runtime::WithLocation;
 
@@ -426,7 +426,50 @@ pub enum FunctionImplementation {
     Extern(PlatformExtern),
 }
 
-pub trait Method: Debug + Unload + ThreadSafe {}
+pub trait Method: Debug + Unload + ThreadSafe {
+    fn owner(self: Arc<Self>) -> MethodOwner;
+    fn metadata(&self) -> &MethodMetadata;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+    fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>>;
+}
+
+pub struct MethodMetadata {
+    pub access: access::AccessModifier,
+    pub name: Identifier,
+    pub is_abstract: bool,
+    pub is_inline: bool,
+    pub erasure_mode: ErasureMode,
+    pub is_witness: bool,
+    pub slot: MethodSlot,
+    pub effect_info: EffectInfo,
+    pub instance_parameter: MethodInstanceParameter,
+}
+
+#[derive(Clone)]
+pub enum MethodOwner {
+    Trait(Arc<dyn Trait>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MethodSlot {
+    Abstract,
+    AbstractOverride,
+    Virtual,
+    Override,
+    Final,
+    FinalOverride,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MethodInstanceParameter {
+    pub name: Option<Identifier>,
+}
+
+#[derive(Clone)]
+pub struct MethodEntry {
+    pub access: access::AccessModifier,
+    pub method: Arc<dyn Method>,
+}
 
 pub trait Record: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
@@ -472,6 +515,7 @@ pub struct EnumVariantMetadata {
 pub trait Trait: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
 }
 
 pub trait Instance: Debug + Unload + ThreadSafe {}

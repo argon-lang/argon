@@ -1,11 +1,12 @@
 use alloc::string::ToString;
+use argon_compiler::access::{AccessModifier, AccessModifierGlobal};
 use argon_compiler::Context;
-use argon_compiler::access::AccessModifierGlobal;
+use argon_compiler::MethodSlot;
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::CompileError;
-use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 use mitsein::slice1;
 use mitsein::slice1::Slice1;
 use parse18_runtime::{Location, WithLocation};
@@ -107,6 +108,22 @@ pub const ACCESS_MODIFIER_GLOBAL: ModifierSpec<AccessModifierGlobal> = slice1![
     ),
 ];
 
+pub const ACCESS_MODIFIER: ModifierSpec<AccessModifier> = slice1![
+    modifier_spec_entry!(&[], AccessModifier::Private),
+    modifier_spec_entry!(&[Modifier::Public], AccessModifier::Public),
+    modifier_spec_entry!(&[Modifier::Private], AccessModifier::Private),
+    modifier_spec_entry!(&[Modifier::Protected], AccessModifier::Protected),
+    modifier_spec_entry!(&[Modifier::Internal], AccessModifier::Internal),
+    modifier_spec_entry!(
+        &[Modifier::Protected, Modifier::Internal],
+        AccessModifier::ProtectedOrInternal
+    ),
+    modifier_spec_entry!(
+        &[Modifier::Private, Modifier::Internal],
+        AccessModifier::ModulePrivate
+    ),
+];
+
 pub const IS_INLINE: ModifierSpec<bool> = slice1![
     modifier_spec_entry!(&[Modifier::Inline], true),
     modifier_spec_entry!(&[], false),
@@ -121,6 +138,22 @@ pub const ERASURE_MODE: ModifierSpec<ErasureMode> = slice1![
     modifier_spec_entry!(&[Modifier::Erased], ErasureMode::Erased),
     modifier_spec_entry!(&[Modifier::Token], ErasureMode::Token),
     modifier_spec_entry!(&[], ErasureMode::Concrete),
+];
+
+pub const METHOD_SLOT_CONCRETE: ModifierSpec<MethodSlot> = slice1![
+    modifier_spec_entry!(&[], MethodSlot::Final),
+    modifier_spec_entry!(&[Modifier::Virtual], MethodSlot::Virtual),
+    modifier_spec_entry!(&[Modifier::Override], MethodSlot::Override),
+    modifier_spec_entry!(&[Modifier::Final], MethodSlot::Final),
+    modifier_spec_entry!(
+        &[Modifier::Final, Modifier::Override],
+        MethodSlot::FinalOverride
+    ),
+];
+
+pub const METHOD_SLOT_ABSTRACT: ModifierSpec<MethodSlot> = slice1![
+    modifier_spec_entry!(&[], MethodSlot::Abstract),
+    modifier_spec_entry!(&[Modifier::Override], MethodSlot::AbstractOverride),
 ];
 
 fn spec_has_modifier<T>(spec: ModifierSpec<T>, modifier: Modifier) -> bool {

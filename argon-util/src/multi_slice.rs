@@ -182,17 +182,6 @@ impl<'a, T> MultiSliceParts<'a, T> {
                 .and_then(|part| (!part.is_empty()).then(|| part.first()).flatten())
         })
     }
-
-    fn into_iter(self) -> MultiSlicePartsIntoIter<'a, T> {
-        match self {
-            Self::Inline { len, parts } => MultiSlicePartsIntoIter::Inline {
-                len,
-                index: 0,
-                parts,
-            },
-            Self::Heap(parts) => MultiSlicePartsIntoIter::Heap(parts.into_iter()),
-        }
-    }
 }
 
 impl<'a, T: ToOwned<Owned = T>> MultiSliceParts<'a, T> {
@@ -275,45 +264,6 @@ impl<'a, T> From<&'a [T]> for MultiSliceParts<'a, T> {
         parts
     }
 }
-
-#[derive(Debug, Clone)]
-enum MultiSlicePartsIntoIter<'a, T> {
-    Inline {
-        len: usize,
-        index: usize,
-        parts: [Option<MultiSlicePart<'a, T>>; INLINE_PARTS],
-    },
-    Heap(alloc::collections::vec_deque::IntoIter<MultiSlicePart<'a, T>>),
-}
-
-impl<'a, T> Iterator for MultiSlicePartsIntoIter<'a, T> {
-    type Item = MultiSlicePart<'a, T>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Inline { len, index, parts } => {
-                if *index >= *len {
-                    return None;
-                }
-
-                let part = parts[*index].take();
-                *index += 1;
-                part
-            }
-            Self::Heap(parts) => parts.next(),
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = match self {
-            Self::Inline { len, index, .. } => len.saturating_sub(*index),
-            Self::Heap(parts) => parts.len(),
-        };
-        (len, Some(len))
-    }
-}
-
-impl<'a, T> ExactSizeIterator for MultiSlicePartsIntoIter<'a, T> {}
 
 #[derive(Debug)]
 struct MultiSlicePartsIter<'m, 'a, T> {

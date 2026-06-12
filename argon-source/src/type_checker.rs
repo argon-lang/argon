@@ -36,7 +36,7 @@ pub fn type_check_type_expr(
 ) -> Expr<DefaultExprContext> {
     let TypeCheckOptions { access, scope } = options;
     let shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
-    let mut local_scope = LocalVariableScope::new(&shifted_scope);
+    let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
     let mut checker = TypeChecker {
         context: context.clone(),
@@ -58,7 +58,7 @@ pub fn type_check_expr(
 ) -> Expr<DefaultExprContext> {
     let TypeCheckOptions { access, scope } = options;
     let shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
-    let mut local_scope = LocalVariableScope::new(&shifted_scope);
+    let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
     let mut checker = TypeChecker {
         context: context.clone(),
@@ -428,7 +428,9 @@ macro_rules! with_nested_scope {
         TypeChecker {
             context: $tc.context.clone(),
             access: $tc.access,
-            scope: &mut LocalVariableScope::new($tc.scope),
+            scope: &mut LocalVariableScope::new(
+                &mut *$tc.scope as &mut dyn Scope<ExprContext = TypeCheckExprContext>,
+            ),
             model: $tc.model,
         }
     };
@@ -2975,7 +2977,9 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
         let sig = overload.signature();
 
         let mut model = self.type_checker.model.clone();
-        let mut scope = LocalVariableScope::new(self.type_checker.scope);
+        let mut scope = LocalVariableScope::new(
+            &*self.type_checker.scope as &dyn Scope<ExprContext = TypeCheckExprContext>,
+        );
         let mut type_checker = TypeChecker {
             context: self.type_checker.context.clone(),
             model: &mut model,
@@ -3283,6 +3287,7 @@ impl<'a> SelectedOverload<'a> {
                 enum_: e,
                 arguments: self.args,
             }),
+            Overloadable::Base(scope::Overloadable::Trait(t)) => Expr::TraitType(t, self.args),
             Overloadable::Base(scope::Overloadable::EnumVariant(v)) => {
                 if !v.clone().fields().is_empty() {
                     checker

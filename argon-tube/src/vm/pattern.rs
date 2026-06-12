@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use std::vec;
+use alloc::vec;
 use num_bigint::BigUint;
 use argon_compiler::DefaultExprContext;
 use argon_compiler::expr_type::get_pattern_type;

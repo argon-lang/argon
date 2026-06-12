@@ -17,7 +17,9 @@ mod modifiers;
 mod module;
 mod record;
 mod signature;
+mod traits;
 mod type_checker;
+mod method;
 
 pub struct SourceCodeTubeOptions<I> {
     pub name: TubeName,
@@ -73,10 +75,13 @@ where
 mod tests {
     use super::{SourceCodeTubeOptions, define_source_tube};
     use alloc::{string::String, string::ToString, vec, vec::Vec};
+    use argon_compiler::access::AccessModifier;
     use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
-        CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder, TubeName,
+        CompileErrorReporter, Context, ContextObject, FunctionImplementation, MethodOwner, MethodSlot,
+        ModuleExportBinding, ModulePath, TubeCollectionBuilder, TubeName,
     };
+    use argon_expr::{Expr, Variable};
     use argon_io::{InputDirectory, InputFile};
     use argon_parser::ast::Identifier;
     use argon_util::sync::Mutex;

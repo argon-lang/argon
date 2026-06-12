@@ -1,0 +1,154 @@
+use crate::method::{MethodClosure, SourceMethod};
+use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL};
+use crate::module::{DeclarationClosure, DeclarationResult};
+use crate::signature::SignatureParser;
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use argon_compiler::access::AccessToken;
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use argon_compiler::scope::{ParameterScope, Scope};
+use argon_compiler::signature::FunctionSignature;
+use argon_compiler::{Context, DefaultExprContext, MethodEntry, MethodOwner, Trait, Unload};
+use argon_expr::ExpressionOwner;
+use argon_parser::ast;
+use argon_util::sync::{mutex_lock, Mutex};
+use argon_util::MultiSlice;
+use core::fmt::Debug;
+
+pub struct SourceTrait {
+    context: Context,
+    decl: Box<ast::TraitDeclarationStmt>,
+    closure: Box<dyn DeclarationClosure>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+}
+
+impl SourceTrait {
+    pub fn from_ast(
+        context: Context,
+        closure: Box<dyn DeclarationClosure>,
+        decl: Box<ast::TraitDeclarationStmt>,
+    ) -> DeclarationResult<Self> {
+        let mut modifiers =
+            ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
+        let access = modifiers.parse(&ACCESS_MODIFIER_GLOBAL);
+        modifiers.done();
+
+        DeclarationResult {
+            access,
+            result: Arc::new(Self {
+                context,
+                decl,
+                closure,
+                signature: Mutex::new(None),
+                methods: Mutex::new(None),
+            }),
+        }
+    }
+}
+
+impl Debug for SourceTrait {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "trait {}", self.decl.name.value)
+    }
+}
+
+impl Unload for SourceTrait {
+    fn unload(&self) {
+        *mutex_lock(&self.signature) = None;
+        *mutex_lock(&self.methods) = None;
+    }
+}
+
+impl Trait for SourceTrait {
+    fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
+        let signature = erase_signature(self.context.clone(), self.clone().signature().as_ref());
+        self.closure
+            .import_specifier(self.decl.name.value.clone(), signature)
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        let mut sig_store = mutex_lock(&self.signature);
+        if let Some(ref sig) = *sig_store {
+            return sig.clone();
+        }
+
+        let scope = self.closure.scope();
+        let access_token = self.closure.access_token();
+        let owner_ref: Arc<dyn Trait> = self.clone();
+        let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Trait(owner_ref);
+        let return_type =
+            SignatureParser::get_type_sig_return_type(&self.decl.name, &self.decl.return_type);
+
+        let sig = SignatureParser {
+            context: self.context.clone(),
+            scope: &scope,
+            access_token,
+            owner,
+        }
+        .parse(
+            MultiSlice::from(self.decl.parameters.as_slice()),
+            &return_type,
+        );
+
+        let result = Arc::new(sig);
+        *sig_store = Some(result.clone());
+        result
+    }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        let mut methods_store = mutex_lock(&self.methods);
+        if let Some(ref methods) = *methods_store {
+            return methods.clone();
+        }
+
+        let methods = self
+            .decl
+            .body
+            .iter()
+            .filter_map(|stmt| match &stmt.value {
+                ast::TraitBodyStmt::MethodDeclaration(method) => {
+                    let closure = TraitMethodClosure {
+                        trait_: self.clone(),
+                    };
+                    let method_res = SourceMethod::from_ast(
+                        self.context.clone(),
+                        closure,
+                        (**method).clone(),
+                    );
+                    Some(MethodEntry {
+                        access: method_res.access,
+                        method: method_res.result,
+                    })
+                }
+                ast::TraitBodyStmt::FunctionDeclaration(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        let result = Arc::new(methods);
+        *methods_store = Some(result.clone());
+        result
+    }
+}
+
+struct TraitMethodClosure {
+    trait_: Arc<SourceTrait>,
+}
+
+impl MethodClosure for TraitMethodClosure {
+    fn owner(&self) -> MethodOwner {
+        MethodOwner::Trait(self.trait_.clone())
+    }
+
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let parent = self.trait_.closure.scope();
+        let trait_ref: Arc<dyn Trait> = self.trait_.clone();
+        let owner = ExpressionOwner::Trait(trait_ref);
+        let signature = self.trait_.clone().signature();
+
+        ParameterScope::new(parent, owner, &signature.parameters)
+    }
+
+    fn access_token(&self) -> AccessToken {
+        self.trait_.closure.access_token()
+    }
+}

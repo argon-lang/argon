@@ -1,9 +1,8 @@
 use crate::modifiers::{ERASURE_MODE, ModifierParser};
-use crate::module::GlobalScope;
 use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::vec::Vec;
 use argon_compiler::access::AccessToken;
-use argon_compiler::scope::ParameterScope;
+use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
 use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{ErasureMode, Expr, ExpressionOwner, ParameterVariable};
@@ -13,7 +12,7 @@ use parse18_runtime::WithLocation;
 
 pub struct SignatureParser<'a> {
     pub context: Context,
-    pub scope: &'a GlobalScope,
+    pub scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
     pub access_token: AccessToken,
     pub owner: ExpressionOwner<DefaultExprContext>,
 }
@@ -45,8 +44,9 @@ impl<'a> SignatureParser<'a> {
                     ));
             }
 
+            let parent_scope: &dyn Scope<ExprContext = DefaultExprContext> = self.scope;
             let mut parameter_scope =
-                ParameterScope::new(self.scope, self.owner.clone(), &parameters);
+                ParameterScope::new(parent_scope, self.owner.clone(), &parameters);
 
             let mut bindings = param
                 .value
@@ -101,7 +101,9 @@ impl<'a> SignatureParser<'a> {
             parameters.push(param);
         }
 
-        let mut parameter_scope = ParameterScope::new(self.scope, self.owner.clone(), &parameters);
+        let parent_scope: &dyn Scope<ExprContext = DefaultExprContext> = self.scope;
+        let mut parameter_scope =
+            ParameterScope::new(parent_scope, self.owner.clone(), &parameters);
 
         let conv_return_type = type_check_type_expr(
             self.context.clone(),

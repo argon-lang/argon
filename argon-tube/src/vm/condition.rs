@@ -1,11 +1,10 @@
-use argon_compiler::DefaultExprContext;
-use argon_expr::{BlockLabel, Expr};
 use crate::vm::{AnyRegister, EmitResult, EmitStop, ExprEmitter};
+use argon_compiler::DefaultExprContext;
+use argon_expr::Expr;
 use argon_format::vm as vf;
 
-use alloc::boxed::Box;
-use core::mem;
 use crate::vm::pattern::emit_pattern;
+use alloc::boxed::Box;
 
 pub(super) struct ConditionEmitter<'a, 'b> {
     pub expr_emitter: &'b mut ExprEmitter<'a>,
