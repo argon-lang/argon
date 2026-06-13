@@ -1,17 +1,18 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
-    access::AccessModifier, AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context,
-    DefaultExprContext, EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr,
-    Function, FunctionImplementation, FunctionMetadata, FunctionParameterListType,
-    FunctionSignature, Identifier, Instance, Method, MethodEntry, MethodInstanceParameter,
-    MethodMetadata, MethodOwner, MethodSlot, ModuleExportBinding, ModuleExportEntry, ModulePath,
-    Record, RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
+    EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr, Function,
+    FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature,
+    Identifier, Instance, Method, MethodEntry, MethodInstanceParameter, MethodMetadata,
+    MethodOwner, MethodSlot, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
+    RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
     TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
+    access::AccessModifier,
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, EnumType, InstanceParameterVariable, LocalVariable,
@@ -19,8 +20,8 @@ use argon_expr::{
     RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
-use argon_util::sync::{mutex_lock, rwlock_read, rwlock_write, Mutex, RwLock};
 use argon_util::UniqueIdentifier;
+use argon_util::sync::{Mutex, RwLock, mutex_lock, rwlock_read, rwlock_write};
 use core::fmt::Debug;
 use core::iter;
 use hashbrown::HashMap;

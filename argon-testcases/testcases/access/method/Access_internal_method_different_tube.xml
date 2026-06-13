@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Access module private method in different tube</Name>
+    <Name>Access internal method in different tube</Name>
 
     <InputSource name="index.argon">
         module _
@@ -9,7 +9,7 @@
         import Argon.TestReference::MyInstance
 
         proc main(): () do
-            MyInstance.my_module_private_method()
+            MyInstance.my_internal_method()
         end
 
 
@@ -20,6 +20,6 @@
         <Library>Argon.TestReference</Library>
     </Libraries>
 
-    <ExpectedError>AR001B</ExpectedError>
+    <ExpectedError>AR000A</ExpectedError>
 
 </ArgonTest>

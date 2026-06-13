@@ -99,6 +99,10 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
             MethodOwner::Instance(instance) => instance.signature().return_type.clone(),
         }
     }
+
+    fn access_token(&self) -> AccessToken {
+        self.closure.access_token()
+    }
 }
 
 impl<MC> Debug for SourceMethod<MC> {
@@ -130,7 +134,7 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
         }
 
         let scope = self.closure.scope();
-        let access_token = self.closure.access_token();
+        let access_token = self.access_token();
         let owner_ref: Arc<dyn Method> = self.clone();
         let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Method(owner_ref);
 
@@ -160,7 +164,7 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
 
         let implementation = match body {
             ast::FunctionBody::ExprBody(body) => {
-                let access_token = self.closure.access_token();
+                let access_token = self.access_token();
 
                 let signature = self.clone().signature();
                 let scope = self.closure.scope();

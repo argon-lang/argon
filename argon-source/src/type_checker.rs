@@ -6,10 +6,7 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{
-    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, Method,
-    RecordField, RecordFieldOwner, SubstFunctionSignature, TypeDeclaration,
-};
+use argon_compiler::{Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, Method, MethodOwner, RecordField, RecordFieldOwner, SubstFunctionSignature, TypeDeclaration};
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, EnumType, ErasureMode, Expr,
     ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels,
@@ -1857,6 +1854,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         norm.normalize(&mut instance.inferred_type);
                     }
 
+                    let instance_type_as_method_owner = match &instance.inferred_type {
+                        Expr::TraitType(tt) => Some(MethodOwner::Trait(tt.trait_.clone())),
+                        Expr::InstanceType(it) => Some(MethodOwner::Instance(it.instance.clone())),
+                        _ => None,
+                    };
+
                     match &instance.inferred_type {
                         Expr::RecordType(record_type) => {
                             let r = &record_type.record;
@@ -1908,7 +1911,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             let method_overloads = methods
                                 .iter()
                                 .filter(|entry| {
-                                    entry.method.metadata().name == adjusted_member_name
+                                    entry.method.metadata().name == adjusted_member_name &&
+                                        self.access.allows_access(
+                                            &Declaration::Method(entry.method.clone()),
+                                            instance_type_as_method_owner.as_ref(),
+                                            entry.access
+                                        )
                                 })
                                 .map(|entry| Overloadable::InstanceMethod {
                                     method: entry.method.clone(),

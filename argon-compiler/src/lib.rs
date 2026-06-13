@@ -17,6 +17,7 @@ pub mod test_utils;
 pub mod vtable;
 
 pub use crate::access::AccessModifierGlobal;
+use crate::erased_sig::ImportSpecifier;
 use crate::platform::PlatformExtern;
 pub use crate::signature::{FunctionSignature, SubstFunctionSignature};
 use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};
@@ -36,8 +37,8 @@ use core::hash::{Hash, Hasher};
 use core::mem;
 use core::str::FromStr;
 use esexpr::ESExpr;
-use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
+use hashbrown::{Equivalent, HashMap};
 use mitsein::vec1::Vec1;
 use parse18_runtime::WithLocation;
 
@@ -453,6 +454,15 @@ pub enum MethodOwner {
 }
 
 impl MethodOwner {
+    pub fn import_specifier(self) -> ImportSpecifier {
+        match self {
+            MethodOwner::Trait(t) => t.import_specifier(),
+            MethodOwner::Instance(i) => i.import_specifier(),
+        }
+    }
+}
+
+impl MethodOwner {
     pub fn into_expression_owner(self) -> ExpressionOwner<DefaultExprContext> {
         match self {
             MethodOwner::Trait(trait_) => ExpressionOwner::Trait(trait_),
@@ -505,6 +515,15 @@ pub trait RecordField: Debug + Unload + ThreadSafe {
 pub enum RecordFieldOwner {
     Record(Arc<dyn Record>),
     EnumVariant(Arc<dyn EnumVariant>),
+}
+
+impl RecordFieldOwner {
+    pub fn import_specifier(self) -> ImportSpecifier {
+        match self {
+            RecordFieldOwner::Record(r) => r.import_specifier(),
+            RecordFieldOwner::EnumVariant(e) => e.owning_enum().import_specifier(),
+        }
+    }
 }
 
 pub struct RecordFieldMetadata {
@@ -570,12 +589,182 @@ impl_dyn_stub_traits!(EnumVariant);
 impl_dyn_stub_traits!(Trait);
 impl_dyn_stub_traits!(Instance);
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+const DECL_HASH_FUNCTION: u8 = 0;
+const DECL_HASH_RECORD: u8 = 1;
+const DECL_HASH_ENUM: u8 = 2;
+const DECL_HASH_TRAIT: u8 = 3;
+const DECL_HASH_INSTANCE: u8 = 4;
+const DECL_HASH_METHOD: u8 = 5;
+const DECL_HASH_RECORD_FIELD: u8 = 6;
+const DECL_HASH_ENUM_VARIANT: u8 = 7;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeDeclaration {
     Record(Arc<dyn Record>),
     Enum(Arc<dyn Enum>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
+}
+
+impl TypeDeclaration {
+    pub fn import_specifier(self) -> ImportSpecifier {
+        match self {
+            Self::Record(r) => r.import_specifier(),
+            Self::Enum(e) => e.import_specifier(),
+            Self::Trait(t) => t.import_specifier(),
+            Self::Instance(i) => i.import_specifier(),
+        }
+    }
+}
+
+impl From<RecordFieldOwner> for TypeDeclaration {
+    fn from(owner: RecordFieldOwner) -> Self {
+        match owner {
+            RecordFieldOwner::Record(r) => TypeDeclaration::Record(r),
+            RecordFieldOwner::EnumVariant(e) => TypeDeclaration::Enum(e.owning_enum()),
+        }
+    }
+}
+
+impl From<MethodOwner> for TypeDeclaration {
+    fn from(owner: MethodOwner) -> Self {
+        match owner {
+            MethodOwner::Trait(t) => TypeDeclaration::Trait(t),
+            MethodOwner::Instance(i) => TypeDeclaration::Instance(i),
+        }
+    }
+}
+
+impl Hash for TypeDeclaration {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            TypeDeclaration::Record(r) => {
+                DECL_HASH_RECORD.hash(state);
+                r.hash(state);
+            }
+            TypeDeclaration::Enum(e) => {
+                DECL_HASH_ENUM.hash(state);
+                e.hash(state);
+            }
+            TypeDeclaration::Trait(t) => {
+                DECL_HASH_TRAIT.hash(state);
+                t.hash(state);
+            }
+            TypeDeclaration::Instance(i) => {
+                DECL_HASH_INSTANCE.hash(state);
+                i.hash(state);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Declaration {
+    Function(Arc<dyn Function>),
+    Method(Arc<dyn Method>),
+    Record(Arc<dyn Record>),
+    RecordField(Arc<dyn RecordField>),
+    Enum(Arc<dyn Enum>),
+    EnumVariant(Arc<dyn EnumVariant>),
+    Trait(Arc<dyn Trait>),
+    Instance(Arc<dyn Instance>),
+}
+
+impl Declaration {
+    pub fn closest_type_declaration(self) -> Option<TypeDeclaration> {
+        match self {
+            Self::Function(_) => None,
+            Self::Method(m) => Some(TypeDeclaration::from(m.owner())),
+            Self::Record(r) => Some(TypeDeclaration::Record(r)),
+            Self::RecordField(f) => Some(TypeDeclaration::from(f.owning_record())),
+            Self::Enum(e) => Some(TypeDeclaration::Enum(e)),
+            Self::EnumVariant(v) => Some(TypeDeclaration::Enum(v.owning_enum())),
+            Self::Trait(t) => Some(TypeDeclaration::Trait(t)),
+            Self::Instance(i) => Some(TypeDeclaration::Instance(i)),
+        }
+    }
+
+    pub fn closest_import_specifier(self) -> ImportSpecifier {
+        match self {
+            Declaration::Function(f) => f.import_specifier(),
+            Declaration::Method(m) => m.owner().import_specifier(),
+            Declaration::Record(r) => r.import_specifier(),
+            Declaration::RecordField(f) => f.owning_record().import_specifier(),
+            Declaration::Enum(e) => e.import_specifier(),
+            Declaration::EnumVariant(v) => v.owning_enum().import_specifier(),
+            Declaration::Trait(t) => t.import_specifier(),
+            Declaration::Instance(i) => i.import_specifier(),
+        }
+    }
+}
+
+impl Hash for Declaration {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Declaration::Function(f) => {
+                DECL_HASH_FUNCTION.hash(state);
+                f.hash(state);
+            }
+            Declaration::Method(m) => {
+                DECL_HASH_METHOD.hash(state);
+                m.hash(state);
+            }
+            Declaration::Record(r) => {
+                DECL_HASH_RECORD.hash(state);
+                r.hash(state);
+            }
+            Declaration::RecordField(f) => {
+                DECL_HASH_RECORD_FIELD.hash(state);
+                f.hash(state);
+            }
+            Declaration::Enum(e) => {
+                DECL_HASH_ENUM.hash(state);
+                e.hash(state);
+            }
+            Declaration::EnumVariant(v) => {
+                DECL_HASH_ENUM_VARIANT.hash(state);
+                v.hash(state);
+            }
+            Declaration::Trait(t) => {
+                DECL_HASH_TRAIT.hash(state);
+                t.hash(state);
+            }
+            Declaration::Instance(i) => {
+                DECL_HASH_INSTANCE.hash(state);
+                i.hash(state);
+            }
+        }
+    }
+}
+
+impl Equivalent<TypeDeclaration> for Declaration {
+    fn equivalent(&self, key: &TypeDeclaration) -> bool {
+        match (self, key) {
+            (Declaration::Record(decl), TypeDeclaration::Record(key)) => decl == key,
+            (Declaration::Enum(decl), TypeDeclaration::Enum(key)) => decl == key,
+            (Declaration::Trait(decl), TypeDeclaration::Trait(key)) => decl == key,
+            (Declaration::Instance(decl), TypeDeclaration::Instance(key)) => decl == key,
+            _ => false,
+        }
+    }
+}
+
+impl Equivalent<Declaration> for TypeDeclaration {
+    fn equivalent(&self, key: &Declaration) -> bool {
+        key.equivalent(self)
+    }
+}
+
+impl From<ModuleExportBinding> for Declaration {
+    fn from(binding: ModuleExportBinding) -> Self {
+        match binding {
+            ModuleExportBinding::Function(f) => Declaration::Function(f),
+            ModuleExportBinding::Record(r) => Declaration::Record(r),
+            ModuleExportBinding::Enum(e) => Declaration::Enum(e),
+            ModuleExportBinding::Trait(t) => Declaration::Trait(t),
+            ModuleExportBinding::Instance(i) => Declaration::Instance(i),
+        }
+    }
 }
 
 pub struct DefaultExprNormalizer;

@@ -3,10 +3,12 @@ use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
-    Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField, Unload,
+    Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
+    TypeDeclaration, Unload,
 };
 use argon_expr::{EnumType, Expr, ExpressionOwner, Variable};
 use argon_parser::ast;
@@ -67,6 +69,13 @@ impl SourceEnum {
             },
         }
     }
+
+    pub fn access_token(self: &Arc<Self>) -> AccessToken {
+        let mut access_token = self.closure.access_token();
+        let enum_ref: Arc<dyn Enum> = self.clone();
+        access_token.add_type_permissions(TypeDeclaration::Enum(enum_ref));
+        access_token
+    }
 }
 
 impl Debug for SourceEnum {
@@ -96,7 +105,7 @@ impl Enum for SourceEnum {
         }
 
         let scope = self.closure.scope();
-        let access_token = self.closure.access_token();
+        let access_token = self.access_token();
         let owner_ref: Arc<dyn Enum> = self.clone();
         let owner = ExpressionOwner::Enum(owner_ref);
         let return_type = self.return_type_specifier();
@@ -239,7 +248,7 @@ impl EnumVariant for SourceEnumVariant {
         }
 
         let scope = self.owner.closure.scope();
-        let access_token = self.owner.closure.access_token();
+        let access_token = self.owner.access_token();
         let param_owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
 
         let sig = match return_type {

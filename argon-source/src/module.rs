@@ -4,12 +4,12 @@ use crate::instance::SourceInstance;
 use crate::record::SourceRecord;
 use crate::traits::SourceTrait;
 use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
-use argon_compiler::access::{AccessModifierGlobal, AccessToken};
+use argon_compiler::access::{AccessModifier, AccessModifierGlobal, AccessToken};
 use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
 use argon_compiler::scope::{Lookup, OverloadLookup, Overloadable, Scope};
 use argon_compiler::{
-    Context, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding, ModuleExportEntry,
-    ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
+    Context, Declaration, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
 };
 use argon_expr::{BlockLabel, BlockLabelDeclaration, LoopLabels};
 use argon_io::InputFile;
@@ -134,6 +134,7 @@ pub struct GlobalScopeBuilder {
     tube_collection: Arc<TubeCollection>,
     current_tube: Arc<Tube>,
     current_module: Arc<Module>,
+    access_token: AccessToken,
     parent: Option<Arc<GlobalScopeBuilder>>,
     imports: Vec<WithLocation<ImportStmt>>,
     resolved_imports: OnceLock<ResolvedImports>,
@@ -147,11 +148,15 @@ impl GlobalScopeBuilder {
         current_module: Arc<Module>,
         imports: Vec<WithLocation<ImportStmt>>,
     ) -> Arc<Self> {
+        let access_token =
+            AccessToken::new(current_tube.name().clone(), current_module.path().clone());
+
         Arc::new(Self {
             context,
             tube_collection,
             current_tube,
             current_module,
+            access_token,
             parent: None,
             imports,
             resolved_imports: OnceLock::new(),
@@ -171,6 +176,7 @@ impl GlobalScopeBuilder {
             tube_collection: self.tube_collection.clone(),
             current_tube: self.current_tube.clone(),
             current_module: self.current_module.clone(),
+            access_token: self.access_token.clone(),
             parent: Some(self.clone()),
             imports,
             resolved_imports: OnceLock::new(),
@@ -334,7 +340,13 @@ impl GlobalScopeBuilder {
 
         let visible_exports = exports
             .iter()
-            .filter(|entry| self.can_access(&tube, module_path, entry.access))
+            .filter(|entry| {
+                self.access_token.allows_access(
+                    &Declaration::from(entry.binding.clone()),
+                    None,
+                    AccessModifier::from(entry.access),
+                )
+            })
             .cloned()
             .collect::<Vec<_>>();
         drop(export_groups);
@@ -363,7 +375,13 @@ impl GlobalScopeBuilder {
         for (name, exports) in module.export_groups().iter() {
             let visible_exports = exports
                 .iter()
-                .filter(|entry| self.can_access(&tube, module_path, entry.access))
+                .filter(|entry| {
+                    self.access_token.allows_access(
+                        &Declaration::from(entry.binding.clone()),
+                        None,
+                        AccessModifier::from(entry.access),
+                    )
+                })
                 .cloned()
                 .collect::<Vec<_>>();
             if visible_exports.is_empty() {
@@ -396,21 +414,6 @@ impl GlobalScopeBuilder {
         }
 
         module
-    }
-
-    fn can_access(
-        &self,
-        tube: &Arc<Tube>,
-        module_path: &ModulePath,
-        access: AccessModifierGlobal,
-    ) -> bool {
-        match access {
-            AccessModifierGlobal::Public => true,
-            AccessModifierGlobal::Internal => tube.name() == self.current_tube.name(),
-            AccessModifierGlobal::ModulePrivate => {
-                tube.name() == self.current_tube.name() && module_path == self.current_module.path()
-            }
-        }
     }
 
     fn resolved_import_group(
@@ -446,11 +449,7 @@ impl DeclarationClosure for ModuleClosure {
     }
 
     fn access_token(&self) -> AccessToken {
-        AccessToken {
-            tube: self.tube_name.clone(),
-            module: self.module_path.clone(),
-            allows_access_to: HashSet::new(),
-        }
+        AccessToken::new(self.tube_name.clone(), self.module_path.clone())
     }
 
     fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier {

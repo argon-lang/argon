@@ -4,12 +4,13 @@ use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
     Context, DefaultExprContext, EnumVariant, Record, RecordField, RecordFieldMetadata,
-    RecordFieldOwner, Unload,
+    RecordFieldOwner, TypeDeclaration, Unload,
 };
 use argon_expr::{Expr, ExpressionOwner};
 use argon_parser::ast;
@@ -47,6 +48,13 @@ impl SourceRecord {
             }),
         }
     }
+
+    fn access_token(self: &Arc<Self>) -> AccessToken {
+        let mut access_token = self.closure.access_token();
+        let record_ref: Arc<dyn Record> = self.clone();
+        access_token.add_type_permissions(TypeDeclaration::Record(record_ref));
+        access_token
+    }
 }
 
 impl Debug for SourceRecord {
@@ -76,7 +84,7 @@ impl Record for SourceRecord {
         }
 
         let scope = self.closure.scope();
-        let access_token = self.closure.access_token();
+        let access_token = self.access_token();
         let owner_ref: Arc<dyn Record> = self.clone();
         let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Record(owner_ref);
         let return_type =
@@ -173,6 +181,13 @@ impl SourceRecordFieldOwner {
             SourceRecordFieldOwner::EnumVariant(variant) => variant.clone().signature(),
         }
     }
+
+    pub fn access_token(&self) -> AccessToken {
+        match self {
+            SourceRecordFieldOwner::SourceRecord(record) => record.access_token(),
+            SourceRecordFieldOwner::EnumVariant(variant) => variant.owner.access_token(),
+        }
+    }
 }
 
 pub struct SourceRecordField {
@@ -220,7 +235,7 @@ impl RecordField for SourceRecordField {
     }
 
     fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
-        let access_token = self.owner.closure().access_token();
+        let access_token = self.owner.access_token();
 
         let mut field_type_store = mutex_lock(&self.field_type);
         if let Some(ref field_type) = *field_type_store {

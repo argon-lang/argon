@@ -5,6 +5,7 @@ use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::{TypeCheckOptions, type_check_expr};
 use alloc::{boxed::Box, sync::Arc};
+use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
@@ -60,6 +61,10 @@ impl SourceFunction {
             }),
         }
     }
+
+    fn access_token(&self) -> AccessToken {
+        self.closure.access_token()
+    }
 }
 
 impl Debug for SourceFunction {
@@ -93,7 +98,7 @@ impl Function for SourceFunction {
         }
 
         let scope = self.closure.scope();
-        let access_token = self.closure.access_token();
+        let access_token = self.access_token();
 
         let owner_ref: Arc<dyn Function> = self.clone();
         let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Function(owner_ref);
@@ -122,7 +127,7 @@ impl Function for SourceFunction {
 
         let implementation = match &self.decl.body {
             ast::FunctionBody::ExprBody(body) => {
-                let access_token = self.closure.access_token();
+                let access_token = self.access_token();
 
                 let signature = self.clone().signature();
                 let scope = self.closure.scope();

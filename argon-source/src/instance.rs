@@ -8,7 +8,8 @@ use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
-    Context, DefaultExprContext, ErasureMode, Instance, MethodEntry, MethodOwner, Unload,
+    Context, DefaultExprContext, ErasureMode, Instance, MethodEntry, MethodOwner, TypeDeclaration,
+    Unload,
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
@@ -66,6 +67,13 @@ impl SourceInstance {
             },
         }
     }
+
+    fn access_token(self: &Arc<Self>) -> AccessToken {
+        let mut access_token = self.closure.access_token();
+        let instance_ref: Arc<dyn Instance> = self.clone();
+        access_token.add_type_permissions(TypeDeclaration::Instance(instance_ref));
+        access_token
+    }
 }
 
 impl Debug for SourceInstance {
@@ -99,7 +107,7 @@ impl Instance for SourceInstance {
         }
 
         let scope = self.closure.scope();
-        let access_token = self.closure.access_token();
+        let access_token = self.access_token();
         let owner_ref: Arc<dyn Instance> = self.clone();
         let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Instance(owner_ref);
         let return_type = self.return_type_specifier();
@@ -171,6 +179,6 @@ impl MethodClosure for InstanceMethodClosure {
     }
 
     fn access_token(&self) -> AccessToken {
-        self.instance.closure.access_token()
+        self.instance.access_token()
     }
 }

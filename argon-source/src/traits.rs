@@ -7,7 +7,9 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
-use argon_compiler::{Context, DefaultExprContext, MethodEntry, MethodOwner, Trait, Unload};
+use argon_compiler::{
+    Context, DefaultExprContext, MethodEntry, MethodOwner, Trait, TypeDeclaration, Unload,
+};
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
 use argon_util::MultiSlice;
@@ -44,6 +46,13 @@ impl SourceTrait {
             }),
         }
     }
+
+    fn access_token(self: &Arc<Self>) -> AccessToken {
+        let mut access_token = self.closure.access_token();
+        let trait_ref: Arc<dyn Trait> = self.clone();
+        access_token.add_type_permissions(TypeDeclaration::Trait(trait_ref));
+        access_token
+    }
 }
 
 impl Debug for SourceTrait {
@@ -73,7 +82,7 @@ impl Trait for SourceTrait {
         }
 
         let scope = self.closure.scope();
-        let access_token = self.closure.access_token();
+        let access_token = self.access_token();
         let owner_ref: Arc<dyn Trait> = self.clone();
         let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Trait(owner_ref);
         let return_type =
@@ -146,6 +155,6 @@ impl MethodClosure for TraitMethodClosure {
     }
 
     fn access_token(&self) -> AccessToken {
-        self.trait_.closure.access_token()
+        self.trait_.access_token()
     }
 }
