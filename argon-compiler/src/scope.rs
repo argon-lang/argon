@@ -1,8 +1,7 @@
 use crate::access::AccessToken;
 use crate::signature::SignatureParameter;
 use crate::{
-    DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Method, Record,
-    Trait,
+    DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Record, Trait,
 };
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
@@ -250,7 +249,6 @@ impl OverloadLookup {
 #[derive(Debug)]
 pub enum Overloadable {
     Function(Arc<dyn Function>),
-    Method(Arc<dyn Method>),
     Record(Arc<dyn Record>),
     Enum(Arc<dyn Enum>),
     EnumVariant(Arc<dyn EnumVariant>),
@@ -267,13 +265,11 @@ impl Overloadable {
                 Enum = <DefaultExprContext as ExprContext>::Enum,
                 Trait = <DefaultExprContext as ExprContext>::Trait,
                 EnumVariant = <DefaultExprContext as ExprContext>::EnumVariant,
-                Method = <DefaultExprContext as ExprContext>::Method,
                 Instance = <DefaultExprContext as ExprContext>::Instance,
             > + ?Sized,
     {
         match self {
             Overloadable::Function(f) => ExpressionOwner::Function(f.clone()),
-            Overloadable::Method(m) => ExpressionOwner::Method(m.clone()),
             Overloadable::Record(r) => ExpressionOwner::Record(r.clone()),
             Overloadable::Enum(e) => ExpressionOwner::Enum(e.clone()),
             Overloadable::EnumVariant(v) => ExpressionOwner::EnumVariant(v.clone()),
@@ -286,11 +282,10 @@ impl Overloadable {
         match self {
             Overloadable::Function(f) => f.clone().signature(),
             Overloadable::Record(r) => r.clone().signature(),
-            Overloadable::Method(_) => todo!(),
             Overloadable::Enum(e) => e.clone().signature(),
             Overloadable::EnumVariant(v) => v.clone().signature(),
             Overloadable::Trait(t) => t.clone().signature(),
-            Overloadable::Instance(_) => todo!(),
+            Overloadable::Instance(i) => i.clone().signature(),
         }
     }
 }

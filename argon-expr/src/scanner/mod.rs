@@ -1,6 +1,6 @@
 use crate::{
-    BlockLabel, EnumType, Expr, ExprContext, LoopLabels, MatchCase, RecordFieldLiteral, RecordType,
-    Variable,
+    BlockLabel, EnumType, Expr, ExprContext, InstanceType, LoopLabels, MatchCase,
+    MethodInstanceType, RecordFieldLiteral, RecordType, TraitType, Variable,
 };
 
 mod normalizer;
@@ -102,6 +102,7 @@ where
             when_true,
             when_false,
         } => scanner.scan(condition) && scanner.scan(when_true) && scanner.scan(when_false),
+        Expr::InstanceType(instance_type) => default_scan_instance_type(scanner, instance_type),
         Expr::IntLiteral(_) => true,
         Expr::Is { value, .. } => scanner.scan(value),
         Expr::Match { value, cases } => {
@@ -111,11 +112,18 @@ where
                     .all(|case: &MatchCase<S::EC>| scanner.scan(&case.body))
         }
         Expr::MethodCall {
+            instance_type,
             receiver,
             arguments,
             ..
-        } => scanner.scan(receiver) && arguments.iter().all(|argument| scanner.scan(argument)),
-        Expr::NewTraitObject { .. } => true,
+        } => {
+            default_scan_method_instance_type(scanner, instance_type)
+                && scanner.scan(receiver)
+                && arguments.iter().all(|argument| scanner.scan(argument))
+        }
+        Expr::NewInstance { arguments, .. } => {
+            arguments.iter().all(|argument| scanner.scan(argument))
+        }
         Expr::Not(value) => scanner.scan(value),
         Expr::Or(a, b) => scanner.scan(a) && scanner.scan(b),
         Expr::Raise { ex } => scanner.scan(ex),
@@ -143,7 +151,7 @@ where
         Expr::Retry { label } => default_scan_label(scanner, label),
         Expr::Sequence(exprs) => exprs.iter().all(|expr| scanner.scan(expr)),
         Expr::StringLiteral(_) => true,
-        Expr::TraitType(_, arguments) => arguments.iter().all(|argument| scanner.scan(argument)),
+        Expr::TraitType(trait_type) => default_scan_trait_type(scanner, trait_type),
         Expr::Tuple { items } => items.iter().all(|item| scanner.scan(item)),
         Expr::TupleElement(value, _) => scanner.scan(value),
         Expr::Type(t) => scanner.scan(t),
@@ -195,6 +203,38 @@ where
     S: ExprScanner + ?Sized,
 {
     enum_type
+        .arguments
+        .iter()
+        .all(|argument| scanner.scan(argument))
+}
+
+fn default_scan_trait_type<S>(scanner: &mut S, trait_type: &TraitType<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    trait_type
+        .arguments
+        .iter()
+        .all(|argument| scanner.scan(argument))
+}
+
+fn default_scan_method_instance_type<S>(
+    scanner: &mut S,
+    instance_type: &MethodInstanceType<S::EC>,
+) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    match instance_type {
+        MethodInstanceType::Trait(trait_type) => default_scan_trait_type(scanner, trait_type),
+    }
+}
+
+fn default_scan_instance_type<S>(scanner: &mut S, instance_type: &InstanceType<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    instance_type
         .arguments
         .iter()
         .all(|argument| scanner.scan(argument))
@@ -286,6 +326,7 @@ where
                 && scanner.scan(when_true.as_mut())
                 && scanner.scan(when_false.as_mut())
         }
+        Expr::InstanceType(instance_type) => default_scan_instance_type_mut(scanner, instance_type),
         Expr::IntLiteral(_) => true,
         Expr::Is { value, .. } => scanner.scan(value.as_mut()),
         Expr::Match { value, cases } => {
@@ -295,14 +336,18 @@ where
                     .all(|case: &mut MatchCase<S::EC>| scanner.scan(&mut case.body))
         }
         Expr::MethodCall {
+            instance_type,
             receiver,
             arguments,
             ..
         } => {
-            scanner.scan(receiver.as_mut())
+            default_scan_method_instance_type_mut(scanner, instance_type)
+                && scanner.scan(receiver.as_mut())
                 && arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
-        Expr::NewTraitObject { .. } => true,
+        Expr::NewInstance { arguments, .. } => {
+            arguments.iter_mut().all(|argument| scanner.scan(argument))
+        }
         Expr::Not(value) => scanner.scan(value.as_mut()),
         Expr::Or(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
         Expr::Raise { ex } => scanner.scan(ex.as_mut()),
@@ -334,9 +379,7 @@ where
         Expr::Retry { label } => default_scan_label_mut(scanner, label),
         Expr::Sequence(exprs) => exprs.iter_mut().all(|expr| scanner.scan(expr)),
         Expr::StringLiteral(_) => true,
-        Expr::TraitType(_, arguments) => {
-            arguments.iter_mut().all(|argument| scanner.scan(argument))
-        }
+        Expr::TraitType(trait_type) => default_scan_trait_type_mut(scanner, trait_type),
         Expr::Tuple { items } => items.iter_mut().all(|item| scanner.scan(item)),
         Expr::TupleElement(value, _) => scanner.scan(value.as_mut()),
         Expr::Type(t) => scanner.scan(t.as_mut()),
@@ -388,6 +431,41 @@ where
     S: ExprScannerMut + ?Sized,
 {
     enum_type
+        .arguments
+        .iter_mut()
+        .all(|argument| scanner.scan(argument))
+}
+
+fn default_scan_trait_type_mut<S>(scanner: &mut S, trait_type: &mut TraitType<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    trait_type
+        .arguments
+        .iter_mut()
+        .all(|argument| scanner.scan(argument))
+}
+
+fn default_scan_method_instance_type_mut<S>(
+    scanner: &mut S,
+    instance_type: &mut MethodInstanceType<S::EC>,
+) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    match instance_type {
+        MethodInstanceType::Trait(trait_type) => default_scan_trait_type_mut(scanner, trait_type),
+    }
+}
+
+fn default_scan_instance_type_mut<S>(
+    scanner: &mut S,
+    instance_type: &mut InstanceType<S::EC>,
+) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    instance_type
         .arguments
         .iter_mut()
         .all(|argument| scanner.scan(argument))

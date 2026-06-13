@@ -115,14 +115,14 @@ function specialize(options = {}) {
         specializedClass.prototype = Object.create(o.prototype);
         storeTokenArgs(this, specializedClass, tokenArgs)
 
-        if(options.customize) {
-            options.customize(specializedClass);
-        }
-
         specializations.push({
             tokenArgs,
             specializedClass,
         });
+
+        if(options.customize) {
+            options.customize(specializedClass);
+        }
 
         return specializedClass;
     }
@@ -181,9 +181,7 @@ export function createRecordType(recordInfo) {
 
     const recordType = recordTypeConstructorObj[recordInfo.name];
 
-    if(recordInfo.tokenParameterCount !== 0) {
-        recordType.specialize = specialize();
-    }
+    recordType.specialize = specialize();
 
     defineTokenArgSymbols(recordType, recordInfo);
 
@@ -204,16 +202,11 @@ export function createEnumType(enumInfo) {
         }
     }
 
-    if(enumInfo.tokenParameterCount === 0) {
-        setupVariants(enumType);
-    }
-    else {
-        enumType.specialize = specialize({
-            customize(specialization) {
-                setupVariants(specialization);
-            },
-        });
-    }
+    enumType.specialize = specialize({
+        customize(specialization) {
+            setupVariants(specialization);
+        },
+    });
 
     defineTokenArgSymbols(enumType, enumInfo);
 
@@ -293,18 +286,12 @@ export function createTraitType(traitInfo) {
         }
     }
 
-    if(traitInfo.tokenParameterCount === 0) {
-        traitType.methods = Object.create(null);
-        applyVTable(traitType, traitInfo.methods, traitInfo.vtable);
-    }
-    else {
-        traitType.specialize = specialize({
-            customize(c) {
-                c.methods = Object.create(null);
-                applyVTable(c, traitInfo.methods, traitInfo.vtable);
-            },
-        });
-    }
+    traitType.specialize = specialize({
+        customize(c) {
+            c.methods = Object.create(null);
+            applyVTable(c, traitInfo.methods, traitInfo.vtable);
+        },
+    });
 
     defineTokenArgSymbols(traitType, traitInfo);
 
@@ -395,6 +382,7 @@ export function createInstanceDefinition(instanceInfo) {
         return constructor;
     }
 
+    const singletonSymbol = Symbol();
 
     const inst = {};
     inst.specialize = specialize({
@@ -404,36 +392,28 @@ export function createInstanceDefinition(instanceInfo) {
         customize(specialized) {
             specialized.methods = Object.create(null);
             applyVTable(specialized, instanceInfo.methods, instanceInfo.vtable);
+
+            if(instanceInfo.argCount === 0) {
+                specialized.create = function(...args) {
+                    let instance = this[singletonSymbol];
+                    if(instance === undefined) {
+                        instance = new this(...args);
+                        this[singletonSymbol] = instance;
+                    }
+                    return instance;
+                };
+            }
+            else {
+                specialized.create = function(...args) {
+                    return new this(...args);
+                };
+            }
         },
     });
 
     defineTokenArgSymbols(inst, instanceInfo);
 
-    let createInstance;
-
-    if(instanceInfo.argCount === 0) {
-        const instanceMemo = new Map();
-        createInstance = function(...tokenArgs) {
-            const ctor = inst.specialize(...tokenArgs);
-            let instance = instanceMemo.get(ctor);
-            if(instance === undefined) {
-                instance = new ctor();
-                instanceMemo.set(ctor, instance);
-            }
-            return instance;
-        };
-    }
-    else {
-        createInstance = function(...allArgs) {
-            const tokenArgs = allArgs.slice(0, instanceInfo.tokenParameterCount);
-            const args = allArgs.slice(instanceInfo.tokenParameterCount);
-
-            return new (inst.specialize(...tokenArgs))(...args);
-        };
-    }
-
-    createInstance.tokenParameterSymbols = inst.tokenParameterSymbols;
-    return createInstance;
+    return inst;
 }
 
 

@@ -1,8 +1,8 @@
 use alloc::borrow::Cow;
 use alloc::{boxed::Box, vec::Vec};
 use argon_expr::{
-    ErasureMode, Expr, ExprContext, ExprContextShifter, ExpressionOwner, ParameterVariable,
-    SubstScanner, Variable,
+    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
+    ParameterVariable, SubstScanner, Variable,
 };
 use argon_parser::ast::{FunctionParameterListType, Identifier};
 use derivative::Derivative;
@@ -16,6 +16,23 @@ pub struct FunctionSignature<EC: ExprContext + ?Sized> {
 }
 
 impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
+    pub fn scan_mut<S>(&mut self, scanner: &mut S) -> bool
+    where
+        S: ExprScannerMut<EC = EC> + ?Sized,
+    {
+        self.parameters.iter_mut().all(|parameter| {
+            parameter
+                .bindings
+                .iter_mut()
+                .all(|binding| scanner.scan(&mut binding.param_type))
+                && scanner.scan(&mut parameter.param_type)
+        }) && scanner.scan(&mut self.return_type)
+            && self
+                .ensures_clauses
+                .iter_mut()
+                .all(|ensures_clause| scanner.scan(ensures_clause))
+    }
+
     pub fn shift<Sh>(self, shifter: &mut Sh) -> FunctionSignature<Sh::EC2>
     where
         Sh: ExprContextShifter<EC1 = EC> + ?Sized,

@@ -6,8 +6,7 @@ use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
-    Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
-    Unload,
+    Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField, Unload,
 };
 use argon_expr::{EnumType, Expr, ExpressionOwner, Variable};
 use argon_parser::ast;

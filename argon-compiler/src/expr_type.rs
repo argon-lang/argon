@@ -55,6 +55,14 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Match { .. } => todo!(),
 
+        Expr::NewInstance {
+            instance,
+            arguments,
+        } => {
+            let owner = ExpressionOwner::Instance(instance.clone());
+            return_type_for_args(owner, instance.clone().signature(), arguments.as_ref())
+        }
+
         Expr::Sequence(items) => get_expr_type(items.last()),
 
         Expr::StringLiteral(_) => Expr::string_type(),
@@ -104,15 +112,28 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::EnumVariantLiteral { enum_type, .. } => Expr::EnumType(enum_type.clone()),
 
-        Expr::TraitType(trait_, arguments) => {
-            let owner = ExpressionOwner::Trait(trait_.clone());
-            return_type_for_args(owner, trait_.clone().signature(), arguments)
+        Expr::TraitType(trait_type) => {
+            let owner = ExpressionOwner::Trait(trait_type.trait_.clone());
+            return_type_for_args(
+                owner,
+                trait_type.trait_.clone().signature(),
+                &trait_type.arguments,
+            )
+        }
+
+        Expr::InstanceType(instance_type) => {
+            let owner = ExpressionOwner::Instance(instance_type.instance.clone());
+            let trait_type = return_type_for_args(
+                owner,
+                instance_type.instance.clone().signature(),
+                &instance_type.arguments,
+            );
+            get_expr_type(&trait_type)
         }
 
         Expr::FunctionLiteral { .. }
         | Expr::FunctionResultValue
         | Expr::MethodCall { .. }
-        | Expr::NewTraitObject { .. }
         | Expr::RecordLiteral { .. } => todo!(),
     }
 }

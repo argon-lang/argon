@@ -6,15 +6,16 @@ use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
+use argon_compiler::vtable::{VTableTarget, build_vtable};
 use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
-    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Module,
-    ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner,
-    Trait, Tube, TubeName, UnaryOperatorIdentifier,
+    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
+    MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
+    RecordField, RecordFieldOwner, Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExpressionOwner, NormalizerScanner,
-    ParameterVariable, Variable,
+    BlockLabel, ErasureMode, Expr, ExpressionOwner, InstanceParameterVariable, NormalizerScanner,
+    ParameterVariable, TraitType, Variable,
 };
 use argon_format::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError};
@@ -30,8 +31,8 @@ pub mod analysis;
 mod condition;
 mod pattern;
 
-use analysis::BlockJumpScan;
 use crate::vm::condition::ConditionEmitter;
+use analysis::BlockJumpScan;
 
 pub fn encode_vm_tube<W>(
     out: &mut W,
@@ -198,6 +199,16 @@ impl VmEncoder {
         if is_new {
             self.entry_emitters
                 .push_back(EntryEmitter::Instance(instance));
+        }
+
+        id
+    }
+
+    fn get_method_id(&mut self, method: Arc<dyn Method>) -> usize {
+        let (id, is_new) = self.ids.method_ids.get_with_new(method.clone());
+
+        if is_new {
+            self.entry_emitters.push_back(EntryEmitter::Method(method));
         }
 
         id
@@ -465,6 +476,41 @@ impl VmEncoder {
                     }
                 }
 
+                EntryEmitter::Method(method) => {
+                    let method_id = BigUint::from(self.ids.method_ids.get(method.clone()));
+                    let name = encode_identifier(&method.metadata().name);
+                    let signature = self.encode_erased_signature(
+                        &argon_compiler::erased_sig::erase_signature(
+                            self.context.clone(),
+                            method.clone().signature().as_ref(),
+                        ),
+                    )?;
+
+                    match method.owner() {
+                        MethodOwner::Trait(trait_) => {
+                            let trait_id = BigUint::from(self.get_trait_id(trait_));
+
+                            vf::TubeFileEntry::TraitMethodReference {
+                                method_id,
+                                trait_id,
+                                name: Box::new(name),
+                                signature: Box::new(signature),
+                            }
+                        }
+
+                        MethodOwner::Instance(instance) => {
+                            let instance_id = BigUint::from(self.get_instance_id(instance));
+
+                            vf::TubeFileEntry::InstanceMethodReference {
+                                method_id,
+                                instance_id,
+                                name: Box::new(name),
+                                signature: Box::new(signature),
+                            }
+                        }
+                    }
+                }
+
                 EntryEmitter::Trait(trait_) => {
                     let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
                     let import_specifier = trait_.clone().import_specifier();
@@ -477,11 +523,68 @@ impl VmEncoder {
                         };
                     }
 
-                    todo!("emit VM trait definitions")
+                    let signature = self.emit_function_signature(
+                        &ExpressionOwner::Trait(trait_.clone()),
+                        &trait_.clone().signature(),
+                    )?;
+                    let methods = trait_.clone().methods();
+                    let method_definitions = methods
+                        .iter()
+                        .map(|method| {
+                            self.emit_method_definition(method.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let vtable =
+                        self.emit_vtable(MethodOwner::Trait(trait_.clone()), methods.as_ref())?;
+
+                    vf::TubeFileEntry::TraitDefinition {
+                        definition: Box::new(vf::TraitDefinition {
+                            trait_id,
+                            import: Box::new(import),
+                            signature: Box::new(signature.sig),
+                            vtable: Box::new(vtable),
+                            methods: method_definitions,
+                        }),
+                    }
                 }
 
-                EntryEmitter::Instance(_instance) => {
-                    todo!("emit VM instance references and definitions")
+                EntryEmitter::Instance(instance) => {
+                    let instance_id = BigUint::from(self.ids.instance_ids.get(instance.clone()));
+                    let import_specifier = instance.clone().import_specifier();
+                    let import = self.encode_import_specifier(&import_specifier)?;
+
+                    if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        break 'entry vf::TubeFileEntry::InstanceReference {
+                            instance_id,
+                            import: Box::new(import),
+                        };
+                    }
+
+                    let signature = self.emit_function_signature(
+                        &ExpressionOwner::Instance(instance.clone()),
+                        &instance.clone().signature(),
+                    )?;
+                    let methods = instance.clone().methods();
+                    let method_definitions = methods
+                        .iter()
+                        .map(|method| {
+                            self.emit_method_definition(method.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let vtable = self
+                        .emit_vtable(MethodOwner::Instance(instance.clone()), methods.as_ref())?;
+
+                    vf::TubeFileEntry::InstanceDefinition {
+                        definition: Box::new(vf::InstanceDefinition {
+                            instance_id,
+                            import: Box::new(import),
+                            signature: Box::new(signature.sig),
+                            vtable: Box::new(vtable),
+                            methods: method_definitions,
+                        }),
+                    }
                 }
             }
         };
@@ -642,6 +745,110 @@ impl VmEncoder {
         })
     }
 
+    fn emit_method_definition(
+        &mut self,
+        method: Arc<dyn Method>,
+    ) -> Result<vf::MethodDefinition, InternalCompilerError> {
+        let metadata = method.metadata();
+        let sig = method.clone().signature();
+        let erased_sig = self.encode_erased_signature(
+            &argon_compiler::erased_sig::erase_signature(self.context.clone(), sig.as_ref()),
+        )?;
+
+        let mut signature = self.emit_method_signature(method.clone(), sig.as_ref())?;
+        let implementation = method
+            .clone()
+            .implementation()
+            .map(|implementation| {
+                let import_specifier = match method.clone().owner() {
+                    MethodOwner::Trait(trait_) => trait_.import_specifier(),
+                    MethodOwner::Instance(instance) => instance.import_specifier(),
+                };
+
+                self.emit_function_implementation(&implementation, &mut signature, import_specifier)
+            })
+            .transpose()?
+            .map(Box::new);
+
+        Ok(vf::MethodDefinition {
+            name: Box::new(encode_identifier(&metadata.name)),
+            erased_signature: Box::new(erased_sig),
+            r#abstract: metadata.is_abstract,
+            signature: Box::new(signature.sig),
+            implementation,
+        })
+    }
+
+    fn emit_vtable(
+        &mut self,
+        owner: MethodOwner,
+        methods: &[MethodEntry],
+    ) -> Result<vf::Vtable, InternalCompilerError> {
+        let method_indexes = methods
+            .iter()
+            .enumerate()
+            .map(|(index, method)| (method.method.clone(), index))
+            .collect::<HashMap<_, _>>();
+
+        let vtable = build_vtable(self.context.clone(), owner);
+        let entries = vtable
+            .entries()
+            .iter()
+            .map(|(slot, slot_value)| {
+                let slot_method = slot.method().clone();
+                let slot_method_id = BigUint::from(self.get_method_id(slot_method.clone()));
+                let mut builder = FunctionSignatureBuilder::new(self);
+                builder.add_method_owner_parameters(slot_method.clone().owner())?;
+                let receiver_type = method_receiver_type(slot_method.clone());
+                let slot_instance_type = builder.token_emitter().token_expr(&receiver_type)?;
+
+                let target = match slot_value.target() {
+                    VTableTarget::Abstract => vf::VtableTarget::Abstract {},
+                    VTableTarget::Ambiguous(_) => vf::VtableTarget::Ambiguous {},
+                    VTableTarget::Implementation(method) => {
+                        let index = *method_indexes
+                            .get(method)
+                            .expect("vtable implementation is not in method list");
+                        vf::VtableTarget::Implementation {
+                            method_index: BigUint::from(index),
+                        }
+                    }
+                };
+
+                Ok(Box::new(vf::VtableEntry {
+                    slot_method_id,
+                    slot_instance_type: Box::new(slot_instance_type),
+                    target: Box::new(target),
+                }))
+            })
+            .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+
+        Ok(vf::Vtable { entries })
+    }
+
+    fn emit_method_signature(
+        &mut self,
+        method: Arc<dyn Method>,
+        sig: &FunctionSignature<DefaultExprContext>,
+    ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
+        let owner = ExpressionOwner::Method(method.clone());
+        let mut builder = FunctionSignatureBuilder::new(self);
+
+        builder.add_method_owner_parameters(method.clone().owner())?;
+        let receiver_type = method_receiver_type(method.clone());
+        let receiver_name = method.metadata().instance_parameter.name.clone();
+        builder.add_instance_parameter(owner.clone(), receiver_type, receiver_name)?;
+
+        for (index, param) in sig.parameters.iter().enumerate() {
+            builder.add_parameter(
+                Box::new(param.clone().to_parameter_var(owner.clone(), index)),
+                false,
+            )?;
+        }
+
+        builder.finish(&sig.return_type)
+    }
+
     fn emit_function_body(
         &mut self,
         expr: &Expr<DefaultExprContext>,
@@ -697,6 +904,7 @@ enum EntryEmitter {
     RecordField(Arc<dyn RecordField>),
     Enum(Arc<dyn Enum>),
     EnumVariant(Arc<dyn EnumVariant>),
+    Method(Arc<dyn Method>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
@@ -806,13 +1014,52 @@ impl<'a> FunctionSignatureBuilder<'a> {
         Ok(())
     }
 
+    fn add_instance_parameter(
+        &mut self,
+        owner: ExpressionOwner<DefaultExprContext>,
+        var_type: Expr<DefaultExprContext>,
+        name: Option<Identifier>,
+    ) -> Result<(), InternalCompilerError> {
+        let param = InstanceParameterVariable {
+            owner,
+            var_type,
+            name,
+        };
+
+        self.instance_param = Some(Variable::InstanceParameter(Box::new(param)));
+        Ok(())
+    }
+
+    fn add_method_owner_parameters(
+        &mut self,
+        owner: MethodOwner,
+    ) -> Result<(), InternalCompilerError> {
+        let signature = owner.signature();
+        let owner = owner.into_expression_owner();
+
+        for (index, param) in signature.parameters.iter().enumerate() {
+            if param.erasure_mode == ErasureMode::Token {
+                self.instance_type_params.insert(
+                    Variable::Parameter(Box::new(
+                        param.clone().to_parameter_var(owner.clone(), index),
+                    )),
+                    vf::Token::ParentTokenParameter {
+                        index: BigUint::from(self.instance_type_params.len()),
+                    },
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     fn finish(
         self,
         return_type: &Expr<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let mut token_emitter = TokenEmitter {
             encoder: self.encoder,
-            token_params: HashMap::new(),
+            token_params: self.instance_type_params.clone(),
         };
 
         let reg_offset = if self.instance_param.is_some() {
@@ -861,7 +1108,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
                 return_type: Box::new(token_emitter.token_expr(return_type)?),
             },
             arg_consumers: self.arg_consumers,
-            has_instance_param: false,
+            has_instance_param: self.instance_param.is_some(),
             known_vars,
         })
     }
@@ -942,9 +1189,9 @@ trait TokenEmitterCommon {
                 args: self.token_exprs(&enum_type.arguments)?,
             }),
 
-            Expr::TraitType(trait_, arguments) => Ok(vf::Token::Trait {
-                trait_id: BigUint::from(self.vm_encoder().get_trait_id(trait_.clone())),
-                args: self.token_exprs(arguments)?,
+            Expr::TraitType(trait_type) => Ok(vf::Token::Trait {
+                trait_id: BigUint::from(self.vm_encoder().get_trait_id(trait_type.trait_.clone())),
+                args: self.token_exprs(&trait_type.arguments)?,
             }),
 
             Expr::Tuple { items } => Ok(vf::Token::Tuple {
@@ -1137,16 +1384,11 @@ impl<'a> ExprEmitter<'a> {
         output: O,
     ) -> EmitResult<O::ResultType> {
         Ok(match e {
-            Expr::And(_, _)
-            | Expr::Or(_, _)
-            | Expr::Not(_)
-            | Expr::Is { .. } => {
+            Expr::And(_, _) | Expr::Or(_, _) | Expr::Not(_) | Expr::Is { .. } => {
                 let rb = output.output_register(self, e)?;
 
                 let when_true_label = self.claim_block_id();
                 let when_false_label = self.claim_block_id();
-
-
 
                 let (block, _) = self.with_nested_block(|emitter| {
                     let mut cond_emitter = ConditionEmitter {
@@ -1163,20 +1405,16 @@ impl<'a> ExprEmitter<'a> {
                     when_true_block_id: Box::new(when_true_label),
                     when_false_block_id: Box::new(when_false_label),
                     when_true: Box::new(vf::Block {
-                        instructions: vec![
-                            Box::new(vf::Instruction::ConstBool {
-                                dest: Box::new(rb.register().clone()),
-                                value: true,
-                            }),
-                        ],
+                        instructions: vec![Box::new(vf::Instruction::ConstBool {
+                            dest: Box::new(rb.register().clone()),
+                            value: true,
+                        })],
                     }),
                     when_false: Box::new(vf::Block {
-                        instructions: vec![
-                            Box::new(vf::Instruction::ConstBool {
-                                dest: Box::new(rb.register().clone()),
-                                value: false,
-                            }),
-                        ],
+                        instructions: vec![Box::new(vf::Instruction::ConstBool {
+                            dest: Box::new(rb.register().clone()),
+                            value: false,
+                        })],
                     }),
                 });
 
@@ -1545,7 +1783,6 @@ impl<'a> ExprEmitter<'a> {
                 }
             }
 
-            // InstanceMethodCall
             Expr::IntLiteral(i) => {
                 let rb = output.output_register(self, e)?;
                 self.emit(vf::Instruction::ConstInt {
@@ -1558,7 +1795,63 @@ impl<'a> ExprEmitter<'a> {
 
             // Lambda
             // Match
-            // NewInstance
+            Expr::MethodCall {
+                method,
+                instance_type,
+                receiver,
+                arguments,
+            } => {
+                let frb = output.output_function_result(self, e)?;
+
+                let instance_type_expr = instance_type.clone().into_expr();
+                let instance_type = self.token_expr(&instance_type_expr)?;
+
+                let receiver_reg = self.expr(receiver, AnyRegister)?;
+
+                let method_id = self.encoder.get_method_id(method.clone());
+                let sig = method.clone().signature();
+
+                let args =
+                    self.emit_arguments(ExpressionOwner::Method(method.clone()), sig, arguments)?;
+
+                self.emit(vf::Instruction::InstanceMethodCall {
+                    dest: Box::new(frb.function_result()),
+
+                    method_id: BigUint::from(method_id),
+                    instance_type: Box::new(instance_type),
+
+                    instance_object: Box::new(receiver_reg),
+                    token_args: args.token_arguments,
+                    args: args.arguments,
+                });
+
+                frb.into_result(self)?
+            }
+
+            Expr::NewInstance {
+                instance,
+                arguments,
+            } => {
+                let rb = output.output_register(self, e)?;
+
+                let instance_id = self.encoder.get_instance_id(instance.clone());
+                let sig = instance.clone().signature();
+                let args = self.emit_arguments(
+                    ExpressionOwner::Instance(instance.clone()),
+                    sig,
+                    arguments,
+                )?;
+
+                self.emit(vf::Instruction::NewInstance {
+                    dest: Box::new(rb.register().clone()),
+                    instance_id: BigUint::from(instance_id),
+                    token_args: args.token_arguments,
+                    args: args.arguments,
+                });
+
+                rb.into_result(self)?
+            }
+
             // Next
 
             // Raise
@@ -1786,15 +2079,15 @@ impl<'a> ExprEmitter<'a> {
         loop {
             match block.instructions.last().map(Box::as_ref) {
                 Some(vf::Instruction::BlockBreak {
-                         block_id: last_break_id,
-                     }) if (**last_break_id).id == block_id.id => {
+                    block_id: last_break_id,
+                }) if (**last_break_id).id == block_id.id => {
                     block.instructions.pop();
                     is_loop = false;
                 }
 
                 Some(vf::Instruction::BlockRetry {
-                         block_id: last_break_id,
-                     }) if (**last_break_id).id == block_id.id => {
+                    block_id: last_break_id,
+                }) if (**last_break_id).id == block_id.id => {
                     block.instructions.pop();
                     is_loop = true;
                 }
@@ -1816,8 +2109,7 @@ impl<'a> ExprEmitter<'a> {
 
         if !is_loop && !scan.has_break && !scan.has_retry {
             self.instructions.extend(block.instructions);
-        }
-        else {
+        } else {
             let flags = vf::BlockFlags {
                 has_break: scan.has_break,
                 has_retry: scan.has_retry,
@@ -2195,6 +2487,30 @@ fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode
         Variable::Local(variable) => variable.erasure_mode,
         Variable::Parameter(variable) => variable.erasure_mode,
         Variable::InstanceParameter(_) => ErasureMode::Concrete,
+    }
+}
+
+fn method_receiver_type(method: Arc<dyn Method>) -> Expr<DefaultExprContext> {
+    match method.owner() {
+        MethodOwner::Trait(trait_) => {
+            let trait_owner = ExpressionOwner::Trait(trait_.clone());
+            let signature = trait_.clone().signature();
+
+            Expr::TraitType(TraitType {
+                trait_,
+                arguments: signature
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(index, param)| {
+                        Expr::Variable(Variable::Parameter(Box::new(
+                            param.clone().to_parameter_var(trait_owner.clone(), index),
+                        )))
+                    })
+                    .collect(),
+            })
+        }
+        MethodOwner::Instance(instance) => instance.signature().return_type.clone(),
     }
 }
 

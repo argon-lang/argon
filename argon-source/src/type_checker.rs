@@ -7,18 +7,18 @@ use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{
-    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
-    RecordField, RecordFieldOwner, SubstFunctionSignature,
+    Context, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, Method,
+    RecordField, RecordFieldOwner, SubstFunctionSignature, TypeDeclaration,
 };
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, EnumType, ErasureMode, Expr,
     ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels,
-    Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, Variable,
-    VariableTupleElement,
+    MethodInstanceType, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType,
+    SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
-use argon_util::{CompileError, MultiSlice, UniqueIdentifier};
+use argon_util::{CompileError, Fuel, MultiSlice, UniqueIdentifier};
 use core::cmp::Ordering;
 use core::fmt::{Debug, Formatter};
 use core::hash::{Hash, Hasher};
@@ -335,6 +335,11 @@ enum ExpectedType<'a> {
 #[derive(Debug)]
 enum Overloadable<'a> {
     Base(scope::Overloadable),
+    InstanceMethod {
+        method: Arc<dyn Method>,
+        trait_type: TraitType<TypeCheckExprContext>,
+        obj: Expr<TypeCheckExprContext>,
+    },
     ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
     RecordField {
         record_type: Expr<TypeCheckExprContext>,
@@ -354,6 +359,7 @@ impl<'a> Overloadable<'a> {
     fn initial_arguments_info(&self) -> Vec<ArgumentInfo<'a>> {
         match self {
             Overloadable::Base(_) => vec![],
+            Overloadable::InstanceMethod { .. } => vec![],
             Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
             Overloadable::RecordField { .. } => vec![],
             Overloadable::RecordFieldStore { .. } => vec![],
@@ -363,6 +369,7 @@ impl<'a> Overloadable<'a> {
     fn initial_arguments(&self) -> Vec<TypeInferResult<'static>> {
         match self {
             Overloadable::Base(_) => vec![],
+            Overloadable::InstanceMethod { .. } => vec![],
             Overloadable::ExtensionMethod(_, _, arg) => {
                 vec![TypeInferResult::Complete(arg.clone())]
             }
@@ -374,6 +381,9 @@ impl<'a> Overloadable<'a> {
     fn as_expression_owner(&self) -> Option<ExpressionOwner<TypeCheckExprContext>> {
         match self {
             Overloadable::Base(base) => Some(base.as_expression_owner()),
+            Overloadable::InstanceMethod { method, .. } => {
+                Some(ExpressionOwner::Method(method.clone()))
+            }
             Overloadable::ExtensionMethod(f, _, _) => Some(ExpressionOwner::Function(f.clone())),
             Overloadable::RecordField { .. } => None,
             Overloadable::RecordFieldStore { .. } => None,
@@ -385,6 +395,33 @@ impl<'a> Overloadable<'a> {
             Overloadable::Base(base) => {
                 let mut shifter = DefaultToTypeCheckExprContextShifter;
                 base.signature().as_ref().clone().shift(&mut shifter)
+            }
+            Overloadable::InstanceMethod {
+                method, trait_type, ..
+            } => {
+                let trait_sig = trait_type
+                    .trait_
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut DefaultToTypeCheckExprContextShifter);
+
+                let mut sig = method
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut DefaultToTypeCheckExprContextShifter);
+                let mut subst = SubstScanner::new();
+                subst.add_function_parameter_substitutions(
+                    ExpressionOwner::Trait(trait_type.trait_.clone()),
+                    &trait_sig,
+                    &trait_type.arguments,
+                );
+                sig.scan_mut(&mut subst);
+
+                sig
             }
             Overloadable::ExtensionMethod(f, _, _) => {
                 let mut shifter = DefaultToTypeCheckExprContextShifter;
@@ -1784,16 +1821,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                     // Find enum variants
                     if arguments.is_empty()
-                        && let CalleeInfo::Overloadable(instance_overloads) =
-                            &mut instance.callee
+                        && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee
                     {
                         if let Some(e) =
-                            instance_overloads.iter().flatten().find_map(|overload| {
-                                match overload {
+                            instance_overloads.iter().flatten().find_map(
+                                |overload| match overload {
                                     Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
                                     _ => None,
-                                }
-                            })
+                                },
+                            )
                         {
                             overload_groups.push(
                                 e.clone()
@@ -1831,9 +1867,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                     .iter()
                                     .find(|field| field.metadata().name == member.value)
                                     .map(|field| {
-                                        let mut field_type =
-                                            DefaultToTypeCheckExprContextShifter
-                                                .shift((*field.clone().field_type()).clone());
+                                        let mut field_type = DefaultToTypeCheckExprContextShifter
+                                            .shift((*field.clone().field_type()).clone());
 
                                         let mut subst = SubstScanner::new();
                                         let record_sig = (*r.clone().signature())
@@ -1867,7 +1902,25 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                     }),
                             );
                         }
-                        Expr::TraitType(..) => todo!("Trait members"),
+                        Expr::TraitType(trait_type) => {
+                            let methods = trait_type.trait_.clone().methods();
+
+                            let method_overloads = methods
+                                .iter()
+                                .filter(|entry| {
+                                    entry.method.metadata().name == adjusted_member_name
+                                })
+                                .map(|entry| Overloadable::InstanceMethod {
+                                    method: entry.method.clone(),
+                                    trait_type: trait_type.clone(),
+                                    obj: instance.checked_expr.clone(),
+                                })
+                                .collect::<Vec<_>>();
+
+                            if !method_overloads.is_empty() {
+                                overload_groups.push(method_overloads);
+                            }
+                        }
                         _ => {}
                     }
 
@@ -1890,7 +1943,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                                     ArgumentInfo {
                                                         call_location,
                                                         arg: o,
-                                                        list_type: FunctionParameterListType::NormalList,
+                                                        list_type:
+                                                            FunctionParameterListType::NormalList,
                                                     },
                                                     instance.clone(),
                                                 ))
@@ -2531,128 +2585,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         );
     }
 
-    fn unify(
-        &mut self,
-        mut a: Expr<TypeCheckExprContext>,
-        mut b: Expr<TypeCheckExprContext>,
-    ) -> bool {
-        {
-            let mut norm = NormalizerScanner::new(
-                self.context.normalize_fuel(),
-                ExprNormalizer {
-                    model: &mut self.model,
-                },
-            );
-            norm.normalize(&mut a);
-        }
-        {
-            let mut norm = NormalizerScanner::new(
-                self.context.normalize_fuel(),
-                ExprNormalizer {
-                    model: &mut self.model,
-                },
-            );
-            norm.normalize(&mut b);
-        }
-
-        match (a, b) {
-            (Expr::Error, _) | (_, Expr::Error) => true,
-            (Expr::Hole(a), Expr::Hole(b)) if a == b => true,
-
-            (Expr::Hole(a), b) => {
-                match self.model.hole_values.entry_ref(&a) {
-                    hash_map::EntryRef::Occupied(oea) => {
-                        let a_value = oea.get().clone();
-                        self.unify(a_value, b)
-                    }
-                    hash_map::EntryRef::Vacant(vea) => {
-                        // TODO: Type check the hole
-                        match b {
-                            Expr::Hole(b) => match self.model.hole_values.entry_ref(&b) {
-                                hash_map::EntryRef::Occupied(oeb) => {
-                                    let b_value = oeb.get().clone();
-                                    self.model.hole_values.insert(a, b_value);
-                                    true
-                                }
-                                hash_map::EntryRef::Vacant(veb) => {
-                                    veb.insert(Expr::Hole(a));
-                                    true
-                                }
-                            },
-                            _ => {
-                                vea.insert(b.clone());
-                                true
-                            }
-                        }
-                    }
-                }
-            }
-
-            (a, Expr::Hole(b)) => {
-                match self.model.hole_values.entry_ref(&b) {
-                    hash_map::EntryRef::Occupied(oeb) => {
-                        let b_value = oeb.get().clone();
-                        self.unify(b_value, a)
-                    }
-                    hash_map::EntryRef::Vacant(veb) => {
-                        // TODO: Type check the hole
-                        veb.insert(a.clone());
-                        true
-                    }
-                }
-            }
-
-            (Expr::And(a1, b1), Expr::And(a2, b2)) | (Expr::Or(a1, b1), Expr::Or(a2, b2)) => {
-                self.unify(*a1, *a2) && self.unify(*b1, *b2)
-            }
-            (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
-            (
-                Expr::Builtin {
-                    builtin: a,
-                    arguments: a_args,
-                },
-                Expr::Builtin {
-                    builtin: b,
-                    arguments: b_args,
-                },
-            ) => a == b && self.unify_all(a_args, b_args),
-            (Expr::EnumType(a), Expr::EnumType(b)) => {
-                a.enum_ == b.enum_ && self.unify_all(a.arguments, b.arguments)
-            }
-            (
-                Expr::FunctionType {
-                    a: a_arg,
-                    r: a_result,
-                },
-                Expr::FunctionType {
-                    a: b_arg,
-                    r: b_result,
-                },
-            ) => self.unify(*a_arg, *b_arg) && self.unify(*a_result, *b_result),
-            (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
-            (Expr::RecordType(a), Expr::RecordType(b)) => {
-                &a.record == &b.record && self.unify_all(a.arguments, b.arguments)
-            }
-            (Expr::StringLiteral(a), Expr::StringLiteral(b)) => a == b,
-            (Expr::TraitType(a, a_args), Expr::TraitType(b, b_args)) => {
-                a == b && self.unify_all(a_args, b_args)
-            }
-            (Expr::Tuple { items: a }, Expr::Tuple { items: b }) => self.unify_all(a, b),
-            (Expr::Type(a), Expr::Type(b)) => self.unify(*a, *b),
-            (Expr::BigType(a), Expr::BigType(b)) => a == b,
-            (Expr::Variable(a), Expr::Variable(b)) => a == b,
-            _ => false,
-        }
-    }
-
-    fn unify_all(
-        &mut self,
-        a: Vec<Expr<TypeCheckExprContext>>,
-        b: Vec<Expr<TypeCheckExprContext>>,
-    ) -> bool {
-        a.len() == b.len() && a.into_iter().zip(b).all(|(a, b)| self.unify(a, b))
-    }
-
     fn is_type(&mut self, mut expr: Expr<TypeCheckExprContext>) -> bool {
         let mut norm = NormalizerScanner::new(
             self.context.normalize_fuel(),
@@ -2761,6 +2693,59 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     }
 }
 
+impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
+    type EC = TypeCheckExprContext;
+    type Norm<'a>
+        = ExprNormalizer<'a>
+    where
+        Self: 'a;
+
+    fn normalize_fuel(&self) -> Fuel {
+        self.context.normalize_fuel()
+    }
+
+    fn normalizer<'a>(&'a mut self) -> Self::Norm<'a> {
+        ExprNormalizer {
+            model: &mut self.model,
+        }
+    }
+
+    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: Expr<Self::EC>) -> bool {
+        if let Expr::Hole(b) = &b
+            && a == *b
+        {
+            return false;
+        }
+
+        match self.model.hole_values.entry_ref(&a) {
+            hash_map::EntryRef::Occupied(oea) => {
+                let a_value = oea.get().clone();
+                self.unify(a_value, b)
+            }
+            hash_map::EntryRef::Vacant(vea) => {
+                // TODO: Type check the hole
+                match b {
+                    Expr::Hole(b) => match self.model.hole_values.entry_ref(&b) {
+                        hash_map::EntryRef::Occupied(oeb) => {
+                            let b_value = oeb.get().clone();
+                            self.model.hole_values.insert(a, b_value);
+                            true
+                        }
+                        hash_map::EntryRef::Vacant(veb) => {
+                            veb.insert(Expr::Hole(a));
+                            true
+                        }
+                    },
+                    _ => {
+                        vea.insert(b.clone());
+                        true
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn substitute_holes_for_args(
     location: &Location,
     owner: &ExpressionOwner<TypeCheckExprContext>,
@@ -2785,14 +2770,7 @@ fn substitute_holes_for_args(
         })
         .collect::<Vec<_>>();
 
-    for param in &mut sig.parameters {
-        subst.scan(&mut param.param_type);
-        for binding in &mut param.bindings {
-            subst.scan(&mut binding.param_type);
-        }
-    }
-
-    subst.scan(&mut sig.return_type);
+    sig.scan_mut(&mut subst);
 
     holes
 }
@@ -3285,7 +3263,10 @@ impl<'a> SelectedOverload<'a> {
                 enum_: e,
                 arguments: self.args,
             }),
-            Overloadable::Base(scope::Overloadable::Trait(t)) => Expr::TraitType(t, self.args),
+            Overloadable::Base(scope::Overloadable::Trait(t)) => Expr::TraitType(TraitType {
+                trait_: t,
+                arguments: self.args,
+            }),
             Overloadable::Base(scope::Overloadable::EnumVariant(v)) => {
                 if !v.clone().fields().is_empty() {
                     checker
@@ -3307,6 +3288,20 @@ impl<'a> SelectedOverload<'a> {
                     fields: vec![],
                 }
             }
+            Overloadable::Base(scope::Overloadable::Instance(i)) => Expr::NewInstance {
+                instance: i.clone(),
+                arguments: self.args,
+            },
+            Overloadable::InstanceMethod {
+                method,
+                trait_type,
+                obj,
+            } => Expr::MethodCall {
+                method,
+                instance_type: MethodInstanceType::Trait(trait_type),
+                receiver: Box::new(obj),
+                arguments: self.args,
+            },
             Overloadable::ExtensionMethod(f, _, _) => Expr::FunctionCall {
                 function: f,
                 arguments: self.args,
@@ -3346,10 +3341,6 @@ impl<'a> SelectedOverload<'a> {
                     new_value: Box::new(value),
                 }
             }
-            _ => todo!(
-                "into_inferred_type: unimplemented overloadable {:?}",
-                self.overload
-            ),
         };
 
         InferredType {

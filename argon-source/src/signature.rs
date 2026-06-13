@@ -135,11 +135,11 @@ impl<'a> SignatureParser<'a> {
         match &self.owner {
             ExpressionOwner::Function(f) => f.metadata().erasure_mode != ErasureMode::Token,
 
-            ExpressionOwner::Record(_)
-            | ExpressionOwner::Enum(_)
-            | ExpressionOwner::Trait(_)
-            | ExpressionOwner::EnumVariant(_)
-            | ExpressionOwner::Method(_) => false,
+            ExpressionOwner::Record(_) | ExpressionOwner::Enum(_) | ExpressionOwner::Trait(_) => {
+                false
+            }
+
+            ExpressionOwner::EnumVariant(_) | ExpressionOwner::Method(_) => true,
 
             ExpressionOwner::Instance(i) => i.erasure_mode() != ErasureMode::Token,
         }

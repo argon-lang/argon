@@ -1,6 +1,6 @@
 use crate::{BlockLabel, Pattern};
 use alloc::{boxed::Box, vec, vec::Vec};
-use argon_parser::ast::{Identifier, NewTraitObjectBodyStmt};
+use argon_parser::ast::Identifier;
 use argon_util::UniqueIdentifier;
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
@@ -115,6 +115,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         when_true: Box<Expr<EC>>,
         when_false: Box<Expr<EC>>,
     },
+    InstanceType(InstanceType<EC>),
     IntLiteral(BigInt),
     Is {
         value: Box<Expr<EC>>,
@@ -126,12 +127,13 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     MethodCall {
         method: EC::Method,
+        instance_type: MethodInstanceType<EC>,
         receiver: Box<Expr<EC>>,
         arguments: Vec<Expr<EC>>,
     },
-    NewTraitObject {
-        trait_ec: EC::Trait,
-        body: Vec<NewTraitObjectBodyStmt>,
+    NewInstance {
+        instance: EC::Instance,
+        arguments: Vec<Expr<EC>>,
     },
     Not(Box<Expr<EC>>),
     Or(Box<Expr<EC>>, Box<Expr<EC>>),
@@ -159,7 +161,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     Sequence(Vec1<Expr<EC>>),
     StringLiteral(Box<str>),
-    TraitType(EC::Trait, Vec<Expr<EC>>),
+    TraitType(TraitType<EC>),
     Tuple {
         items: Vec<Expr<EC>>,
     },
@@ -227,7 +229,7 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Builtin {
     IntType,
     BoolType,
@@ -400,6 +402,37 @@ pub struct RecordType<EC: ExprContext + ?Sized> {
 pub struct EnumType<EC: ExprContext + ?Sized> {
     pub enum_: EC::Enum,
     pub arguments: Vec<Expr<EC>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+pub struct TraitType<EC: ExprContext + ?Sized> {
+    pub trait_: EC::Trait,
+    pub arguments: Vec<Expr<EC>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+pub struct InstanceType<EC: ExprContext + ?Sized> {
+    pub instance: EC::Instance,
+    pub arguments: Vec<Expr<EC>>,
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+pub enum MethodInstanceType<EC: ExprContext + ?Sized> {
+    Trait(TraitType<EC>),
+}
+
+impl<EC: ExprContext + ?Sized> MethodInstanceType<EC> {
+    pub fn into_expr(self) -> Expr<EC> {
+        match self {
+            MethodInstanceType::Trait(trait_type) => Expr::TraitType(trait_type),
+        }
+    }
 }
 
 #[derive(Derivative)]

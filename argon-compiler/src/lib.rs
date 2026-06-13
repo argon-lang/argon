@@ -1,6 +1,6 @@
 #![no_std]
 
-use argon_expr::ExprScannerMut;
+use argon_expr::{ExprScannerMut, Unify};
 extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
@@ -14,6 +14,7 @@ pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
+pub mod vtable;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::platform::PlatformExtern;
@@ -451,6 +452,22 @@ pub enum MethodOwner {
     Instance(Arc<dyn Instance>),
 }
 
+impl MethodOwner {
+    pub fn into_expression_owner(self) -> ExpressionOwner<DefaultExprContext> {
+        match self {
+            MethodOwner::Trait(trait_) => ExpressionOwner::Trait(trait_),
+            MethodOwner::Instance(instance) => ExpressionOwner::Instance(instance),
+        }
+    }
+
+    pub fn signature(&self) -> Arc<FunctionSignature<DefaultExprContext>> {
+        match self {
+            MethodOwner::Trait(trait_) => trait_.clone().signature(),
+            MethodOwner::Instance(instance) => instance.clone().signature(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MethodSlot {
     Abstract,
@@ -592,5 +609,29 @@ impl Normalizer for DefaultExprNormalizer {
         subst.add_function_parameter_substitutions(owner, &signature, &arguments);
         subst.scan(&mut body);
         Some(body)
+    }
+}
+
+pub struct DefaultExprUnify {
+    pub context: Context,
+}
+
+impl Unify for DefaultExprUnify {
+    type EC = DefaultExprContext;
+    type Norm<'a>
+        = DefaultExprNormalizer
+    where
+        Self: 'a;
+
+    fn normalize_fuel(&self) -> Fuel {
+        self.context.normalize_fuel()
+    }
+
+    fn normalizer<'a>(&'a mut self) -> Self::Norm<'a> {
+        DefaultExprNormalizer
+    }
+
+    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, _b: Expr<Self::EC>) -> bool {
+        match a {}
     }
 }

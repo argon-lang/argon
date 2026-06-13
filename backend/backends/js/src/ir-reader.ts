@@ -38,7 +38,7 @@ class IrReader {
     readonly enumMap = new Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>();
     readonly enumVariantMap = new Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>();
     readonly traitMap = new Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>();
-    readonly methodMap = new Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" })>();
+    readonly methodMap = new Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" | "instance-method-reference" })>();
     readonly instanceMap = new Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>();
 
 
@@ -174,6 +174,7 @@ class IrReader {
                 return;
 
             case "trait-method-reference":
+            case "instance-method-reference":
                 this.methodMap.set(entry.methodId, entry);
                 return;
 
@@ -271,7 +272,7 @@ type ProgramModelOptions = Pick<ProgramModel, "header" | "metadata" | "modules">
     readonly enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
     readonly enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
     readonly traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
-    readonly methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" })>;
+    readonly methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" | "instance-method-reference" })>;
     readonly instanceMap: Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>;
 };
 
@@ -305,7 +306,7 @@ class ProgramModelImpl implements ProgramModel {
     readonly #enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
     readonly #enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
     readonly #traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
-    readonly #methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" })>;
+    readonly #methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" | "instance-method-reference" })>;
     readonly #instanceMap: Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>;
 
     getTubeInfo(id: bigint): TubeInfo {
@@ -478,7 +479,7 @@ class ProgramModelImpl implements ProgramModel {
     getMethodInfo(id: bigint): MethodInfo {
         const entry = this.#methodMap.get(id);
         if(entry === undefined) {
-            throw new Error("Invalid trait id");
+            throw new Error("Invalid method id");
         }
 
         switch(entry.$type) {
@@ -488,6 +489,17 @@ class ProgramModelImpl implements ProgramModel {
 
                 return {
                     parentImportSpecifier: traitInfo.importSpecifier,
+                    name: entry.name,
+                    signature: entry.signature,
+                };
+            }
+
+            case "instance-method-reference":
+            {
+                const instanceInfo = this.getInstanceInfo(entry.instanceId);
+
+                return {
+                    parentImportSpecifier: instanceInfo.importSpecifier,
                     name: entry.name,
                     signature: entry.signature,
                 };

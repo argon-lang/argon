@@ -1,13 +1,12 @@
+use crate::vm::{AnyRegister, EmitResult, ExprEmitter, TokenEmitterCommon};
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use alloc::vec;
-use num_bigint::BigUint;
+use alloc::vec::Vec;
 use argon_compiler::DefaultExprContext;
 use argon_compiler::expr_type::get_pattern_type;
 use argon_expr::{Expr, Pattern};
-use crate::vm::{AnyRegister, EmitResult, ExprEmitter, TokenEmitterCommon};
 use argon_format::vm as vf;
-
+use num_bigint::BigUint;
 
 pub(super) fn emit_pattern(
     emitter: &mut ExprEmitter<'_>,
@@ -106,7 +105,11 @@ pub(super) fn emit_pattern(
             emitter.emit(vf::Instruction::Builtin {
                 op: vf::BuiltinOp::StringEq,
                 tokens: vec![],
-                registers: vec![Box::new(check_res.clone()), Box::new(sr), Box::new(value_reg)],
+                registers: vec![
+                    Box::new(check_res.clone()),
+                    Box::new(sr),
+                    Box::new(value_reg),
+                ],
             });
             emitter.emit(vf::Instruction::BlockBreakUnless {
                 block_id: Box::new(when_false_label.clone()),
@@ -124,7 +127,11 @@ pub(super) fn emit_pattern(
             emitter.emit(vf::Instruction::Builtin {
                 op: vf::BuiltinOp::IntEq,
                 tokens: vec![],
-                registers: vec![Box::new(check_res.clone()), Box::new(sr), Box::new(value_reg)],
+                registers: vec![
+                    Box::new(check_res.clone()),
+                    Box::new(sr),
+                    Box::new(value_reg),
+                ],
             });
             emitter.emit(vf::Instruction::BlockBreakUnless {
                 block_id: Box::new(when_false_label.clone()),
@@ -142,7 +149,11 @@ pub(super) fn emit_pattern(
             emitter.emit(vf::Instruction::Builtin {
                 op: vf::BuiltinOp::BoolEq,
                 tokens: vec![],
-                registers: vec![Box::new(check_res.clone()), Box::new(sr), Box::new(value_reg)],
+                registers: vec![
+                    Box::new(check_res.clone()),
+                    Box::new(sr),
+                    Box::new(value_reg),
+                ],
             });
             emitter.emit(vf::Instruction::BlockBreakUnless {
                 block_id: Box::new(when_false_label.clone()),
@@ -151,4 +162,3 @@ pub(super) fn emit_pattern(
         }
     })
 }
-

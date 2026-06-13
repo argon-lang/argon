@@ -1,7 +1,7 @@
 use crate::{
     BlockLabel, EnumType, Expr, ExprContext, ExpressionOwner, InstanceParameterVariable,
-    LocalVariable, LoopLabels, MatchCase, ParameterVariable, Pattern, RecordFieldLiteral,
-    RecordFieldPattern, RecordType, Variable,
+    InstanceType, LocalVariable, LoopLabels, MatchCase, MethodInstanceType, ParameterVariable,
+    Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -139,6 +139,9 @@ where
             when_true: Box::new(shifter.shift(*when_true)),
             when_false: Box::new(shifter.shift(*when_false)),
         },
+        Expr::InstanceType(instance_type) => {
+            Expr::InstanceType(default_shift_instance_type(shifter, instance_type))
+        }
         Expr::IntLiteral(value) => Expr::IntLiteral(value),
         Expr::Is { value, pattern } => Expr::Is {
             value: Box::new(shifter.shift(*value)),
@@ -156,17 +159,28 @@ where
         },
         Expr::MethodCall {
             method,
+            instance_type,
             receiver,
             arguments,
         } => Expr::MethodCall {
             method,
+            instance_type: default_shift_method_instance_type(shifter, instance_type),
             receiver: Box::new(shifter.shift(*receiver)),
             arguments: arguments
                 .into_iter()
                 .map(|argument| shifter.shift(argument))
                 .collect(),
         },
-        Expr::NewTraitObject { trait_ec, body } => Expr::NewTraitObject { trait_ec, body },
+        Expr::NewInstance {
+            instance,
+            arguments,
+        } => Expr::NewInstance {
+            instance,
+            arguments: arguments
+                .into_iter()
+                .map(|argument| shifter.shift(argument))
+                .collect(),
+        },
         Expr::Not(value) => Expr::Not(Box::new(shifter.shift(*value))),
         Expr::Or(a, b) => Expr::Or(Box::new(shifter.shift(*a)), Box::new(shifter.shift(*b))),
         Expr::Raise { ex } => Expr::Raise {
@@ -221,13 +235,9 @@ where
             .expect("shifting a non-empty expression sequence preserves non-emptiness"),
         ),
         Expr::StringLiteral(value) => Expr::StringLiteral(value),
-        Expr::TraitType(trait_ec, arguments) => Expr::TraitType(
-            trait_ec,
-            arguments
-                .into_iter()
-                .map(|argument| shifter.shift(argument))
-                .collect(),
-        ),
+        Expr::TraitType(trait_type) => {
+            Expr::TraitType(default_shift_trait_type(shifter, trait_type))
+        }
         Expr::Tuple { items } => Expr::Tuple {
             items: items.into_iter().map(|item| shifter.shift(item)).collect(),
         },
@@ -318,6 +328,51 @@ where
     }
 }
 
+fn default_shift_trait_type<S>(shifter: &mut S, trait_type: TraitType<S::EC1>) -> TraitType<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    TraitType {
+        trait_: trait_type.trait_,
+        arguments: trait_type
+            .arguments
+            .into_iter()
+            .map(|argument| shifter.shift(argument))
+            .collect(),
+    }
+}
+
+fn default_shift_method_instance_type<S>(
+    shifter: &mut S,
+    instance_type: MethodInstanceType<S::EC1>,
+) -> MethodInstanceType<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    match instance_type {
+        MethodInstanceType::Trait(trait_type) => {
+            MethodInstanceType::Trait(default_shift_trait_type(shifter, trait_type))
+        }
+    }
+}
+
+fn default_shift_instance_type<S>(
+    shifter: &mut S,
+    instance_type: InstanceType<S::EC1>,
+) -> InstanceType<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    InstanceType {
+        instance: instance_type.instance,
+        arguments: instance_type
+            .arguments
+            .into_iter()
+            .map(|argument| shifter.shift(argument))
+            .collect(),
+    }
+}
+
 fn default_shift_pattern<S>(shifter: &mut S, pattern: Pattern<S::EC1>) -> Pattern<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
@@ -380,9 +435,7 @@ where
     }
 }
 
-fn default_shift_expression_owner<S>(
-    owner: ExpressionOwner<S::EC1>,
-) -> ExpressionOwner<S::EC2>
+fn default_shift_expression_owner<S>(owner: ExpressionOwner<S::EC1>) -> ExpressionOwner<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
 {
@@ -391,9 +444,7 @@ where
         ExpressionOwner::Record(record) => ExpressionOwner::Record(record),
         ExpressionOwner::Enum(enum_ec) => ExpressionOwner::Enum(enum_ec),
         ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec),
-        ExpressionOwner::EnumVariant(enum_variant) => {
-            ExpressionOwner::EnumVariant(enum_variant)
-        }
+        ExpressionOwner::EnumVariant(enum_variant) => ExpressionOwner::EnumVariant(enum_variant),
         ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
         ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
     }

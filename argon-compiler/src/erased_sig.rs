@@ -6,13 +6,13 @@ use argon_expr::{Builtin, ErasureMode, Expr, NormalizerScanner};
 use argon_parser::ast::Identifier;
 use argon_util::UniqueIdentifier;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ErasedSignature {
     pub parameters: Vec<ErasedSignatureType>,
     pub result: ErasedSignatureType,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ErasedSignatureType {
     Builtin(Builtin),
     Function(Box<ErasedSignatureType>, Box<ErasedSignatureType>),
@@ -21,7 +21,7 @@ pub enum ErasedSignatureType {
     Erased,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImportSpecifier {
     Global {
         tube: TubeName,
@@ -54,7 +54,7 @@ pub fn erase_signature(
     }
 }
 
-fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedSignatureType {
+pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedSignatureType {
     let mut normalizer = NormalizerScanner::new(context.normalize_fuel(), DefaultExprNormalizer);
     normalizer.normalize(&mut t);
 
@@ -84,9 +84,10 @@ fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedSigna
                 .collect::<Vec<_>>(),
         ),
 
-        Expr::TraitType(decl, arguments) => ErasedSignatureType::Declared(
-            decl.clone().import_specifier(),
-            arguments
+        Expr::TraitType(trait_type) => ErasedSignatureType::Declared(
+            trait_type.trait_.clone().import_specifier(),
+            trait_type
+                .arguments
                 .into_iter()
                 .map(|arg| erase_type(context, arg))
                 .collect::<Vec<_>>(),

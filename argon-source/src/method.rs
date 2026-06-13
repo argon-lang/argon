@@ -13,7 +13,7 @@ use argon_compiler::{
     Context, DefaultExprContext, EffectInfo, FunctionImplementation, FunctionSignature, Method,
     MethodInstanceParameter, MethodMetadata, MethodOwner, Unload,
 };
-use argon_expr::{Expr, ExpressionOwner, InstanceParameterVariable, Variable};
+use argon_expr::{Expr, ExpressionOwner, InstanceParameterVariable, TraitType, Variable};
 use argon_parser::ast;
 use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, ThreadSafe, mutex_lock};
@@ -86,12 +86,15 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
                 let owner = ExpressionOwner::Trait(trait_.clone());
                 let signature = trait_.clone().signature();
 
-                Expr::TraitType(
+                Expr::TraitType(TraitType {
                     trait_,
-                    SignatureParser::get_parameter_variables(&owner, &signature.parameters)
-                        .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
-                        .collect(),
-                )
+                    arguments: SignatureParser::get_parameter_variables(
+                        &owner,
+                        &signature.parameters,
+                    )
+                    .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
+                    .collect(),
+                })
             }
             MethodOwner::Instance(instance) => instance.signature().return_type.clone(),
         }

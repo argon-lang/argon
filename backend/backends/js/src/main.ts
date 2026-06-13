@@ -161,5 +161,8 @@ try {
 catch(err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`argon-js-backend: ${message}`);
+    if(err instanceof Error && err.stack) {
+        console.error(err.stack);
+    }
     process.exitCode = 1;
 }

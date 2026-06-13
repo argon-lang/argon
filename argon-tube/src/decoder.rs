@@ -1,24 +1,26 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{
-    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
+    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
 };
 use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
-    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
-    EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr, Function,
-    FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature,
-    Identifier, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField,
-    RecordFieldMetadata, RecordFieldOwner, Tube, TubeCollection, TubeCollectionBuilder,
-    TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
+    access::AccessModifier, AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context,
+    DefaultExprContext, EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr,
+    Function, FunctionImplementation, FunctionMetadata, FunctionParameterListType,
+    FunctionSignature, Identifier, Instance, Method, MethodEntry, MethodInstanceParameter,
+    MethodMetadata, MethodOwner, MethodSlot, ModuleExportBinding, ModuleExportEntry, ModulePath,
+    Record, RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
+    TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, EnumType, InstanceParameterVariable, LocalVariable,
-    ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, Variable,
+    MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern,
+    RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
+use argon_util::sync::{mutex_lock, rwlock_read, rwlock_write, Mutex, RwLock};
 use argon_util::UniqueIdentifier;
-use argon_util::sync::{OnceLock, RwLock, rwlock_read, rwlock_write};
 use core::fmt::Debug;
 use core::iter;
 use hashbrown::HashMap;
@@ -52,6 +54,7 @@ struct TubeDecoder {
     enum_variant_record_field_references: HashMap<BigUint, (BigUint, tf::Identifier)>,
     trait_entries: HashMap<BigUint, TraitEntry>,
     trait_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
+    method_entries: HashMap<BigUint, MethodEntryDefinition>,
     instance_entries: HashMap<BigUint, InstanceEntry>,
     instance_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     tube_ids: RwLock<HashMap<BigUint, TubeName>>,
@@ -60,6 +63,9 @@ struct TubeDecoder {
     records: RwLock<HashMap<BigUint, Arc<dyn Record>>>,
     enums: RwLock<HashMap<BigUint, Arc<dyn Enum>>>,
     enum_variants: RwLock<HashMap<BigUint, Arc<dyn EnumVariant>>>,
+    traits: RwLock<HashMap<BigUint, Arc<dyn Trait>>>,
+    instances: RwLock<HashMap<BigUint, Arc<dyn Instance>>>,
+    methods: RwLock<HashMap<BigUint, Arc<dyn Method>>>,
     record_fields: RwLock<HashMap<BigUint, Arc<dyn RecordField>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
@@ -100,6 +106,18 @@ enum InstanceEntry {
     Reference(tf::ImportSpecifier),
 }
 
+#[derive(Clone)]
+enum MethodEntryDefinition {
+    Trait {
+        trait_id: BigUint,
+        entry: tf::MethodEntry,
+    },
+    Instance {
+        instance_id: BigUint,
+        entry: tf::MethodEntry,
+    },
+}
+
 impl TubeDecoder {
     fn new(
         context: Context,
@@ -119,6 +137,7 @@ impl TubeDecoder {
             enum_variant_record_field_references: HashMap::new(),
             trait_entries: HashMap::new(),
             trait_method_references: HashMap::new(),
+            method_entries: HashMap::new(),
             instance_entries: HashMap::new(),
             instance_method_references: HashMap::new(),
             tube_ids: RwLock::new(HashMap::new()),
@@ -127,6 +146,9 @@ impl TubeDecoder {
             records: RwLock::new(HashMap::new()),
             enums: RwLock::new(HashMap::new()),
             enum_variants: RwLock::new(HashMap::new()),
+            traits: RwLock::new(HashMap::new()),
+            instances: RwLock::new(HashMap::new()),
+            methods: RwLock::new(HashMap::new()),
             record_fields: RwLock::new(HashMap::new()),
             local_import_ids: RwLock::new(HashMap::new()),
             local_variables: RwLock::new(HashMap::new()),
@@ -244,10 +266,22 @@ impl TubeDecoder {
                 );
             }
             tf::TubeFileEntry::TraitDefinition { definition } => {
+                let definition = *definition;
+                for method in &definition.methods {
+                    insert_unique(
+                        &mut self.method_entries,
+                        method.id.clone(),
+                        MethodEntryDefinition::Trait {
+                            trait_id: definition.trait_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "method entry",
+                    );
+                }
                 insert_unique(
                     &mut self.trait_entries,
                     definition.trait_id.clone(),
-                    TraitEntry::Definition(*definition),
+                    TraitEntry::Definition(definition),
                     "trait entry",
                 );
             }
@@ -273,10 +307,22 @@ impl TubeDecoder {
                 );
             }
             tf::TubeFileEntry::InstanceDefinition { definition } => {
+                let definition = *definition;
+                for method in &definition.methods {
+                    insert_unique(
+                        &mut self.method_entries,
+                        method.id.clone(),
+                        MethodEntryDefinition::Instance {
+                            instance_id: definition.instance_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "method entry",
+                    );
+                }
                 insert_unique(
                     &mut self.instance_entries,
                     definition.instance_id.clone(),
-                    InstanceEntry::Definition(*definition),
+                    InstanceEntry::Definition(definition),
                     "instance entry",
                 );
             }
@@ -681,26 +727,206 @@ impl TubeDecoder {
     }
 
     fn trait_decl(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Trait> {
-        match self
+        if let Some(trait_) = rwlock_read(&self.traits).get(&id).cloned() {
+            return trait_;
+        }
+
+        let trait_ = match self
             .trait_entries
             .get(&id)
             .unwrap_or_else(|| panic!("unknown trait id {id}"))
             .clone()
         {
-            TraitEntry::Definition(_) => todo!("decode trait definition"),
-            TraitEntry::Reference(_) => todo!("decode trait reference"),
+            TraitEntry::Definition(definition) => {
+                let mut traits = rwlock_write(&self.traits);
+                if let Some(trait_) = traits.get(&id) {
+                    return trait_.clone();
+                }
+
+                let trait_: Arc<dyn Trait> = Arc::new(DecodedTrait::new(self.clone(), definition));
+                traits.insert(id, trait_.clone());
+                return trait_;
+            }
+            TraitEntry::Reference(import) => self.resolve_trait_import(import),
+        };
+
+        rwlock_write(&self.traits).insert(id, trait_.clone());
+        trait_
+    }
+
+    fn resolve_trait_import(self: &Arc<Self>, import: tf::ImportSpecifier) -> Arc<dyn Trait> {
+        match self.decode_import_specifier(import) {
+            ImportSpecifier::Global {
+                tube,
+                module,
+                name,
+                signature,
+            } => {
+                let tube = self
+                    .tube_collection
+                    .tube(&tube)
+                    .unwrap_or_else(|| panic!("trait import references unknown tube {tube}"));
+                let module = tube
+                    .module(&module)
+                    .unwrap_or_else(|| panic!("trait import references unknown module {module}"));
+
+                let export_groups = module.export_groups();
+                let exports = export_groups
+                    .get(&name)
+                    .unwrap_or_else(|| panic!("trait import references unknown export"));
+
+                exports
+                    .iter()
+                    .find_map(|entry| match &entry.binding {
+                        ModuleExportBinding::Trait(trait_)
+                            if &erase_signature(
+                                self.context.clone(),
+                                trait_.clone().signature().as_ref(),
+                            ) == signature.as_ref() =>
+                        {
+                            Some(trait_.clone())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("trait import references unknown overload"))
+            }
+            ImportSpecifier::Local { .. } => todo!("resolve local trait import"),
         }
     }
 
+    fn method(self: &Arc<Self>, id: BigUint) -> Arc<dyn Method> {
+        if let Some(method) = rwlock_read(&self.methods).get(&id) {
+            return method.clone();
+        }
+
+        let method = if let Some(entry) = self.method_entries.get(&id).cloned() {
+            match entry {
+                MethodEntryDefinition::Trait { trait_id, entry } => Arc::new(DecodedMethod::new(
+                    self.clone(),
+                    MethodOwner::Trait(self.trait_decl(trait_id)),
+                    entry,
+                ))
+                    as Arc<dyn Method>,
+                MethodEntryDefinition::Instance { instance_id, entry } => {
+                    Arc::new(DecodedMethod::new(
+                        self.clone(),
+                        MethodOwner::Instance(self.instance(instance_id)),
+                        entry,
+                    )) as Arc<dyn Method>
+                }
+            }
+        } else if let Some((trait_id, name, signature)) = self.trait_method_references.get(&id) {
+            self.resolve_method_reference(
+                self.trait_decl(trait_id.clone()).methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else if let Some((instance_id, name, signature)) =
+            self.instance_method_references.get(&id)
+        {
+            self.resolve_method_reference(
+                self.instance(instance_id.clone()).methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else {
+            panic!("unknown method id {id}");
+        };
+
+        rwlock_write(&self.methods).insert(id, method.clone());
+        method
+    }
+
+    fn resolve_method_reference(
+        self: &Arc<Self>,
+        methods: Arc<Vec<MethodEntry>>,
+        name: tf::Identifier,
+        signature: tf::ErasedSignature,
+    ) -> Arc<dyn Method> {
+        let name = decode_identifier(name);
+        let signature = self.decode_erased_signature(signature);
+        methods
+            .iter()
+            .find_map(|entry| {
+                let method = entry.method.clone();
+                if method.metadata().name == name
+                    && erase_signature(self.context.clone(), method.clone().signature().as_ref())
+                        == signature
+                {
+                    Some(method)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| panic!("method reference has unknown overload {name:?}"))
+    }
+
     fn instance(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Instance> {
-        match self
+        if let Some(instance) = rwlock_read(&self.instances).get(&id).cloned() {
+            return instance;
+        }
+
+        let instance = match self
             .instance_entries
             .get(&id)
             .unwrap_or_else(|| panic!("unknown instance id {id}"))
             .clone()
         {
-            InstanceEntry::Definition(_) => todo!("decode instance definition"),
-            InstanceEntry::Reference(_) => todo!("decode instance reference"),
+            InstanceEntry::Definition(definition) => {
+                let mut instances = rwlock_write(&self.instances);
+                if let Some(instance) = instances.get(&id) {
+                    return instance.clone();
+                }
+
+                let instance: Arc<dyn Instance> =
+                    Arc::new(DecodedInstance::new(self.clone(), definition));
+                instances.insert(id, instance.clone());
+                return instance;
+            }
+            InstanceEntry::Reference(import) => self.resolve_instance_import(import),
+        };
+
+        rwlock_write(&self.instances).insert(id, instance.clone());
+        instance
+    }
+
+    fn resolve_instance_import(self: &Arc<Self>, import: tf::ImportSpecifier) -> Arc<dyn Instance> {
+        match self.decode_import_specifier(import) {
+            ImportSpecifier::Global {
+                tube,
+                module,
+                name,
+                signature,
+            } => {
+                let tube = self
+                    .tube_collection
+                    .tube(&tube)
+                    .unwrap_or_else(|| panic!("instance import references unknown tube {tube}"));
+                let module = tube.module(&module).unwrap_or_else(|| {
+                    panic!("instance import references unknown module {module}")
+                });
+
+                let export_groups = module.export_groups();
+                let exports = export_groups
+                    .get(&name)
+                    .unwrap_or_else(|| panic!("instance import references unknown export"));
+
+                exports
+                    .iter()
+                    .find_map(|entry| match &entry.binding {
+                        ModuleExportBinding::Instance(instance)
+                            if &erase_signature(
+                                self.context.clone(),
+                                instance.clone().signature().as_ref(),
+                            ) == signature.as_ref() =>
+                        {
+                            Some(instance.clone())
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("instance import references unknown overload"))
+            }
+            ImportSpecifier::Local { .. } => todo!("resolve local instance import"),
         }
     }
 
@@ -862,6 +1088,27 @@ impl TubeDecoder {
         }
     }
 
+    fn decode_method_implementation(
+        self: &Arc<Self>,
+        implementation: tf::MethodImplementation,
+    ) -> FunctionImplementation {
+        match implementation {
+            tf::MethodImplementation::Abstract {} => FunctionImplementation::Expr(Expr::Error),
+            tf::MethodImplementation::Expr { body } => {
+                FunctionImplementation::Expr(self.decode_expr(*body))
+            }
+            tf::MethodImplementation::Extern { externs } => {
+                FunctionImplementation::Extern(PlatformExtern {
+                    externs: externs
+                        .externs
+                        .into_iter()
+                        .map(|(platform, expr)| (platform, expr.into_inner()))
+                        .collect(),
+                })
+            }
+        }
+    }
+
     fn decode_expr(self: &Arc<Self>, expr: tf::Expr) -> Expr<DefaultExprContext> {
         match expr {
             tf::Expr::Error {} => Expr::Error,
@@ -972,9 +1219,22 @@ impl TubeDecoder {
                 when_true: Box::new(self.decode_expr(*true_body)),
                 when_false: Box::new(self.decode_expr(*false_body)),
             },
-            tf::Expr::InstanceMethodCall { .. }
-            | tf::Expr::InstanceSingletonType { .. }
-            | tf::Expr::NewInstance { .. } => todo!("decode instance expressions"),
+            tf::Expr::InstanceMethodCall {
+                method_id,
+                instance_type,
+                instance,
+                args,
+            } => Expr::MethodCall {
+                method: self.method(method_id),
+                instance_type: self.decode_method_instance_type(*instance_type),
+                receiver: Box::new(self.decode_expr(*instance)),
+                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+            },
+            tf::Expr::InstanceSingletonType { .. } => todo!("decode instance expressions"),
+            tf::Expr::NewInstance { instance_id, args } => Expr::NewInstance {
+                instance: self.instance(instance_id),
+                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+            },
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
             tf::Expr::Is { value, pattern } => Expr::Is {
                 value: Box::new(self.decode_expr(*value)),
@@ -1068,7 +1328,9 @@ impl TubeDecoder {
                 )
             }
             tf::Expr::StringLiteral { s } => Expr::StringLiteral(s.into_boxed_str()),
-            tf::Expr::TraitType { .. } => todo!("decode trait type expression"),
+            tf::Expr::TraitType { trait_type } => {
+                Expr::TraitType(self.decode_trait_type(*trait_type))
+            }
             tf::Expr::Tuple { items } => Expr::Tuple {
                 items: items
                     .into_iter()
@@ -1147,6 +1409,34 @@ impl TubeDecoder {
         }
     }
 
+    fn decode_trait_type(
+        self: &Arc<Self>,
+        trait_type: tf::TraitType,
+    ) -> TraitType<DefaultExprContext> {
+        TraitType {
+            trait_: self.trait_decl(trait_type.id),
+            arguments: trait_type
+                .args
+                .into_iter()
+                .map(|arg| self.decode_expr(*arg))
+                .collect(),
+        }
+    }
+
+    fn decode_method_instance_type(
+        self: &Arc<Self>,
+        instance_type: tf::MethodInstanceType,
+    ) -> MethodInstanceType<DefaultExprContext> {
+        match instance_type {
+            tf::MethodInstanceType::TraitType { trait_type } => {
+                MethodInstanceType::Trait(self.decode_trait_type(*trait_type))
+            }
+            tf::MethodInstanceType::InstanceSingletonType { .. } => {
+                todo!("decode instance singleton method instance types")
+            }
+        }
+    }
+
     fn decode_var(self: &Arc<Self>, var: tf::Var) -> Variable<DefaultExprContext> {
         match var {
             tf::Var::LocalVar { id } => Variable::Local(
@@ -1200,11 +1490,15 @@ impl TubeDecoder {
                 argon_expr::ExpressionOwner::Enum(self.enum_decl(index))
             }
             tf::ExpressionOwner::Trait { .. } => todo!("decode trait expression owner"),
-            tf::ExpressionOwner::Instance { .. } => todo!("decode instance expression owner"),
+            tf::ExpressionOwner::Instance { index } => {
+                argon_expr::ExpressionOwner::Instance(self.instance(index))
+            }
             tf::ExpressionOwner::EnumVariant { index } => {
                 argon_expr::ExpressionOwner::EnumVariant(self.enum_variant(index))
             }
-            tf::ExpressionOwner::Method { .. } => todo!("decode method expression owner"),
+            tf::ExpressionOwner::Method { index } => {
+                argon_expr::ExpressionOwner::Method(self.method(index))
+            }
         }
     }
 
@@ -1265,9 +1559,9 @@ struct DecodedFunction {
     decoder: Arc<TubeDecoder>,
     definition: tf::FunctionDefinition,
     metadata: FunctionMetadata,
-    import: OnceLock<ImportSpecifier>,
-    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
-    implementation: OnceLock<Option<Arc<FunctionImplementation>>>,
+    import: Mutex<Option<ImportSpecifier>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    implementation: Mutex<Option<Option<Arc<FunctionImplementation>>>>,
 }
 
 impl DecodedFunction {
@@ -1283,9 +1577,9 @@ impl DecodedFunction {
             decoder,
             definition,
             metadata,
-            import: OnceLock::new(),
-            signature: OnceLock::new(),
-            implementation: OnceLock::new(),
+            import: Mutex::new(None),
+            signature: Mutex::new(None),
+            implementation: Mutex::new(None),
         }
     }
 }
@@ -1297,7 +1591,11 @@ impl Debug for DecodedFunction {
 }
 
 impl Unload for DecodedFunction {
-    fn unload(&self) {}
+    fn unload(&self) {
+        clear_cached(&self.import);
+        clear_cached(&self.signature);
+        clear_cached(&self.implementation);
+    }
 }
 
 impl Function for DecodedFunction {
@@ -1306,45 +1604,261 @@ impl Function for DecodedFunction {
     }
 
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
-        self.import
-            .get_or_init(|| {
-                self.decoder
-                    .decode_import_specifier((*self.definition.import).clone())
-            })
-            .clone()
+        get_or_init_cached(&self.import, || {
+            self.decoder
+                .decode_import_specifier((*self.definition.import).clone())
+        })
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        self.signature
-            .get_or_init(|| {
-                Arc::new(
-                    self.decoder
-                        .decode_function_signature((*self.definition.signature).clone()),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.definition.signature).clone()),
+            )
+        })
     }
 
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
-        self.implementation
-            .get_or_init(|| {
+        get_or_init_cached(&self.implementation, || {
+            self.definition
+                .implementation
+                .clone()
+                .map(|implementation| {
+                    Arc::new(self.decoder.decode_function_implementation(*implementation))
+                })
+        })
+    }
+}
+
+struct DecodedTrait {
+    decoder: Arc<TubeDecoder>,
+    definition: tf::TraitDefinition,
+    import: Mutex<Option<ImportSpecifier>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+}
+
+impl DecodedTrait {
+    fn new(decoder: Arc<TubeDecoder>, definition: tf::TraitDefinition) -> Self {
+        Self {
+            decoder,
+            definition,
+            import: Mutex::new(None),
+            signature: Mutex::new(None),
+            methods: Mutex::new(None),
+        }
+    }
+}
+
+impl Debug for DecodedTrait {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "trait {:?}", self.definition.import)
+    }
+}
+
+impl Unload for DecodedTrait {
+    fn unload(&self) {
+        clear_cached(&self.import);
+        clear_cached(&self.signature);
+        clear_cached(&self.methods);
+    }
+}
+
+impl Trait for DecodedTrait {
+    fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
+        get_or_init_cached(&self.import, || {
+            self.decoder
+                .decode_import_specifier((*self.definition.import).clone())
+        })
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.definition.signature).clone()),
+            )
+        })
+    }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        get_or_init_cached(&self.methods, || {
+            Arc::new(
                 self.definition
-                    .implementation
-                    .clone()
-                    .map(|implementation| {
-                        Arc::new(self.decoder.decode_function_implementation(*implementation))
+                    .methods
+                    .iter()
+                    .map(|entry| MethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self.decoder.method(entry.id.clone()),
                     })
-            })
-            .clone()
+                    .collect(),
+            )
+        })
+    }
+}
+
+struct DecodedMethod {
+    decoder: Arc<TubeDecoder>,
+    owner: MethodOwner,
+    entry: tf::MethodEntry,
+    metadata: MethodMetadata,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    implementation: Mutex<Option<Option<Arc<FunctionImplementation>>>>,
+}
+
+impl DecodedMethod {
+    fn new(decoder: Arc<TubeDecoder>, owner: MethodOwner, entry: tf::MethodEntry) -> Self {
+        let definition = &entry.method;
+        let slot = decode_method_slot((*definition.slot).clone());
+        let metadata = MethodMetadata {
+            access: decode_access_modifier((*entry.access).clone()),
+            name: decode_identifier((*definition.name).clone()),
+            is_abstract: definition.implementation.is_none(),
+            is_inline: definition.inline,
+            erasure_mode: if definition.erased {
+                ErasureMode::Erased
+            } else {
+                ErasureMode::Concrete
+            },
+            is_witness: definition.witness,
+            slot,
+            effect_info: decode_effect_info((*definition.effects).clone()),
+            instance_parameter: decode_instance_parameter((*definition.instance_parameter).clone()),
+        };
+
+        Self {
+            decoder,
+            owner,
+            entry,
+            metadata,
+            signature: Mutex::new(None),
+            implementation: Mutex::new(None),
+        }
+    }
+}
+
+impl Debug for DecodedMethod {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "method {:?}", self.entry.method.name)
+    }
+}
+
+impl Unload for DecodedMethod {
+    fn unload(&self) {
+        clear_cached(&self.signature);
+        clear_cached(&self.implementation);
+    }
+}
+
+impl Method for DecodedMethod {
+    fn owner(self: Arc<Self>) -> MethodOwner {
+        self.owner.clone()
+    }
+
+    fn metadata(&self) -> &MethodMetadata {
+        &self.metadata
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.entry.method.signature).clone()),
+            )
+        })
+    }
+
+    fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
+        get_or_init_cached(&self.implementation, || {
+            self.entry
+                .method
+                .implementation
+                .clone()
+                .map(|implementation| {
+                    Arc::new(self.decoder.decode_method_implementation(*implementation))
+                })
+        })
+    }
+}
+
+struct DecodedInstance {
+    decoder: Arc<TubeDecoder>,
+    definition: tf::InstanceDefinition,
+    import: Mutex<Option<ImportSpecifier>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+}
+
+impl DecodedInstance {
+    fn new(decoder: Arc<TubeDecoder>, definition: tf::InstanceDefinition) -> Self {
+        Self {
+            decoder,
+            definition,
+            import: Mutex::new(None),
+            signature: Mutex::new(None),
+            methods: Mutex::new(None),
+        }
+    }
+}
+
+impl Debug for DecodedInstance {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "instance {:?}", self.definition.import)
+    }
+}
+
+impl Unload for DecodedInstance {
+    fn unload(&self) {
+        clear_cached(&self.import);
+        clear_cached(&self.signature);
+        clear_cached(&self.methods);
+    }
+}
+
+impl Instance for DecodedInstance {
+    fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
+        get_or_init_cached(&self.import, || {
+            self.decoder
+                .decode_import_specifier((*self.definition.import).clone())
+        })
+    }
+
+    fn erasure_mode(&self) -> ErasureMode {
+        decode_erasure_mode((*self.definition.erasure).clone())
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.definition.signature).clone()),
+            )
+        })
+    }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        get_or_init_cached(&self.methods, || {
+            Arc::new(
+                self.definition
+                    .methods
+                    .iter()
+                    .map(|entry| MethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self.decoder.method(entry.id.clone()),
+                    })
+                    .collect(),
+            )
+        })
     }
 }
 
 struct DecodedEnum {
     decoder: Arc<TubeDecoder>,
     definition: tf::EnumDefinition,
-    import: OnceLock<ImportSpecifier>,
-    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
-    variants: OnceLock<Arc<Vec<Arc<dyn EnumVariant>>>>,
+    import: Mutex<Option<ImportSpecifier>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    variants: Mutex<Option<Arc<Vec<Arc<dyn EnumVariant>>>>>,
 }
 
 impl DecodedEnum {
@@ -1352,9 +1866,9 @@ impl DecodedEnum {
         Self {
             decoder,
             definition,
-            import: OnceLock::new(),
-            signature: OnceLock::new(),
-            variants: OnceLock::new(),
+            import: Mutex::new(None),
+            signature: Mutex::new(None),
+            variants: Mutex::new(None),
         }
     }
 }
@@ -1366,45 +1880,43 @@ impl Debug for DecodedEnum {
 }
 
 impl Unload for DecodedEnum {
-    fn unload(&self) {}
+    fn unload(&self) {
+        clear_cached(&self.import);
+        clear_cached(&self.signature);
+        clear_cached(&self.variants);
+    }
 }
 
 impl Enum for DecodedEnum {
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
-        self.import
-            .get_or_init(|| {
-                self.decoder
-                    .decode_import_specifier((*self.definition.import).clone())
-            })
-            .clone()
+        get_or_init_cached(&self.import, || {
+            self.decoder
+                .decode_import_specifier((*self.definition.import).clone())
+        })
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        self.signature
-            .get_or_init(|| {
-                Arc::new(
-                    self.decoder
-                        .decode_function_signature((*self.definition.signature).clone()),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.definition.signature).clone()),
+            )
+        })
     }
 
     fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>> {
-        self.variants
-            .get_or_init(|| {
-                Arc::new(
-                    self.definition
-                        .variants
-                        .iter()
-                        .map(|variant| {
-                            Arc::new(DecodedEnumVariant::new(self.clone(), (**variant).clone()))
-                                as Arc<dyn EnumVariant>
-                        })
-                        .collect(),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.variants, || {
+            Arc::new(
+                self.definition
+                    .variants
+                    .iter()
+                    .map(|variant| {
+                        Arc::new(DecodedEnumVariant::new(self.clone(), (**variant).clone()))
+                            as Arc<dyn EnumVariant>
+                    })
+                    .collect(),
+            )
+        })
     }
 }
 
@@ -1412,8 +1924,8 @@ struct DecodedEnumVariant {
     owner: Arc<DecodedEnum>,
     definition: tf::EnumVariantDefinition,
     metadata: EnumVariantMetadata,
-    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
-    fields: OnceLock<Arc<Vec<Arc<dyn RecordField>>>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    fields: Mutex<Option<Arc<Vec<Arc<dyn RecordField>>>>>,
 }
 
 impl DecodedEnumVariant {
@@ -1426,8 +1938,8 @@ impl DecodedEnumVariant {
             owner,
             definition,
             metadata,
-            signature: OnceLock::new(),
-            fields: OnceLock::new(),
+            signature: Mutex::new(None),
+            fields: Mutex::new(None),
         }
     }
 }
@@ -1439,7 +1951,10 @@ impl Debug for DecodedEnumVariant {
 }
 
 impl Unload for DecodedEnumVariant {
-    fn unload(&self) {}
+    fn unload(&self) {
+        clear_cached(&self.signature);
+        clear_cached(&self.fields);
+    }
 }
 
 impl EnumVariant for DecodedEnumVariant {
@@ -1452,34 +1967,30 @@ impl EnumVariant for DecodedEnumVariant {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        self.signature
-            .get_or_init(|| {
-                Arc::new(
-                    self.owner
-                        .decoder
-                        .decode_function_signature((*self.definition.signature).clone()),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.owner
+                    .decoder
+                    .decode_function_signature((*self.definition.signature).clone()),
+            )
+        })
     }
 
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
-        self.fields
-            .get_or_init(|| {
-                Arc::new(
-                    self.definition
-                        .fields
-                        .iter()
-                        .map(|field| {
-                            Arc::new(DecodedEnumVariantField::new(
-                                self.clone(),
-                                (**field).clone(),
-                            )) as Arc<dyn RecordField>
-                        })
-                        .collect(),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.fields, || {
+            Arc::new(
+                self.definition
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        Arc::new(DecodedEnumVariantField::new(
+                            self.clone(),
+                            (**field).clone(),
+                        )) as Arc<dyn RecordField>
+                    })
+                    .collect(),
+            )
+        })
     }
 }
 
@@ -1487,7 +1998,7 @@ struct DecodedEnumVariantField {
     owner: Arc<DecodedEnumVariant>,
     definition: tf::RecordFieldDefinition,
     metadata: RecordFieldMetadata,
-    field_type: OnceLock<Arc<Expr<DefaultExprContext>>>,
+    field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
 }
 
 impl DecodedEnumVariantField {
@@ -1501,7 +2012,7 @@ impl DecodedEnumVariantField {
             owner,
             definition,
             metadata,
-            field_type: OnceLock::new(),
+            field_type: Mutex::new(None),
         }
     }
 }
@@ -1513,7 +2024,9 @@ impl Debug for DecodedEnumVariantField {
 }
 
 impl Unload for DecodedEnumVariantField {
-    fn unload(&self) {}
+    fn unload(&self) {
+        clear_cached(&self.field_type);
+    }
 }
 
 impl RecordField for DecodedEnumVariantField {
@@ -1526,25 +2039,23 @@ impl RecordField for DecodedEnumVariantField {
     }
 
     fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
-        self.field_type
-            .get_or_init(|| {
-                Arc::new(
-                    self.owner
-                        .owner
-                        .decoder
-                        .decode_expr((*self.definition.field_type).clone()),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.field_type, || {
+            Arc::new(
+                self.owner
+                    .owner
+                    .decoder
+                    .decode_expr((*self.definition.field_type).clone()),
+            )
+        })
     }
 }
 
 struct DecodedRecord {
     decoder: Arc<TubeDecoder>,
     definition: tf::RecordDefinition,
-    import: OnceLock<ImportSpecifier>,
-    signature: OnceLock<Arc<FunctionSignature<DefaultExprContext>>>,
-    fields: OnceLock<Arc<Vec<Arc<dyn RecordField>>>>,
+    import: Mutex<Option<ImportSpecifier>>,
+    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
+    fields: Mutex<Option<Arc<Vec<Arc<dyn RecordField>>>>>,
 }
 
 impl DecodedRecord {
@@ -1552,9 +2063,9 @@ impl DecodedRecord {
         Self {
             decoder,
             definition,
-            import: OnceLock::new(),
-            signature: OnceLock::new(),
-            fields: OnceLock::new(),
+            import: Mutex::new(None),
+            signature: Mutex::new(None),
+            fields: Mutex::new(None),
         }
     }
 }
@@ -1566,45 +2077,43 @@ impl Debug for DecodedRecord {
 }
 
 impl Unload for DecodedRecord {
-    fn unload(&self) {}
+    fn unload(&self) {
+        clear_cached(&self.import);
+        clear_cached(&self.signature);
+        clear_cached(&self.fields);
+    }
 }
 
 impl Record for DecodedRecord {
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
-        self.import
-            .get_or_init(|| {
-                self.decoder
-                    .decode_import_specifier((*self.definition.import).clone())
-            })
-            .clone()
+        get_or_init_cached(&self.import, || {
+            self.decoder
+                .decode_import_specifier((*self.definition.import).clone())
+        })
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        self.signature
-            .get_or_init(|| {
-                Arc::new(
-                    self.decoder
-                        .decode_function_signature((*self.definition.signature).clone()),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.definition.signature).clone()),
+            )
+        })
     }
 
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
-        self.fields
-            .get_or_init(|| {
-                Arc::new(
-                    self.definition
-                        .fields
-                        .iter()
-                        .map(|field| {
-                            Arc::new(DecodedRecordField::new(self.clone(), (**field).clone()))
-                                as Arc<dyn RecordField>
-                        })
-                        .collect(),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.fields, || {
+            Arc::new(
+                self.definition
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        Arc::new(DecodedRecordField::new(self.clone(), (**field).clone()))
+                            as Arc<dyn RecordField>
+                    })
+                    .collect(),
+            )
+        })
     }
 }
 
@@ -1612,7 +2121,7 @@ struct DecodedRecordField {
     owner: Arc<DecodedRecord>,
     definition: tf::RecordFieldDefinition,
     metadata: RecordFieldMetadata,
-    field_type: OnceLock<Arc<Expr<DefaultExprContext>>>,
+    field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
 }
 
 impl DecodedRecordField {
@@ -1626,7 +2135,7 @@ impl DecodedRecordField {
             owner,
             definition,
             metadata,
-            field_type: OnceLock::new(),
+            field_type: Mutex::new(None),
         }
     }
 }
@@ -1638,7 +2147,9 @@ impl Debug for DecodedRecordField {
 }
 
 impl Unload for DecodedRecordField {
-    fn unload(&self) {}
+    fn unload(&self) {
+        clear_cached(&self.field_type);
+    }
 }
 
 impl RecordField for DecodedRecordField {
@@ -1651,15 +2162,13 @@ impl RecordField for DecodedRecordField {
     }
 
     fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
-        self.field_type
-            .get_or_init(|| {
-                Arc::new(
-                    self.owner
-                        .decoder
-                        .decode_expr((*self.definition.field_type).clone()),
-                )
-            })
-            .clone()
+        get_or_init_cached(&self.field_type, || {
+            Arc::new(
+                self.owner
+                    .decoder
+                    .decode_expr((*self.definition.field_type).clone()),
+            )
+        })
     }
 }
 
@@ -1690,6 +2199,21 @@ fn insert_unique<T>(map: &mut HashMap<BigUint, T>, key: BigUint, value: T, kind:
     if map.insert(key.clone(), value).is_some() {
         panic!("duplicate {kind} id {key}");
     }
+}
+
+fn get_or_init_cached<T: Clone, F: FnOnce() -> T>(cache: &Mutex<Option<T>>, init: F) -> T {
+    let mut cache = mutex_lock(cache);
+    if let Some(value) = cache.as_ref() {
+        return value.clone();
+    }
+
+    let value = init();
+    *cache = Some(value.clone());
+    value
+}
+
+fn clear_cached<T>(cache: &Mutex<Option<T>>) {
+    *mutex_lock(cache) = None;
 }
 
 fn to_usize_index(n: BigUint) -> usize {
@@ -1753,6 +2277,35 @@ fn decode_access_modifier_global(access: tf::AccessModifierGlobal) -> AccessModi
         tf::AccessModifierGlobal::Public {} => AccessModifierGlobal::Public,
         tf::AccessModifierGlobal::Internal {} => AccessModifierGlobal::Internal,
         tf::AccessModifierGlobal::ModulePrivate {} => AccessModifierGlobal::ModulePrivate,
+    }
+}
+
+fn decode_access_modifier(access: tf::AccessModifier) -> AccessModifier {
+    match access {
+        tf::AccessModifier::Public {} => AccessModifier::Public,
+        tf::AccessModifier::Private {} => AccessModifier::Private,
+        tf::AccessModifier::Protected {} => AccessModifier::Protected,
+        tf::AccessModifier::Internal {} => AccessModifier::Internal,
+        tf::AccessModifier::ProtectedOrInternal {} => AccessModifier::ProtectedOrInternal,
+        tf::AccessModifier::ProtectedAndInternal {} => AccessModifier::ProtectedAndInternal,
+        tf::AccessModifier::ModulePrivate {} => AccessModifier::ModulePrivate,
+    }
+}
+
+fn decode_method_slot(slot: tf::MethodSlot) -> MethodSlot {
+    match slot {
+        tf::MethodSlot::Abstract {} => MethodSlot::Abstract,
+        tf::MethodSlot::AbstractOverride {} => MethodSlot::AbstractOverride,
+        tf::MethodSlot::Virtual {} => MethodSlot::Virtual,
+        tf::MethodSlot::Override {} => MethodSlot::Override,
+        tf::MethodSlot::Final {} => MethodSlot::Final,
+        tf::MethodSlot::FinalOverride {} => MethodSlot::FinalOverride,
+    }
+}
+
+fn decode_instance_parameter(parameter: tf::InstanceParameter) -> MethodInstanceParameter {
+    MethodInstanceParameter {
+        name: parameter.name.map(|name| decode_identifier(*name)),
     }
 }
 

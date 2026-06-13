@@ -99,6 +99,13 @@ enum tube-file-entry {
         instance-id: nat;
         import: import-specifier;
     },
+
+    instance-method-reference {
+        method-id: nat;
+        instance-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
 }
 
 
@@ -477,6 +484,12 @@ enum token {
     },
     trait {
         trait-id: nat;
+
+        @esexpr:(vararg)
+        args: list[token];
+    },
+    instance-type {
+        instance-id: nat;
 
         @esexpr:(vararg)
         args: list[token];

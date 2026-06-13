@@ -105,22 +105,44 @@ abstract class TokenEmitter {
             case "instance-value":
             {
                 const instanceInfo = this.#moduleEmitter.options.program.getInstanceInfo(t.instanceId);
-                const funcExpr = this.#moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+                const instanceExpr = this.#moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+
+                let specializedExpr: estree.Expression = {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: instanceExpr,
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
 
                 return {
                     type: "CallExpression",
                     optional: false,
-                    callee: funcExpr,
-                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: specializedExpr,
+                        property: {
+                            type: "Identifier",
+                            name: "create",
+                        },
+                    },
+                    arguments: [],
                 };
             }
 
             case "record":
             {
                 const rec = this.#moduleEmitter.options.program.getRecordInfo(t.recordId);
-                if(t.args.length === 0) {
-                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
-                }
 
                 return {
                     type: "CallExpression",
@@ -142,9 +164,6 @@ abstract class TokenEmitter {
             case "enum":
             {
                 const rec = this.#moduleEmitter.options.program.getEnumInfo(t.enumId);
-                if(t.args.length === 0) {
-                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
-                }
 
                 return {
                     type: "CallExpression",
@@ -177,10 +196,7 @@ abstract class TokenEmitter {
 
             case "trait":
             {
-                const rec = this.#moduleEmitter.options.program.getTraitInfo(t.traitId);
-                if(t.args.length === 0) {
-                    return this.#moduleEmitter.getImportExpr(rec.importSpecifier);
-                }
+                const trt = this.#moduleEmitter.options.program.getTraitInfo(t.traitId);
 
                 return {
                     type: "CallExpression",
@@ -189,7 +205,7 @@ abstract class TokenEmitter {
                         type: "MemberExpression",
                         computed: false,
                         optional: false,
-                        object: this.#moduleEmitter.getImportExpr(rec.importSpecifier),
+                        object: this.#moduleEmitter.getImportExpr(trt.importSpecifier),
                         property: {
                             type: "Identifier",
                             name: "specialize",
@@ -198,6 +214,28 @@ abstract class TokenEmitter {
                     arguments: t.args.map(arg => this.buildTokenValue(arg)),
                 };
             }
+
+            case "instance-type":
+            {
+                const inst = this.#moduleEmitter.options.program.getInstanceInfo(t.instanceId);
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.#moduleEmitter.getImportExpr(inst.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTokenValue(arg)),
+                };
+            }
+
 
             case "tuple":
                 return {
@@ -2303,25 +2341,51 @@ class BlockEmitter extends EmitterBase {
             case "new-instance":
             {
                 const instanceInfo = this.options.program.getInstanceInfo(insn.instanceId);
-                const funcExpr = this.moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
+                const instanceExpr = this.moduleEmitter.getImportExpr(instanceInfo.importSpecifier);
 
-                const args: estree.Expression[] = [];
+                const tokenArgs: estree.Expression[] = [];
                 for(const tokenArg of insn.tokenArgs) {
-                    args.push(this.buildTokenValue(tokenArg));
+                    tokenArgs.push(this.buildTokenValue(tokenArg));
                 }
 
+                const args: estree.Expression[] = [];
                 for(const arg of insn.args) {
                     args.push(this.getReg(arg));
                 }
 
-                const callExpr: estree.Expression = {
+                const specializedExpr: estree.Expression = {
                     type: "CallExpression",
                     optional: false,
-                    callee: funcExpr,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: instanceExpr,
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: tokenArgs,
+                };
+
+                const createExpr: estree.Expression = {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: specializedExpr,
+                        property: {
+                            type: "Identifier",
+                            name: "create",
+                        },
+                    },
                     arguments: args,
                 };
 
-                assign(insn.dest, callExpr);
+                assign(insn.dest, createExpr);
                 break;
             }
 

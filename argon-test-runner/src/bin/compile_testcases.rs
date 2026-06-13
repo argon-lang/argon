@@ -1,6 +1,6 @@
+use argon_test_runner::cmd::DirectCommandRunner;
 use argon_test_runner::{
-    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext,
-    workspace::WorkspacePaths,
+    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext, workspace::WorkspacePaths,
 };
 use argon_testcases::load_test_case;
 use clap::{Parser, ValueEnum};
@@ -9,7 +9,6 @@ use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
-use argon_test_runner::cmd::DirectCommandRunner;
 
 #[derive(Parser)]
 #[command(about = "Compile Argon test XML files without running them")]

@@ -3,17 +3,18 @@ use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::{
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
     EffectInfo, Enum, EnumVariant, ErasureMode, Expr, Function, FunctionImplementation,
-    FunctionParameterListType, FunctionSignature, Identifier, Module, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Tube, TubeName,
-    UnaryOperatorIdentifier,
+    FunctionParameterListType, FunctionSignature, Identifier, Instance, Method, MethodEntry,
+    MethodInstanceParameter, MethodOwner, MethodSlot, Module, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Trait, Tube, TubeName,
+    UnaryOperatorIdentifier, access::AccessModifier,
 };
 use core::mem;
 use num_bigint::{BigInt, BigUint};
 
 use crate::ids::TubeIdProvider;
 use argon_expr::{
-    BlockLabel, BlockLabelKind, ExpressionOwner, LocalVariable, Pattern, RecordFieldPattern,
-    RecordType, Variable,
+    BlockLabel, BlockLabelKind, ExpressionOwner, LocalVariable, MethodInstanceType, Pattern,
+    RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
 
@@ -142,6 +143,50 @@ impl TubeEncoder {
         if is_new {
             self.entry_emitters
                 .push_back(EntryEmitter::EnumVariant(variant));
+        }
+
+        id
+    }
+
+    fn get_trait_id(&mut self, trait_: Arc<dyn Trait>) -> usize {
+        let (id, is_new) = self.ids.trait_ids.get_with_new(trait_.clone());
+
+        if is_new {
+            self.entry_emitters.push_back(EntryEmitter::Trait(trait_));
+        }
+
+        id
+    }
+
+    fn get_instance_id(&mut self, instance: Arc<dyn Instance>) -> usize {
+        let (id, is_new) = self.ids.instance_ids.get_with_new(instance.clone());
+
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::Instance(instance));
+        }
+
+        id
+    }
+
+    fn get_method_id(&mut self, method: Arc<dyn Method>) -> usize {
+        let (id, is_new) = self.ids.method_ids.get_with_new(method.clone());
+
+        if is_new {
+            match method.clone().owner() {
+                MethodOwner::Trait(trait_) => {
+                    self.get_trait_id(trait_.clone());
+                    if import_specifier_tube(&trait_.import_specifier()) != self.tube.name() {
+                        self.entry_emitters.push_back(EntryEmitter::Method(method));
+                    }
+                }
+                MethodOwner::Instance(instance) => {
+                    self.get_instance_id(instance.clone());
+                    if import_specifier_tube(&instance.import_specifier()) != self.tube.name() {
+                        self.entry_emitters.push_back(EntryEmitter::Method(method));
+                    }
+                }
+            }
         }
 
         id
@@ -406,6 +451,91 @@ impl TubeEncoder {
                     name: Box::new(name),
                 }
             }
+
+            EntryEmitter::Trait(trait_) => {
+                let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
+                let import_specifier = trait_.clone().import_specifier();
+                let import = self.encode_import_specifier(&import_specifier)?;
+
+                if import_specifier_tube(&import_specifier) != self.tube.name() {
+                    tf::TubeFileEntry::TraitReference {
+                        trait_id,
+                        import: Box::new(import),
+                    }
+                } else {
+                    let methods = trait_
+                        .clone()
+                        .methods()
+                        .iter()
+                        .map(|method| self.emit_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    tf::TubeFileEntry::TraitDefinition {
+                        definition: Box::new(tf::TraitDefinition {
+                            trait_id,
+                            import: Box::new(import),
+                            signature: Box::new(self.emit_function_signature(&trait_.signature())?),
+                            methods,
+                        }),
+                    }
+                }
+            }
+
+            EntryEmitter::Instance(instance) => {
+                let instance_id = BigUint::from(self.ids.instance_ids.get(instance.clone()));
+                let import_specifier = instance.clone().import_specifier();
+                let import = self.encode_import_specifier(&import_specifier)?;
+
+                if import_specifier_tube(&import_specifier) != self.tube.name() {
+                    tf::TubeFileEntry::InstanceReference {
+                        instance_id,
+                        import: Box::new(import),
+                    }
+                } else {
+                    let methods = instance
+                        .clone()
+                        .methods()
+                        .iter()
+                        .map(|method| self.emit_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    tf::TubeFileEntry::InstanceDefinition {
+                        definition: Box::new(tf::InstanceDefinition {
+                            instance_id,
+                            import: Box::new(import),
+                            erasure: Box::new(encode_erasure_mode(instance.erasure_mode())),
+                            signature: Box::new(
+                                self.emit_function_signature(&instance.signature())?,
+                            ),
+                            methods,
+                        }),
+                    }
+                }
+            }
+
+            EntryEmitter::Method(method) => {
+                let method_id = BigUint::from(self.ids.method_ids.get(method.clone()));
+                let metadata = method.metadata();
+                let signature = self.encode_erased_signature(&erase_signature(
+                    self.context.clone(),
+                    method.clone().signature().as_ref(),
+                ))?;
+
+                match method.clone().owner() {
+                    MethodOwner::Trait(trait_) => tf::TubeFileEntry::TraitMethodReference {
+                        method_id,
+                        trait_id: BigUint::from(self.ids.trait_ids.get(trait_)),
+                        name: Box::new(encode_identifier(&metadata.name)?),
+                        signature: Box::new(signature),
+                    },
+                    MethodOwner::Instance(instance) => tf::TubeFileEntry::InstanceMethodReference {
+                        method_id,
+                        instance_id: BigUint::from(self.ids.instance_ids.get(instance)),
+                        name: Box::new(encode_identifier(&metadata.name)?),
+                        signature: Box::new(signature),
+                    },
+                }
+            }
         }))
     }
 
@@ -477,11 +607,27 @@ impl TubeEncoder {
                     signature: Box::new(signature),
                 }
             }
-            ModuleExportBinding::Trait(_) => {
-                todo!()
+            ModuleExportBinding::Trait(trait_) => {
+                let trait_id = self.get_trait_id(trait_.clone());
+                let sig = trait_.signature();
+                let erased_sig = erase_signature(self.context.clone(), sig.as_ref());
+                let signature = self.encode_erased_signature(&erased_sig)?;
+                tf::ModuleExport::Trait {
+                    trait_id: BigUint::from(trait_id),
+                    access: Box::new(encode_access_modifier_global(exp.access)),
+                    signature: Box::new(signature),
+                }
             }
-            ModuleExportBinding::Instance(_) => {
-                todo!()
+            ModuleExportBinding::Instance(instance) => {
+                let instance_id = self.get_instance_id(instance.clone());
+                let sig = instance.signature();
+                let erased_sig = erase_signature(self.context.clone(), sig.as_ref());
+                let signature = self.encode_erased_signature(&erased_sig)?;
+                tf::ModuleExport::Instance {
+                    instance_id: BigUint::from(instance_id),
+                    access: Box::new(encode_access_modifier_global(exp.access)),
+                    signature: Box::new(signature),
+                }
             }
         };
 
@@ -641,6 +787,89 @@ impl TubeEncoder {
         })
     }
 
+    fn emit_method_entry(
+        &mut self,
+        method_entry: &MethodEntry,
+    ) -> Result<tf::MethodEntry, InternalCompilerError> {
+        let method_id = self.get_method_id(method_entry.method.clone());
+        let method = method_entry.method.clone();
+        let metadata = method.metadata();
+        let sig = method.clone().signature();
+        let erased_sig = erase_signature(self.context.clone(), sig.as_ref());
+        let implementation = method
+            .clone()
+            .implementation()
+            .map(|implementation| self.emit_method_implementation(&implementation))
+            .transpose()?
+            .map(Box::new);
+
+        Ok(tf::MethodEntry {
+            id: BigUint::from(method_id),
+            access: Box::new(encode_access_modifier(method_entry.access)),
+            method: Box::new(tf::MethodDefinition {
+                name: Box::new(encode_identifier(&metadata.name)?),
+                erased_signature: Box::new(self.encode_erased_signature(&erased_sig)?),
+                inline: metadata.is_inline,
+                erased: metadata.erasure_mode == ErasureMode::Erased,
+                witness: metadata.is_witness,
+                slot: Box::new(encode_method_slot(metadata.slot)),
+                effects: Box::new(encode_effect_info(metadata.effect_info)),
+                instance_parameter: Box::new(encode_instance_parameter(
+                    &metadata.instance_parameter,
+                )?),
+                signature: Box::new(self.emit_function_signature(&sig)?),
+                implementation,
+            }),
+        })
+    }
+
+    fn emit_method_implementation(
+        &mut self,
+        implementation: &FunctionImplementation,
+    ) -> Result<tf::MethodImplementation, InternalCompilerError> {
+        Ok(match implementation {
+            FunctionImplementation::Expr(expr) => tf::MethodImplementation::Expr {
+                body: Box::new(self.emit_expr(expr)?),
+            },
+
+            FunctionImplementation::Extern(externs) => tf::MethodImplementation::Extern {
+                externs: Box::new(tf::ExternMap {
+                    externs: externs
+                        .externs
+                        .iter()
+                        .map(|(platform, expr)| (platform.clone(), ESExprStatic::new(expr.clone())))
+                        .collect::<BTreeMap<_, _>>()
+                        .into(),
+                }),
+            },
+        })
+    }
+
+    fn emit_method_instance_type(
+        &mut self,
+        instance_type: &MethodInstanceType<DefaultExprContext>,
+    ) -> Result<tf::MethodInstanceType, InternalCompilerError> {
+        Ok(match instance_type {
+            MethodInstanceType::Trait(trait_type) => tf::MethodInstanceType::TraitType {
+                trait_type: Box::new(self.emit_trait_type(trait_type)?),
+            },
+        })
+    }
+
+    fn emit_trait_type(
+        &mut self,
+        trait_type: &TraitType<DefaultExprContext>,
+    ) -> Result<tf::TraitType, InternalCompilerError> {
+        Ok(tf::TraitType {
+            id: BigUint::from(self.get_trait_id(trait_type.trait_.clone())),
+            args: trait_type
+                .arguments
+                .iter()
+                .map(|arg| self.emit_expr(arg).map(Box::new))
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+
     fn emit_expr(
         &mut self,
         expr: &Expr<argon_compiler::DefaultExprContext>,
@@ -676,6 +905,30 @@ impl TubeEncoder {
                 arguments,
             } => tf::Expr::FunctionCall {
                 id: self.get_function_id(function.clone()).into(),
+                args: arguments
+                    .iter()
+                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+            Expr::MethodCall {
+                method,
+                instance_type,
+                receiver,
+                arguments,
+            } => tf::Expr::InstanceMethodCall {
+                method_id: self.get_method_id(method.clone()).into(),
+                instance_type: Box::new(self.emit_method_instance_type(instance_type)?),
+                instance: Box::new(self.emit_expr(receiver)?),
+                args: arguments
+                    .iter()
+                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+            Expr::NewInstance {
+                instance,
+                arguments,
+            } => tf::Expr::NewInstance {
+                instance_id: self.get_instance_id(instance.clone()).into(),
                 args: arguments
                     .iter()
                     .map(|arg| self.emit_expr(arg).map(Box::new))
@@ -878,6 +1131,9 @@ impl TubeEncoder {
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
             },
+            Expr::TraitType(trait_type) => tf::Expr::TraitType {
+                trait_type: Box::new(self.emit_trait_type(trait_type)?),
+            },
             Expr::EnumVariantLiteral {
                 enum_type,
                 variant,
@@ -1045,8 +1301,12 @@ impl TubeEncoder {
             ExpressionOwner::EnumVariant(variant) => tf::ExpressionOwner::EnumVariant {
                 index: self.get_enum_variant_id(variant.clone()).into(),
             },
-            ExpressionOwner::Method(_) => todo!("emit method expression owners"),
-            ExpressionOwner::Instance(_) => todo!("emit instance expression owners"),
+            ExpressionOwner::Method(method) => tf::ExpressionOwner::Method {
+                index: self.get_method_id(method.clone()).into(),
+            },
+            ExpressionOwner::Instance(instance) => tf::ExpressionOwner::Instance {
+                index: self.get_instance_id(instance.clone()).into(),
+            },
         })
     }
 
@@ -1104,6 +1364,9 @@ enum EntryEmitter {
     RecordField(Arc<dyn RecordField>),
     Enum(Arc<dyn Enum>),
     EnumVariant(Arc<dyn EnumVariant>),
+    Trait(Arc<dyn Trait>),
+    Instance(Arc<dyn Instance>),
+    Method(Arc<dyn Method>),
 }
 
 fn encode_module_path(path: &argon_compiler::ModulePath) -> tf::ModulePath {
@@ -1175,6 +1438,41 @@ fn encode_access_modifier_global(access: AccessModifierGlobal) -> tf::AccessModi
         AccessModifierGlobal::Internal => tf::AccessModifierGlobal::Internal {},
         AccessModifierGlobal::ModulePrivate => tf::AccessModifierGlobal::ModulePrivate {},
     }
+}
+
+fn encode_access_modifier(access: AccessModifier) -> tf::AccessModifier {
+    match access {
+        AccessModifier::Public => tf::AccessModifier::Public {},
+        AccessModifier::Private => tf::AccessModifier::Private {},
+        AccessModifier::Protected => tf::AccessModifier::Protected {},
+        AccessModifier::Internal => tf::AccessModifier::Internal {},
+        AccessModifier::ProtectedOrInternal => tf::AccessModifier::ProtectedOrInternal {},
+        AccessModifier::ProtectedAndInternal => tf::AccessModifier::ProtectedAndInternal {},
+        AccessModifier::ModulePrivate => tf::AccessModifier::ModulePrivate {},
+    }
+}
+
+fn encode_method_slot(slot: MethodSlot) -> tf::MethodSlot {
+    match slot {
+        MethodSlot::Abstract => tf::MethodSlot::Abstract {},
+        MethodSlot::AbstractOverride => tf::MethodSlot::AbstractOverride {},
+        MethodSlot::Virtual => tf::MethodSlot::Virtual {},
+        MethodSlot::Override => tf::MethodSlot::Override {},
+        MethodSlot::Final => tf::MethodSlot::Final {},
+        MethodSlot::FinalOverride => tf::MethodSlot::FinalOverride {},
+    }
+}
+
+fn encode_instance_parameter(
+    parameter: &MethodInstanceParameter,
+) -> Result<tf::InstanceParameter, InternalCompilerError> {
+    Ok(tf::InstanceParameter {
+        name: parameter
+            .name
+            .as_ref()
+            .map(|name| encode_identifier(name).map(Box::new))
+            .transpose()?,
+    })
 }
 
 fn encode_block_label_kind(kind: BlockLabelKind) -> tf::BlockLabelKind {
