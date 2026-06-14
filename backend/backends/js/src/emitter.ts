@@ -477,13 +477,14 @@ abstract class EmitterBase {
 
     protected getExportNameForType(t: ir.ErasedSignatureType): string {
         switch(t.$type) {
-            case "builtin":
-            {
-                const name = t.b.$type;
-                const args = t.args.map(arg => this.getExportNameForType(arg)).join("");
+            case "int":
+            case "bool":
+            case "string":
+            case "never":
+                return "$b" + t.$type + "$a$e";
 
-                return "$b" + name + "$a" + args + "$e";
-            }
+            case "array":
+                return "$barray$a" + this.getExportNameForType(t.elementType) + "$e";
 
             case "function":
                 return "$f" + this.getExportNameForType(t.input) + "$r" + this.getExportNameForType(t.output) + "$e";

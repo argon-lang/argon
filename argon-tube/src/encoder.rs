@@ -659,16 +659,13 @@ impl TubeEncoder {
         t: &ErasedSignatureType,
     ) -> Result<tf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
-            ErasedSignatureType::Builtin(builtin) => {
-                let Some(builtin_type) = encode_erased_builtin_type(*builtin) else {
-                    return Ok(tf::ErasedSignatureType::Erased {});
-                };
-
-                tf::ErasedSignatureType::Builtin {
-                    b: Box::new(builtin_type),
-                    args: Vec::new(),
-                }
-            }
+            ErasedSignatureType::Int => tf::ErasedSignatureType::Int {},
+            ErasedSignatureType::Bool => tf::ErasedSignatureType::Bool {},
+            ErasedSignatureType::String => tf::ErasedSignatureType::String {},
+            ErasedSignatureType::Never => tf::ErasedSignatureType::Never {},
+            ErasedSignatureType::Array(element_type) => tf::ErasedSignatureType::Array {
+                element_type: Box::new(self.encode_erased_signature_type(element_type)?),
+            },
 
             ErasedSignatureType::Function(input, output) => tf::ErasedSignatureType::Function {
                 input: Box::new(self.encode_erased_signature_type(input)?),
@@ -1594,18 +1591,5 @@ fn encode_builtin(builtin: Builtin) -> Result<tf::Builtin, InternalCompilerError
         Builtin::ArrayGet => tf::Builtin::ArrayGet,
         Builtin::ArraySet => tf::Builtin::ArraySet,
         Builtin::EqualToType => tf::Builtin::EqualTo,
-    })
-}
-
-fn encode_erased_builtin_type(builtin: Builtin) -> Option<tf::BuiltinType> {
-    Some(match builtin {
-        Builtin::IntType => tf::BuiltinType::Int {},
-        Builtin::BoolType => tf::BuiltinType::Bool {},
-        Builtin::StringType => tf::BuiltinType::String {},
-        Builtin::NeverType => tf::BuiltinType::Never {},
-        Builtin::ArrayType => tf::BuiltinType::Array {},
-        Builtin::ConjunctionType => tf::BuiltinType::Conjunction {},
-        Builtin::DisjunctionType => tf::BuiltinType::Disjunction {},
-        _ => return None,
     })
 }

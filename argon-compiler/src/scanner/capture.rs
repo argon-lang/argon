@@ -66,8 +66,7 @@ mod tests {
     use alloc::boxed::Box;
     use alloc::vec;
     use argon_expr::{
-        ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprScanner, LocalVariable,
-        Variable,
+        ClosureParameterVariable, ErasureMode, Expr, ExprContext, LocalVariable, Variable,
     };
     use argon_util::UniqueIdentifier;
     use mitsein::vec1::Vec1;
@@ -126,10 +125,8 @@ mod tests {
             body: Box::new(body),
         };
 
-        let mut scanner = CaptureScanner::new();
-        scanner.scan(&expr);
+        let captures = CaptureScanner::scan_captures(&expr);
 
-        let captures = scanner.captures_for(&parameter).unwrap();
         assert!(captures.contains(&captured));
         assert!(!captures.contains(&Variable::ClosureParameter(parameter)));
     }
@@ -153,11 +150,9 @@ mod tests {
         };
 
         let captures = CaptureScanner::scan_captures(&expr);
-        let captures = captures
-            .get(&Variable::ClosureParameter(parameter))
-            .unwrap();
 
         assert!(!captures.contains(&bound));
+        assert!(!captures.contains(&Variable::ClosureParameter(parameter)));
     }
 
     #[test]
@@ -179,17 +174,8 @@ mod tests {
 
         let captures = CaptureScanner::scan_captures(&outer);
 
-        assert!(
-            captures
-                .get(&Variable::ClosureParameter(outer_parameter))
-                .unwrap()
-                .contains(&captured)
-        );
-        assert!(
-            captures
-                .get(&Variable::ClosureParameter(inner_parameter))
-                .unwrap()
-                .contains(&captured)
-        );
+        assert!(captures.contains(&captured));
+        assert!(!captures.contains(&Variable::ClosureParameter(outer_parameter)));
+        assert!(!captures.contains(&Variable::ClosureParameter(inner_parameter)));
     }
 }

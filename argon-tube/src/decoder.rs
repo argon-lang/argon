@@ -1003,12 +1003,13 @@ impl TubeDecoder {
         sig_type: tf::ErasedSignatureType,
     ) -> ErasedSignatureType {
         match sig_type {
-            tf::ErasedSignatureType::Builtin { b, args } => {
-                if !args.is_empty() {
-                    todo!("decode erased builtin type arguments")
-                }
-                ErasedSignatureType::Builtin(decode_builtin_type(*b))
-            }
+            tf::ErasedSignatureType::Int {} => ErasedSignatureType::Int,
+            tf::ErasedSignatureType::Bool {} => ErasedSignatureType::Bool,
+            tf::ErasedSignatureType::String {} => ErasedSignatureType::String,
+            tf::ErasedSignatureType::Never {} => ErasedSignatureType::Never,
+            tf::ErasedSignatureType::Array { element_type } => ErasedSignatureType::Array(
+                Box::new(self.decode_erased_signature_type(*element_type)),
+            ),
             tf::ErasedSignatureType::Function { input, output } => ErasedSignatureType::Function(
                 Box::new(self.decode_erased_signature_type(*input)),
                 Box::new(self.decode_erased_signature_type(*output)),
@@ -2432,17 +2433,5 @@ fn decode_builtin(builtin: tf::Builtin) -> Builtin {
         tf::Builtin::ArraySet => Builtin::ArraySet,
         tf::Builtin::EqualTo => Builtin::EqualToType,
         tf::Builtin::EqualToRefl => todo!("decode equal-to-refl builtin"),
-    }
-}
-
-fn decode_builtin_type(builtin_type: tf::BuiltinType) -> Builtin {
-    match builtin_type {
-        tf::BuiltinType::Int {} => Builtin::IntType,
-        tf::BuiltinType::Bool {} => Builtin::BoolType,
-        tf::BuiltinType::String {} => Builtin::StringType,
-        tf::BuiltinType::Never {} => Builtin::NeverType,
-        tf::BuiltinType::Array {} => Builtin::ArrayType,
-        tf::BuiltinType::Conjunction {} => Builtin::ConjunctionType,
-        tf::BuiltinType::Disjunction {} => Builtin::DisjunctionType,
     }
 }

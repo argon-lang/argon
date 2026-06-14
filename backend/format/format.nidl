@@ -275,11 +275,13 @@ record erased-signature {
 
 @esexpr:(derive-codec)
 enum erased-signature-type {
-    builtin {
-        b: builtin-type;
+    int,
+    bool,
+    string,
+    never,
 
-        @esexpr: (vararg)
-        args: list[erased-signature-type];
+    array {
+        element-type: erased-signature-type;
     },
     function {
         input: erased-signature-type;
@@ -296,17 +298,6 @@ enum erased-signature-type {
         elements: list[erased-signature-type];
     },
     erased,
-}
-
-@esexpr:(derive-codec)
-enum builtin-type {
-    int,
-    bool,
-    string,
-    never,
-    array,
-    conjunction,
-    disjunction,
 }
 
 @esexpr:(derive-codec)

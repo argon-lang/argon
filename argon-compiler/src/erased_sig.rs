@@ -14,7 +14,11 @@ pub struct ErasedSignature {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ErasedSignatureType {
-    Builtin(Builtin),
+    Int,
+    Bool,
+    String,
+    Never,
+    Array(Box<ErasedSignatureType>),
     Function(Box<ErasedSignatureType>, Box<ErasedSignatureType>),
     Declared(ImportSpecifier, Vec<ErasedSignatureType>),
     Tuple(Vec<ErasedSignatureType>),
@@ -59,7 +63,7 @@ pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedS
     normalizer.normalize(&mut t);
 
     match t {
-        Expr::Builtin { builtin, arguments } => erase_builtin(builtin, arguments),
+        Expr::Builtin { builtin, arguments } => erase_builtin(context, builtin, arguments),
 
         Expr::FunctionType { a, r } => ErasedSignatureType::Function(
             Box::new(erase_type(context, a.var_type)),
@@ -105,16 +109,21 @@ pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedS
 }
 
 fn erase_builtin(
+    context: &Context,
     builtin: Builtin,
-    arguments: Vec<Expr<DefaultExprContext>>,
+    mut arguments: Vec<Expr<DefaultExprContext>>,
 ) -> ErasedSignatureType {
-    if arguments.is_empty() {
-        return ErasedSignatureType::Builtin(builtin);
-    }
-
     match builtin {
-        Builtin::ArrayType => todo!(),
-
+        Builtin::IntType => ErasedSignatureType::Int,
+        Builtin::BoolType => ErasedSignatureType::Bool,
+        Builtin::StringType => ErasedSignatureType::String,
+        Builtin::NeverType => ErasedSignatureType::Never,
+        Builtin::ArrayType => {
+            let Some(arg) = arguments.pop() else {
+                return ErasedSignatureType::Erased;
+            };
+            ErasedSignatureType::Array(Box::new(erase_type(context, arg)))
+        }
         _ => ErasedSignatureType::Erased,
     }
 }

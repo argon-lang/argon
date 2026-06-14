@@ -701,14 +701,13 @@ impl VmEncoder {
         t: &ErasedSignatureType,
     ) -> Result<vf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
-            ErasedSignatureType::Builtin(builtin) => {
-                let builtin_type = encode_builtin_type(*builtin);
-
-                vf::ErasedSignatureType::Builtin {
-                    b: Box::new(builtin_type),
-                    args: Vec::new(),
-                }
-            }
+            ErasedSignatureType::Int => vf::ErasedSignatureType::Int {},
+            ErasedSignatureType::Bool => vf::ErasedSignatureType::Bool {},
+            ErasedSignatureType::String => vf::ErasedSignatureType::String {},
+            ErasedSignatureType::Never => vf::ErasedSignatureType::Never {},
+            ErasedSignatureType::Array(element_type) => vf::ErasedSignatureType::Array {
+                element_type: Box::new(self.encode_erased_signature_type(element_type)?),
+            },
 
             ErasedSignatureType::Function(input, output) => vf::ErasedSignatureType::Function {
                 input: Box::new(self.encode_erased_signature_type(input)?),
@@ -2777,11 +2776,6 @@ fn import_specifier_tube(import: &ImportSpecifier) -> &TubeName {
         ImportSpecifier::Global { tube, .. } => tube,
         ImportSpecifier::Local { parent, .. } => import_specifier_tube(parent),
     }
-}
-
-fn encode_builtin_type(builtin: Builtin) -> vf::BuiltinType {
-    encode_token_builtin_type(builtin)
-        .unwrap_or_else(|| todo!("encode non-type builtin as VM builtin type"))
 }
 
 fn encode_token_builtin_type(builtin: Builtin) -> Option<vf::BuiltinType> {
