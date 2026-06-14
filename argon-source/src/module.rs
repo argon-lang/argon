@@ -17,7 +17,7 @@ use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, S
 use argon_util::CompileError;
 use argon_util::sync::{OnceLock, ThreadSafe};
 use core::{iter, mem};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
 

@@ -327,7 +327,9 @@ enum Rule {
 
     #[strum(serialize = "PostfixExpr_{0}")]
     PostfixExpr(ParenAllowedState),
-    CurryCallExpr,
+
+    #[strum(serialize = "CurryCallExpr_Prefix{0}")]
+    CurryCallExpr(ParenAllowedState),
     CurryCallExprArgs1,
     CurryCallExprArgs2,
     EnclosedArgList,
@@ -345,6 +347,7 @@ enum Rule {
     BitwiseXorExpr,
     BitwiseOrExpr,
     FunctionTypeExpr,
+    FunctionTypeExprRest,
     RelationalExpr,
     EqualityExpr,
     LogicalAndExpr,
@@ -640,9 +643,9 @@ impl GrammarFactory for ParserFactory {
                 ]
             ),
             StringExprContent => ruleset(
-                "Vec<StringFragment>",
+                "VecDeque<StringFragment>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ nonterm(StringFragment), nonterm(StringExprContent) ], "(move |h, t| prepend(h, t))"),
                 ],
             ),
@@ -675,9 +678,9 @@ impl GrammarFactory for ParserFactory {
                 ]
             ).lex_mode("LexerMode::SkipNewLines"),
             MatchCases => ruleset(
-                "Vec<WithLocation<MatchCase>>",
+                "VecDeque<WithLocation<MatchCase>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule(
                         [
                             nonterm(MatchCase).with_location(),
@@ -730,7 +733,7 @@ impl GrammarFactory for ParserFactory {
                 "Expr",
                 [
                     rule([ nonterm(PrimaryExpr(ParenAllowedState::NotAllowed)) ], "identity"),
-                    rule([ term(SymOpenParen).discard(), term(SymCloseParen).discard() ], "(|| expr_tuple(Vec::new()))"),
+                    rule([ term(SymOpenParen).discard(), term(SymCloseParen).discard() ], "(|| expr_tuple(empty_seq()))"),
                     rule([ term(SymOpenParen).discard(), nonterm(Expression).with_location(), term(SymCloseParen).discard() ], "(|e| Expr::Paren(Box::new(e)))"),
                     expr_error(),
                 ],
@@ -806,12 +809,12 @@ impl GrammarFactory for ParserFactory {
                     rules,
                 )
             },
-            CurryCallExpr => ruleset(
+            CurryCallExpr(prefix_paren_allowed) => ruleset(
                 "Expr",
                 [
                     rule(
                         [
-                            nonterm(PostfixExpr(ParenAllowedState::Allowed)).with_location(),
+                            nonterm(PostfixExpr(prefix_paren_allowed)).with_location(),
                             nonterm(CurryCallExprArgs1),
                         ],
                         "(move |func_expr, args| curried_call(func_expr, args))",
@@ -820,9 +823,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             CurryCallExprArgs1 => ruleset(
-                "Vec<(FunctionParameterListType, WithLocation<Expr>)>",
+                "VecDeque<(FunctionParameterListType, WithLocation<Expr>)>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule(
                         [
                             nonterm(PostfixExpr(ParenAllowedState::NotAllowed)).with_location(),
@@ -833,9 +836,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             CurryCallExprArgs2 => ruleset(
-                "Vec<(FunctionParameterListType, WithLocation<Expr>)>",
+                "VecDeque<(FunctionParameterListType, WithLocation<Expr>)>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule(
                         [
                             nonterm(EnclosedArgList),
@@ -875,18 +878,18 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             RecordLiteralFieldsWithBlockEnd => ruleset(
-                "WithLocation<Vec<WithLocation<RecordFieldLiteral>>>",
+                "WithLocation<VecDeque<WithLocation<RecordFieldLiteral>>>",
                 [
                     rule([ nonterm(RecordLiteralFields).with_location(), term(SymCloseCurly).discard() ], "identity"),
                 ],
             ),
             RecordLiteralFields => ruleset(
-                "Vec<WithLocation<RecordFieldLiteral>>",
+                "VecDeque<WithLocation<RecordFieldLiteral>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ nonterm(StatementSeparator).discard(), nonterm(RecordLiteralFields) ], "identity" ),
                     rule([ nonterm(RecordLiteralField).with_location(), nonterm(StatementSeparator).discard(), nonterm(RecordLiteralFields) ], "(move |h, t| prepend(h, t))"),
-                    rule([ nonterm(RecordLiteralField).with_location() ], "(move |f| vec![f])"),
+                    rule([ nonterm(RecordLiteralField).with_location() ], "seq1"),
                 ],
             ),
             RecordLiteralField => ruleset(
@@ -907,7 +910,7 @@ impl GrammarFactory for ParserFactory {
             UnaryExpr => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(CurryCallExpr) ], "identity"),
+                    rule([ nonterm(CurryCallExpr(ParenAllowedState::Allowed)) ], "identity"),
                     rule([ nonterm(TypeExpr) ], "identity"),
                     unary_operator_expr_rule(OpBitNot, "BitNot"),
                     unary_operator_expr_rule(OpLogicalNot, "LogicalNot"),
@@ -986,19 +989,30 @@ impl GrammarFactory for ParserFactory {
                             term(KwFn).discard(),
                             nonterm(BitwiseOrExpr).with_location(),
                             term(OpArrow).discard(),
-                            nonterm(FunctionTypeExpr).with_location(),
+                            nonterm(FunctionTypeExprRest).with_location(),
                         ],
                         "expr_function_type"
+                    ),
+                    expr_error(),
+                ],
+            ),
+            FunctionTypeExprRest => ruleset(
+                "Expr",
+                [
+                    rule(
+                        [
+                            nonterm(BitwiseOrExpr).with_location(),
+                        ],
+                        "with_location_value"
                     ),
                     rule(
                         [
                             nonterm(BitwiseOrExpr).with_location(),
                             term(OpArrow).discard(),
-                            nonterm(FunctionTypeExpr).with_location(),
+                            nonterm(FunctionTypeExprRest).with_location(),
                         ],
                         "expr_function_type"
                     ),
-                    expr_error(),
                 ],
             ),
             RelationalExpr => ruleset(
@@ -1110,9 +1124,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             TupleExprRest => ruleset(
-                "Vec<WithLocation<Expr>>",
+                "VecDeque<WithLocation<Expr>>",
                 [
-                    rule([ nonterm(ClosureExpr).with_location() ], "(move |e| vec![e])"),
+                    rule([ nonterm(ClosureExpr).with_location() ], "seq1"),
                     rule([ nonterm(ClosureExpr).with_location(), term(SymComma).discard(), nonterm(TupleExprRest) ], "(move |h, t| prepend(h, t))"),
                 ],
             ),
@@ -1208,15 +1222,15 @@ impl GrammarFactory for ParserFactory {
             TuplePattern => ruleset(
                 "Pattern",
                 [
-                    rule([], "(|| pattern_tuple(Vec::new()))"),
+                    rule([], "(|| pattern_tuple(empty_seq()))"),
                     rule([ nonterm(NonTuplePattern).with_location() ], "with_location_value"),
                     rule([ nonterm(NonTuplePattern).with_location(), term(SymComma).discard(), nonterm(NonEmptyTuplePattern) ], "(move |h, t| pattern_tuple(prepend(h, t)))"),
                 ],
             ),
             NonEmptyTuplePattern => ruleset(
-                "Vec<WithLocation<Pattern>>",
+                "VecDeque<WithLocation<Pattern>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ nonterm(NonTuplePattern).with_location() ], "seq1"),
                     rule(
                         [ nonterm(NonTuplePattern).with_location(), term(SymComma).discard(), nonterm(NonEmptyTuplePattern) ],
@@ -1267,9 +1281,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             ConstructorArgsPattern => ruleset(
-                "Vec<PatternArgument>",
+                "VecDeque<PatternArgument>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule(
                         [
                             nonterm(ConstructorArgPattern),
@@ -1316,13 +1330,13 @@ impl GrammarFactory for ParserFactory {
                 "Vec<WithLocation<Modifier>>",
                 [
                     rule([], "(|| Vec::new())"),
-                    rule([ nonterm(Modifier).with_location(), nonterm(Modifiers1) ], "(move |h, t| prepend(h, t))" ),
+                    rule([ nonterm(Modifier).with_location(), nonterm(Modifiers1) ], "(move |h, t| vec_deque_to_vec(prepend(h, t)))" ),
                 ],
             ),
             Modifiers1 => ruleset(
-                "Vec<WithLocation<Modifier>>",
+                "VecDeque<WithLocation<Modifier>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ term(NewLine).discard(), nonterm(Modifiers1) ], "identity"),
                     rule([ nonterm(Modifier).with_location(), nonterm(Modifiers1) ], "(move |h, t| prepend(h, t))" ),
                 ],
@@ -1447,9 +1461,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             MethodParameters => ruleset(
-                "Vec<WithLocation<FunctionParameterList>>",
+                "VecDeque<WithLocation<FunctionParameterList>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ nonterm(MethodParameterList).with_location(), nonterm(MethodParameters) ], "(move |h, t| prepend(h, t))"),
                 ],
             ),
@@ -1487,9 +1501,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ).lex_mode("LexerMode::SkipNewLines"),
             MethodParameterListModifiers => ruleset(
-                "Vec<WithLocation<Modifier>>",
+                "VecDeque<WithLocation<Modifier>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ nonterm(MethodParameterListModifier).with_location(), nonterm(MethodParameterListModifiers) ], "(move |h, t| prepend(h, t))")
                 ],
             ),
@@ -1501,17 +1515,17 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             MethodParameterListContents => ruleset(
-                "(Vec<WithLocation<FunctionParameter>>, bool)",
+                "(VecDeque<WithLocation<FunctionParameter>>, bool)",
                 [
-                    rule([], "(|| (Vec::new(), false))"),
+                    rule([], "(|| (empty_seq(), false))"),
                     rule([ nonterm(MethodParameter).with_location(), nonterm(MethodParameterListContents1) ], "(move |h, tail_info| { let (t, has_trailing_comma) = tail_info; (prepend(h, t), has_trailing_comma) })"),
                 ],
             ),
             MethodParameterListContents1 => ruleset(
-                "(Vec<WithLocation<FunctionParameter>>, bool)",
+                "(VecDeque<WithLocation<FunctionParameter>>, bool)",
                 [
-                    rule([], "(|| (Vec::new(), false))"),
-                    rule([ term(SymComma).discard() ], "(|| (Vec::new(), true))"),
+                    rule([], "(|| (empty_seq(), false))"),
+                    rule([ term(SymComma).discard() ], "(|| (empty_seq(), true))"),
                     rule(
                         [
                             term(SymComma).discard(),
@@ -1542,9 +1556,9 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             MethodEnsuresClause => ruleset(
-                "Vec<WithLocation<Expr>>",
+                "VecDeque<WithLocation<Expr>>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ term(KwEnsures).discard(), nonterm(TypeBinding).with_location(), nonterm(MethodEnsuresClause) ], "(move |h, t| prepend(h, t))"),
                 ],
             ),
@@ -1589,12 +1603,12 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             RecordBody => ruleset(
-                "Vec<WithLocation<RecordBodyStmt>>",
+                "VecDeque<WithLocation<RecordBodyStmt>>",
                 [
-                    rule([ nonterm(RecordBodyStmt).with_location() ], "(move |s| vec![s])"),
+                    rule([ nonterm(RecordBodyStmt).with_location() ], "seq1"),
                     rule([ nonterm(RecordBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(RecordBody) ], "(move |h, t| prepend(h, t))"),
                     rule([ nonterm(StatementSeparator).discard(), nonterm(RecordBody) ], "identity"),
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                 ],
             ),
             RecordBodyStmt => ruleset(
@@ -1638,12 +1652,12 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             EnumBody => ruleset(
-                "Vec<WithLocation<EnumBodyStmt>>",
+                "VecDeque<WithLocation<EnumBodyStmt>>",
                 [
-                    rule([ nonterm(EnumBodyStmt).with_location() ], "(move |s| vec![s])"),
+                    rule([ nonterm(EnumBodyStmt).with_location() ], "seq1"),
                     rule([ nonterm(EnumBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(EnumBody) ], "(move |h, t| prepend(h, t))"),
                     rule([ nonterm(StatementSeparator).discard(), nonterm(EnumBody) ], "identity"),
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                 ],
             ),
             EnumBodyStmt => ruleset(
@@ -1685,12 +1699,12 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             TraitBody => ruleset(
-                "Vec<WithLocation<TraitBodyStmt>>",
+                "VecDeque<WithLocation<TraitBodyStmt>>",
                 [
-                    rule([ nonterm(TraitBodyStmt).with_location() ], "(move |s| vec![s])"),
+                    rule([ nonterm(TraitBodyStmt).with_location() ], "seq1"),
                     rule([ nonterm(TraitBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(TraitBody) ], "(move |h, t| prepend(h, t))"),
                     rule([ nonterm(StatementSeparator).discard(), nonterm(TraitBody) ], "identity"),
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                 ],
             ),
             TraitBodyStmt => ruleset(
@@ -1700,12 +1714,12 @@ impl GrammarFactory for ParserFactory {
                 ],
             ),
             NewTraitObjectBody => ruleset(
-                "Vec<WithLocation<NewTraitObjectBodyStmt>>",
+                "VecDeque<WithLocation<NewTraitObjectBodyStmt>>",
                 [
-                    rule([ nonterm(NewTraitObjectBodyStmt).with_location() ], "(move |s| vec![s])"),
+                    rule([ nonterm(NewTraitObjectBodyStmt).with_location() ], "seq1"),
                     rule([ nonterm(NewTraitObjectBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(NewTraitObjectBody) ], "(move |h, t| prepend(h, t))"),
                     rule([ nonterm(StatementSeparator).discard(), nonterm(NewTraitObjectBody) ], "identity"),
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                 ],
             ),
             NewTraitObjectBodyStmt => ruleset(
@@ -1793,12 +1807,12 @@ impl GrammarFactory for ParserFactory {
             ),
 
             ImportPathMulti => ruleset(
-                "Vec<ImportPathSegment>",
+                "VecDeque<ImportPathSegment>",
                 [
                     rule([ nonterm(StatementSeparator).discard(), nonterm(ImportPathMulti) ], "identity"),
                     rule([ nonterm(ImportPathSegment) ], "seq1"),
                     rule([ nonterm(ImportPathSegment), nonterm(StatementSeparator).discard(), nonterm(ImportPathMulti) ], "(move |h, t| prepend(h, t))"),
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                 ],
             ),
 
@@ -1819,12 +1833,12 @@ impl GrammarFactory for ParserFactory {
             ),
 
             StatementList => ruleset(
-                "Vec<WithLocation<Stmt>>",
+                "VecDeque<WithLocation<Stmt>>",
                 [
-                    rule([ nonterm(Statement).with_location() ], "(move |s| vec![s])"),
+                    rule([ nonterm(Statement).with_location() ], "seq1"),
                     rule([ nonterm(Statement).with_location(), nonterm(StatementSeparator).discard(), nonterm(StatementList) ], "(move |h, t| prepend(h, t))"),
                     rule([ nonterm(StatementSeparator).discard(), nonterm(StatementList) ], "identity"),
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                 ],
             ),
 
@@ -1844,24 +1858,24 @@ impl GrammarFactory for ParserFactory {
             ),
 
             ModuleDeclaration => ruleset(
-                "Vec<String>",
+                "VecDeque<String>",
                 [
                     rule([ term(KwModule).discard(), nonterm(ModulePath) ], "identity"),
                 ],
             ),
 
             ModulePath => ruleset(
-                "Vec<String>",
+                "VecDeque<String>",
                 [
-                    rule([ term(KwUnderscore).discard() ], "(|| Vec::new())"),
+                    rule([ term(KwUnderscore).discard() ], "empty_seq"),
                     rule([ term(IdentifierToken), nonterm(ModulePath1) ], "module_path_prepend"),
                 ],
             ),
 
             ModulePath1 => ruleset(
-                "Vec<String>",
+                "VecDeque<String>",
                 [
-                    rule([], "(|| Vec::new())"),
+                    rule([], "empty_seq"),
                     rule([ term(SymColonColon).discard(), term(IdentifierToken), nonterm(ModulePath1) ], "module_path_prepend"),
                 ],
             ),

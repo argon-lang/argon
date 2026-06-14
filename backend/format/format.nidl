@@ -616,6 +616,11 @@ enum expr {
         value: expr;
         condition: expr;
     },
+    closure {
+        v: closure-parameter-var;
+        return-type: expr;
+        body: expr;
+    },
     condition {
         value: expr;
 
@@ -656,7 +661,7 @@ enum expr {
         a: expr;
     },
     function-type {
-        a: lambda-parameter-var;
+        a: closure-parameter-var;
         r: expr;
     },
     if-else {
@@ -682,11 +687,6 @@ enum expr {
     is {
         value: expr;
         pattern: pattern;
-    },
-    lambda {
-        v: lambda-parameter-var;
-        return-type: expr;
-        body: expr;
     },
     match {
         value: expr;
@@ -896,7 +896,7 @@ record local-var {
 }
 
 @esexpr:(derive-codec)
-record lambda-parameter-var {
+record closure-parameter-var {
     id: nat;
     var-type: expr;
     name: option[identifier];
@@ -987,7 +987,7 @@ enum var {
         @esexpr:(default-value #false)
         witness: bool;
     },
-    lambda-parameter-var {
+    closure-parameter-var {
         id: nat;
     },
 }

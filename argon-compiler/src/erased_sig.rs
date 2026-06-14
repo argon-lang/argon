@@ -62,7 +62,7 @@ pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedS
         Expr::Builtin { builtin, arguments } => erase_builtin(builtin, arguments),
 
         Expr::FunctionType { a, r } => ErasedSignatureType::Function(
-            Box::new(erase_type(context, *a)),
+            Box::new(erase_type(context, a.var_type)),
             Box::new(erase_type(context, *r)),
         ),
 

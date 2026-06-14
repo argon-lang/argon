@@ -1,4 +1,4 @@
-use alloc::{sync::Arc, vec::Vec};
+use alloc::sync::Arc;
 use argon_compiler::{
     DefaultExprContext, Enum, EnumVariant, Function, Instance, Method, ModulePath, Record,
     RecordField, Trait, TubeName,
@@ -21,13 +21,14 @@ pub struct TubeIdProvider {
     pub method_ids: IdStore<Arc<dyn Method>>,
     pub instance_ids: IdStore<Arc<dyn Instance>>,
     pub local_variable_ids: IdStore<UniqueIdentifier>,
+    pub closure_parameter_ids: IdStore<UniqueIdentifier>,
     pub local_import_ids: IdStore<UniqueIdentifier>,
     pub block_label_ids: IdStore<BlockLabel<DefaultExprContext>>,
 }
 
 pub struct IdStore<T> {
     ids: HashMap<T, usize>,
-    values: Vec<T>,
+    next_id: usize,
 }
 
 impl<T: Eq + Hash + Clone> IdStore<T> {
@@ -40,10 +41,15 @@ impl<T: Eq + Hash + Clone> IdStore<T> {
         if let Some(id) = self.ids.get(&value) {
             return (*id, false);
         }
-        let id = self.values.len();
+        let id = self.claim_id();
         self.ids.insert(value.clone(), id);
-        self.values.push(value);
         (id, true)
+    }
+
+    pub fn claim_id(&mut self) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
     }
 }
 
@@ -51,7 +57,7 @@ impl<T> Default for IdStore<T> {
     fn default() -> Self {
         Self {
             ids: HashMap::new(),
-            values: Vec::new(),
+            next_id: 0,
         }
     }
 }

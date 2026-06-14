@@ -16,6 +16,11 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
         | Expr::Not(_)
         | Expr::Or(_, _) => Expr::bool_type(),
 
+        Expr::Closure { v, return_type, .. } => Expr::FunctionType {
+            a: v.clone(),
+            r: return_type.clone(),
+        },
+
         Expr::Block { label, .. } => label.block_result_type.clone(),
 
         Expr::VariableBinding(_, _) | Expr::VariableStore(_, _) => Expr::unit(),
@@ -131,10 +136,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             get_expr_type(&trait_type)
         }
 
-        Expr::FunctionLiteral { .. }
-        | Expr::FunctionResultValue
-        | Expr::MethodCall { .. }
-        | Expr::RecordLiteral { .. } => todo!(),
+        Expr::FunctionResultValue | Expr::MethodCall { .. } | Expr::RecordLiteral { .. } => todo!(),
     }
 }
 

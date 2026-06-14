@@ -3,7 +3,7 @@ use crate::ast::*;
 use crate::lexer::{LexedToken, LexerMode, TokenReader};
 use crate::token::{Token, TokenCategory};
 use alloc::borrow::ToOwned;
-use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, collections::VecDeque, format, string::String, vec::Vec};
 use argon_util::{CompileError, ErrorReporter};
 use num_bigint::{BigInt, BigUint};
 use parse18_runtime::{
@@ -30,15 +30,21 @@ fn with_location_value<T>(value: WithLocation<T>) -> T {
     value.value
 }
 
-fn seq1<T>(head: T) -> Vec<T> {
-    vec![head]
+fn empty_seq<T>() -> VecDeque<T> {
+    VecDeque::new()
 }
 
-fn prepend<T>(head: T, mut tail: Vec<T>) -> Vec<T> {
-    let mut values = Vec::with_capacity(tail.len() + 1);
-    values.push(head);
-    values.append(&mut tail);
-    values
+fn seq1<T>(head: T) -> VecDeque<T> {
+    VecDeque::from([head])
+}
+
+fn prepend<T>(head: T, mut tail: VecDeque<T>) -> VecDeque<T> {
+    tail.push_front(head);
+    tail
+}
+
+fn vec_deque_to_vec<T>(values: VecDeque<T>) -> Vec<T> {
+    Vec::from(values)
 }
 
 fn non_empty_single<T>(head: T) -> NonEmptyVec<T> {
@@ -117,7 +123,7 @@ fn unary_op(op: WithLocation<UnaryOperator>, a: WithLocation<Expr>) -> Expr {
 
 fn curried_call(
     func_expr: WithLocation<Expr>,
-    args: Vec<(FunctionParameterListType, WithLocation<Expr>)>,
+    args: VecDeque<(FunctionParameterListType, WithLocation<Expr>)>,
 ) -> Expr {
     let mut value = func_expr;
 
@@ -130,7 +136,7 @@ fn curried_call(
     value.value
 }
 
-fn simplify_fragments(fragments: Vec<StringFragment>) -> StringLiteral {
+fn simplify_fragments(fragments: VecDeque<StringFragment>) -> StringLiteral {
     let mut parts = Vec::new();
 
     for fragment in fragments {
@@ -177,42 +183,42 @@ fn if_expr_from_cond_apply(
 }
 
 fn if_expr_after_then_end(
-    then_body: WithLocation<Vec<WithLocation<Stmt>>>,
+    then_body: WithLocation<VecDeque<WithLocation<Stmt>>>,
 ) -> Box<dyn FnOnce(WithLocation<Expr>) -> Expr> {
     Box::new(move |cond| {
-        let else_body = WithLocation::new(Vec::new(), then_body.location.clone());
+        let else_body = WithLocation::new(empty_seq(), then_body.location.clone());
         expr_if_else(cond, then_body, else_body)
     })
 }
 
 fn if_expr_after_then_else(
-    then_body: WithLocation<Vec<WithLocation<Stmt>>>,
-    else_body: WithLocation<Vec<WithLocation<Stmt>>>,
+    then_body: WithLocation<VecDeque<WithLocation<Stmt>>>,
+    else_body: WithLocation<VecDeque<WithLocation<Stmt>>>,
 ) -> Box<dyn FnOnce(WithLocation<Expr>) -> Expr> {
     Box::new(move |cond| expr_if_else(cond, then_body, else_body))
 }
 
 fn if_expr_after_then_elsif(
-    then_body: WithLocation<Vec<WithLocation<Stmt>>>,
+    then_body: WithLocation<VecDeque<WithLocation<Stmt>>>,
     else_expr: WithLocation<Expr>,
 ) -> Box<dyn FnOnce(WithLocation<Expr>) -> Expr> {
     Box::new(move |cond| {
         let else_location = else_expr.location.clone();
         let else_stmt = WithLocation::new(stmt_expr(else_expr), else_location.clone());
-        let else_body = WithLocation::new(vec![else_stmt], else_location);
+        let else_body = WithLocation::new(seq1(else_stmt), else_location);
         expr_if_else(cond, then_body, else_body)
     })
 }
 
 fn expr_while_no_body(
     label: Option<WithLocation<Identifier>>,
-    cond: WithLocation<Vec<WithLocation<Stmt>>>,
+    cond: WithLocation<VecDeque<WithLocation<Stmt>>>,
     end_keyword: WithLocation<Token>,
 ) -> Expr {
     expr_while(
         label,
         cond,
-        WithLocation::new(Vec::new(), end_keyword.location),
+        WithLocation::new(empty_seq(), end_keyword.location),
     )
 }
 
@@ -237,7 +243,7 @@ fn enclosed_arg_list_paren_empty(
 ) -> (FunctionParameterListType, WithLocation<Expr>) {
     (
         FunctionParameterListType::NormalList,
-        WithLocation::new(expr_tuple(Vec::new()), close_paren.location),
+        WithLocation::new(expr_tuple(empty_seq()), close_paren.location),
     )
 }
 
@@ -246,7 +252,7 @@ fn enclosed_arg_list_square_empty(
 ) -> (FunctionParameterListType, WithLocation<Expr>) {
     (
         FunctionParameterListType::InferrableList,
-        WithLocation::new(expr_tuple(Vec::new()), close_bracket.location),
+        WithLocation::new(expr_tuple(empty_seq()), close_bracket.location),
     )
 }
 
@@ -261,7 +267,7 @@ fn pattern_binding_discard(mut_spec: bool, id: WithLocation<Identifier>) -> Patt
 
 fn pattern_argument_from_path(path: WithLocation<PatternPath>) -> PatternArgument {
     let location = path.location.clone();
-    let pattern = WithLocation::new(pattern_constructor(path, Vec::new()), location);
+    let pattern = WithLocation::new(pattern_constructor(path, empty_seq()), location);
     pattern_argument(FunctionParameterListType::NormalList, pattern)
 }
 
@@ -278,7 +284,7 @@ fn variable_declaration_rest_builder(
 fn method_declaration_stmt_rest_from_named_instance(
     instance_name: WithLocation<Identifier>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
 ) -> Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt> {
@@ -299,7 +305,7 @@ fn method_declaration_stmt_rest_from_named_instance(
 fn method_declaration_stmt_rest_from_discard_instance(
     instance_name: WithLocation<Token>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
 ) -> Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt> {
@@ -319,7 +325,7 @@ fn method_declaration_stmt_rest_from_discard_instance(
 
 fn method_declaration_stmt_rest_function(
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: FunctionBody,
 ) -> Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt> {
@@ -334,9 +340,9 @@ fn function_body_extern_body_token(id: WithLocation<Box<str>>) -> FunctionBody {
 
 fn record_declaration_stmt_rest_builder(
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<RecordBodyStmt>>,
+    body: VecDeque<WithLocation<RecordBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordDeclarationStmt> {
     Box::new(move |modifiers| {
         record_declaration_stmt(modifiers, name, parameters, type_annotation, body)
@@ -349,9 +355,9 @@ fn record_body_stmt_record_field(field: RecordField) -> RecordBodyStmt {
 
 fn enum_declaration_stmt_rest_builder(
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<EnumBodyStmt>>,
+    body: VecDeque<WithLocation<EnumBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
     Box::new(move |modifiers| {
         enum_declaration_stmt(modifiers, name, parameters, type_annotation, body)
@@ -382,7 +388,7 @@ fn enum_body_stmt_from_declaration_builder(
 
 fn enum_constructor_variant_builder(
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> EnumBodyStmt> {
     Box::new(move |modifiers| {
@@ -392,9 +398,9 @@ fn enum_constructor_variant_builder(
 
 fn trait_declaration_stmt_rest_builder(
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<TraitBodyStmt>>,
+    body: VecDeque<WithLocation<TraitBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
     Box::new(move |modifiers| {
         trait_declaration_stmt(modifiers, name, parameters, type_annotation, body)
@@ -403,9 +409,9 @@ fn trait_declaration_stmt_rest_builder(
 
 fn instance_declaration_stmt_rest_builder(
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<TraitBodyStmt>>,
+    body: VecDeque<WithLocation<TraitBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> Stmt> {
     Box::new(move |modifiers| {
         instance_declaration_stmt(modifiers, name, parameters, type_annotation, body)
@@ -504,7 +510,7 @@ fn new_trait_object_body_stmt_from_declaration_builder(
     declaration_stmt_to_new_trait_object_body_stmt(build_decl((modifiers, method_purity)))
 }
 
-fn module_path_prepend(name: Box<str>, tail: Vec<String>) -> Vec<String> {
+fn module_path_prepend(name: Box<str>, tail: VecDeque<String>) -> VecDeque<String> {
     prepend(token_identifier_name(name), tail)
 }
 
@@ -524,10 +530,13 @@ fn expr_assert(t: WithLocation<Expr>) -> Expr {
 }
 
 fn expr_block(
-    body: WithLocation<Vec<WithLocation<Stmt>>>,
-    finally_body: Option<WithLocation<Vec<WithLocation<Stmt>>>>,
+    body: WithLocation<VecDeque<WithLocation<Stmt>>>,
+    finally_body: Option<WithLocation<VecDeque<WithLocation<Stmt>>>>,
 ) -> Expr {
-    Expr::Block { body, finally_body }
+    Expr::Block {
+        body: body.map(vec_deque_to_vec),
+        finally_body: finally_body.map(|body| body.map(vec_deque_to_vec)),
+    }
 }
 
 fn expr_bool_literal(value: bool) -> Expr {
@@ -577,13 +586,13 @@ fn expr_function_type(a: WithLocation<Expr>, r: WithLocation<Expr>) -> Expr {
 
 fn expr_if_else(
     condition: WithLocation<Expr>,
-    when_true: WithLocation<Vec<WithLocation<Stmt>>>,
-    when_false: WithLocation<Vec<WithLocation<Stmt>>>,
+    when_true: WithLocation<VecDeque<WithLocation<Stmt>>>,
+    when_false: WithLocation<VecDeque<WithLocation<Stmt>>>,
 ) -> Expr {
     Expr::IfElse {
         condition: Box::new(condition),
-        when_true,
-        when_false,
+        when_true: when_true.map(vec_deque_to_vec),
+        when_false: when_false.map(vec_deque_to_vec),
     }
 }
 
@@ -603,25 +612,28 @@ fn expr_is(value: WithLocation<Expr>, pattern: WithLocation<Pattern>) -> Expr {
 
 fn expr_loop(
     label: Option<WithLocation<Identifier>>,
-    body: WithLocation<Vec<WithLocation<Stmt>>>,
+    body: WithLocation<VecDeque<WithLocation<Stmt>>>,
 ) -> Expr {
-    Expr::Loop { label, body }
+    Expr::Loop {
+        label,
+        body: body.map(vec_deque_to_vec),
+    }
 }
 
-fn expr_match(value: WithLocation<Expr>, cases: Vec<WithLocation<MatchCase>>) -> Expr {
+fn expr_match(value: WithLocation<Expr>, cases: VecDeque<WithLocation<MatchCase>>) -> Expr {
     Expr::Match {
         value: Box::new(value),
-        cases,
+        cases: vec_deque_to_vec(cases),
     }
 }
 
 fn expr_new_trait_object(
     trait_expr: WithLocation<Expr>,
-    body: Vec<WithLocation<NewTraitObjectBodyStmt>>,
+    body: VecDeque<WithLocation<NewTraitObjectBodyStmt>>,
 ) -> Expr {
     Expr::NewTraitObject {
         trait_expr: Box::new(trait_expr),
-        body,
+        body: vec_deque_to_vec(body),
     }
 }
 
@@ -635,11 +647,11 @@ fn expr_raise(ex: WithLocation<Expr>) -> Expr {
 
 fn expr_record_literal(
     record_expr: WithLocation<Expr>,
-    fields: WithLocation<Vec<WithLocation<ast::RecordFieldLiteral>>>,
+    fields: WithLocation<VecDeque<WithLocation<ast::RecordFieldLiteral>>>,
 ) -> Expr {
     Expr::RecordLiteral {
         record_expr: Box::new(record_expr),
-        fields,
+        fields: fields.map(vec_deque_to_vec),
     }
 }
 
@@ -655,8 +667,10 @@ fn expr_string_literal(value: StringLiteral) -> Expr {
     Expr::StringLiteral(value)
 }
 
-fn expr_tuple(items: Vec<WithLocation<Expr>>) -> Expr {
-    Expr::Tuple { items }
+fn expr_tuple(items: VecDeque<WithLocation<Expr>>) -> Expr {
+    Expr::Tuple {
+        items: vec_deque_to_vec(items),
+    }
 }
 
 fn expr_type() -> Expr {
@@ -672,13 +686,13 @@ where
 
 fn expr_while(
     label: Option<WithLocation<Identifier>>,
-    condition: WithLocation<Vec<WithLocation<Stmt>>>,
-    body: WithLocation<Vec<WithLocation<Stmt>>>,
+    condition: WithLocation<VecDeque<WithLocation<Stmt>>>,
+    body: WithLocation<VecDeque<WithLocation<Stmt>>>,
 ) -> Expr {
     Expr::While {
         label,
-        condition,
-        body,
+        condition: condition.map(vec_deque_to_vec),
+        body: body.map(vec_deque_to_vec),
     }
 }
 
@@ -747,8 +761,10 @@ fn pattern_discard() -> Pattern {
     Pattern::Discard
 }
 
-fn pattern_tuple(elements: Vec<WithLocation<Pattern>>) -> Pattern {
-    Pattern::Tuple { elements }
+fn pattern_tuple(elements: VecDeque<WithLocation<Pattern>>) -> Pattern {
+    Pattern::Tuple {
+        elements: vec_deque_to_vec(elements),
+    }
 }
 
 fn pattern_binding(
@@ -763,8 +779,14 @@ fn pattern_binding(
     }
 }
 
-fn pattern_constructor(path: WithLocation<PatternPath>, args: Vec<PatternArgument>) -> Pattern {
-    Pattern::Constructor { path, args }
+fn pattern_constructor(
+    path: WithLocation<PatternPath>,
+    args: VecDeque<PatternArgument>,
+) -> Pattern {
+    Pattern::Constructor {
+        path,
+        args: vec_deque_to_vec(args),
+    }
 }
 
 fn pattern_string(value: StringLiteral) -> Pattern {
@@ -812,25 +834,25 @@ fn function_parameter(param_type: WithLocation<Expr>, name: Identifier) -> Funct
 
 fn function_parameter_list(
     list_type: FunctionParameterListType,
-    modifiers: Vec<WithLocation<Modifier>>,
-    parameters: Vec<WithLocation<FunctionParameter>>,
+    modifiers: VecDeque<WithLocation<Modifier>>,
+    parameters: VecDeque<WithLocation<FunctionParameter>>,
     has_trailing_comma: bool,
 ) -> FunctionParameterList {
     FunctionParameterList {
         list_type,
-        modifiers,
-        parameters,
+        modifiers: vec_deque_to_vec(modifiers),
+        parameters: vec_deque_to_vec(parameters),
         has_trailing_comma,
     }
 }
 
 fn return_type_specifier(
     return_type: WithLocation<Expr>,
-    ensures_clauses: Vec<WithLocation<Expr>>,
+    ensures_clauses: VecDeque<WithLocation<Expr>>,
 ) -> ReturnTypeSpecifier {
     ReturnTypeSpecifier {
         return_type,
-        ensures_clauses,
+        ensures_clauses: vec_deque_to_vec(ensures_clauses),
     }
 }
 
@@ -854,7 +876,7 @@ fn function_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     purity: bool,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: FunctionBody,
 ) -> DeclarationStmt {
@@ -862,7 +884,7 @@ fn function_declaration_stmt(
         modifiers,
         purity,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
         body,
     }))
@@ -874,7 +896,7 @@ fn method_declaration_stmt(
     instance_name: WithLocation<Option<Identifier>>,
     instance_type: Option<WithLocation<Expr>>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
 ) -> DeclarationStmt {
@@ -884,7 +906,7 @@ fn method_declaration_stmt(
         instance_name,
         instance_type,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
         body,
     }))
@@ -893,64 +915,64 @@ fn method_declaration_stmt(
 fn record_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<RecordBodyStmt>>,
+    body: VecDeque<WithLocation<RecordBodyStmt>>,
 ) -> RecordDeclarationStmt {
     ast::RecordDeclarationStmt {
         modifiers,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
-        body,
+        body: vec_deque_to_vec(body),
     }
 }
 
 fn enum_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<EnumBodyStmt>>,
+    body: VecDeque<WithLocation<EnumBodyStmt>>,
 ) -> Stmt {
     Stmt::EnumDeclaration(Box::new(ast::EnumDeclarationStmt {
         modifiers,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
-        body,
+        body: vec_deque_to_vec(body),
     }))
 }
 
 fn trait_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<TraitBodyStmt>>,
+    body: VecDeque<WithLocation<TraitBodyStmt>>,
 ) -> Stmt {
     Stmt::TraitDeclaration(Box::new(ast::TraitDeclarationStmt {
         modifiers,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
-        body,
+        body: vec_deque_to_vec(body),
     }))
 }
 
 fn instance_declaration_stmt(
     modifiers: Vec<WithLocation<Modifier>>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
-    body: Vec<WithLocation<TraitBodyStmt>>,
+    body: VecDeque<WithLocation<TraitBodyStmt>>,
 ) -> Stmt {
     Stmt::InstanceDeclaration(Box::new(ast::InstanceDeclarationStmt {
         modifiers,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
-        body,
+        body: vec_deque_to_vec(body),
     }))
 }
 
@@ -969,13 +991,13 @@ fn record_field(
 fn enum_variant_constructor(
     modifiers: Vec<WithLocation<Modifier>>,
     name: WithLocation<Identifier>,
-    parameters: Vec<WithLocation<FunctionParameterList>>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
 ) -> EnumBodyStmt {
     EnumBodyStmt::EnumVariant(Box::new(EnumVariant::Constructor {
         modifiers,
         name,
-        parameters,
+        parameters: vec_deque_to_vec(parameters),
         return_type,
     }))
 }
@@ -996,10 +1018,13 @@ fn match_case(pattern: WithLocation<Pattern>, body: WithLocation<Expr>) -> Match
 }
 
 fn module_declaration(
-    module_path: Vec<String>,
-    stmts: Vec<WithLocation<Stmt>>,
+    module_path: VecDeque<String>,
+    stmts: VecDeque<WithLocation<Stmt>>,
 ) -> ModuleDeclaration {
-    ast::ModuleDeclaration { module_path, stmts }
+    ast::ModuleDeclaration {
+        module_path: vec_deque_to_vec(module_path),
+        stmts: vec_deque_to_vec(stmts),
+    }
 }
 
 fn export_stmt(from_import: WithLocation<ImportStmt>) -> ExportStmt {
@@ -1028,8 +1053,10 @@ fn import_path_segment_cons(
     }
 }
 
-fn import_path_segment_many(segments: Vec<ImportPathSegment>) -> ImportPathSegment {
-    ImportPathSegment::Many { segments }
+fn import_path_segment_many(segments: VecDeque<ImportPathSegment>) -> ImportPathSegment {
+    ImportPathSegment::Many {
+        segments: vec_deque_to_vec(segments),
+    }
 }
 
 fn import_path_segment_renaming(

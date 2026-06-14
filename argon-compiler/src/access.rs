@@ -1,6 +1,5 @@
 use crate::erased_sig::ImportSpecifier;
 use crate::{Declaration, MethodOwner, ModulePath, TubeName, TypeDeclaration};
-use argon_expr::{Expr, ExprContext, MethodInstanceType};
 use hashbrown::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

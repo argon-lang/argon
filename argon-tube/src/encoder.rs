@@ -13,8 +13,8 @@ use num_bigint::{BigInt, BigUint};
 
 use crate::ids::TubeIdProvider;
 use argon_expr::{
-    BlockLabel, BlockLabelKind, ExpressionOwner, LocalVariable, MethodInstanceType, Pattern,
-    RecordFieldPattern, RecordType, TraitType, Variable,
+    BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, LocalVariable,
+    MethodInstanceType, Pattern, RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
 
@@ -938,15 +938,17 @@ impl TubeEncoder {
                 f: Box::new(self.emit_expr(function)?),
                 a: Box::new(self.emit_expr(argument)?),
             },
+            Expr::Closure {
+                v,
+                return_type,
+                body,
+            } => tf::Expr::Closure {
+                v: Box::new(self.emit_closure_parameter_var(v)?),
+                return_type: Box::new(self.emit_expr(return_type)?),
+                body: Box::new(self.emit_expr(body)?),
+            },
             Expr::FunctionType { a, r } => tf::Expr::FunctionType {
-                a: Box::new(tf::LambdaParameterVar {
-                    id: BigUint::ZERO,
-                    var_type: Box::new(self.emit_expr(a)?),
-                    name: None,
-                    mutable: false,
-                    erasure: Box::new(tf::ErasureMode::Concrete {}),
-                    witness: false,
-                }),
+                a: Box::new(self.emit_closure_parameter_var(a)?),
                 r: Box::new(self.emit_expr(r)?),
             },
             Expr::Type(t) => tf::Expr::TypeN {
@@ -1280,6 +1282,13 @@ impl TubeEncoder {
                     .transpose()?,
                 var_type: Box::new(self.emit_expr(&variable.var_type)?),
             },
+            Variable::ClosureParameter(variable) => tf::Var::ClosureParameterVar {
+                id: self
+                    .ids
+                    .closure_parameter_ids
+                    .get(variable.id.clone())
+                    .into(),
+            },
         })
     }
 
@@ -1318,7 +1327,30 @@ impl TubeEncoder {
             Variable::Local(variable) => self.emit_local_var(variable),
             Variable::Parameter(_) => todo!("Expected local variable"),
             Variable::InstanceParameter(_) => todo!("Expected local variable"),
+            Variable::ClosureParameter(_) => todo!("Expected local variable"),
         }
+    }
+
+    fn emit_closure_parameter_var(
+        &mut self,
+        variable: &ClosureParameterVariable<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::ClosureParameterVar, InternalCompilerError> {
+        Ok(tf::ClosureParameterVar {
+            id: self
+                .ids
+                .closure_parameter_ids
+                .get(variable.id.clone())
+                .into(),
+            var_type: Box::new(self.emit_expr(&variable.var_type)?),
+            name: variable
+                .name
+                .as_ref()
+                .map(|name| encode_identifier(name).map(Box::new))
+                .transpose()?,
+            mutable: variable.is_mutable,
+            erasure: Box::new(encode_erasure_mode(variable.erasure_mode)),
+            witness: variable.is_witness,
+        })
     }
 
     fn emit_local_var(

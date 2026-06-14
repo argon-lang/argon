@@ -1,6 +1,7 @@
 use crate::{
     BlockLabel, EnumType, Expr, ExprContext, InstanceType, LoopLabels, MatchCase,
-    MethodInstanceType, RecordFieldLiteral, RecordType, TraitType, Variable,
+    MethodInstanceType, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType,
+    Variable,
 };
 
 mod normalizer;
@@ -23,6 +24,10 @@ pub trait ExprScanner {
     fn scan_variable(&mut self, v: &Variable<Self::EC>) -> bool {
         default_scan_variable(self, v)
     }
+
+    fn scan_pattern(&mut self, pattern: &Pattern<Self::EC>) -> bool {
+        default_scan_pattern(self, pattern)
+    }
 }
 
 pub trait ExprScannerMut {
@@ -38,6 +43,10 @@ pub trait ExprScannerMut {
 
     fn scan_variable(&mut self, v: &mut Variable<Self::EC>) -> bool {
         default_scan_variable_mut(self, v)
+    }
+
+    fn scan_pattern(&mut self, pattern: &mut Pattern<Self::EC>) -> bool {
+        default_scan_pattern_mut(self, pattern)
     }
 }
 
@@ -88,7 +97,11 @@ where
                     .iter()
                     .all(|field: &RecordFieldLiteral<S::EC>| scanner.scan(&field.value))
         }
-        Expr::FunctionLiteral { body, .. } => scanner.scan(body),
+        Expr::Closure {
+            v,
+            return_type,
+            body,
+        } => scanner.scan(&v.var_type) && scanner.scan(return_type) && scanner.scan(body),
         Expr::FunctionCall { arguments, .. } => {
             arguments.iter().all(|argument| scanner.scan(argument))
         }
@@ -96,7 +109,7 @@ where
             scanner.scan(function) && scanner.scan(argument)
         }
         Expr::FunctionResultValue => true,
-        Expr::FunctionType { a, r } => scanner.scan(a) && scanner.scan(r),
+        Expr::FunctionType { a, r } => scanner.scan(&a.var_type) && scanner.scan(r),
         Expr::IfElse {
             condition,
             when_true,
@@ -104,12 +117,12 @@ where
         } => scanner.scan(condition) && scanner.scan(when_true) && scanner.scan(when_false),
         Expr::InstanceType(instance_type) => default_scan_instance_type(scanner, instance_type),
         Expr::IntLiteral(_) => true,
-        Expr::Is { value, .. } => scanner.scan(value),
+        Expr::Is { value, pattern } => scanner.scan(value) && scanner.scan_pattern(pattern),
         Expr::Match { value, cases } => {
             scanner.scan(value)
-                && cases
-                    .iter()
-                    .all(|case: &MatchCase<S::EC>| scanner.scan(&case.body))
+                && cases.iter().all(|case: &MatchCase<S::EC>| {
+                    scanner.scan_pattern(&case.pattern) && scanner.scan(&case.body)
+                })
         }
         Expr::MethodCall {
             instance_type,
@@ -248,6 +261,33 @@ where
         Variable::Local(variable) => scanner.scan(&variable.var_type),
         Variable::Parameter(variable) => scanner.scan(&variable.var_type),
         Variable::InstanceParameter(variable) => scanner.scan(&variable.var_type),
+        Variable::ClosureParameter(variable) => scanner.scan(&variable.var_type),
+    }
+}
+
+pub fn default_scan_pattern<S>(scanner: &mut S, pattern: &Pattern<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    match pattern {
+        Pattern::Error | Pattern::String(_) | Pattern::Int(_) | Pattern::Bool(_) => true,
+        Pattern::Discard { t } => scanner.scan(t),
+        Pattern::Tuple(patterns) => patterns.iter().all(|pattern| scanner.scan_pattern(pattern)),
+        Pattern::Binding(variable, pattern) => {
+            scanner.scan(&variable.var_type) && scanner.scan_pattern(pattern)
+        }
+        Pattern::EnumVariant {
+            enum_type,
+            args,
+            fields,
+            ..
+        } => {
+            default_scan_enum_type(scanner, enum_type)
+                && args.iter().all(|arg| scanner.scan_pattern(arg))
+                && fields
+                    .iter()
+                    .all(|field: &RecordFieldPattern<S::EC>| scanner.scan_pattern(&field.pattern))
+        }
     }
 }
 
@@ -308,7 +348,15 @@ where
                     .iter_mut()
                     .all(|field: &mut RecordFieldLiteral<S::EC>| scanner.scan(&mut field.value))
         }
-        Expr::FunctionLiteral { body, .. } => scanner.scan(body.as_mut()),
+        Expr::Closure {
+            v,
+            return_type,
+            body,
+        } => {
+            scanner.scan(&mut v.var_type)
+                && scanner.scan(return_type.as_mut())
+                && scanner.scan(body.as_mut())
+        }
         Expr::FunctionCall { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
@@ -316,7 +364,7 @@ where
             scanner.scan(function.as_mut()) && scanner.scan(argument.as_mut())
         }
         Expr::FunctionResultValue => true,
-        Expr::FunctionType { a, r } => scanner.scan(a.as_mut()) && scanner.scan(r.as_mut()),
+        Expr::FunctionType { a, r } => scanner.scan(&mut a.var_type) && scanner.scan(r.as_mut()),
         Expr::IfElse {
             condition,
             when_true,
@@ -328,12 +376,14 @@ where
         }
         Expr::InstanceType(instance_type) => default_scan_instance_type_mut(scanner, instance_type),
         Expr::IntLiteral(_) => true,
-        Expr::Is { value, .. } => scanner.scan(value.as_mut()),
+        Expr::Is { value, pattern } => {
+            scanner.scan(value.as_mut()) && scanner.scan_pattern(pattern.as_mut())
+        }
         Expr::Match { value, cases } => {
             scanner.scan(value.as_mut())
-                && cases
-                    .iter_mut()
-                    .all(|case: &mut MatchCase<S::EC>| scanner.scan(&mut case.body))
+                && cases.iter_mut().all(|case: &mut MatchCase<S::EC>| {
+                    scanner.scan_pattern(&mut case.pattern) && scanner.scan(&mut case.body)
+                })
         }
         Expr::MethodCall {
             instance_type,
@@ -479,6 +529,37 @@ where
         Variable::Local(variable) => scanner.scan(&mut variable.var_type),
         Variable::Parameter(variable) => scanner.scan(&mut variable.var_type),
         Variable::InstanceParameter(variable) => scanner.scan(&mut variable.var_type),
+        Variable::ClosureParameter(variable) => scanner.scan(&mut variable.var_type),
+    }
+}
+
+pub fn default_scan_pattern_mut<S>(scanner: &mut S, pattern: &mut Pattern<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    match pattern {
+        Pattern::Error | Pattern::String(_) | Pattern::Int(_) | Pattern::Bool(_) => true,
+        Pattern::Discard { t } => scanner.scan(t.as_mut()),
+        Pattern::Tuple(patterns) => patterns
+            .iter_mut()
+            .all(|pattern| scanner.scan_pattern(pattern)),
+        Pattern::Binding(variable, pattern) => {
+            scanner.scan(&mut variable.var_type) && scanner.scan_pattern(pattern.as_mut())
+        }
+        Pattern::EnumVariant {
+            enum_type,
+            args,
+            fields,
+            ..
+        } => {
+            default_scan_enum_type_mut(scanner, enum_type)
+                && args.iter_mut().all(|arg| scanner.scan_pattern(arg))
+                && fields
+                    .iter_mut()
+                    .all(|field: &mut RecordFieldPattern<S::EC>| {
+                        scanner.scan_pattern(&mut field.pattern)
+                    })
+        }
     }
 }
 

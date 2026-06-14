@@ -1,5 +1,5 @@
-use crate::{Expr, ExprContext, Normalizer, NormalizerScanner};
-use alloc::vec::Vec;
+use crate::{Expr, ExprContext, Normalizer, NormalizerScanner, SubstScanner, Variable};
+use alloc::{borrow::Cow, vec::Vec};
 use argon_util::Fuel;
 
 pub trait Unify {
@@ -54,7 +54,17 @@ pub trait Unify {
                     a: b_arg,
                     r: b_result,
                 },
-            ) => self.unify(*a_arg, *b_arg) && self.unify(*a_result, *b_result),
+            ) => {
+                let mut b_result = *b_result;
+                SubstScanner::subst(
+                    Variable::ClosureParameter(b_arg.clone()),
+                    Cow::Owned(Expr::Variable(Variable::ClosureParameter(a_arg.clone()))),
+                    &mut b_result,
+                );
+
+                self.unify(a_arg.var_type.clone(), b_arg.var_type.clone())
+                    && self.unify(*a_result, b_result)
+            }
             (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
             (Expr::RecordType(a), Expr::RecordType(b)) => {
                 &a.record == &b.record && self.unify_all(a.arguments, b.arguments)
@@ -73,5 +83,93 @@ pub trait Unify {
 
     fn unify_all(&mut self, a: Vec<Expr<Self::EC>>, b: Vec<Expr<Self::EC>>) -> bool {
         a.len() == b.len() && a.into_iter().zip(b).all(|(a, b)| self.unify(a, b))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Unify;
+    use crate::{ClosureParameterVariable, ErasureMode, Expr, ExprContext, Normalizer, Variable};
+    use alloc::{boxed::Box, vec::Vec};
+    use argon_util::{Fuel, UniqueIdentifier};
+
+    #[derive(Debug, Eq, Hash, PartialEq)]
+    struct TestContext;
+
+    impl ExprContext for TestContext {
+        type Hole = ();
+        type Function = ();
+        type Record = ();
+        type RecordField = ();
+        type Enum = ();
+        type Trait = ();
+        type EnumVariant = ();
+        type Method = ();
+        type Instance = ();
+    }
+
+    struct NoopNormalizer;
+
+    impl Normalizer for NoopNormalizer {
+        type EC = TestContext;
+
+        fn resolve_hole(&mut self, _hole: &()) -> Option<Expr<Self::EC>> {
+            None
+        }
+
+        fn get_function_body(
+            &mut self,
+            _function: &(),
+            _arguments: &mut Vec<Expr<Self::EC>>,
+        ) -> Option<Expr<Self::EC>> {
+            None
+        }
+    }
+
+    struct TestUnifier;
+
+    impl Unify for TestUnifier {
+        type EC = TestContext;
+        type Norm<'a> = NoopNormalizer;
+
+        fn normalize_fuel(&self) -> Fuel {
+            Fuel::new(0)
+        }
+
+        fn normalizer<'a>(&'a mut self) -> Self::Norm<'a> {
+            NoopNormalizer
+        }
+
+        fn unify_hole(&mut self, _a: (), _b: Expr<Self::EC>) -> bool {
+            false
+        }
+    }
+
+    fn closure_parameter() -> Box<ClosureParameterVariable<TestContext>> {
+        Box::new(ClosureParameterVariable {
+            id: UniqueIdentifier::new(),
+            var_type: Expr::Type(Box::new(Expr::BigType(0.into()))),
+            name: None,
+            is_mutable: false,
+            erasure_mode: ErasureMode::Concrete,
+            is_witness: false,
+        })
+    }
+
+    #[test]
+    fn function_type_unification_substitutes_result_parameter() {
+        let a = closure_parameter();
+        let b = closure_parameter();
+
+        let left = Expr::FunctionType {
+            a: a.clone(),
+            r: Box::new(Expr::Variable(Variable::ClosureParameter(a))),
+        };
+        let right = Expr::FunctionType {
+            a: b.clone(),
+            r: Box::new(Expr::Variable(Variable::ClosureParameter(b))),
+        };
+
+        assert!(TestUnifier.unify(left, right));
     }
 }

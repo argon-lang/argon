@@ -6,12 +6,15 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, Method, MethodOwner, RecordField, RecordFieldOwner, SubstFunctionSignature, TypeDeclaration};
+use argon_compiler::{
+    Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
+    Method, MethodOwner, RecordField, RecordFieldOwner, SubstFunctionSignature,
+};
 use argon_expr::{
-    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, EnumType, ErasureMode, Expr,
-    ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels,
-    MethodInstanceType, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType,
-    SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
+    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, EnumType,
+    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
+    LocalVariable, LoopLabels, MethodInstanceType, Normalizer, NormalizerScanner, Pattern,
+    RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -988,8 +991,35 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                 result
             }
-            ast::Expr::FunctionLiteral(_) => todo!("infer function literals"),
-            ast::Expr::FunctionType { .. } => todo!("infer function types"),
+            ast::Expr::FunctionLiteral(func) => TypeInferResult::Closure {
+                location: &expr.location,
+                function_literal: func,
+            },
+
+            ast::Expr::FunctionType { a, r } => {
+                let arg_type = self.check_type(a);
+                let ret_type = self.check_type_with_meta_type(r);
+
+                // TODO: Figure out the proper kind
+
+                let arg = ClosureParameterVariable {
+                    id: UniqueIdentifier::new(),
+                    var_type: arg_type,
+                    name: None,
+                    is_mutable: false,
+                    erasure_mode: ErasureMode::Concrete,
+                    is_witness: false,
+                };
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::FunctionType {
+                        a: Box::new(arg),
+                        r: Box::new(ret_type.checked_expr),
+                    },
+                    inferred_type: ret_type.inferred_type,
+                })
+            }
+
             ast::Expr::IfElse {
                 condition,
                 when_true,
@@ -1689,7 +1719,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     let checked_arg = self.check_inferred_type(
                         &arg.arg.location,
                         arg_result,
-                        ExpectedType::Exact(a),
+                        ExpectedType::Exact(&a.var_type),
                     );
                     let f = self.check_inferred_type(
                         &arg.arg.location,
@@ -1911,11 +1941,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             let method_overloads = methods
                                 .iter()
                                 .filter(|entry| {
-                                    entry.method.metadata().name == adjusted_member_name &&
-                                        self.access.allows_access(
+                                    entry.method.metadata().name == adjusted_member_name
+                                        && self.access.allows_access(
                                             &Declaration::Method(entry.method.clone()),
                                             instance_type_as_method_owner.as_ref(),
-                                            entry.access
+                                            entry.access,
                                         )
                                 })
                                 .map(|entry| Overloadable::InstanceMethod {
@@ -2123,8 +2153,80 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     ) -> InferredType {
         match infer {
             TypeInferResult::Complete(inferred_type) => inferred_type,
-            TypeInferResult::Closure { .. } => {
-                todo!()
+            TypeInferResult::Closure {
+                location,
+                function_literal,
+            } => {
+                let ExpectedType::Exact(expected_type) = expected_type else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::tuple_type_required(
+                            location.clone(),
+                            format!("{:?}", expected_type),
+                        ));
+                    return InferredType::error();
+                };
+                let mut expected_type = expected_type.clone();
+
+                let mut norm = NormalizerScanner::new(
+                    self.context.normalize_fuel(),
+                    ExprNormalizer {
+                        model: &mut self.model,
+                    },
+                );
+                norm.normalize(&mut expected_type);
+
+                let Expr::FunctionType {
+                    a: func_type_arg,
+                    r: mut func_type_result,
+                } = expected_type
+                else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::tuple_type_required(
+                            location.clone(),
+                            format!("{:?}", expected_type),
+                        ));
+                    return InferredType::error();
+                };
+
+                let param = ClosureParameterVariable {
+                    id: UniqueIdentifier::new(),
+                    name: function_literal.parameter_name.clone(),
+                    var_type: func_type_arg.var_type.clone(),
+                    is_mutable: false,
+                    erasure_mode: ErasureMode::Concrete,
+                    is_witness: false,
+                };
+
+                let param_var = Variable::ClosureParameter(Box::new(param.clone()));
+
+                let mut subst = SubstScanner::new();
+                subst.add_substitution(
+                    Variable::ClosureParameter(func_type_arg),
+                    Cow::Owned(Expr::Variable(param_var.clone())),
+                );
+                subst.scan(&mut func_type_result);
+
+                let mut checker = with_nested_scope!(self);
+
+                checker.scope.add_variable(param_var);
+
+                let body = checker.check(&function_literal.body, &func_type_result);
+
+                let function_type = Expr::FunctionType {
+                    a: Box::new(param.clone()),
+                    r: func_type_result.clone(),
+                };
+
+                InferredType {
+                    checked_expr: Expr::Closure {
+                        v: Box::new(param),
+                        return_type: func_type_result,
+                        body: Box::new(body),
+                    },
+                    inferred_type: function_type,
+                }
             }
 
             TypeInferResult::Tuple { location, elements } => {
@@ -2678,7 +2780,20 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 self.type_matches_expected(actual_type, expected_type)
             }
             PartiallyInferredType::Closure => {
-                todo!()
+                let ExpectedType::Exact(expected_type) = expected_type else {
+                    return false;
+                };
+                let mut expected_type = expected_type.clone();
+
+                let mut norm = NormalizerScanner::new(
+                    self.context.normalize_fuel(),
+                    ExprNormalizer {
+                        model: &mut self.model,
+                    },
+                );
+                norm.normalize(&mut expected_type);
+
+                matches!(expected_type, Expr::FunctionType { .. })
             }
             PartiallyInferredType::Tuple(elements) => match expected_type {
                 ExpectedType::AnyMetaType

@@ -6,6 +6,7 @@ use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
+use argon_compiler::scanner::{CaptureScanner, FreeVariableScanner};
 use argon_compiler::vtable::{VTableTarget, build_vtable};
 use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
@@ -14,11 +15,11 @@ use argon_compiler::{
     RecordField, RecordFieldOwner, Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExpressionOwner, InstanceParameterVariable, NormalizerScanner,
-    ParameterVariable, TraitType, Variable,
+    BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
+    NormalizerScanner, TraitType, Variable,
 };
 use argon_format::vm as vf;
-use argon_util::{InternalCompilerError, TubeFormatError};
+use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
 use core::mem;
 use embedded_io::Write;
 use esexpr::{ESExprCodec, ESExprStatic};
@@ -139,6 +140,10 @@ impl VmEncoder {
         }
 
         id
+    }
+
+    fn new_synthetic_function_id(&mut self) -> usize {
+        self.ids.function_ids.claim_id()
     }
 
     fn get_record_id(&mut self, record: Arc<dyn Record>) -> usize {
@@ -329,7 +334,9 @@ impl VmEncoder {
 
                     for (index, param) in signature.parameters.iter().enumerate() {
                         builder.add_parameter(
-                            Box::new(param.clone().to_parameter_var(owner.clone(), index)),
+                            Variable::Parameter(Box::new(
+                                param.clone().to_parameter_var(owner.clone(), index),
+                            )),
                             false,
                         )?;
                     }
@@ -420,10 +427,10 @@ impl VmEncoder {
                             let mut builder = FunctionSignatureBuilder::new(self);
                             for (index, param) in variant_signature.parameters.iter().enumerate() {
                                 builder.add_parameter(
-                                    Box::new(param.clone().to_parameter_var(
+                                    Variable::Parameter(Box::new(param.clone().to_parameter_var(
                                         ExpressionOwner::EnumVariant(variant.clone()),
                                         index,
-                                    )),
+                                    ))),
                                     false,
                                 )?;
                             }
@@ -586,6 +593,27 @@ impl VmEncoder {
                         }),
                     }
                 }
+
+                EntryEmitter::SyntheticFunction {
+                    mut sig,
+                    syn_id,
+                    syn_import_spec,
+                    body,
+                } => {
+                    let import_spec = self.encode_import_specifier(&syn_import_spec)?;
+                    let block = self.emit_function_body(&body, &mut sig, syn_import_spec)?;
+
+                    vf::TubeFileEntry::FunctionDefinition {
+                        definition: Box::new(vf::FunctionDefinition {
+                            function_id: BigUint::from(syn_id),
+                            import: Box::new(import_spec),
+                            signature: Box::new(sig.sig),
+                            implementation: Some(Box::new(vf::FunctionImplementation::VmIr {
+                                body: Box::new(block),
+                            })),
+                        }),
+                    }
+                }
             }
         };
 
@@ -715,7 +743,9 @@ impl VmEncoder {
 
         for (index, param) in sig.parameters.iter().enumerate() {
             builder.add_parameter(
-                Box::new(param.clone().to_parameter_var(owner.clone(), index)),
+                Variable::Parameter(Box::new(
+                    param.clone().to_parameter_var(owner.clone(), index),
+                )),
                 false,
             )?;
         }
@@ -841,7 +871,9 @@ impl VmEncoder {
 
         for (index, param) in sig.parameters.iter().enumerate() {
             builder.add_parameter(
-                Box::new(param.clone().to_parameter_var(owner.clone(), index)),
+                Variable::Parameter(Box::new(
+                    param.clone().to_parameter_var(owner.clone(), index),
+                )),
                 false,
             )?;
         }
@@ -866,7 +898,7 @@ impl VmEncoder {
             declared_vars: Vec::new(),
             instructions: Vec::new(),
             parent_import_specifier: import_specifier,
-            captured_vars: HashSet::new(),
+            captured_vars: CaptureScanner::scan_captures(expr),
             block_labels: HashMap::new(),
             next_block_id: 0,
         };
@@ -907,6 +939,12 @@ enum EntryEmitter {
     Method(Arc<dyn Method>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
+    SyntheticFunction {
+        sig: FunctionSignatureWithMapping,
+        syn_id: usize,
+        syn_import_spec: ImportSpecifier,
+        body: Expr<DefaultExprContext>,
+    },
 }
 
 struct FunctionSignatureWithMapping {
@@ -971,37 +1009,36 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
     fn add_parameter(
         &mut self,
-        param: Box<ParameterVariable<DefaultExprContext>>,
+        param: Variable<DefaultExprContext>,
         captured_ref: bool,
     ) -> Result<(), InternalCompilerError> {
-        match param.erasure_mode {
+        match param.erasure_mode() {
             ErasureMode::Erased => {
                 self.arg_consumers.push(ArgConsumer::Erased);
             }
             ErasureMode::Token => {
-                let token_kind = self.token_emitter().token_expr(&param.var_type)?;
+                let token_kind = self.token_emitter().token_expr(param.var_type())?;
                 let tp = vf::SignatureTokenParameter {
-                    name: param.name.as_ref().map(encode_identifier).map(Box::new),
+                    name: param.name().map(encode_identifier).map(Box::new),
                     kind: Box::new(token_kind),
                 };
 
                 let index = self.token_parameters.len();
                 self.token_parameters.push(Box::new(tp));
-                self.type_param_mapping
-                    .insert(Variable::Parameter(param), index);
+                self.type_param_mapping.insert(param, index);
                 self.arg_consumers.push(ArgConsumer::Token);
             }
             ErasureMode::Concrete => {
-                let t = self.token_emitter().token_expr(&param.var_type)?;
+                let t = self.token_emitter().token_expr(param.var_type())?;
                 let sig_param = vf::SignatureParameter {
-                    name: param.name.as_ref().map(encode_identifier).map(Box::new),
+                    name: param.name().map(encode_identifier).map(Box::new),
                     param_type: Box::new(t),
                 };
 
                 let index = self.parameters.len();
                 self.parameters.push(Box::new(sig_param));
                 self.param_var_mapping.insert(
-                    Variable::Parameter(param),
+                    param,
                     MappedParamVar {
                         index,
                         captured_ref,
@@ -1173,7 +1210,7 @@ trait TokenEmitterCommon {
             }
 
             Expr::FunctionType { a, r } => Ok(vf::Token::Function {
-                input: Box::new(self.token_expr(a)?),
+                input: Box::new(self.token_expr(&a.var_type)?),
                 output: Box::new(self.token_expr(r)?),
             }),
 
@@ -1427,6 +1464,71 @@ impl<'a> ExprEmitter<'a> {
                     dest: Box::new(rb.register().clone()),
                     value: *b,
                 });
+
+                rb.into_result(self)?
+            }
+
+            Expr::Closure {
+                v,
+                return_type,
+                body,
+            } => {
+                let rb = output.output_register(self, e)?;
+
+                let func_id = UniqueIdentifier::new();
+                let syn_import_spec = ImportSpecifier::Local {
+                    parent: Box::new(self.parent_import_specifier.clone()),
+                    id: func_id,
+                };
+
+                let syn_id = self.encoder.new_synthetic_function_id();
+
+                let mut free_vars = FreeVariableScanner::new();
+                free_vars.scan(body);
+                let mut free_vars = free_vars.into_free_variables();
+                free_vars.remove(&Variable::ClosureParameter(v.clone()));
+
+                let (token_args, args, sig) = self.capture_variables(
+                    &free_vars,
+                    |sb| sb.add_parameter(Variable::ClosureParameter(v.clone()), false),
+                    |sb| sb.finish(return_type),
+                )?;
+
+                self.encoder
+                    .entry_emitters
+                    .push_back(EntryEmitter::SyntheticFunction {
+                        sig,
+                        syn_id,
+                        syn_import_spec,
+                        body: (**body).clone(),
+                    });
+
+                match v.erasure_mode {
+                    ErasureMode::Erased => {
+                        self.emit(vf::Instruction::PartiallyAppliedFunctionErased {
+                            function_id: BigUint::from(syn_id),
+                            dest: Box::new(rb.register().clone()),
+                            token_args,
+                            args,
+                        });
+                    }
+                    ErasureMode::Token => {
+                        self.emit(vf::Instruction::PartiallyAppliedTokenFunction {
+                            function_id: BigUint::from(syn_id),
+                            dest: Box::new(rb.register().clone()),
+                            token_args,
+                            args,
+                        });
+                    }
+                    ErasureMode::Concrete => {
+                        self.emit(vf::Instruction::PartiallyAppliedFunction {
+                            function_id: BigUint::from(syn_id),
+                            dest: Box::new(rb.register().clone()),
+                            token_args,
+                            args,
+                        });
+                    }
+                }
 
                 rb.into_result(self)?
             }
@@ -1741,7 +1843,43 @@ impl<'a> ExprEmitter<'a> {
                 frb.into_result(self)?
             }
 
-            // FunctionObjectCall
+            Expr::FunctionObjectCall { function, argument } => {
+                let frb = output.output_function_result(self, e)?;
+
+                let Expr::FunctionType { a, .. } = get_expr_type(function) else {
+                    todo!("return a proper error")
+                };
+
+                let func = self.expr(function, AnyRegister)?;
+
+                match a.erasure_mode {
+                    ErasureMode::Erased => {
+                        self.emit(vf::Instruction::FunctionObjectErasedCall {
+                            dest: Box::new(frb.function_result()),
+                            function: Box::new(func),
+                        });
+                    }
+                    ErasureMode::Token => {
+                        let arg = self.token_expr(argument)?;
+                        self.emit(vf::Instruction::FunctionObjectTokenCall {
+                            dest: Box::new(frb.function_result()),
+                            function: Box::new(func),
+                            arg: Box::new(arg),
+                        });
+                    }
+                    ErasureMode::Concrete => {
+                        let arg = self.expr(argument, AnyRegister)?;
+                        self.emit(vf::Instruction::FunctionObjectCall {
+                            dest: Box::new(frb.function_result()),
+                            function: Box::new(func),
+                            arg: Box::new(arg),
+                        });
+                    }
+                }
+
+                frb.into_result(self)?
+            }
+
             Expr::IfElse {
                 condition,
                 when_true,
@@ -1793,7 +1931,6 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            // Lambda
             // Match
             Expr::MethodCall {
                 method,
@@ -2061,7 +2198,7 @@ impl<'a> ExprEmitter<'a> {
                     VariableRealization::RegRefCell(reg) => {
                         self.expr(value, ExprOutputKnown::RefCell(reg.clone()))?;
                     }
-                    VariableRealization::Tok(tok) => {
+                    VariableRealization::Tok(_) => {
                         todo!("return a proper error")
                     }
                 }
@@ -2162,6 +2299,57 @@ impl<'a> ExprEmitter<'a> {
 
     fn expr_return(&mut self, e: &Expr<DefaultExprContext>) -> EmitResult<()> {
         self.expr(e, ExprOutputKnown::Return)
+    }
+
+    fn capture_variables(
+        &mut self,
+        captured_vars: &HashSet<Variable<DefaultExprContext>>,
+        build_rest: impl FnOnce(&mut FunctionSignatureBuilder<'_>) -> Result<(), InternalCompilerError>,
+        finish: impl FnOnce(
+            FunctionSignatureBuilder<'_>,
+        ) -> Result<FunctionSignatureWithMapping, InternalCompilerError>,
+    ) -> Result<
+        (
+            Vec<Box<vf::Token>>,
+            Vec<Box<vf::RegisterId>>,
+            FunctionSignatureWithMapping,
+        ),
+        InternalCompilerError,
+    > {
+        let mut sb = FunctionSignatureBuilder::new(self.encoder);
+
+        for v in captured_vars {
+            sb.add_parameter(v.clone(), v.is_mutable())?;
+        }
+
+        build_rest(&mut sb)?;
+        let sig = finish(sb)?;
+
+        let mut args = Vec::new();
+        let mut token_args = Vec::new();
+
+        for (consumer, v) in sig.arg_consumers.iter().zip(captured_vars.iter()) {
+            match consumer {
+                ArgConsumer::Erased => {}
+                ArgConsumer::Token => match self.known_vars.get(v) {
+                    Some(VariableRealization::Tok(tok)) => {
+                        token_args.push(Box::new(tok.clone()));
+                    }
+                    _ => unreachable!("Capture type mismatch"),
+                },
+                ArgConsumer::Arg => match self.known_vars.get(v) {
+                    Some(VariableRealization::Reg(reg)) => {
+                        args.push(Box::new(reg.clone()));
+                    }
+                    Some(VariableRealization::RegRefCell(reg)) => {
+                        args.push(Box::new(reg.clone()));
+                    }
+                    _ => unreachable!("Capture type mismatch"),
+                },
+            }
+        }
+
+        Ok((token_args, args, sig))
     }
 }
 
@@ -2487,6 +2675,7 @@ fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode
         Variable::Local(variable) => variable.erasure_mode,
         Variable::Parameter(variable) => variable.erasure_mode,
         Variable::InstanceParameter(_) => ErasureMode::Concrete,
+        Variable::ClosureParameter(variable) => variable.erasure_mode,
     }
 }
 

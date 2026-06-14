@@ -15,9 +15,9 @@ use argon_compiler::{
     access::AccessModifier,
 };
 use argon_expr::{
-    BlockLabel, BlockLabelKind, EnumType, InstanceParameterVariable, LocalVariable,
-    MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern,
-    RecordType, TraitType, Variable,
+    BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
+    LocalVariable, MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral,
+    RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
 use argon_util::UniqueIdentifier;
@@ -70,6 +70,7 @@ struct TubeDecoder {
     record_fields: RwLock<HashMap<BigUint, Arc<dyn RecordField>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
+    closure_parameters: RwLock<HashMap<BigUint, Box<ClosureParameterVariable<DefaultExprContext>>>>,
     block_labels: RwLock<HashMap<BigUint, Box<BlockLabel<DefaultExprContext>>>>,
 }
 
@@ -153,6 +154,7 @@ impl TubeDecoder {
             record_fields: RwLock::new(HashMap::new()),
             local_import_ids: RwLock::new(HashMap::new()),
             local_variables: RwLock::new(HashMap::new()),
+            closure_parameters: RwLock::new(HashMap::new()),
             block_labels: RwLock::new(HashMap::new()),
         }
     }
@@ -1197,7 +1199,7 @@ impl TubeDecoder {
                 argument: Box::new(self.decode_expr(*a)),
             },
             tf::Expr::FunctionType { a, r } => Expr::FunctionType {
-                a: Box::new(self.decode_expr(*a.var_type)),
+                a: Box::new(self.decode_closure_parameter_var(*a)),
                 r: Box::new(self.decode_expr(*r)),
             },
             tf::Expr::Condition {
@@ -1241,7 +1243,15 @@ impl TubeDecoder {
                 value: Box::new(self.decode_expr(*value)),
                 pattern: Box::new(self.decode_pattern(*pattern)),
             },
-            tf::Expr::Lambda { .. } => todo!("decode lambda expression"),
+            tf::Expr::Closure {
+                v,
+                return_type,
+                body,
+            } => Expr::Closure {
+                v: Box::new(self.decode_closure_parameter_var(*v)),
+                return_type: Box::new(self.decode_expr(*return_type)),
+                body: Box::new(self.decode_expr(*body)),
+            },
             tf::Expr::Match { .. } => todo!("decode match expression"),
             tf::Expr::Or { a, b } => Expr::Or(
                 Box::new(self.decode_expr(*a)),
@@ -1471,8 +1481,46 @@ impl TubeDecoder {
                 var_type: self.decode_expr(*var_type),
                 name: name.map(|name| decode_identifier(*name)),
             })),
-            tf::Var::LambdaParameterVar { .. } => todo!("decode lambda parameter variable"),
+            tf::Var::ClosureParameterVar { id } => {
+                Variable::ClosureParameter(self.decode_closure_parameter_ref(id))
+            }
         }
+    }
+
+    fn decode_closure_parameter_var(
+        self: &Arc<Self>,
+        variable: tf::ClosureParameterVar,
+    ) -> ClosureParameterVariable<DefaultExprContext> {
+        let variable_id = variable.id;
+        let variable = ClosureParameterVariable {
+            id: UniqueIdentifier::new(),
+            var_type: self.decode_expr(*variable.var_type),
+            name: variable.name.map(|name| decode_identifier(*name)),
+            is_mutable: variable.mutable,
+            erasure_mode: decode_erasure_mode(*variable.erasure),
+            is_witness: variable.witness,
+        };
+        rwlock_write(&self.closure_parameters).insert(variable_id, Box::new(variable.clone()));
+        variable
+    }
+
+    fn decode_closure_parameter_ref(
+        self: &Arc<Self>,
+        id: BigUint,
+    ) -> Box<ClosureParameterVariable<DefaultExprContext>> {
+        rwlock_read(&self.closure_parameters)
+            .get(&id)
+            .cloned()
+            .unwrap_or_else(|| {
+                Box::new(ClosureParameterVariable {
+                    id: UniqueIdentifier::new(),
+                    var_type: Expr::Error,
+                    name: None,
+                    is_mutable: false,
+                    erasure_mode: ErasureMode::Concrete,
+                    is_witness: false,
+                })
+            })
     }
 
     fn decode_expression_owner(

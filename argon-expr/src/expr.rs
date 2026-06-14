@@ -77,6 +77,11 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         builtin: Builtin,
         arguments: Vec<Expr<EC>>,
     },
+    Closure {
+        v: Box<ClosureParameterVariable<EC>>,
+        return_type: Box<Expr<EC>>,
+        body: Box<Expr<EC>>,
+    },
     Condition {
         value: Box<Expr<EC>>,
         when_true_witness: Option<Variable<EC>>,
@@ -93,10 +98,6 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         block_body: Box<Expr<EC>>,
         finally_body: Box<Expr<EC>>,
     },
-    FunctionLiteral {
-        parameter_name: Option<Identifier>,
-        body: Box<Expr<EC>>,
-    },
     FunctionCall {
         function: EC::Function,
         arguments: Vec<Expr<EC>>,
@@ -107,7 +108,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     FunctionResultValue,
     FunctionType {
-        a: Box<Expr<EC>>,
+        a: Box<ClosureParameterVariable<EC>>,
         r: Box<Expr<EC>>,
     },
     IfElse {
@@ -445,6 +446,7 @@ pub enum Variable<EC: ExprContext + ?Sized> {
     Local(Box<LocalVariable<EC>>),
     Parameter(Box<ParameterVariable<EC>>),
     InstanceParameter(Box<InstanceParameterVariable<EC>>),
+    ClosureParameter(Box<ClosureParameterVariable<EC>>),
 }
 
 impl<EC: ExprContext + ?Sized> Variable<EC> {
@@ -453,6 +455,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
             Variable::Local(variable) => variable.name.as_ref(),
             Variable::Parameter(variable) => variable.name.as_ref(),
             Variable::InstanceParameter(variable) => variable.name.as_ref(),
+            Variable::ClosureParameter(variable) => variable.name.as_ref(),
         }
     }
 
@@ -461,6 +464,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
             Variable::Local(variable) => &variable.var_type,
             Variable::Parameter(variable) => &variable.var_type,
             Variable::InstanceParameter(variable) => &variable.var_type,
+            Variable::ClosureParameter(variable) => &variable.var_type,
         }
     }
 
@@ -469,6 +473,16 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
             Variable::Local(variable) => variable.is_mutable,
             Variable::Parameter(_) => false,
             Variable::InstanceParameter(_) => false,
+            Variable::ClosureParameter(v) => v.is_mutable,
+        }
+    }
+
+    pub fn erasure_mode(&self) -> ErasureMode {
+        match self {
+            Variable::Local(variable) => variable.erasure_mode,
+            Variable::Parameter(variable) => variable.erasure_mode,
+            Variable::InstanceParameter(_) => ErasureMode::Concrete,
+            Variable::ClosureParameter(variable) => variable.erasure_mode,
         }
     }
 }
@@ -562,6 +576,32 @@ impl<EC: ExprContext + ?Sized> Eq for InstanceParameterVariable<EC> {}
 impl<EC: ExprContext + ?Sized> Hash for InstanceParameterVariable<EC> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.owner.hash(state);
+    }
+}
+
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+pub struct ClosureParameterVariable<EC: ExprContext + ?Sized> {
+    pub id: UniqueIdentifier,
+    pub var_type: Expr<EC>,
+    pub name: Option<Identifier>,
+    pub is_mutable: bool,
+    pub erasure_mode: ErasureMode,
+    pub is_witness: bool,
+}
+
+impl<EC: ExprContext + ?Sized> PartialEq for ClosureParameterVariable<EC> {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl<EC: ExprContext + ?Sized> Eq for ClosureParameterVariable<EC> {}
+
+impl<EC: ExprContext + ?Sized> Hash for ClosureParameterVariable<EC> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
     }
 }
 

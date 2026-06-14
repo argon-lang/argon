@@ -8,7 +8,7 @@
 
         import Argon.Core::*
 
-        proc callFunc (f: Int -> String) (i: Int): String =
+        proc callFunc (f: fn Int -> String) (i: Int): String =
             f i
 
         proc main(): () do

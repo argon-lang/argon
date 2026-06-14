@@ -1,7 +1,8 @@
 use crate::{
-    BlockLabel, EnumType, Expr, ExprContext, ExpressionOwner, InstanceParameterVariable,
-    InstanceType, LocalVariable, LoopLabels, MatchCase, MethodInstanceType, ParameterVariable,
-    Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType, Variable,
+    BlockLabel, ClosureParameterVariable, EnumType, Expr, ExprContext, ExpressionOwner,
+    InstanceParameterVariable, InstanceType, LocalVariable, LoopLabels, MatchCase,
+    MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern,
+    RecordType, TraitType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -104,11 +105,13 @@ where
                 })
                 .collect(),
         },
-        Expr::FunctionLiteral {
-            parameter_name,
+        Expr::Closure {
+            v,
+            return_type,
             body,
-        } => Expr::FunctionLiteral {
-            parameter_name,
+        } => Expr::Closure {
+            v: Box::new(default_shift_closure_parameter_variable(shifter, *v)),
+            return_type: Box::new(shifter.shift(*return_type)),
             body: Box::new(shifter.shift(*body)),
         },
         Expr::FunctionCall {
@@ -127,7 +130,7 @@ where
         },
         Expr::FunctionResultValue => Expr::FunctionResultValue,
         Expr::FunctionType { a, r } => Expr::FunctionType {
-            a: Box::new(shifter.shift(*a)),
+            a: Box::new(default_shift_closure_parameter_variable(shifter, *a)),
             r: Box::new(shifter.shift(*r)),
         },
         Expr::IfElse {
@@ -435,6 +438,23 @@ where
     }
 }
 
+fn default_shift_closure_parameter_variable<S>(
+    shifter: &mut S,
+    variable: ClosureParameterVariable<S::EC1>,
+) -> ClosureParameterVariable<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    ClosureParameterVariable {
+        id: variable.id,
+        var_type: shifter.shift(variable.var_type),
+        name: variable.name,
+        is_mutable: variable.is_mutable,
+        erasure_mode: variable.erasure_mode,
+        is_witness: variable.is_witness,
+    }
+}
+
 fn default_shift_expression_owner<S>(owner: ExpressionOwner<S::EC1>) -> ExpressionOwner<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
@@ -473,5 +493,8 @@ where
                 name: variable.name,
             }))
         }
+        Variable::ClosureParameter(variable) => Variable::ClosureParameter(Box::new(
+            default_shift_closure_parameter_variable(shifter, *variable),
+        )),
     }
 }
