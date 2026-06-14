@@ -782,7 +782,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     let resolved = OverloadResolver::new(self, record_call.location)
                         .resolve_overload_lookup(overloads, record_call.arguments);
 
-                    let Some(selected_overload) = resolved.overload else {
+                    let Some(mut selected_overload) = resolved.overload else {
                         return TypeInferResult::error();
                     };
 
@@ -813,6 +813,20 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             CompileError::record_literal_extra_arguments(
                                 record_expr.location.clone(),
                             ),
+                        );
+                    }
+
+                    if !selected_overload.unspecified_parameters.is_empty() {
+                        self.context.reporter().report_error(
+                            CompileError::record_literal_missing_arguments(
+                                record_expr.location.clone(),
+                            ),
+                        );
+
+                        selected_overload.args.extend(
+                            selected_overload.unspecified_parameters
+                                .drain(..)
+                                .map(|_| Expr::Error)
                         );
                     }
 
@@ -1392,12 +1406,56 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let resolved = OverloadResolver::new(self, call.location)
                     .resolve_overload_lookup(overloads, call.arguments);
 
-                let Some(inferred_type) = resolved.overload else {
+                let Some(mut selected_overload) = resolved.overload else {
                     return TypeInferResult::error();
                 };
 
+                let mut curried_closure_params = Vec::with_capacity(selected_overload.unspecified_parameters.len());
+                while let Some(param) = selected_overload.unspecified_parameters.pop_front() {
+                    let closure_param = ClosureParameterVariable {
+                        id: UniqueIdentifier::new(),
+                        name: None,
+                        var_type: param.param_type.clone(),
+                        is_mutable: false,
+                        erasure_mode: param.erasure_mode,
+                        is_witness: false,
+                    };
+
+                    let closure_param_var = Variable::ClosureParameter(Box::new(closure_param.clone()));
+
+                    if let Some(owner) = selected_overload.overload.as_expression_owner() {
+                        let param_var = param.to_parameter_var(owner, selected_overload.args.len());
+
+                        substitute_arg_in_param_types(
+                            &mut selected_overload.unspecified_parameters,
+                            &mut selected_overload.return_type,
+                            Variable::Parameter(Box::new(param_var)),
+                            &Expr::Variable(closure_param_var.clone()),
+                        )
+                    }
+
+                    curried_closure_params.push(closure_param);
+                    selected_overload.args.push(Expr::Variable(closure_param_var))
+                }
+
+                let mut inferred_type = selected_overload.into_inferred_type(self);
+
+                for curried_closure_param in curried_closure_params.into_iter().rev() {
+                    let return_type = inferred_type.inferred_type.clone();
+                    inferred_type.inferred_type = Expr::FunctionType {
+                        a: Box::new(curried_closure_param.clone()),
+                        r: Box::new(inferred_type.inferred_type),
+                    };
+
+                    inferred_type.checked_expr = Expr::Closure {
+                        v: Box::new(curried_closure_param),
+                        return_type: Box::new(return_type),
+                        body: Box::new(inferred_type.checked_expr),
+                    };
+                }
+
                 self.infer_function_object_call_inferred(
-                    TypeInferResult::Complete(inferred_type.into_inferred_type(self)),
+                    TypeInferResult::Complete(inferred_type),
                     resolved
                         .extra_inferred_args
                         .into_iter()
@@ -2347,8 +2405,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 .reporter()
                 .report_error(CompileError::type_mismatch(
                     location.clone(),
-                    format!("{:?}", inferred.inferred_type),
                     format!("{:?}", expected_type),
+                    format!("{:?}", inferred.inferred_type),
                 ));
         }
 
@@ -3086,26 +3144,16 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             scope: &mut scope,
         };
 
-        let mut param_types = sig
-            .parameters
-            .iter()
-            .map(|p| p.param_type.clone())
-            .collect::<VecDeque<_>>();
-
         let mut return_type = sig.return_type.clone();
 
-        let mut params = &sig.parameters[..];
+        let mut params = VecDeque::from(sig.parameters);
         let mut parameter_index = 0;
 
         args.push_front_vec(overload.initial_arguments_info());
         inferred_args.push_front_vec(overload.initial_arguments());
 
-        loop {
-            let Some((param, tail_params)) = params.split_first() else {
-                break;
-            };
-
-            let Some(param_type) = param_types.pop_front() else {
+        'processed_all_args: loop {
+            let Some(param) = params.pop_front() else {
                 break;
             };
 
@@ -3120,40 +3168,50 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                     ))
                 });
 
-            if let (Some(arg), Some(inferred_arg)) = (args.first(), inferred_args.first())
-                && param.list_type == arg.list_type
-            {
-                if !type_checker.partially_inferred_type_matches_expected(
-                    &inferred_arg.partially_inferred_type(),
-                    ExpectedType::Exact(&param_type),
-                ) {
-                    return Some(OverloadRejectionReason::ParameterTypeMismatch {
-                        parameter_index,
-                    });
+            'processed_arg: {
+                'list_type_mismatch: {
+                    if let (Some(arg), Some(inferred_arg)) = (args.first(), inferred_args.first()) {
+                        if param.list_type != arg.list_type {
+                            break 'list_type_mismatch;
+                        }
+
+                        if !type_checker.partially_inferred_type_matches_expected(
+                            &inferred_arg.partially_inferred_type(),
+                            ExpectedType::Exact(&param.param_type),
+                        ) {
+                            return Some(OverloadRejectionReason::ParameterTypeMismatch {
+                                parameter_index,
+                            });
+                        }
+
+                        if let Some(v) = v {
+                            self.substitute_inferred_arg_in_param_types(
+                                &mut params,
+                                &mut return_type,
+                                v,
+                                &inferred_arg,
+                            );
+                        }
+
+                        args.pop_front();
+                        inferred_args.pop_front();
+                        break 'processed_arg;
+                    }
+                    else if param.list_type == FunctionParameterListType::NormalList {
+                        break 'processed_all_args;
+                    }
                 }
 
-                if let Some(v) = v {
-                    self.substitute_inferred_arg_in_param_types(
-                        &mut param_types,
-                        &mut return_type,
-                        v,
-                        &inferred_arg,
-                    );
-                }
-
-                args.pop_front();
-                inferred_args.pop_front();
-            } else {
                 match param.list_type {
                     FunctionParameterListType::NormalList => {
                         return Some(OverloadRejectionReason::ParameterListTypeMismatch);
                     }
                     FunctionParameterListType::InferrableList
                     | FunctionParameterListType::QuoteList => {
-                        let hole = Hole::new(self.call_location.clone(), param_type);
+                        let hole = Hole::new(self.call_location.clone(), param.param_type.clone());
                         if let Some(v) = v {
-                            self.substitute_arg_in_param_types(
-                                &mut param_types,
+                            substitute_arg_in_param_types(
+                                &mut params,
                                 &mut return_type,
                                 v,
                                 &Expr::Hole(hole),
@@ -3167,7 +3225,6 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             }
 
             parameter_index += 1;
-            params = tail_params;
         }
 
         // Process extra arguments by comparing argument types to return type
@@ -3180,38 +3237,22 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
     fn substitute_inferred_arg_in_param_types(
         &self,
-        param_types: &mut VecDeque<Expr<TypeCheckExprContext>>,
+        params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
         return_type: &mut Expr<TypeCheckExprContext>,
         v: Variable<TypeCheckExprContext>,
         arg: &TypeInferResult<'e>,
     ) {
         if let TypeInferResult::Complete(inferred_type) = arg {
-            self.substitute_arg_in_param_types(
-                param_types,
+            substitute_arg_in_param_types(
+                params,
                 return_type,
                 v,
                 &inferred_type.checked_expr,
             );
         } else {
-            self.substitute_arg_in_param_types(param_types, return_type, v, &Expr::Error);
+            let hole = Hole::new(self.call_location.clone(), v.var_type().clone());
+            substitute_arg_in_param_types(params, return_type, v, &Expr::Hole(hole));
         }
-    }
-
-    fn substitute_arg_in_param_types(
-        &self,
-        param_types: &mut VecDeque<Expr<TypeCheckExprContext>>,
-        return_type: &mut Expr<TypeCheckExprContext>,
-        v: Variable<TypeCheckExprContext>,
-        arg: &Expr<TypeCheckExprContext>,
-    ) {
-        let mut scanner = SubstScanner::new();
-        scanner.add_substitution(v, Cow::Borrowed(arg));
-
-        for param_type in param_types.iter_mut() {
-            scanner.scan(param_type);
-        }
-
-        scanner.scan(return_type);
     }
 
     fn select_overload(
@@ -3222,15 +3263,9 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
     ) -> SelectedOverload<'e> {
         let sig = overload.signature();
 
-        let mut param_types = sig
-            .parameters
-            .iter()
-            .map(|p| p.param_type.clone())
-            .collect::<VecDeque<_>>();
+        let mut return_type = sig.return_type;
 
-        let mut return_type = sig.return_type.clone();
-
-        let mut params = &sig.parameters[..];
+        let mut params = VecDeque::from(sig.parameters);
         let mut parameter_index = 0;
 
         for initial_arg in overload.initial_arguments_info().into_iter().rev() {
@@ -3243,48 +3278,57 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
         let mut selected_args = Vec::with_capacity(inferred_args.len());
 
-        loop {
-            let Some((param, tail_params)) = params.split_first() else {
-                break;
-            };
 
-            let Some(param_type) = param_types.pop_front() else {
+
+        'processed_all_args: loop {
+            let Some(param) = params.pop_front() else {
                 break;
             };
 
             let v: Option<Variable<TypeCheckExprContext>> =
                 overload.as_expression_owner().map(|owner| {
-                    Variable::Parameter(Box::new(
-                        param.clone().to_parameter_var(owner, parameter_index),
-                    ))
+                    let param_var = param.clone().to_parameter_var(owner, parameter_index);
+                    Variable::Parameter(Box::new(param_var))
                 });
 
-            if let Some(arg) = args.front()
-                && param.list_type == arg.list_type
-            {
-                let arg_result = inferred_args
-                    .pop_front()
-                    .expect("inferred_args should not be empty when args is not empty");
 
-                let arg_expr = self.type_checker.check_inferred_type(
-                    &arg.arg.location,
-                    arg_result,
-                    ExpectedType::Exact(&param_type),
-                );
+            'processed_arg: {
+                'list_type_mismatch: {
+                    if let Some(arg) = args.front() {
+                        if param.list_type != arg.list_type {
+                            break 'list_type_mismatch;
+                        }
 
-                if let Some(v) = v {
-                    self.substitute_arg_in_param_types(
-                        &mut param_types,
-                        &mut return_type,
-                        v,
-                        &arg_expr.checked_expr,
-                    );
+                        let arg_result = inferred_args
+                            .pop_front()
+                            .expect("inferred_args should not be empty when args is not empty");
+
+                        let arg_expr = self.type_checker.check_inferred_type(
+                            &arg.arg.location,
+                            arg_result,
+                            ExpectedType::Exact(&param.param_type),
+                        );
+
+                        if let Some(v) = v {
+                            substitute_arg_in_param_types(
+                                &mut params,
+                                &mut return_type,
+                                v,
+                                &arg_expr.checked_expr,
+                            );
+                        }
+
+                        selected_args.push(arg_expr.checked_expr);
+
+                        args.pop_front();
+                        break 'processed_arg;
+                    }
+                    else if param.list_type == FunctionParameterListType::NormalList {
+                        params.push_front(param);
+                        break 'processed_all_args;
+                    }
                 }
 
-                selected_args.push(arg_expr.checked_expr);
-
-                args.pop_front();
-            } else {
                 match param.list_type {
                     FunctionParameterListType::NormalList => {
                         unreachable!(
@@ -3293,11 +3337,11 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                     }
                     FunctionParameterListType::InferrableList
                     | FunctionParameterListType::QuoteList => {
-                        let hole = Hole::new(self.call_location.clone(), param_type);
+                        let hole = Hole::new(self.call_location.clone(), param.param_type);
 
                         if let Some(v) = v {
-                            self.substitute_arg_in_param_types(
-                                &mut param_types,
+                            substitute_arg_in_param_types(
+                                &mut params,
                                 &mut return_type,
                                 v,
                                 &Expr::Hole(hole),
@@ -3311,17 +3355,36 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             }
 
             parameter_index += 1;
-            params = tail_params;
         }
 
         SelectedOverload {
             call_location: self.call_location,
             overload,
+
             args: selected_args,
             return_type,
+            unspecified_parameters: params,
         }
     }
 }
+
+
+fn substitute_arg_in_param_types(
+    params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
+    return_type: &mut Expr<TypeCheckExprContext>,
+    v: Variable<TypeCheckExprContext>,
+    arg: &Expr<TypeCheckExprContext>,
+) {
+    let mut scanner = SubstScanner::new();
+    scanner.add_substitution(v, Cow::Borrowed(arg));
+
+    for param in params.iter_mut() {
+        scanner.scan(&mut param.param_type);
+    }
+
+    scanner.scan(return_type);
+}
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum OverloadArityRank {
@@ -3369,6 +3432,7 @@ struct SelectedOverload<'e> {
     overload: Overloadable<'e>,
     args: Vec<Expr<TypeCheckExprContext>>,
     return_type: Expr<TypeCheckExprContext>,
+    unspecified_parameters: VecDeque<SignatureParameter<TypeCheckExprContext>>,
 }
 
 impl<'a> SelectedOverload<'a> {

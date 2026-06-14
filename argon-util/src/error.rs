@@ -407,6 +407,14 @@ impl CompileError {
         )
     }
 
+    pub fn record_literal_missing_arguments(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::RecordLiteralExtraArguments,
+            "Record literal type is missing arguments",
+            Some(loc),
+        )
+    }
+
     pub fn duplicate_record_literal_field(loc: Location, name: impl AsRef<str>) -> Self {
         Self::new(
             ErrorCode::DuplicateRecordLiteralField,
