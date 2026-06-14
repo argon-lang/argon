@@ -329,6 +329,10 @@ pub enum Expr {
         when_true: WithLocation<Vec<WithLocation<Stmt>>>,
         when_false: WithLocation<Vec<WithLocation<Stmt>>>,
     },
+    Index {
+        obj: Box<WithLocation<Expr>>,
+        index: Box<WithLocation<Expr>>,
+    },
     IntLiteral(BigInt),
     Is {
         value: Box<WithLocation<Expr>>,

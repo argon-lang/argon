@@ -646,6 +646,13 @@ fn expr_record_literal(
     }
 }
 
+fn expr_index(obj: WithLocation<Expr>, index: WithLocation<Expr>) -> Expr {
+    Expr::Index {
+        obj: Box::new(obj),
+        index: Box::new(index),
+    }
+}
+
 fn expr_redo(label: Option<WithLocation<Identifier>>) -> Expr {
     Expr::Redo { label }
 }

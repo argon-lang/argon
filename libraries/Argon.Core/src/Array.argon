@@ -1,0 +1,61 @@
+module Array
+
+import ::Int::*
+import ::Exception::*
+import ::String::*
+
+
+instance NegativeArraySizeException: Exception
+    public override def _.message: String = "Negative array size"
+end
+
+instance IndexOutOfBoundsException: Exception
+    public override def _.message: String = "Index out of bounds"
+end
+
+public token inline def Array (token T: type): type =
+    __argon_builtin array_type T
+
+
+public trait ArrayOperations
+    public proc _.newFilled '(token T: type) (length: Int) (value: T): Array T = abstract
+end
+
+public instance Array: ArrayOperations
+    public override proc _.newFilled '(token T: type) (length: Int) (value: T): Array T do
+        if length < 0 then
+            raise NegativeArraySizeException
+        end
+
+        let arr = __argon_builtin array_create_unsafe_uninitialized T length
+
+        let mut i = 0
+        while i < arr.length do
+            arr[i] := value
+            i := i + 1
+        end
+
+        arr
+    end
+end
+
+public def extension length '(token T: type) (array: Array T): Int =
+    __argon_builtin array_length T array
+
+public proc extension operator[] '(token T: type) (array: Array T)(index: Int): T do
+    if index < 0 || index >= array.length then
+        raise IndexOutOfBoundsException
+    end
+
+    __argon_builtin array_get T array index
+end
+
+public proc extension update operator[] '(token T: type) (array: Array T)(index: Int)(value: T): () do
+    if index < 0 || index >= array.length then
+        raise IndexOutOfBoundsException
+    end
+
+    __argon_builtin array_set T array index value
+end
+
+

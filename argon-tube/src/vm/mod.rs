@@ -963,14 +963,15 @@ enum ArgConsumer {
 struct FunctionSignatureBuilder<'a> {
     encoder: &'a mut VmEncoder,
 
-    instance_type_params: HashMap<Variable<DefaultExprContext>, vf::Token>,
     token_parameters: Vec<Box<vf::SignatureTokenParameter>>,
     parameters: Vec<Box<vf::SignatureParameter>>,
     arg_consumers: Vec<ArgConsumer>,
 
+    instance_type_params: HashMap<Variable<DefaultExprContext>, vf::Token>,
     instance_param: Option<Variable<DefaultExprContext>>,
-    type_param_mapping: HashMap<Variable<DefaultExprContext>, usize>,
+    type_param_mapping: HashMap<Variable<DefaultExprContext>, vf::Token>,
     param_var_mapping: HashMap<Variable<DefaultExprContext>, MappedParamVar>,
+
 }
 
 impl<'a> FunctionSignatureBuilder<'a> {
@@ -978,11 +979,11 @@ impl<'a> FunctionSignatureBuilder<'a> {
         Self {
             encoder,
 
-            instance_type_params: HashMap::new(),
             token_parameters: Vec::new(),
             parameters: Vec::new(),
             arg_consumers: Vec::new(),
 
+            instance_type_params: HashMap::new(),
             instance_param: None,
             type_param_mapping: HashMap::new(),
             param_var_mapping: HashMap::new(),
@@ -991,14 +992,11 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
     fn token_emitter<'b>(&'b mut self) -> TokenEmitter<'b> {
         let mut token_params = self.instance_type_params.clone();
-        token_params.extend(self.type_param_mapping.iter().map(|(var, index)| {
-            (
-                var.clone(),
-                vf::Token::TokenParameter {
-                    index: BigUint::from(index.clone()),
-                },
-            )
-        }));
+        token_params.extend(
+            self.type_param_mapping
+                .iter()
+                .map(|(var, index)| (var.clone(), index.clone()))
+        );
 
         TokenEmitter {
             encoder: self.encoder,
@@ -1024,7 +1022,9 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
                 let index = self.token_parameters.len();
                 self.token_parameters.push(Box::new(tp));
-                self.type_param_mapping.insert(param, index);
+                self.type_param_mapping.insert(param, vf::Token::TokenParameter {
+                    index: BigUint::from(index),
+                });
                 self.arg_consumers.push(ArgConsumer::Token);
             }
             ErasureMode::Concrete => {
@@ -1095,7 +1095,10 @@ impl<'a> FunctionSignatureBuilder<'a> {
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let mut token_emitter = TokenEmitter {
             encoder: self.encoder,
-            token_params: self.instance_type_params.clone(),
+            token_params: self.instance_type_params.iter()
+                .chain(self.type_param_mapping.iter())
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
         };
 
         let reg_offset = if self.instance_param.is_some() {
@@ -1118,6 +1121,12 @@ impl<'a> FunctionSignatureBuilder<'a> {
                 VariableRealization::Reg(vf::RegisterId { id: BigUint::ZERO }),
             )
         }));
+
+        known_vars.extend(
+            self.type_param_mapping
+                .into_iter()
+                .map(|(v, t)| (v, VariableRealization::Tok(t))),
+        );
 
         known_vars.extend(
             self.param_var_mapping
@@ -1301,9 +1310,14 @@ impl TokenEmitterCommon for ExprEmitter<'_> {
 
     fn get_parameter_as_token(
         &mut self,
-        _v: &Variable<DefaultExprContext>,
+        v: &Variable<DefaultExprContext>,
     ) -> Result<Option<vf::Token>, InternalCompilerError> {
-        todo!("get token parameter from expression emitter")
+        Ok(self.known_vars
+            .get(v)
+            .and_then(|real| match real {
+                VariableRealization::Tok(tk) => Some(tk.clone()),
+                _ => None,
+            }))
     }
 
     fn vm_encoder(&mut self) -> &mut VmEncoder {

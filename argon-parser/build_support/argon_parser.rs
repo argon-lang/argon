@@ -794,6 +794,15 @@ impl GrammarFactory for ParserFactory {
                         ],
                         "expr_record_literal",
                     ),
+                    rule(
+                        [
+                            nonterm(PostfixExpr(paren_allowed)).with_location(),
+                            term(SymOpenBracket).discard(),
+                            nonterm(Expression).with_location(),
+                            term(SymCloseBracket).discard(),
+                        ],
+                        "expr_index",
+                    ),
                 ];
 
                 if paren_allowed == ParenAllowedState::Allowed {
@@ -1526,10 +1535,10 @@ impl GrammarFactory for ParserFactory {
                         [
                             term(SymSingleQuote).discard(),
                             nonterm(EnclosedArgListExtraQuotes),
-                            term(SymOpenBracket).discard(),
+                            term(SymOpenParen).discard(),
                             nonterm(MethodParameterListModifiers),
                             nonterm(MethodParameterListContents),
-                            term(SymCloseBracket).discard(),
+                            term(SymCloseParen).discard(),
                         ],
                         "(move |num_extra_quotes, modifiers, data| { let (parameters, has_trailing_comma) = data; function_parameter_list(FunctionParameterListType::InferrableList(num_extra_quotes), modifiers, parameters, has_trailing_comma) })"
                     ),

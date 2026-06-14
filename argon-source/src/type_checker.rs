@@ -676,6 +676,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             | ast::Expr::Dot { .. }
             | ast::Expr::FunctionCall { .. }
             | ast::Expr::Identifier(_)
+            | ast::Expr::Index { .. }
             | ast::Expr::Type => {
                 let call = self.process_call(expr, None);
                 self.infer_call(call)
@@ -1410,8 +1411,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 self.infer_builtin(call.location, builtin, call.arguments)
             }
             CalleeInfo::Variable(v) => self.infer_variable(v, call.arguments),
-            CalleeInfo::VariableStore(v) => {
-                self.infer_variable_store(call.location, v, call.arguments)
+            CalleeInfo::VariableStore(v, value) => {
+                self.infer_variable_store(call.location, v, value)
             }
             CalleeInfo::VariableTupleElement(vte) => {
                 self.infer_variable_tuple_element(vte, call.arguments)
@@ -1489,6 +1490,43 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::type_n(0),
                     inferred_type: Expr::type_n(1),
                 })
+            }
+            CalleeInfo::Index(obj, index) => {
+                let index_call = self.process_method_call(
+                    obj,
+                    &Identifier::Index,
+                    VecDeque::from(vec![
+                        ArgumentInfo {
+                            call_location: &call.location,
+                            arg: index,
+                            list_type: FunctionParameterListType::NormalList,
+                        },
+                    ]),
+                    None,
+                );
+                let result = self.infer_call(index_call);
+
+                self.infer_function_object_call(result, call.arguments)
+            }
+            CalleeInfo::IndexUpdate(obj, index, value) => {
+                let index_call = self.process_method_call(
+                    obj,
+                    &Identifier::Update(Box::new(Identifier::Index)),
+                    VecDeque::from(vec![
+                        ArgumentInfo {
+                            call_location: &call.location,
+                            arg: index,
+                            list_type: FunctionParameterListType::NormalList,
+                        },
+                        ArgumentInfo {
+                            call_location: value.assign_location,
+                            arg: value.value,
+                            list_type: FunctionParameterListType::NormalList,
+                        },
+                    ]),
+                    None,
+                );
+                self.infer_call(index_call)
             }
         }
     }
@@ -1723,15 +1761,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         location: &'e Location,
         v: Variable<TypeCheckExprContext>,
-        mut args: VecDeque<ArgumentInfo<'e>>,
+        value: AssignedValue<'e>,
     ) -> TypeInferResult<'e> {
         let t = v.var_type().clone();
 
-        let value = args
-            .pop_front()
-            .expect("Variable value should have been added as an argument");
-
-        let value = self.check(value.arg, &t);
+        let value = self.check(&value.value, &t);
 
         if !v.is_mutable() {
             self.context
@@ -1879,24 +1913,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     let callee = self.process_lookup(
                         &func_expr.location,
                         identifier,
-                        assigned_value.is_some(),
+                        assigned_value,
                     );
 
-                    if !arguments.is_empty() && matches!(callee, CalleeInfo::VariableStore(_)) {
+                    if !arguments.is_empty() && matches!(callee, CalleeInfo::VariableStore(..)) {
                         self.report_invalid_assignment_target(call_location);
                         return CallInfo {
                             location: call_location,
                             callee: CalleeInfo::Error,
                             arguments,
                         };
-                    }
-
-                    if let Some(assigned_value) = assigned_value {
-                        arguments.push_back(ArgumentInfo {
-                            call_location: assigned_value.assign_location,
-                            arg: assigned_value.value,
-                            list_type: FunctionParameterListType::NormalList,
-                        });
                     }
 
                     return CallInfo {
@@ -1907,179 +1933,38 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
 
                 ast::Expr::Dot { o, member } => {
-                    let mut overload_groups: Vec<Vec<Overloadable>> = Vec::new();
-
-                    let mut instance = self.process_call(o, None);
-                    let call_location = instance.location;
-
-                    let adjusted_member_name = if assigned_value.is_some() {
-                        Identifier::Update(Box::new(member.value.clone()))
-                    } else {
-                        member.value.clone()
-                    };
-
-                    // Find enum variants
-                    if arguments.is_empty()
-                        && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee
-                    {
-                        if let Some(e) =
-                            instance_overloads.iter().flatten().find_map(
-                                |overload| match overload {
-                                    Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
-                                    _ => None,
-                                },
-                            )
-                        {
-                            overload_groups.push(
-                                e.clone()
-                                    .variants()
-                                    .iter()
-                                    .cloned()
-                                    .filter(|v| v.metadata().name == member.value)
-                                    .map(|v| {
-                                        Overloadable::Base(scope::Overloadable::EnumVariant(
-                                            v.clone(),
-                                        ))
-                                    })
-                                    .collect(),
-                            );
-                        }
-                    }
-
-                    let mut instance = self.infer_call(instance).infer_fully();
-
-                    {
-                        let mut norm = NormalizerScanner::new(
-                            self.context.normalize_fuel(),
-                            ExprNormalizer { model: self.model },
-                        );
-                        norm.normalize(&mut instance.inferred_type);
-                    }
-
-                    let instance_type_as_method_owner = match &instance.inferred_type {
-                        Expr::TraitType(tt) => Some(MethodOwner::Trait(tt.trait_.clone())),
-                        Expr::InstanceType(it) => Some(MethodOwner::Instance(it.instance.clone())),
-                        _ => None,
-                    };
-
-                    match &instance.inferred_type {
-                        Expr::RecordType(record_type) => {
-                            let r = &record_type.record;
-                            let args = &record_type.arguments;
-                            overload_groups.extend(
-                                r.clone()
-                                    .fields()
-                                    .iter()
-                                    .find(|field| field.metadata().name == member.value)
-                                    .map(|field| {
-                                        let mut field_type = DefaultToTypeCheckExprContextShifter
-                                            .shift((*field.clone().field_type()).clone());
-
-                                        let mut subst = SubstScanner::new();
-                                        let record_sig = (*r.clone().signature())
-                                            .clone()
-                                            .shift(&mut DefaultToTypeCheckExprContextShifter);
-
-                                        subst.add_function_parameter_substitutions(
-                                            ExpressionOwner::Record(r.clone()),
-                                            &record_sig,
-                                            args,
-                                        );
-                                        subst.scan(&mut field_type);
-
-                                        let overload = if assigned_value.is_some() {
-                                            Overloadable::RecordFieldStore {
-                                                record_type: instance.inferred_type.clone(),
-                                                field: field.clone(),
-                                                field_type,
-                                                record_value: instance.checked_expr.clone(),
-                                            }
-                                        } else {
-                                            Overloadable::RecordField {
-                                                record_type: instance.inferred_type.clone(),
-                                                field: field.clone(),
-                                                field_type,
-                                                record_value: instance.checked_expr.clone(),
-                                            }
-                                        };
-
-                                        vec![overload]
-                                    }),
-                            );
-                        }
-                        Expr::TraitType(trait_type) => {
-                            let methods = trait_type.trait_.clone().methods();
-
-                            let method_overloads = methods
-                                .iter()
-                                .filter(|entry| {
-                                    entry.method.metadata().name == adjusted_member_name
-                                        && self.access.allows_access(
-                                            &Declaration::Method(entry.method.clone()),
-                                            instance_type_as_method_owner.as_ref(),
-                                            entry.access,
-                                        )
-                                })
-                                .map(|entry| Overloadable::InstanceMethod {
-                                    method: entry.method.clone(),
-                                    trait_type: trait_type.clone(),
-                                    obj: instance.checked_expr.clone(),
-                                })
-                                .collect::<Vec<_>>();
-
-                            if !method_overloads.is_empty() {
-                                overload_groups.push(method_overloads);
-                            }
-                        }
-                        _ => {}
-                    }
-
-                    // Extension methods
-                    if let Lookup::Overloadable(extension_overloads) = self.scope.lookup(
-                        &Identifier::Extension(Box::new(adjusted_member_name.clone())),
-                        self.access,
-                    ) {
-                        overload_groups.extend(
-                            extension_overloads
-                                .item_groups
-                                .into_iter()
-                                .map(|overload_group| {
-                                    overload_group
-                                        .into_iter()
-                                        .filter_map(|overload| match overload {
-                                            scope::Overloadable::Function(f) => {
-                                                Some(Overloadable::ExtensionMethod(
-                                                    f,
-                                                    ArgumentInfo {
-                                                        call_location,
-                                                        arg: o,
-                                                        list_type:
-                                                            FunctionParameterListType::NormalList,
-                                                    },
-                                                    instance.clone(),
-                                                ))
-                                            }
-                                            _ => None,
-                                        })
-                                        .collect::<Vec<_>>()
-                                })
-                                .filter(|overload_group| !overload_group.is_empty()),
-                        );
-                    }
-
-                    if let Some(assigned_value) = assigned_value {
-                        arguments.push_back(ArgumentInfo {
-                            call_location: assigned_value.assign_location,
-                            arg: assigned_value.value,
-                            list_type: FunctionParameterListType::NormalList,
-                        });
-                    }
-
-                    return CallInfo {
-                        location: call_location,
-                        callee: CalleeInfo::Overloadable(overload_groups),
+                    return self.process_method_call(
+                        o,
+                        &member.value,
                         arguments,
-                    };
+                        assigned_value,
+                    );
+                }
+
+                ast::Expr::Index { obj, index } => {
+                    if let Some(assigned_value) = assigned_value {
+                        if !arguments.is_empty() {
+                            self.report_invalid_assignment_target(call_location);
+                            return CallInfo {
+                                location: call_location,
+                                callee: CalleeInfo::Error,
+                                arguments,
+                            };
+                        }
+
+                        return CallInfo {
+                            location: call_location,
+                            callee: CalleeInfo::IndexUpdate(obj, index, assigned_value),
+                            arguments,
+                        };
+                    }
+                    else {
+                        return CallInfo {
+                            location: call_location,
+                            callee: CalleeInfo::Index(obj, index),
+                            arguments,
+                        };
+                    }
                 }
 
                 ast::Expr::Type => {
@@ -2119,6 +2004,188 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
     }
 
+    fn process_method_call<'e>(
+        &mut self,
+        o: &'e WithLocation<ast::Expr>,
+        member: &Identifier,
+        mut arguments: VecDeque<ArgumentInfo<'e>>,
+        assigned_value: Option<AssignedValue<'e>>,
+    ) -> CallInfo<'e> {
+        let mut overload_groups: Vec<Vec<Overloadable>> = Vec::new();
+
+        let mut instance = self.process_call(o, None);
+        let call_location = instance.location;
+
+        let adjusted_member_name = if assigned_value.is_some() {
+            Identifier::Update(Box::new(member.clone()))
+        } else {
+            member.clone()
+        };
+
+        // Find enum variants
+        if arguments.is_empty()
+            && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee
+        {
+            if let Some(e) =
+                instance_overloads.iter().flatten().find_map(
+                    |overload| match overload {
+                        Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
+                        _ => None,
+                    },
+                )
+            {
+                overload_groups.push(
+                    e.clone()
+                        .variants()
+                        .iter()
+                        .cloned()
+                        .filter(|v| v.metadata().name == *member)
+                        .map(|v| {
+                            Overloadable::Base(scope::Overloadable::EnumVariant(
+                                v.clone(),
+                            ))
+                        })
+                        .collect(),
+                );
+            }
+        }
+
+        let mut instance = self.infer_call(instance).infer_fully();
+
+        {
+            let mut norm = NormalizerScanner::new(
+                self.context.normalize_fuel(),
+                ExprNormalizer { model: self.model },
+            );
+            norm.normalize(&mut instance.inferred_type);
+        }
+
+        let instance_type_as_method_owner = match &instance.inferred_type {
+            Expr::TraitType(tt) => Some(MethodOwner::Trait(tt.trait_.clone())),
+            Expr::InstanceType(it) => Some(MethodOwner::Instance(it.instance.clone())),
+            _ => None,
+        };
+
+        match &instance.inferred_type {
+            Expr::RecordType(record_type) => {
+                let r = &record_type.record;
+                let args = &record_type.arguments;
+                overload_groups.extend(
+                    r.clone()
+                        .fields()
+                        .iter()
+                        .find(|field| field.metadata().name == *member)
+                        .map(|field| {
+                            let mut field_type = DefaultToTypeCheckExprContextShifter
+                                .shift((*field.clone().field_type()).clone());
+
+                            let mut subst = SubstScanner::new();
+                            let record_sig = (*r.clone().signature())
+                                .clone()
+                                .shift(&mut DefaultToTypeCheckExprContextShifter);
+
+                            subst.add_function_parameter_substitutions(
+                                ExpressionOwner::Record(r.clone()),
+                                &record_sig,
+                                args,
+                            );
+                            subst.scan(&mut field_type);
+
+                            let overload = if assigned_value.is_some() {
+                                Overloadable::RecordFieldStore {
+                                    record_type: instance.inferred_type.clone(),
+                                    field: field.clone(),
+                                    field_type,
+                                    record_value: instance.checked_expr.clone(),
+                                }
+                            } else {
+                                Overloadable::RecordField {
+                                    record_type: instance.inferred_type.clone(),
+                                    field: field.clone(),
+                                    field_type,
+                                    record_value: instance.checked_expr.clone(),
+                                }
+                            };
+
+                            vec![overload]
+                        }),
+                );
+            }
+            Expr::TraitType(trait_type) => {
+                let methods = trait_type.trait_.clone().methods();
+
+                let method_overloads = methods
+                    .iter()
+                    .filter(|entry| {
+                        entry.method.metadata().name == adjusted_member_name
+                            && self.access.allows_access(
+                            &Declaration::Method(entry.method.clone()),
+                            instance_type_as_method_owner.as_ref(),
+                            entry.access,
+                        )
+                    })
+                    .map(|entry| Overloadable::InstanceMethod {
+                        method: entry.method.clone(),
+                        trait_type: trait_type.clone(),
+                        obj: instance.checked_expr.clone(),
+                    })
+                    .collect::<Vec<_>>();
+
+                if !method_overloads.is_empty() {
+                    overload_groups.push(method_overloads);
+                }
+            }
+            _ => {}
+        }
+
+        // Extension methods
+        if let Lookup::Overloadable(extension_overloads) = self.scope.lookup(
+            &Identifier::Extension(Box::new(adjusted_member_name.clone())),
+            self.access,
+        ) {
+            overload_groups.extend(
+                extension_overloads
+                    .item_groups
+                    .into_iter()
+                    .map(|overload_group| {
+                        overload_group
+                            .into_iter()
+                            .filter_map(|overload| match overload {
+                                scope::Overloadable::Function(f) => {
+                                    Some(Overloadable::ExtensionMethod(
+                                        f,
+                                        ArgumentInfo {
+                                            call_location,
+                                            arg: o,
+                                            list_type:
+                                            FunctionParameterListType::NormalList,
+                                        },
+                                        instance.clone(),
+                                    ))
+                                }
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .filter(|overload_group| !overload_group.is_empty()),
+            );
+        }
+
+        if let Some(assigned_value) = assigned_value {
+            arguments.push_back(ArgumentInfo {
+                call_location: assigned_value.assign_location,
+                arg: assigned_value.value,
+                list_type: FunctionParameterListType::NormalList,
+            });
+        }
+
+        return CallInfo {
+            location: call_location,
+            callee: CalleeInfo::Overloadable(overload_groups),
+            arguments,
+        };
+    }
+
     fn process_binary_operator<'b>(
         &mut self,
         location: &'b Location,
@@ -2129,7 +2196,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     ) -> CallInfo<'b> {
         CallInfo {
             location,
-            callee: self.process_lookup(op_location, &Identifier::BinaryOp(op), false),
+            callee: self.process_lookup(op_location, &Identifier::BinaryOp(op), None),
             arguments: VecDeque::from([
                 ArgumentInfo {
                     call_location: location,
@@ -2154,7 +2221,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     ) -> CallInfo<'b> {
         CallInfo {
             location,
-            callee: self.process_lookup(op_location, &Identifier::UnaryOp(op), false),
+            callee: self.process_lookup(op_location, &Identifier::UnaryOp(op), None),
             arguments: VecDeque::from([ArgumentInfo {
                 call_location: location,
                 arg,
@@ -2167,9 +2234,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         location: &Location,
         identifier: &Identifier,
-        is_assignment: bool,
+        assigned_value: Option<AssignedValue<'b>>,
     ) -> CalleeInfo<'b> {
-        let lookup = if is_assignment {
+        let lookup = if assigned_value.is_some() {
             self.scope.lookup_assign(identifier, self.access)
         } else {
             self.scope.lookup(identifier, self.access)
@@ -2188,14 +2255,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             Lookup::Variable(v) => {
-                if is_assignment {
-                    CalleeInfo::VariableStore(v)
+                if let Some(assigned_value) = assigned_value {
+                    CalleeInfo::VariableStore(v, assigned_value)
                 } else {
                     CalleeInfo::Variable(v)
                 }
             }
             Lookup::VariableTupleElement(vte) => {
-                if is_assignment {
+                if assigned_value.is_some() {
                     self.report_invalid_assignment_target(location);
                     return CalleeInfo::Error;
                 }
@@ -3017,10 +3084,12 @@ enum CalleeInfo<'a> {
     Expr(&'a WithLocation<ast::Expr>),
     Builtin(Builtin),
     Variable(Variable<TypeCheckExprContext>),
-    VariableStore(Variable<TypeCheckExprContext>),
+    VariableStore(Variable<TypeCheckExprContext>, AssignedValue<'a>),
     VariableTupleElement(VariableTupleElement<TypeCheckExprContext>),
     Overloadable(Vec<Vec<Overloadable<'a>>>),
     TypeN,
+    Index(&'a WithLocation<ast::Expr>, &'a WithLocation<ast::Expr>),
+    IndexUpdate(&'a WithLocation<ast::Expr>, &'a WithLocation<ast::Expr>, AssignedValue<'a>),
 }
 
 struct CallInfo<'a> {
@@ -3380,9 +3449,11 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                                 &mut params,
                                 &mut return_type,
                                 v,
-                                &Expr::Hole(hole),
+                                &Expr::Hole(hole.clone()),
                             );
                         }
+
+                        selected_args.push(Expr::Hole(hole));
                     }
                     FunctionParameterListType::RequiresList => {
                         todo!("implicit resolution")

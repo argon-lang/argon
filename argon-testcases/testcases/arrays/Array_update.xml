@@ -9,11 +9,11 @@
 
         proc main(): () do
             let arr = Array.newFilled 4 77
-            arr(2) := 99
+            arr[2] := 99
             puts (arr.length.to_s())
             let mut i = 0
             while i < arr.length do
-                puts (arr(i).to_s())
+                puts (arr[i].to_s())
                 i := i + 1
             end
         end

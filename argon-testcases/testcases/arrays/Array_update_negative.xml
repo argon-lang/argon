@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Array update past end</Name>
+    <Name>Array update negative</Name>
 
     <InputSource name="index.argon"><![CDATA[
         module _
@@ -9,7 +9,7 @@
 
         proc main(): () do
             let arr = Array.newFilled 4 77
-            arr(4) := 99
+            arr[-4] := 99
         end
 
 
