@@ -3227,11 +3227,6 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             parameter_index += 1;
         }
 
-        // Process extra arguments by comparing argument types to return type
-        while let (Some(arg), Some(inferred_arg)) = (args.pop_front(), inferred_args.pop_front()) {
-            todo!()
-        }
-
         None
     }
 

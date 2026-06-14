@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Add Curried</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc add (a: Int): fn Int -> Int =
+            |b| a + b
+
+        proc main(): () do
+            puts ((add 10 5).to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>15</ExpectedOutput>
+
+</ArgonTest>
