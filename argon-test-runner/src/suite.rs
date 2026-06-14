@@ -449,6 +449,7 @@ fn run_test<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P
     let platform = context.test_suite_context.platform.clone();
     platform.clone().codegen(&context);
     let result = platform.run(&context);
+
     assert!(
         result_matches_expected(&result, &context.test_case.1.expected),
         "Output mismatch\nActual:{}\nExpected:{:?}",

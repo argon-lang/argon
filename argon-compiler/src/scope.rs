@@ -1,8 +1,6 @@
 use crate::access::AccessToken;
 use crate::signature::SignatureParameter;
-use crate::{
-    DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Record, Trait,
-};
+use crate::{DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Record, Trait, Tube, TubeName};
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
@@ -17,6 +15,8 @@ pub trait Scope {
 
     fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext>;
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext>;
+
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>>;
 
     fn lookup_block_label(
         &self,
@@ -53,6 +53,11 @@ impl<EC: ExprContext + ?Sized> Scope for &dyn Scope<ExprContext = EC> {
         (**self).lookup_assign(name, access)
     }
 
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        (**self).lookup_tube(name)
+    }
+
+
     fn lookup_block_label(
         &self,
         name: &Identifier,
@@ -80,32 +85,10 @@ impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
         (**self).lookup_assign(name, access)
     }
 
-    fn lookup_block_label(
-        &self,
-        name: &Identifier,
-    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
-        (**self).lookup_block_label(name)
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        (**self).lookup_tube(name)
     }
 
-    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
-        (**self).latest_loop_labels()
-    }
-
-    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
-        (**self).latest_block_label()
-    }
-}
-
-impl<EC: ExprContext + ?Sized> Scope for &dyn LocalScope<ExprContext = EC> {
-    type ExprContext = EC;
-
-    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup(name, access)
-    }
-
-    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup_assign(name, access)
-    }
 
     fn lookup_block_label(
         &self,
@@ -120,115 +103,6 @@ impl<EC: ExprContext + ?Sized> Scope for &dyn LocalScope<ExprContext = EC> {
 
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
         (**self).latest_block_label()
-    }
-}
-
-impl<EC: ExprContext + ?Sized> Scope for &mut dyn LocalScope<ExprContext = EC> {
-    type ExprContext = EC;
-
-    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup(name, access)
-    }
-
-    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup_assign(name, access)
-    }
-
-    fn lookup_block_label(
-        &self,
-        name: &Identifier,
-    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
-        (**self).lookup_block_label(name)
-    }
-
-    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
-        (**self).latest_loop_labels()
-    }
-
-    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
-        (**self).latest_block_label()
-    }
-}
-
-impl<EC: ExprContext + ?Sized> LocalScope for &mut dyn LocalScope<ExprContext = EC> {
-    fn add_variable(&mut self, variable: Variable<Self::ExprContext>) {
-        (**self).add_variable(variable);
-    }
-
-    fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool {
-        (**self).has_variable(variable)
-    }
-
-    fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>) {
-        (**self).add_block_label(label);
-    }
-}
-
-impl<EC: ExprContext + ?Sized> Scope for Box<dyn Scope<ExprContext = EC>> {
-    type ExprContext = EC;
-
-    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup(name, access)
-    }
-
-    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup_assign(name, access)
-    }
-
-    fn lookup_block_label(
-        &self,
-        name: &Identifier,
-    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
-        (**self).lookup_block_label(name)
-    }
-
-    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
-        (**self).latest_loop_labels()
-    }
-
-    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
-        (**self).latest_block_label()
-    }
-}
-
-impl<EC: ExprContext + ?Sized> Scope for Box<dyn LocalScope<ExprContext = EC>> {
-    type ExprContext = EC;
-
-    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup(name, access)
-    }
-
-    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
-        (**self).lookup_assign(name, access)
-    }
-
-    fn lookup_block_label(
-        &self,
-        name: &Identifier,
-    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
-        (**self).lookup_block_label(name)
-    }
-
-    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
-        (**self).latest_loop_labels()
-    }
-
-    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
-        (**self).latest_block_label()
-    }
-}
-
-impl<EC: ExprContext + ?Sized> LocalScope for Box<dyn LocalScope<ExprContext = EC>> {
-    fn add_variable(&mut self, variable: Variable<Self::ExprContext>) {
-        (**self).add_variable(variable);
-    }
-
-    fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool {
-        (**self).has_variable(variable)
-    }
-
-    fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>) {
-        (**self).add_block_label(label);
     }
 }
 
@@ -361,6 +235,11 @@ impl<Sc: Scope> Scope for ParameterScope<Sc> {
             .unwrap_or_else(|| self.parent.lookup_assign(name, access))
     }
 
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.parent.lookup_tube(name)
+    }
+
+
     fn lookup_block_label(
         &self,
         _name: &Identifier,
@@ -412,6 +291,11 @@ impl<Sc: Scope> Scope for InstanceParameterScope<Sc> {
         self.lookup_name(name)
             .unwrap_or_else(|| self.parent.lookup_assign(name, access))
     }
+
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.parent.lookup_tube(name)
+    }
+
 
     fn lookup_block_label(
         &self,
@@ -468,6 +352,10 @@ impl<Sc: Scope> Scope for LocalVariableScope<Sc> {
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup_variable(name)
             .unwrap_or_else(|| self.parent.lookup_assign(name, access))
+    }
+
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.parent.lookup_tube(name)
     }
 
     fn lookup_block_label(
@@ -615,6 +503,10 @@ where
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         let lookup = self.inner.lookup_assign(name, access);
         self.shift_lookup(lookup)
+    }
+
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.inner.lookup_tube(name)
     }
 
     fn lookup_block_label(

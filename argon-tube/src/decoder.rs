@@ -1189,7 +1189,10 @@ impl TubeDecoder {
                     })
                     .collect(),
             },
-            tf::Expr::Finally { .. } => todo!("decode finally expression"),
+            tf::Expr::Finally { action, ensuring } => Expr::Finally {
+                block_body: Box::new(self.decode_expr(*action)),
+                finally_body: Box::new(self.decode_expr(*ensuring)),
+            },
             tf::Expr::FunctionCall { id, args } => Expr::FunctionCall {
                 function: self.function(id),
                 arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),

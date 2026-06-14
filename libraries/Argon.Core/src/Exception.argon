@@ -1,0 +1,7 @@
+module Exception
+
+import ::String::*
+
+public trait Exception
+    public virtual def _.message: String = ""
+end

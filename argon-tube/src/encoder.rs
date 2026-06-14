@@ -1031,6 +1031,9 @@ impl TubeEncoder {
             Expr::Retry { label } => tf::Expr::Retry {
                 block_id: Box::new(self.emit_block_id(label)),
             },
+            Expr::Raise { ex } => tf::Expr::Raise {
+                ex: Box::new(self.emit_expr(ex)?),
+            },
             Expr::RecordFieldLoad {
                 record_type,
                 field,
@@ -1179,6 +1182,13 @@ impl TubeEncoder {
                         .collect::<Result<Vec<_>, InternalCompilerError>>()?,
                 }
             }
+            Expr::Finally {
+                block_body,
+                finally_body,
+            } => tf::Expr::Finally {
+                action: Box::new(self.emit_expr(block_body)?),
+                ensuring: Box::new(self.emit_expr(finally_body)?),
+            },
             Expr::Variable(variable) => tf::Expr::Variable {
                 v: Box::new(self.emit_var(variable)?),
             },

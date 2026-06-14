@@ -72,6 +72,7 @@ impl ResolvedImportGroups {
 }
 
 pub struct GlobalScope {
+    tubes: Arc<TubeCollection>,
     current_module: Arc<Module>,
     resolved_imports: ResolvedImports,
 }
@@ -111,6 +112,10 @@ impl Scope for GlobalScope {
 
     fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
         self.lookup(&Identifier::Update(Box::new(name.clone())), access)
+    }
+
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.tubes.tube(name)
     }
 
     fn lookup_block_label(
@@ -165,6 +170,7 @@ impl GlobalScopeBuilder {
 
     fn build(&self) -> GlobalScope {
         GlobalScope {
+            tubes: self.tube_collection.clone(),
             current_module: self.current_module.clone(),
             resolved_imports: self.resolved_imports().clone(),
         }

@@ -273,15 +273,6 @@ export function createTraitType(traitInfo) {
     switch(traitInfo.special) {
         case "exception": {
             traitType.prototype = Object.create(Error.prototype);
-            Object.defineProperty(
-                traitType.prototype,
-                "message",
-                {
-                    get() {
-                        return resolve(this[traitType.methods["message$a$r$bstring$a$e"]]());
-                    }
-                }
-            );
             break;
         }
     }
@@ -290,6 +281,22 @@ export function createTraitType(traitInfo) {
         customize(c) {
             c.methods = Object.create(null);
             applyVTable(c, traitInfo.methods, traitInfo.vtable);
+
+            switch(traitInfo.special) {
+                case "exception": {
+                    Object.defineProperty(
+                        c.prototype,
+                        "message",
+                        {
+                            get() {
+                                console.log("getting message");
+                                return resolve(this[c.methods["message$a$r$bstring$a$e"]]());
+                            }
+                        }
+                    );
+                    break;
+                }
+            }
         },
     });
 

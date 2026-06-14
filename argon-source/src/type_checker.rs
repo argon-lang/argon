@@ -6,10 +6,7 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{
-    Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
-    Method, MethodOwner, RecordField, RecordFieldOwner, SubstFunctionSignature,
-};
+use argon_compiler::{Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, Method, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, TubeName};
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, EnumType,
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
@@ -1161,7 +1158,24 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
             ast::Expr::Match { .. } => todo!("infer match expressions"),
             ast::Expr::NewTraitObject { .. } => todo!("infer trait object construction"),
-            ast::Expr::Raise { .. } => todo!("infer raise expressions"),
+
+            ast::Expr::Raise { ex } => {
+                let ex_trait = self.get_exception_trait();
+                let ex_type = Expr::TraitType(TraitType {
+                    trait_: ex_trait,
+                    arguments: vec![],
+                });
+
+                let ex = self.check(ex, &ex_type);
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Raise {
+                        ex: Box::new(ex),
+                    },
+                    inferred_type: Expr::never_type(),
+                })
+            },
+
             ast::Expr::Summon { .. } => todo!("infer summon expressions"),
 
             ast::Expr::Tuple { items } => {
@@ -2871,6 +2885,35 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 _ => false,
             },
         }
+    }
+
+    fn get_exception_trait(&self) -> Arc<dyn Trait> {
+        let Some(core_tube) = self.scope.lookup_tube(&TubeName(vec1![ "Argon".to_owned(), "Core".to_owned() ])) else {
+            todo!()
+        };
+
+        let Some(exception_module) = core_tube.module(&ModulePath(vec![ "Exception".to_owned() ])) else {
+            todo!()
+        };
+
+        let group = exception_module.export_groups()
+            .get(&Identifier::Named("Exception".to_owned()))
+            .iter()
+            .flat_map(|group| group.iter())
+            .filter_map(|entry| match &entry.binding {
+                ModuleExportBinding::Trait(t) => Some(t.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        let Some(t) = group
+            .into_iter()
+            .find(|t| t.clone().signature().parameters.is_empty())
+        else {
+            todo!()
+        };
+
+        t
     }
 }
 

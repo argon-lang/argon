@@ -1989,9 +1989,15 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            // Next
+            Expr::Raise { ex } => {
+                let exception = self.expr(ex, AnyRegister)?;
+                self.emit(vf::Instruction::Raise {
+                    exception: Box::new(exception),
+                });
 
-            // Raise
+                Err(EmitStop::Branch)?
+            }
+
             // RecordType
             Expr::Retry { label } => {
                 let (block_id, _) = self.get_block_id(label)?;
