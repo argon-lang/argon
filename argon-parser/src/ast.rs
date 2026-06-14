@@ -1,7 +1,7 @@
 use crate::Location;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::fmt::{Display, Formatter};
-use num_bigint::BigInt;
+use num_bigint::{BigInt, BigUint};
 use parse18_runtime::WithLocation;
 
 #[derive(Debug, Clone)]
@@ -183,11 +183,10 @@ pub struct FunctionParameter {
     pub name: Identifier,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FunctionParameterListType {
     NormalList,
-    InferrableList,
-    QuoteList,
+    InferrableList(BigUint),
     RequiresList,
 }
 

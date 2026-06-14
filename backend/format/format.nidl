@@ -350,10 +350,11 @@ record signature-parameter {
 }
 
 @esexpr:(derive-codec)
-simple enum function-parameter-list-type {
+enum function-parameter-list-type {
     normal-list,
-    inferrable-list,
-    quote-list,
+    inferrable-list {
+        level: nat;
+    },
     requires-list,
 }
 

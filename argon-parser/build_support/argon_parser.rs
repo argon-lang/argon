@@ -123,7 +123,7 @@ pub enum Token {
     KwOr,
     #[strum(serialize = "KwType")]
     KwType,
-    #[strum(serialize = "KwBigtype")]
+    #[strum(serialize = "KwBigType")]
     KwBigType,
     #[strum(serialize = "KwUnderscore")]
     KwUnderscore,
@@ -181,15 +181,15 @@ pub enum Token {
     OpLogicalOr,
     #[strum(serialize = "OpEquals")]
     OpEquals,
-    #[strum(serialize = "OpNotequals")]
+    #[strum(serialize = "OpNotEquals")]
     OpNotEquals,
-    #[strum(serialize = "OpLessthaneq")]
+    #[strum(serialize = "OpLessThanEq")]
     OpLessThanEq,
-    #[strum(serialize = "OpGreaterthaneq")]
+    #[strum(serialize = "OpGreaterThanEq")]
     OpGreaterThanEq,
-    #[strum(serialize = "OpShiftleft")]
+    #[strum(serialize = "OpShiftLeft")]
     OpShiftLeft,
-    #[strum(serialize = "OpShiftright")]
+    #[strum(serialize = "OpShiftRight")]
     OpShiftRight,
     #[strum(serialize = "OpAssign")]
     OpAssign,
@@ -207,17 +207,17 @@ pub enum Token {
     OpSlash,
     #[strum(serialize = "OpDiv")]
     OpDiv,
-    #[strum(serialize = "OpBitand")]
+    #[strum(serialize = "OpBitAnd")]
     OpBitAnd,
-    #[strum(serialize = "OpBitor")]
+    #[strum(serialize = "OpBitOr")]
     OpBitOr,
-    #[strum(serialize = "OpBitxor")]
+    #[strum(serialize = "OpBitXor")]
     OpBitXor,
-    #[strum(serialize = "OpBitnot")]
+    #[strum(serialize = "OpBitNot")]
     OpBitNot,
-    #[strum(serialize = "OpLessthan")]
+    #[strum(serialize = "OpLessThan")]
     OpLessThan,
-    #[strum(serialize = "OpGreaterthan")]
+    #[strum(serialize = "OpGreaterThan")]
     OpGreaterThan,
     #[strum(serialize = "OpUnion")]
     OpUnion,
@@ -225,7 +225,7 @@ pub enum Token {
     OpIntersection,
     #[strum(serialize = "OpConcat")]
     OpConcat,
-    #[strum(serialize = "OpStarstar")]
+    #[strum(serialize = "OpStarStar")]
     OpStarStar,
     #[strum(serialize = "OpArrow")]
     OpArrow,
@@ -237,7 +237,7 @@ pub enum Token {
     OpPropDisjunction,
     #[strum(serialize = "OpPropConjunction")]
     OpPropConjunction,
-    #[strum(serialize = "OpDotdot")]
+    #[strum(serialize = "OpDotDot")]
     OpDotDot,
 
     // Symbols
@@ -247,19 +247,19 @@ pub enum Token {
     SymComma,
     #[strum(serialize = "SymColon")]
     SymColon,
-    #[strum(serialize = "SymColoncolon")]
+    #[strum(serialize = "SymColonColon")]
     SymColonColon,
-    #[strum(serialize = "SymOpenparen")]
+    #[strum(serialize = "SymOpenParen")]
     SymOpenParen,
-    #[strum(serialize = "SymCloseparen")]
+    #[strum(serialize = "SymCloseParen")]
     SymCloseParen,
-    #[strum(serialize = "SymOpenbracket")]
+    #[strum(serialize = "SymOpenBracket")]
     SymOpenBracket,
-    #[strum(serialize = "SymClosebracket")]
+    #[strum(serialize = "SymCloseBracket")]
     SymCloseBracket,
-    #[strum(serialize = "SymOpencurly")]
+    #[strum(serialize = "SymOpenCurly")]
     SymOpenCurly,
-    #[strum(serialize = "SymClosecurly")]
+    #[strum(serialize = "SymCloseCurly")]
     SymCloseCurly,
     #[strum(serialize = "SymPipe")]
     SymPipe,
@@ -334,7 +334,8 @@ enum Rule {
     CurryCallExprArgs2,
     EnclosedArgList,
     EnclosedArgListParen,
-    EnclosedArgListSquare,
+    EnclosedArgListQuote,
+    EnclosedArgListExtraQuotes,
     RecordLiteralFieldsWithBlockEnd,
     RecordLiteralFields,
     RecordLiteralField,
@@ -859,7 +860,15 @@ impl GrammarFactory for ParserFactory {
                 "(FunctionParameterListType, WithLocation<Expr>)",
                 [
                     rule([ term(SymOpenParen).discard(), nonterm(EnclosedArgListParen) ], "identity"),
-                    rule([ term(SymOpenBracket).discard(), nonterm(EnclosedArgListSquare) ], "identity"),
+                    rule(
+                        [
+                            term(SymSingleQuote).discard(),
+                            nonterm(EnclosedArgListExtraQuotes),
+                            term(SymOpenParen).discard(),
+                            nonterm(EnclosedArgListQuote),
+                        ],
+                        "(|num_extra_quotes, arg| (FunctionParameterListType::InferrableList(num_extra_quotes), arg))",
+                    ),
                 ],
             ),
             EnclosedArgListParen => ruleset(
@@ -870,11 +879,24 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Expression).with_location(), term(SymCloseParen).discard() ], "(move |arg_expr| (FunctionParameterListType::NormalList, arg_expr))"),
                 ],
             ),
-            EnclosedArgListSquare => ruleset(
-                "(FunctionParameterListType, WithLocation<Expr>)",
+            EnclosedArgListQuote => ruleset(
+                "WithLocation<Expr>",
                 [
-                    rule([ term(SymCloseBracket).with_location() ], "enclosed_arg_list_square_empty"),
-                    rule([ nonterm(Expression).with_location(), term(SymCloseBracket).discard() ], "(move |arg_expr| (FunctionParameterListType::InferrableList, arg_expr))"),
+                    rule([ term(SymCloseParen).with_location() ], "(|close_bracket: WithLocation<_>| WithLocation::new(expr_tuple(empty_seq()), close_bracket.location))"),
+                    rule([ nonterm(Expression).with_location(), term(SymCloseParen).discard() ], "identity"),
+                ],
+            ),
+            EnclosedArgListExtraQuotes => ruleset(
+                "BigUint",
+                [
+                    rule([], "(|| BigUint::ZERO)"),
+                    rule(
+                        [
+                            term(SymSingleQuote).discard(),
+                            nonterm(EnclosedArgListExtraQuotes),
+                        ],
+                        "(|n| n + 1u32)",
+                    ),
                 ],
             ),
             RecordLiteralFieldsWithBlockEnd => ruleset(
@@ -1315,12 +1337,22 @@ impl GrammarFactory for ParserFactory {
                     ),
                     rule(
                         [
-                            term(SymOpenBracket).discard(),
+                            term(SymOpenParen).discard(),
                             term(KwRequires).discard(),
                             nonterm(Pattern).with_location(),
-                            term(SymCloseBracket).discard(),
+                            term(SymCloseParen).discard(),
                         ],
-                        "(move |pattern| pattern_argument(FunctionParameterListType::InferrableList, pattern))",
+                        "(move |pattern| pattern_argument(FunctionParameterListType::RequiresList, pattern))",
+                    ),
+                    rule(
+                        [
+                            term(SymSingleQuote).discard(),
+                            nonterm(EnclosedArgListExtraQuotes),
+                            term(SymOpenParen).discard(),
+                            nonterm(Pattern).with_location(),
+                            term(SymCloseParen).discard(),
+                        ],
+                        "(move |num_extra_quotes, pattern| pattern_argument(FunctionParameterListType::InferrableList(num_extra_quotes), pattern))",
                     ),
                 ],
             ),
@@ -1491,12 +1523,14 @@ impl GrammarFactory for ParserFactory {
                     ),
                     rule(
                         [
+                            term(SymSingleQuote).discard(),
+                            nonterm(EnclosedArgListExtraQuotes),
                             term(SymOpenBracket).discard(),
                             nonterm(MethodParameterListModifiers),
                             nonterm(MethodParameterListContents),
                             term(SymCloseBracket).discard(),
                         ],
-                        "(move |modifiers, data| { let (parameters, has_trailing_comma) = data; function_parameter_list(FunctionParameterListType::InferrableList, modifiers, parameters, has_trailing_comma) })"
+                        "(move |num_extra_quotes, modifiers, data| { let (parameters, has_trailing_comma) = data; function_parameter_list(FunctionParameterListType::InferrableList(num_extra_quotes), modifiers, parameters, has_trailing_comma) })"
                     ),
                 ],
             ).lex_mode("LexerMode::SkipNewLines"),

@@ -91,7 +91,7 @@ impl<'a> SignatureParser<'a> {
             }
 
             let param = SignatureParameter {
-                list_type: param.value.list_type,
+                list_type: param.value.list_type.clone(),
                 erasure_mode,
                 bindings,
                 name,

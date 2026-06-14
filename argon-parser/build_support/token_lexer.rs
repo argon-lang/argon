@@ -106,7 +106,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("redo"), "TokenType::Token(Token::KwRedo)");
     b.add(Regex::str("retry"), "TokenType::Token(Token::KwRetry)");
     b.add(Regex::str("type"), "TokenType::Token(Token::KwType)");
-    b.add(Regex::str("type!"), "TokenType::Token(Token::KwBigtype)");
+    b.add(Regex::str("type!"), "TokenType::Token(Token::KwBigType)");
     b.add(Regex::str("extern"), "TokenType::Token(Token::KwExtern)");
     b.add(Regex::str("raise"), "TokenType::Token(Token::KwRaise)");
     b.add(Regex::str("begin"), "TokenType::Token(Token::KwBegin)");
@@ -145,25 +145,25 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     // b.add(Regex::str("sealed"), "Token::KwSealed");
     b.add(Regex::str("_"), "TokenType::Token(Token::KwUnderscore)");
 
-    b.add(Regex::str("&&&"), "TokenType::Token(Token::OpBitand)");
-    b.add(Regex::str("|||"), "TokenType::Token(Token::OpBitor)");
+    b.add(Regex::str("&&&"), "TokenType::Token(Token::OpBitAnd)");
+    b.add(Regex::str("|||"), "TokenType::Token(Token::OpBitOr)");
     b.add(Regex::str("&&"), "TokenType::Token(Token::OpLogicalAnd)");
-    b.add(Regex::str("^^^"), "TokenType::Token(Token::OpBitxor)");
-    b.add(Regex::str("~~~"), "TokenType::Token(Token::OpBitnot)");
-    b.add(Regex::str("<<<"), "TokenType::Token(Token::OpShiftleft)");
-    b.add(Regex::str(">>>"), "TokenType::Token(Token::OpShiftright)");
+    b.add(Regex::str("^^^"), "TokenType::Token(Token::OpBitXor)");
+    b.add(Regex::str("~~~"), "TokenType::Token(Token::OpBitNot)");
+    b.add(Regex::str("<<<"), "TokenType::Token(Token::OpShiftLeft)");
+    b.add(Regex::str(">>>"), "TokenType::Token(Token::OpShiftRight)");
     b.add(Regex::str("||"), "TokenType::Token(Token::OpLogicalOr)");
-    b.add(Regex::str("!="), "TokenType::Token(Token::OpNotequals)");
-    b.add(Regex::str("<="), "TokenType::Token(Token::OpLessthaneq)");
-    b.add(Regex::str(">="), "TokenType::Token(Token::OpGreaterthaneq)");
+    b.add(Regex::str("!="), "TokenType::Token(Token::OpNotEquals)");
+    b.add(Regex::str("<="), "TokenType::Token(Token::OpLessThanEq)");
+    b.add(Regex::str(">="), "TokenType::Token(Token::OpGreaterThanEq)");
     b.add(Regex::str(":="), "TokenType::Token(Token::OpAssign)");
     b.add(Regex::str("->"), "TokenType::Token(Token::OpArrow)");
     b.add(Regex::str("=>"), "TokenType::Token(Token::OpFatArrow)");
     b.add(Regex::str("++"), "TokenType::Token(Token::OpConcat)");
-    b.add(Regex::str(".."), "TokenType::Token(Token::OpDotdot)");
-    b.add(Regex::str("**"), "TokenType::Token(Token::OpStarstar)");
+    b.add(Regex::str(".."), "TokenType::Token(Token::OpDotDot)");
+    b.add(Regex::str("**"), "TokenType::Token(Token::OpStarStar)");
     b.add(Regex::str("=="), "TokenType::Token(Token::OpPropEqual)");
-    b.add(Regex::str("::"), "TokenType::Token(Token::SymColoncolon)");
+    b.add(Regex::str("::"), "TokenType::Token(Token::SymColonColon)");
     b.add(
         Regex::str("\\/"),
         "TokenType::Token(Token::OpPropDisjunction)",
@@ -173,18 +173,18 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
         "TokenType::Token(Token::OpPropConjunction)",
     );
     b.add(Regex::str("="), "TokenType::Token(Token::OpEquals)");
-    b.add(Regex::str("≠"), "TokenType::Token(Token::OpNotequals)");
-    b.add(Regex::str("≤"), "TokenType::Token(Token::OpLessthaneq)");
-    b.add(Regex::str("≥"), "TokenType::Token(Token::OpGreaterthaneq)");
+    b.add(Regex::str("≠"), "TokenType::Token(Token::OpNotEquals)");
+    b.add(Regex::str("≤"), "TokenType::Token(Token::OpLessThanEq)");
+    b.add(Regex::str("≥"), "TokenType::Token(Token::OpGreaterThanEq)");
     b.add(Regex::str("."), "TokenType::Token(Token::SymDot)");
     b.add(Regex::str(","), "TokenType::Token(Token::SymComma)");
     b.add(Regex::str(";"), "TokenType::Token(Token::Semicolon)");
-    b.add(Regex::str("("), "TokenType::Token(Token::SymOpenparen)");
-    b.add(Regex::str(")"), "TokenType::Token(Token::SymCloseparen)");
-    b.add(Regex::str("["), "TokenType::Token(Token::SymOpenbracket)");
-    b.add(Regex::str("]"), "TokenType::Token(Token::SymClosebracket)");
-    b.add(Regex::str("{"), "TokenType::Token(Token::SymOpencurly)");
-    b.add(Regex::str("}"), "TokenType::Token(Token::SymClosecurly)");
+    b.add(Regex::str("("), "TokenType::Token(Token::SymOpenParen)");
+    b.add(Regex::str(")"), "TokenType::Token(Token::SymCloseParen)");
+    b.add(Regex::str("["), "TokenType::Token(Token::SymOpenBracket)");
+    b.add(Regex::str("]"), "TokenType::Token(Token::SymCloseBracket)");
+    b.add(Regex::str("{"), "TokenType::Token(Token::SymOpenCurly)");
+    b.add(Regex::str("}"), "TokenType::Token(Token::SymCloseCurly)");
     b.add(Regex::str("!"), "TokenType::Token(Token::OpLogicalNot)");
     b.add(Regex::str("+"), "TokenType::Token(Token::OpPlus)");
     b.add(Regex::str("-"), "TokenType::Token(Token::OpMinus)");
@@ -192,8 +192,8 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("×"), "TokenType::Token(Token::OpMul)");
     b.add(Regex::str("/"), "TokenType::Token(Token::OpSlash)");
     b.add(Regex::str("÷"), "TokenType::Token(Token::OpDiv)");
-    b.add(Regex::str("<"), "TokenType::Token(Token::OpLessthan)");
-    b.add(Regex::str(">"), "TokenType::Token(Token::OpGreaterthan)");
+    b.add(Regex::str("<"), "TokenType::Token(Token::OpLessThan)");
+    b.add(Regex::str(">"), "TokenType::Token(Token::OpGreaterThan)");
     b.add(Regex::str(":"), "TokenType::Token(Token::SymColon)");
     b.add(Regex::str("@"), "TokenType::Token(Token::SymAt)");
     b.add(Regex::str("|"), "TokenType::Token(Token::SymPipe)");

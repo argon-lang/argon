@@ -1057,7 +1057,7 @@ impl TubeDecoder {
         param: tf::SignatureParameter,
     ) -> SignatureParameter<DefaultExprContext> {
         SignatureParameter {
-            list_type: decode_parameter_list_type(param.list_type),
+            list_type: decode_parameter_list_type(*param.list_type),
             erasure_mode: decode_erasure_mode(*param.erasure),
             bindings: param
                 .bindings
@@ -2390,10 +2390,11 @@ fn decode_parameter_list_type(
     list_type: tf::FunctionParameterListType,
 ) -> FunctionParameterListType {
     match list_type {
-        tf::FunctionParameterListType::NormalList => FunctionParameterListType::NormalList,
-        tf::FunctionParameterListType::InferrableList => FunctionParameterListType::InferrableList,
-        tf::FunctionParameterListType::QuoteList => FunctionParameterListType::QuoteList,
-        tf::FunctionParameterListType::RequiresList => FunctionParameterListType::RequiresList,
+        tf::FunctionParameterListType::NormalList {} => FunctionParameterListType::NormalList,
+        tf::FunctionParameterListType::InferrableList { level } => {
+            FunctionParameterListType::InferrableList(level)
+        }
+        tf::FunctionParameterListType::RequiresList {} => FunctionParameterListType::RequiresList,
     }
 }
 

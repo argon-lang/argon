@@ -247,15 +247,6 @@ fn enclosed_arg_list_paren_empty(
     )
 }
 
-fn enclosed_arg_list_square_empty(
-    close_bracket: WithLocation<Token>,
-) -> (FunctionParameterListType, WithLocation<Expr>) {
-    (
-        FunctionParameterListType::InferrableList,
-        WithLocation::new(expr_tuple(empty_seq()), close_bracket.location),
-    )
-}
-
 fn pattern_int_token(value: BigUint) -> Pattern {
     pattern_int(token_int_bigint(value))
 }

@@ -728,7 +728,7 @@ impl TubeEncoder {
                 .iter()
                 .map(|param| {
                     Ok(Box::new(tf::SignatureParameter {
-                        list_type: encode_parameter_list_type(param.list_type),
+                        list_type: Box::new(encode_parameter_list_type(param.list_type.clone())),
                         erasure: Box::new(encode_erasure_mode(param.erasure_mode)),
                         bindings: param
                             .bindings
@@ -1549,10 +1549,11 @@ fn encode_parameter_list_type(
     list_type: FunctionParameterListType,
 ) -> tf::FunctionParameterListType {
     match list_type {
-        FunctionParameterListType::NormalList => tf::FunctionParameterListType::NormalList,
-        FunctionParameterListType::InferrableList => tf::FunctionParameterListType::InferrableList,
-        FunctionParameterListType::QuoteList => tf::FunctionParameterListType::QuoteList,
-        FunctionParameterListType::RequiresList => tf::FunctionParameterListType::RequiresList,
+        FunctionParameterListType::NormalList => tf::FunctionParameterListType::NormalList {},
+        FunctionParameterListType::InferrableList(level) => {
+            tf::FunctionParameterListType::InferrableList { level }
+        }
+        FunctionParameterListType::RequiresList => tf::FunctionParameterListType::RequiresList {},
     }
 }
 

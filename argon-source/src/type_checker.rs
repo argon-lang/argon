@@ -1844,7 +1844,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     arguments.push_front(ArgumentInfo {
                         call_location: &func_expr.location,
                         arg,
-                        list_type: *list_type,
+                        list_type: list_type.clone(),
                     });
                     func_expr = func;
                 }
@@ -3249,8 +3249,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                     FunctionParameterListType::NormalList => {
                         return Some(OverloadRejectionReason::ParameterListTypeMismatch);
                     }
-                    FunctionParameterListType::InferrableList
-                    | FunctionParameterListType::QuoteList => {
+                    FunctionParameterListType::InferrableList(_) => {
                         let hole = Hole::new(self.call_location.clone(), param.param_type.clone());
                         if let Some(v) = v {
                             substitute_arg_in_param_types(
@@ -3373,8 +3372,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             "Parameter list type mismatch should have been caught earlier"
                         );
                     }
-                    FunctionParameterListType::InferrableList
-                    | FunctionParameterListType::QuoteList => {
+                    FunctionParameterListType::InferrableList(_) => {
                         let hole = Hole::new(self.call_location.clone(), param.param_type);
 
                         if let Some(v) = v {
