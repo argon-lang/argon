@@ -399,6 +399,7 @@ abstract class EmitterBase {
         named     - the name, but with all $ encoded as $$ and any invalid characters URL encoded, using $XX
         binop     - The constructor name of the operator, but prefixed with $b and - replaced with _
         unop      - Same as binop, but using $u as a prefix
+        index     - $n
         extension - $x<name>
         inverse   - $i<name>
         update    - $m<name>
@@ -463,6 +464,9 @@ abstract class EmitterBase {
 
             case "un-op":
                 return "$u" + id.op.replaceAll("-", "_");
+
+            case "index":
+                return "$n";
 
             case "extension":
                 return "$x" + this.getExportNameForId(id.inner);

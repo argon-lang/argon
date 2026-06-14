@@ -501,6 +501,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwUpdate).discard(), nonterm(NewLines).discard(), nonterm(Identifier) ], "(move |id| identifier_expr_update(id))"),
                     rule([ term(KwUnary).discard(), nonterm(NewLines).discard(), term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(UnaryOperatorName) ], "Identifier::UnaryOp"),
                     rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), nonterm(BinaryOperatorName) ], "Identifier::BinaryOp"),
+                    rule([ term(KwOperator).discard(), nonterm(NewLines).discard(), term(SymOpenBracket).discard(), term(SymCloseBracket).discard() ], "(|| Identifier::Index)"),
                 ],
             ),
             MethodName => ruleset(

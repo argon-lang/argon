@@ -2286,6 +2286,7 @@ fn decode_identifier(id: tf::Identifier) -> Identifier {
         tf::Identifier::Named { s } => Identifier::Named(s),
         tf::Identifier::BinOp { op } => Identifier::BinaryOp(decode_binary_operator(op)),
         tf::Identifier::UnOp { op } => Identifier::UnaryOp(decode_unary_operator(op)),
+        tf::Identifier::Index {} => Identifier::Index,
         tf::Identifier::Extension { inner } => {
             Identifier::Extension(Box::new(decode_identifier(*inner)))
         }

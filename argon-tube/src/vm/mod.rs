@@ -2730,6 +2730,7 @@ fn encode_identifier(id: &Identifier) -> vf::Identifier {
         Identifier::UnaryOp(op) => vf::Identifier::UnOp {
             op: encode_unary_operator(*op),
         },
+        Identifier::Index => vf::Identifier::Index {},
         Identifier::Extension(inner) => vf::Identifier::Extension {
             inner: Box::new(encode_identifier(inner)),
         },

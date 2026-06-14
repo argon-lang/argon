@@ -168,6 +168,7 @@ enum identifier {
     named { s: string; },
     bin-op { op: binary-operator; },
     un-op { op: unary-operator; },
+    index,
     extension { inner: identifier; },
     inverse { inner: identifier; },
     update { inner: identifier; },

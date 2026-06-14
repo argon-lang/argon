@@ -1430,6 +1430,7 @@ fn encode_identifier(id: &Identifier) -> Result<tf::Identifier, InternalCompiler
         Identifier::UnaryOp(op) => tf::Identifier::UnOp {
             op: encode_unary_operator(*op),
         },
+        Identifier::Index => tf::Identifier::Index {},
         Identifier::Extension(inner) => tf::Identifier::Extension {
             inner: Box::new(encode_identifier(inner)?),
         },
