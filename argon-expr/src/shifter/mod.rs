@@ -258,9 +258,7 @@ where
             shifter.shift_variable(variable),
             Box::new(shifter.shift(*value)),
         ),
-        Expr::BoxedType { t } => Expr::BoxedType {
-            t: Box::new(shifter.shift(*t)),
-        },
+        Expr::BoxedType(t) => Expr::BoxedType(Box::new(shifter.shift(*t))),
         Expr::Box { t, value } => Expr::Box {
             t: Box::new(shifter.shift(*t)),
             value: Box::new(shifter.shift(*value)),

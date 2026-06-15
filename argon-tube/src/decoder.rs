@@ -1135,9 +1135,7 @@ impl TubeDecoder {
                 builtin: decode_builtin(builtin),
                 arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
             },
-            tf::Expr::Boxed { t } => Expr::BoxedType {
-                t: Box::new(self.decode_expr(*t)),
-            },
+            tf::Expr::Boxed { t } => Expr::BoxedType(Box::new(self.decode_expr(*t))),
             tf::Expr::Block { label, body } => Expr::Block {
                 label: self.decode_block_label(*label),
                 body: Box::new(self.decode_expr(*body)),

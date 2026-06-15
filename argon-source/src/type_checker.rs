@@ -1296,9 +1296,52 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 })
             }
 
-            ast::Expr::BoxedType { .. } => todo!("infer boxed types"),
-            ast::Expr::Box { .. } => todo!("infer box expressions"),
-            ast::Expr::Unbox { .. } => todo!("infer unbox expressions"),
+            ast::Expr::BoxedType { t } => {
+                let inner = self.check_type_with_meta_type(t);
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::BoxedType(Box::new(inner.checked_expr)),
+                    inferred_type: inner.inferred_type,
+                })
+            },
+            ast::Expr::Box { value } => {
+                let value = self.infer(value).infer_fully();
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Box {
+                        t: Box::new(value.inferred_type.clone()),
+                        value: Box::new(value.checked_expr),
+                    },
+                    inferred_type: Expr::BoxedType(Box::new(value.inferred_type)),
+                })
+            },
+            ast::Expr::Unbox { value } => {
+                let mut value = self.infer(value).infer_fully();
+
+                {
+                    let mut norm = NormalizerScanner::new(
+                        self.context.normalize_fuel(),
+                        ExprNormalizer {
+                            model: &mut self.model,
+                        }
+                    );
+                    norm.normalize(&mut value.inferred_type);
+                }
+
+                let unboxed_type = match value.inferred_type {
+                    Expr::BoxedType(t) => t,
+                    _ => todo!("Expected boxed type"),
+                };
+
+                let inferred_type = (*unboxed_type).clone();
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Unbox {
+                        t: unboxed_type,
+                        value: Box::new(value.checked_expr),
+                    },
+                    inferred_type,
+                })
+            },
         }
     }
 
@@ -2479,9 +2522,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         infer: TypeInferResult,
         expected_type: ExpectedType<'_>,
     ) -> InferredType {
-        let inferred = self.resolve_inferred_type(infer, expected_type);
+        let mut inferred = self.resolve_inferred_type(infer, expected_type);
 
-        if !self.type_matches_expected(&inferred.inferred_type, expected_type) {
+        let mut transformations = Vec::new();
+        if !self.type_matches_expected(&mut transformations, &inferred.inferred_type, expected_type) {
             self.context
                 .reporter()
                 .report_error(CompileError::type_mismatch(
@@ -2489,6 +2533,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     format!("{:?}", expected_type),
                     format!("{:?}", inferred.inferred_type),
                 ));
+        }
+
+        for transformation in transformations {
+            transformation.transform(&mut inferred)
         }
 
         inferred
@@ -2649,10 +2697,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             &mut sig,
                         );
 
+                        let mut transformations = Vec::new();
                         if !self.type_matches_expected(
+                            &mut transformations,
                             &pattern_type,
                             ExpectedType::Exact(&sig.return_type),
                         ) {
+                            todo!()
+                        }
+
+                        if !transformations.is_empty() {
                             todo!()
                         }
 
@@ -2674,9 +2728,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             ast::Pattern::String(s) => {
+                let mut transformations = Vec::new();
                 if !self
-                    .type_matches_expected(&pattern_type, ExpectedType::Exact(&Expr::string_type()))
+                    .type_matches_expected(&mut transformations, &pattern_type, ExpectedType::Exact(&Expr::string_type()))
                 {
+                    todo!()
+                }
+
+                if !transformations.is_empty() {
                     todo!()
                 }
 
@@ -2687,18 +2746,28 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
             }
             ast::Pattern::Int(i) => {
+                let mut transformations = Vec::new();
                 if !self
-                    .type_matches_expected(&pattern_type, ExpectedType::Exact(&Expr::int_type()))
+                    .type_matches_expected(&mut transformations, &pattern_type, ExpectedType::Exact(&Expr::int_type()))
                 {
+                    todo!()
+                }
+
+                if !transformations.is_empty() {
                     todo!()
                 }
 
                 Pattern::Int(i.clone())
             }
             ast::Pattern::Bool(b) => {
+                let mut transformations = Vec::new();
                 if !self
-                    .type_matches_expected(&pattern_type, ExpectedType::Exact(&Expr::bool_type()))
+                    .type_matches_expected(&mut transformations, &pattern_type, ExpectedType::Exact(&Expr::bool_type()))
                 {
+                    todo!()
+                }
+
+                if !transformations.is_empty() {
                     todo!()
                 }
 
@@ -2853,6 +2922,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn type_matches_expected(
         &mut self,
+        transformations: &mut Vec<TypeCheckValueTransformation>,
         actual_type: &Expr<TypeCheckExprContext>,
         expected_type: ExpectedType<'_>,
     ) -> bool {
@@ -2861,47 +2931,74 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
             ExpectedType::Exact(expected_type) => {
                 let mut expected_type = expected_type.clone();
-                {
-                    let mut norm = NormalizerScanner::new(
-                        self.context.normalize_fuel(),
-                        ExprNormalizer {
-                            model: &mut self.model,
-                        },
-                    );
-                    norm.normalize(&mut expected_type);
-                }
-
                 let mut actual_type = actual_type.clone();
-                {
-                    let mut norm = NormalizerScanner::new(
-                        self.context.normalize_fuel(),
-                        ExprNormalizer {
-                            model: &mut self.model,
-                        },
-                    );
-                    norm.normalize(&mut actual_type);
-                }
 
-                match &actual_type {
-                    Expr::Type(n) => match &expected_type {
-                        Expr::BigType(_) => return true,
-                        Expr::Type(n2) => match (&**n, &**n2) {
-                            (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
-                                return n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2;
-                            }
-                            _ => {}
-                        },
-                        _ => {}
-                    },
-
-                    Expr::Builtin {
-                        builtin: Builtin::NeverType,
-                        ..
-                    } => {
-                        return true;
+                loop {
+                    {
+                        let mut norm = NormalizerScanner::new(
+                            self.context.normalize_fuel(),
+                            ExprNormalizer {
+                                model: &mut self.model,
+                            },
+                        );
+                        norm.normalize(&mut expected_type);
                     }
 
-                    _ => {}
+                    {
+                        let mut norm = NormalizerScanner::new(
+                            self.context.normalize_fuel(),
+                            ExprNormalizer {
+                                model: &mut self.model,
+                            },
+                        );
+                        norm.normalize(&mut actual_type);
+                    }
+
+                    match actual_type {
+                        Expr::Type(ref n) => match &expected_type {
+                            Expr::BigType(_) => return true,
+                            Expr::Type(n2) => match (&**n, &**n2) {
+                                (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
+                                    return n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2;
+                                }
+                                _ => {}
+                            },
+                            _ => {}
+                        },
+
+                        Expr::Builtin {
+                            builtin: Builtin::NeverType,
+                            ..
+                        } => {
+                            return true;
+                        }
+
+                        Expr::BoxedType(actual_unboxed) => {
+                            if let Expr::BoxedType(expected_unboxed) = expected_type {
+                                expected_type = *expected_unboxed;
+                            }
+                            else {
+                                transformations.push(TypeCheckValueTransformation::Unbox((*actual_unboxed).clone()));
+                            }
+
+                            actual_type = *actual_unboxed;
+                            continue;
+                        }
+
+                        _ => {}
+                    }
+
+                    match expected_type {
+                        Expr::BoxedType(expected_unboxed) => {
+                            transformations.push(TypeCheckValueTransformation::Box((*expected_unboxed).clone()));
+                            expected_type = *expected_unboxed;
+                            continue;
+                        }
+
+                        _ => {}
+                    }
+
+                    break;
                 }
 
                 self.unify(expected_type, actual_type)
@@ -2911,12 +3008,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn partially_inferred_type_matches_expected(
         &mut self,
+        allow_transform: bool,
         actual_type: &PartiallyInferredType<'_>,
         expected_type: ExpectedType<'_>,
     ) -> bool {
         match actual_type {
             PartiallyInferredType::Full(actual_type) => {
-                self.type_matches_expected(actual_type, expected_type)
+                let mut transformations = Vec::new();
+                self.type_matches_expected(&mut transformations, actual_type, expected_type) &&
+                    (allow_transform || transformations.is_empty())
             }
             PartiallyInferredType::Closure => {
                 let ExpectedType::Exact(expected_type) = expected_type else {
@@ -2938,11 +3038,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 ExpectedType::AnyMetaType
                 | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => elements
                     .iter()
-                    .all(|e| self.partially_inferred_type_matches_expected(e, expected_type)),
+                    .all(|e| self.partially_inferred_type_matches_expected(false, e, expected_type)),
 
                 ExpectedType::Exact(Expr::Tuple { items }) if items.len() == elements.len() => {
                     elements.iter().zip(items.iter()).all(|(actual, expected)| {
                         self.partially_inferred_type_matches_expected(
+                            false,
                             actual,
                             ExpectedType::Exact(expected),
                         )
@@ -3032,6 +3133,37 @@ impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
                         true
                     }
                 }
+            }
+        }
+    }
+}
+
+enum TypeCheckValueTransformation {
+    Box(Expr<TypeCheckExprContext>),
+    Unbox(Expr<TypeCheckExprContext>),
+}
+
+impl TypeCheckValueTransformation {
+    fn transform(self, e: &mut InferredType) {
+        match self {
+            TypeCheckValueTransformation::Box(t) => {
+                let checked_expr = mem::replace(&mut e.checked_expr, Expr::Error);
+                let inferred_type = mem::replace(&mut e.inferred_type, Expr::Error);
+
+                e.checked_expr = Expr::Box {
+                    t: Box::new(t),
+                    value: Box::new(checked_expr),
+                };
+                e.inferred_type = Expr::BoxedType(Box::new(inferred_type));
+            }
+            TypeCheckValueTransformation::Unbox(t) => {
+                let checked_expr = mem::replace(&mut e.checked_expr, Expr::Error);
+
+                e.checked_expr = Expr::Unbox {
+                    t: Box::new(t.clone()),
+                    value: Box::new(checked_expr),
+                };
+                e.inferred_type = t;
             }
         }
     }
@@ -3288,6 +3420,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                         }
 
                         if !type_checker.partially_inferred_type_matches_expected(
+                            true,
                             &inferred_arg.partially_inferred_type(),
                             ExpectedType::Exact(&param.param_type),
                         ) {

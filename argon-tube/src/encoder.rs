@@ -954,7 +954,7 @@ impl TubeEncoder {
             Expr::BigType(n) => tf::Expr::TypeBigN {
                 n: n.to_biguint().unwrap_or_default(),
             },
-            Expr::BoxedType { t } => tf::Expr::Boxed {
+            Expr::BoxedType(t) => tf::Expr::Boxed {
                 t: Box::new(self.emit_expr(t)?),
             },
             Expr::Box { t, value } => tf::Expr::Box {

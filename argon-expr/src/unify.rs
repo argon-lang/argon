@@ -42,6 +42,7 @@ pub trait Unify {
                     arguments: b_args,
                 },
             ) => a == b && self.unify_all(a_args, b_args),
+            (Expr::BoxedType(a), Expr::BoxedType(b)) => self.unify(*a, *b),
             (Expr::EnumType(a), Expr::EnumType(b)) => {
                 a.enum_ == b.enum_ && self.unify_all(a.arguments, b.arguments)
             }

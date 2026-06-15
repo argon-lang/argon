@@ -1203,7 +1203,7 @@ trait TokenEmitterCommon {
             .normalize(&mut t);
 
         match &t {
-            Expr::BoxedType { .. } => Ok(vf::Token::Boxed {}),
+            Expr::BoxedType(_) => Ok(vf::Token::Boxed {}),
 
             Expr::Builtin { builtin, arguments } => {
                 let builtin = match encode_token_builtin_type(*builtin) {
@@ -1548,7 +1548,18 @@ impl<'a> ExprEmitter<'a> {
 
             Expr::Condition { value, .. } => self.expr(value, output)?,
 
-            // Box
+            Expr::Box { t, value } => {
+                let rb = output.output_register(self, e)?;
+                let unboxed_value = self.expr(value, AnyRegister)?;
+
+                self.emit(vf::Instruction::Box {
+                    dest: Box::new(rb.register().clone()),
+                    value: Box::new(unboxed_value),
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Block { label, body } => {
                 let (output_result, output) = output.into_known_location(self, e)?;
 
@@ -2097,7 +2108,6 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            // Redo
             // RefCellCreate
             Expr::Sequence(items) => {
                 let mut item = items.first();
@@ -2157,7 +2167,21 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            // Unbox
+            Expr::Unbox { t, value } => {
+                let rb = output.output_register(self, e)?;
+                let boxed_value = self.expr(value, AnyRegister)?;
+
+                let tt = self.token_expr(t)?;
+
+                self.emit(vf::Instruction::Unbox {
+                    dest: Box::new(rb.register().clone()),
+                    r#type: Box::new(tt),
+                    value: Box::new(boxed_value),
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Variable(v) => {
                 let Some(realization) = self.known_vars.get(v) else {
                     todo!("return a proper error")

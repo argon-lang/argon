@@ -176,7 +176,7 @@ where
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value)
         }
-        Expr::BoxedType { t } => scanner.scan(t),
+        Expr::BoxedType(t) => scanner.scan(t),
         Expr::Box { t, value } => scanner.scan(t) && scanner.scan(value),
         Expr::Unbox { t, value } => scanner.scan(t) && scanner.scan(value),
     }
@@ -441,7 +441,7 @@ where
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value.as_mut())
         }
-        Expr::BoxedType { t } => scanner.scan(t.as_mut()),
+        Expr::BoxedType(t) => scanner.scan(t.as_mut()),
         Expr::Box { t, value } => scanner.scan(t.as_mut()) && scanner.scan(value.as_mut()),
         Expr::Unbox { t, value } => scanner.scan(t.as_mut()) && scanner.scan(value.as_mut()),
     }

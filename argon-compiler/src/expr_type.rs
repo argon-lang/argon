@@ -31,9 +31,9 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::BigType(value) => Expr::BigType(value + 1),
 
-        Expr::Box { t, .. } => Expr::BoxedType { t: t.clone() },
+        Expr::Box { t, .. } => Expr::BoxedType(t.clone()),
 
-        Expr::BoxedType { t } => get_expr_type(&*t),
+        Expr::BoxedType(t) => get_expr_type(&*t),
 
         Expr::Builtin { builtin, arguments } => get_builtin_type(*builtin, arguments),
 

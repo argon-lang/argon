@@ -172,9 +172,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Variable(Variable<EC>),
     VariableBinding(Variable<EC>, Box<Expr<EC>>),
     VariableStore(Variable<EC>, Box<Expr<EC>>),
-    BoxedType {
-        t: Box<Expr<EC>>,
-    },
+    BoxedType(Box<Expr<EC>>),
     Box {
         t: Box<Expr<EC>>,
         value: Box<Expr<EC>>,

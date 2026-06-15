@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Boxing (explicit boxing and unboxing)</Name>
+    <Name>Boxing (explicit boxed types)</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
@@ -9,11 +9,11 @@
 
         import Argon.Core::*
 
-        def identity [erased T: type] (value: T.boxed): T.boxed = value
+        def identity '(erased T: type) (value: T.boxed): T.boxed = value
 
         proc main(): () do
 
-            let str: String = (identity "A".box).unbox
+            let str: String = identity "A"
 
         end
         
