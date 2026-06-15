@@ -3,6 +3,7 @@ use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::borrow::Cow;
 use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::signature::FunctionSignature;
@@ -10,11 +11,14 @@ use argon_compiler::{
     Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
     TypeDeclaration, Unload,
 };
-use argon_expr::{EnumType, Expr, ExpressionOwner, Variable};
+use argon_expr::{EnumType, Expr, ExprScannerMut, ExpressionOwner, SubstScanner, Variable};
 use argon_parser::ast;
 use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, mutex_lock};
 use core::fmt::Debug;
+use num_bigint::BigUint;
+use argon_compiler::scope::ParameterScope;
+use argon_parser::ast::FunctionParameterListType;
 use parse18_runtime::WithLocation;
 
 pub struct SourceEnum {
@@ -268,6 +272,49 @@ impl EnumVariant for SourceEnumVariant {
             None => {
                 let fake_rt = SignatureParser::get_type_sig_return_type(name, return_type);
 
+                let parent_sig = self.owner.clone().signature();
+
+                let mut parameters = Vec::new();
+
+                let parent_owner = ExpressionOwner::<DefaultExprContext>::Enum(self.owner.clone());
+                let owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
+                let mut subst = SubstScanner::new();
+                for (i, mut param) in parent_sig.parameters.iter().cloned().enumerate() {
+                    let orig_param_var = param.clone().to_parameter_var(parent_owner.clone(), i);
+
+                    match &mut param.list_type {
+                        FunctionParameterListType::NormalList => {
+                            param.list_type = FunctionParameterListType::InferrableList(BigUint::ZERO);
+                        }
+                        FunctionParameterListType::InferrableList(n) => {
+                            *n += 1u32;
+                        }
+                        FunctionParameterListType::RequiresList => {}
+                    }
+                    param.scan_mut(&mut subst);
+
+                    let param_var = param.clone().to_parameter_var(owner.clone(), i);
+
+                    subst.add_substitution(
+                        Variable::Parameter(Box::new(orig_param_var)),
+                        Cow::Owned(Expr::Variable(Variable::Parameter(Box::new(param_var)))),
+                    );
+
+                    parameters.push(param);
+                }
+
+                let return_type = Expr::<DefaultExprContext>::EnumType(EnumType {
+                    enum_: self.owner.clone(),
+                    arguments: SignatureParser::get_parameter_variables(
+                        &param_owner,
+                        &parameters,
+                    )
+                        .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
+                        .collect(),
+                });
+
+                let scope = ParameterScope::new(scope, owner, &parameters);
+
                 let sig_parser = SignatureParser {
                     context: self.owner.context.clone(),
                     scope: &scope,
@@ -275,22 +322,14 @@ impl EnumVariant for SourceEnumVariant {
                     owner: param_owner.clone(),
                 };
 
-                let mut all_params = MultiSlice::new();
-                all_params.push_slice(&self.owner.decl.parameters);
-                all_params.push_slice(params);
+                let mut variant_sig = sig_parser.parse(MultiSlice::from(params), &fake_rt);
+                parameters.append(&mut variant_sig.parameters);
 
-                let mut sig = sig_parser.parse(all_params, &fake_rt);
-                sig.return_type = Expr::<DefaultExprContext>::EnumType(EnumType {
-                    enum_: self.owner.clone(),
-                    arguments: SignatureParser::get_parameter_variables(
-                        &param_owner,
-                        &sig.parameters[0..self.owner.decl.parameters.len()],
-                    )
-                    .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
-                    .collect(),
-                });
-
-                sig
+                FunctionSignature {
+                    parameters,
+                    return_type,
+                    ensures_clauses: Vec::new(),
+                }
             }
         };
 

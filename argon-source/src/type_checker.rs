@@ -1038,8 +1038,26 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 when_false,
             } => {
                 let conv_condition = self.check_condition_expr(condition);
-                let true_body_result = with_nested_scope!(self).infer_block(when_true);
-                let false_body_result = with_nested_scope!(self).infer_block(when_false);
+
+                let mut when_true_vars = Vec::new();
+                let mut when_false_vars = Vec::new();
+                get_condition_vars(&conv_condition, &mut when_true_vars, &mut when_false_vars);
+
+                let true_body_result = {
+                    let mut checker = with_nested_scope!(self);
+                    for v in when_true_vars {
+                        checker.scope.add_variable(Variable::Local(Box::new(v)));
+                    }
+                    checker.infer_block(when_true)
+                };
+
+                let false_body_result = {
+                    let mut checker = with_nested_scope!(self);
+                    for v in when_false_vars {
+                        checker.scope.add_variable(Variable::Local(Box::new(v)));
+                    }
+                    checker.infer_block(when_false)
+                };
 
                 match (&true_body_result, &false_body_result) {
                     (
@@ -2066,9 +2084,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         };
 
         // Find enum variants
-        if arguments.is_empty()
-            && let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee
-        {
+        if let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee {
             if let Some(e) =
                 instance_overloads.iter().flatten().find_map(
                     |overload| match overload {
@@ -3196,6 +3212,72 @@ fn substitute_holes_for_args(
     sig.scan_mut(&mut subst);
 
     holes
+}
+
+fn get_condition_vars(
+    condition: &Expr<TypeCheckExprContext>,
+    when_true_vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
+    when_false_vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
+) {
+    match condition {
+        Expr::Condition { value, when_true_witness, when_false_witness } => {
+            when_true_vars.extend(when_true_witness.iter().map(Box::as_ref).cloned());
+            when_false_vars.extend(when_false_witness.iter().map(Box::as_ref).cloned());
+            get_condition_vars(value, when_true_vars, when_false_vars);
+        }
+
+        Expr::Not(value) => {
+            get_condition_vars(value, when_false_vars, when_true_vars);
+        }
+
+        Expr::And(a, b) => {
+            let mut discarded_false_vars = Vec::new();
+            get_condition_vars(a, when_true_vars, &mut discarded_false_vars);
+            get_condition_vars(b, when_true_vars, &mut discarded_false_vars);
+        }
+
+        Expr::Or(a, b) => {
+            let mut discarded_true_vars = Vec::new();
+            get_condition_vars(a, &mut discarded_true_vars, when_false_vars);
+            get_condition_vars(b, &mut discarded_true_vars, when_false_vars);
+        }
+
+        Expr::Is { value: _, pattern } => {
+            get_pattern_vars(pattern, when_true_vars);
+        }
+
+        _ => {}
+    }
+}
+
+fn get_pattern_vars(
+    pattern: &Pattern<TypeCheckExprContext>,
+    vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
+) {
+    match pattern {
+        Pattern::Error => {}
+        Pattern::Discard { .. } => {}
+        Pattern::Tuple(items) => {
+            for item in items {
+                get_pattern_vars(item, vars);
+            }
+        }
+        Pattern::Binding(v, inner) => {
+            vars.push(v.clone());
+            get_pattern_vars(inner, vars);
+        }
+        Pattern::EnumVariant { args, fields, .. } => {
+            for arg in args {
+                get_pattern_vars(arg, vars);
+            }
+            for field in fields {
+                get_pattern_vars(&field.pattern, vars);
+            }
+        }
+        Pattern::String(_) => {}
+        Pattern::Int(_) => {}
+        Pattern::Bool(_) => {}
+    }
 }
 
 #[derive(Debug, Clone)]

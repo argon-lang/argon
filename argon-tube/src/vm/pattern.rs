@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use argon_compiler::DefaultExprContext;
 use argon_compiler::expr_type::get_pattern_type;
-use argon_expr::{Expr, Pattern};
+use argon_expr::{Expr, Pattern, Variable};
 use argon_format::vm as vf;
 use num_bigint::BigUint;
 
@@ -33,8 +33,23 @@ pub(super) fn emit_pattern(
                 emit_pattern(emitter, when_false_label, element_reg, element)?;
             }
         }
-        Pattern::Binding(_, _) => {
-            todo!()
+        Pattern::Binding(v, inner) => {
+            let v = Variable::Local(Box::new(v.clone()));
+            let r = emitter.declare_var(v.clone())?;
+            if emitter.captured_vars.contains(&v) && v.is_mutable() {
+                emitter.emit(vf::Instruction::NewReference {
+                    dest: Box::new(r.clone()),
+                    value: Box::new(value_reg.clone()),
+                });
+            }
+            else {
+                emitter.emit(vf::Instruction::Move {
+                    dest: Box::new(r.clone()),
+                    src: Box::new(value_reg.clone()),
+                });
+            }
+
+            emit_pattern(emitter, when_false_label, value_reg, inner)?;
         }
         Pattern::EnumVariant {
             enum_type,
