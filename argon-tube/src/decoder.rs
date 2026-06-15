@@ -1124,7 +1124,7 @@ impl TubeDecoder {
             tf::Expr::BindVariable { v, value } => {
                 let value = self.decode_expr(*value);
                 let variable = self.decode_local_var(*v);
-                Expr::VariableBinding(Variable::Local(variable), Box::new(value))
+                Expr::VariableBinding(variable, Box::new(value))
             }
             tf::Expr::BoolLiteral { value } => Expr::BoolLiteral(value),
             tf::Expr::Box { t, value } => Expr::Box {
@@ -1210,10 +1210,8 @@ impl TubeDecoder {
                 when_false_witness,
             } => Expr::Condition {
                 value: Box::new(self.decode_expr(*value)),
-                when_true_witness: when_true_witness
-                    .map(|var| Variable::Local(self.decode_local_var(*var))),
-                when_false_witness: when_false_witness
-                    .map(|var| Variable::Local(self.decode_local_var(*var))),
+                when_true_witness: when_true_witness.map(|var| self.decode_local_var(*var)),
+                when_false_witness: when_false_witness.map(|var| self.decode_local_var(*var)),
             },
             tf::Expr::IfElse {
                 condition,

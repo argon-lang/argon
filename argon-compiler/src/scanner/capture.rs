@@ -134,11 +134,11 @@ mod tests {
     #[test]
     fn closure_does_not_capture_locals_bound_in_body() {
         let parameter = closure_parameter();
-        let bound = Variable::Local(local_variable());
+        let bound = local_variable();
         let body = Expr::Sequence(
             Vec1::try_from(vec![
                 Expr::VariableBinding(bound.clone(), Box::new(Expr::IntLiteral(1.into()))),
-                Expr::Variable(bound.clone()),
+                Expr::Variable(Variable::Local(bound.clone())),
             ])
             .ok()
             .unwrap(),
@@ -151,7 +151,7 @@ mod tests {
 
         let captures = CaptureScanner::scan_captures(&expr);
 
-        assert!(!captures.contains(&bound));
+        assert!(!captures.contains(&Variable::Local(bound)));
         assert!(!captures.contains(&Variable::ClosureParameter(parameter)));
     }
 

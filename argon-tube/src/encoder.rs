@@ -998,11 +998,11 @@ impl TubeEncoder {
                 value: Box::new(self.emit_expr(value)?),
                 when_true_witness: when_true_witness
                     .as_ref()
-                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
+                    .map(|variable| self.emit_local_var(variable).map(Box::new))
                     .transpose()?,
                 when_false_witness: when_false_witness
                     .as_ref()
-                    .map(|variable| self.emit_local_var_from_variable(variable).map(Box::new))
+                    .map(|variable| self.emit_local_var(variable).map(Box::new))
                     .transpose()?,
             },
             Expr::IfElse {
@@ -1191,7 +1191,7 @@ impl TubeEncoder {
             },
             Expr::VariableBinding(variable, value) => tf::Expr::BindVariable {
                 value: Box::new(self.emit_expr(value)?),
-                v: Box::new(self.emit_local_var_from_variable(variable)?),
+                v: Box::new(self.emit_local_var(variable)?),
             },
             Expr::VariableStore(variable, value) => tf::Expr::VariableStore {
                 v: Box::new(self.emit_var(variable)?),
@@ -1324,18 +1324,6 @@ impl TubeEncoder {
                 index: self.get_instance_id(instance.clone()).into(),
             },
         })
-    }
-
-    fn emit_local_var_from_variable(
-        &mut self,
-        variable: &Variable<argon_compiler::DefaultExprContext>,
-    ) -> Result<tf::LocalVar, InternalCompilerError> {
-        match variable {
-            Variable::Local(variable) => self.emit_local_var(variable),
-            Variable::Parameter(_) => todo!("Expected local variable"),
-            Variable::InstanceParameter(_) => todo!("Expected local variable"),
-            Variable::ClosureParameter(_) => todo!("Expected local variable"),
-        }
     }
 
     fn emit_closure_parameter_var(

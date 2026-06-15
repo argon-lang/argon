@@ -2215,8 +2215,9 @@ impl<'a> ExprEmitter<'a> {
             }
 
             Expr::VariableBinding(v, value) => {
+                let v = Variable::Local(v.clone());
                 let r = self.declare_var(v.clone())?;
-                if self.captured_vars.contains(v) && v.is_mutable() {
+                if self.captured_vars.contains(&v) && v.is_mutable() {
                     let value_reg = self.expr(value, AnyRegister)?;
                     self.emit(vf::Instruction::NewReference {
                         dest: Box::new(r),

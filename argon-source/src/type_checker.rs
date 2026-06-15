@@ -1427,16 +1427,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let is_witness = mp.parse(IS_WITNESS);
                 mp.done();
 
-                let v = Variable::Local(Box::new(LocalVariable {
+                let v = Box::new(LocalVariable {
                     id: UniqueIdentifier::new(),
                     name: v.name.clone(),
                     var_type,
                     erasure_mode,
                     is_witness,
                     is_mutable: v.is_mutable,
-                }));
+                });
 
-                self.scope.add_variable(v.clone());
+                self.scope.add_variable(Variable::Local(v.clone()));
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::VariableBinding(v, Box::new(variable_value)),
@@ -2577,8 +2577,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         cond_expr: &Expr<TypeCheckExprContext>,
     ) -> (
-        Option<Variable<TypeCheckExprContext>>,
-        Option<Variable<TypeCheckExprContext>>,
+        Option<Box<LocalVariable<TypeCheckExprContext>>>,
+        Option<Box<LocalVariable<TypeCheckExprContext>>>,
     ) {
         let is_pure_cond = PurityScanner::contains_impure_function_call(cond_expr);
 
@@ -2592,8 +2592,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         cond_expr: &Expr<TypeCheckExprContext>,
         equal_to_value: bool,
-    ) -> Variable<TypeCheckExprContext> {
-        Variable::Local(Box::new(LocalVariable {
+    ) -> Box<LocalVariable<TypeCheckExprContext>> {
+        Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
             var_type: Expr::Builtin {
@@ -2603,7 +2603,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             erasure_mode: ErasureMode::Erased,
             is_witness: false,
             is_mutable: false,
-        }))
+        })
     }
 
     fn check_pattern(

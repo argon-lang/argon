@@ -79,10 +79,10 @@ where
             scanner.scan(value)
                 && when_true_witness
                     .as_ref()
-                    .is_none_or(|variable| scanner.scan_variable(variable))
+                    .is_none_or(|variable| scanner.scan(&variable.var_type))
                 && when_false_witness
                     .as_ref()
-                    .is_none_or(|variable| scanner.scan_variable(variable))
+                    .is_none_or(|variable| scanner.scan(&variable.var_type))
         }
         Expr::EnumType(enum_type) => default_scan_enum_type(scanner, enum_type),
         Expr::EnumVariantLiteral {
@@ -171,7 +171,7 @@ where
         Expr::BigType(_) => true,
         Expr::Variable(variable) => scanner.scan_variable(variable),
         Expr::VariableBinding(variable, value) => {
-            scanner.scan_variable(variable) && scanner.scan(value)
+            scanner.scan(&variable.var_type) && scanner.scan(value)
         }
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value)
@@ -330,10 +330,10 @@ where
             scanner.scan(value.as_mut())
                 && when_true_witness
                     .as_mut()
-                    .is_none_or(|variable| scanner.scan_variable(variable))
+                    .is_none_or(|variable| scanner.scan(&mut variable.var_type))
                 && when_false_witness
                     .as_mut()
-                    .is_none_or(|variable| scanner.scan_variable(variable))
+                    .is_none_or(|variable| scanner.scan(&mut variable.var_type))
         }
         Expr::EnumType(enum_type) => default_scan_enum_type_mut(scanner, enum_type),
         Expr::EnumVariantLiteral {
@@ -436,7 +436,7 @@ where
         Expr::BigType(_) => true,
         Expr::Variable(variable) => scanner.scan_variable(variable),
         Expr::VariableBinding(variable, value) => {
-            scanner.scan_variable(variable) && scanner.scan(value.as_mut())
+            scanner.scan(&mut variable.var_type) && scanner.scan(value.as_mut())
         }
         Expr::VariableStore(variable, value) => {
             scanner.scan_variable(variable) && scanner.scan(value.as_mut())

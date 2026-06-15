@@ -81,8 +81,10 @@ where
             when_false_witness,
         } => Expr::Condition {
             value: Box::new(shifter.shift(*value)),
-            when_true_witness: when_true_witness.map(|v| shifter.shift_variable(v)),
-            when_false_witness: when_false_witness.map(|v| shifter.shift_variable(v)),
+            when_true_witness: when_true_witness
+                .map(|v| Box::new(default_shift_local_variable(shifter, *v))),
+            when_false_witness: when_false_witness
+                .map(|v| Box::new(default_shift_local_variable(shifter, *v))),
         },
         Expr::EnumType(enum_type) => Expr::EnumType(default_shift_enum_type(shifter, enum_type)),
         Expr::EnumVariantLiteral {
@@ -251,7 +253,7 @@ where
         Expr::BigType(value) => Expr::BigType(value),
         Expr::Variable(variable) => Expr::Variable(shifter.shift_variable(variable)),
         Expr::VariableBinding(variable, value) => Expr::VariableBinding(
-            shifter.shift_variable(variable),
+            Box::new(default_shift_local_variable(shifter, *variable)),
             Box::new(shifter.shift(*value)),
         ),
         Expr::VariableStore(variable, value) => Expr::VariableStore(

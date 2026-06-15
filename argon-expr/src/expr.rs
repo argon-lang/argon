@@ -84,8 +84,8 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     Condition {
         value: Box<Expr<EC>>,
-        when_true_witness: Option<Variable<EC>>,
-        when_false_witness: Option<Variable<EC>>,
+        when_true_witness: Option<Box<LocalVariable<EC>>>,
+        when_false_witness: Option<Box<LocalVariable<EC>>>,
     },
     EnumType(EnumType<EC>),
     EnumVariantLiteral {
@@ -170,7 +170,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     Type(Box<Expr<EC>>),
     BigType(BigInt),
     Variable(Variable<EC>),
-    VariableBinding(Variable<EC>, Box<Expr<EC>>),
+    VariableBinding(Box<LocalVariable<EC>>, Box<Expr<EC>>),
     VariableStore(Variable<EC>, Box<Expr<EC>>),
     BoxedType(Box<Expr<EC>>),
     Box {

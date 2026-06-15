@@ -69,11 +69,13 @@ where
                     .into_iter()
                     .flatten()
                 {
-                    self.bind_variable(v.clone());
+                    self.bind_variable(Variable::Local(v.clone()));
                 }
             }
 
-            Expr::VariableBinding(variable, _) => self.bind_variable(variable.clone()),
+            Expr::VariableBinding(variable, _) => {
+                self.bind_variable(Variable::Local(variable.clone()))
+            }
 
             _ => {}
         }
@@ -151,12 +153,12 @@ mod tests {
 
     #[test]
     fn sequence_binding_is_not_free_after_declaration() {
-        let bound = Variable::Local(local_variable());
+        let bound = local_variable();
         let free = Variable::Local(local_variable());
         let expr = Expr::Sequence(
             Vec1::try_from(vec![
                 Expr::VariableBinding(bound.clone(), Box::new(Expr::IntLiteral(1.into()))),
-                Expr::Variable(bound.clone()),
+                Expr::Variable(Variable::Local(bound.clone())),
                 Expr::Variable(free.clone()),
             ])
             .ok()
@@ -165,7 +167,7 @@ mod tests {
 
         let free_variables = FreeVariableScanner::scan_free_variables(&expr);
 
-        assert!(!free_variables.contains(&bound));
+        assert!(!free_variables.contains(&Variable::Local(bound)));
         assert!(free_variables.contains(&free));
     }
 
