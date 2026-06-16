@@ -1,10 +1,5 @@
-#![no_std]
-
 use argon_expr::{ExprScannerMut, Unify};
 extern crate alloc;
-#[cfg(feature = "std")]
-extern crate std;
-
 pub mod access;
 pub mod erased_sig;
 pub mod expr_type;

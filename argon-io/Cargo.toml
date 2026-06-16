@@ -3,15 +3,11 @@ name = "argon-io"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-default = []
-std = ["argon-util/std", "embedded-io/std", "parse18-runtime/std"]
-
 [dependencies]
-argon-util = { workspace = true, default-features = false }
+argon-util = { workspace = true }
 embedded-io = { workspace = true }
 esexpr-binary = { workspace = true }
-parse18-runtime = { workspace = true, default-features = false }
+parse18-runtime = { workspace = true }
 
 [lints]
 workspace = true

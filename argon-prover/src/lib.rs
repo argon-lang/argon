@@ -1,5 +1,3 @@
-#![no_std]
-
 mod prolog;
 
 extern crate alloc;

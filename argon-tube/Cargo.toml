@@ -3,24 +3,14 @@ name = "argon-tube"
 publish = false
 edition = "2024"
 
-[features]
-default = []
-std = [
-    "argon-compiler/std",
-    "argon-expr/std",
-    "argon-util/std",
-    "esexpr/std",
-    "esexpr-binary/std",
-]
-
 [dependencies]
-argon-compiler = { workspace = true, default-features = false }
-argon-expr = { workspace = true, default-features = false }
+argon-compiler = { workspace = true }
+argon-expr = { workspace = true }
 argon-format = { workspace = true }
-argon-util = { workspace = true, default-features = false }
+argon-util = { workspace = true }
 embedded-io = { workspace = true }
 esexpr = { workspace = true }
-esexpr-binary = { workspace = true, default-features = false }
+esexpr-binary = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }

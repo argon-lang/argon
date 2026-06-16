@@ -78,11 +78,7 @@ fn metadata_format_error<F>(file: &F, error: TubeFormatError) -> InternalCompile
 where
     F: InputFile,
 {
-    #[cfg(not(feature = "std"))]
-    let _ = file;
-
     match error {
-        #[cfg(feature = "std")]
         TubeFormatError::FileError(_, err) => InternalCompilerError::TubeFormatError(
             TubeFormatError::FileError(file.path().to_path_buf(), err),
         ),
@@ -97,12 +93,8 @@ fn metadata_parse_error<F>(
 where
     F: InputFile,
 {
-    #[cfg(not(feature = "std"))]
-    let _ = file;
-
     match error {
         ParseError::IOError(err) => match err {
-            #[cfg(feature = "std")]
             InternalCompilerError::IoError(_, io_err) => {
                 InternalCompilerError::IoError(file.path().to_path_buf(), io_err)
             }

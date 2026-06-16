@@ -3,18 +3,14 @@ name = "argon-expr"
 publish = false
 edition = "2024"
 
-[features]
-default = []
-std = ["argon-parser/std", "argon-util/std", "parse18-runtime/std"]
-
 [dependencies]
-argon-util = { workspace = true, default-features = false }
-argon-parser = { workspace = true, default-features = false }
+argon-util = { workspace = true }
+argon-parser = { workspace = true }
 derivative = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }
-parse18-runtime = { workspace = true, default-features = false }
+parse18-runtime = { workspace = true }
 
 [lints]
 workspace = true

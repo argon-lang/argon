@@ -19,10 +19,10 @@ name = "compile-testcases"
 path = "src/bin/compile_testcases.rs"
 
 [dependencies]
-argon-io = { workspace = true, features = ["std"] }
-argon-runner = { workspace = true, features = ["std"] }
+argon-io = { workspace = true }
+argon-runner = { workspace = true }
 argon-testcases = { workspace = true }
-argon-util = { workspace = true, features = ["std"] }
+argon-util = { workspace = true }
 clap = { workspace = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
@@ -30,7 +30,7 @@ hashbrown = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }
 tempfile = { workspace = true }
-toml_edit = { version = "0.25.11", default-features = false, features = ["parse", "serde"] }
+toml_edit = { version = "0.25.11", features = ["parse", "serde"] }
 walkdir = { workspace = true }
 
 [lints]

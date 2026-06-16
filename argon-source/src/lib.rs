@@ -1,9 +1,4 @@
-#![no_std]
-
 extern crate alloc;
-#[cfg(any(test, feature = "std"))]
-extern crate std;
-
 use crate::module::{process_source_file, register_module_reexports};
 use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
@@ -167,8 +162,6 @@ mod tests {
     #[derive(Clone)]
     struct TestSourcePath {
         path: std::path::PathBuf,
-        #[cfg(not(feature = "std"))]
-        location_file: String,
     }
 
     #[derive(Clone)]
@@ -193,14 +186,8 @@ mod tests {
     impl InputFile for TestSourcePath {
         type Reader = TestSourceFileReader;
 
-        #[cfg(feature = "std")]
         fn path(&self) -> &Path {
             &self.path
-        }
-
-        #[cfg(not(feature = "std"))]
-        fn location_file(&self) -> &parse18_runtime::LocationFileView {
-            &self.location_file
         }
 
         fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
@@ -221,11 +208,7 @@ mod tests {
                 .filter(|entry| entry.file_type().is_file())
                 .map(|entry| {
                     let path = entry.path().to_path_buf();
-                    Ok(TestSourcePath {
-                        #[cfg(not(feature = "std"))]
-                        location_file: path.display().to_string(),
-                        path,
-                    })
+                    Ok(TestSourcePath { path })
                 })
                 .collect()
         }

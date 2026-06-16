@@ -1,9 +1,4 @@
-#![no_std]
-
 extern crate alloc;
-#[cfg(feature = "std")]
-extern crate std;
-
 use crate::ast::ModuleDeclaration;
 use crate::lexer::{Lexer, LexerReader};
 use alloc::borrow::ToOwned;

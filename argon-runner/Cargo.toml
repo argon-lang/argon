@@ -3,37 +3,21 @@ name = "argon-runner"
 version = "0.1.0"
 edition = "2024"
 
-[features]
-default = []
-std = [
-    "argon-compiler/std",
-    "argon-io/std",
-    "argon-source/std",
-    "argon-tube/std",
-    "argon-util/std",
-    "embedded-io/std",
-    "esexpr/std",
-    "esexpr-binary/std",
-    "dep:walkdir",
-    "dep:embedded-io-adapters",
-]
-
 [dependencies]
-argon-compiler = { workspace = true, default-features = false }
+argon-compiler = { workspace = true }
 argon-format = { workspace = true }
-argon-io = { workspace = true, default-features = false }
-argon-source = { workspace = true, default-features = false }
-argon-tube = { workspace = true, default-features = false }
-argon-util = { workspace = true, default-features = false }
+argon-io = { workspace = true }
+argon-source = { workspace = true }
+argon-tube = { workspace = true }
+argon-util = { workspace = true }
 
 embedded-io = { workspace = true }
-embedded-io-adapters = { workspace = true, optional = true }
 esexpr = { workspace = true }
-esexpr-binary = { workspace = true, default-features = false }
+esexpr-binary = { workspace = true }
 hashbrown = { workspace = true }
 noble-idl-runtime = { workspace = true }
-parse18-runtime = { workspace = true, default-features = false }
-walkdir = { workspace = true, optional = true }
+parse18-runtime = { workspace = true }
+walkdir = { workspace = true }
 
 [build-dependencies]
 noble-idl-compiler-rust = { workspace = true }

@@ -4,20 +4,18 @@ publish = false
 edition = "2024"
 
 [features]
-default = []
-std = ["argon-expr/std", "argon-parser/std", "argon-util/std", "parse18-runtime/std"]
 test-utils = []
 
 [dependencies]
-argon-expr = { workspace = true, default-features = false }
-argon-parser = { workspace = true, default-features = false }
-argon-util = { workspace = true, default-features = false }
+argon-expr = { workspace = true }
+argon-parser = { workspace = true }
+argon-util = { workspace = true }
 derivative = { workspace = true }
 esexpr = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 percent-encoding = { workspace = true }
-parse18-runtime = { workspace = true, default-features = false }
+parse18-runtime = { workspace = true }
 
 [lints]
 workspace = true

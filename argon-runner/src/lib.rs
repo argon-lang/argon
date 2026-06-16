@@ -1,12 +1,6 @@
-#![no_std]
-
 extern crate alloc;
-#[cfg(feature = "std")]
-extern crate std;
-
 mod backend;
 mod context;
-#[cfg(feature = "std")]
 pub mod local_io;
 mod tubes;
 
@@ -133,13 +127,10 @@ where
     W: Write,
 {
     if let Err(err) = output_file.delete() {
-        #[cfg(feature = "std")]
         error_output.write_fmt(format_args!(
             "failed to delete output file {}: {err}",
             output_file.path().display()
         ))?;
-        #[cfg(not(feature = "std"))]
-        error_output.write_fmt(format_args!("failed to delete output file: {err}"))?;
 
         error_output.write_all(b"\n")?;
     }

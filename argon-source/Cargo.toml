@@ -3,31 +3,20 @@ name = "argon-source"
 publish = false
 edition = "2024"
 
-[features]
-default = []
-std = [
-    "argon-compiler/std",
-    "argon-expr/std",
-    "argon-io/std",
-    "argon-parser/std",
-    "argon-util/std",
-    "parse18-runtime/std",
-]
-
 [dependencies]
-argon-compiler = { workspace = true, default-features = false }
-argon-expr = { workspace = true, default-features = false }
-argon-io = { workspace = true, default-features = false }
-argon-parser = { workspace = true, default-features = false }
-argon-util = { workspace = true, default-features = false }
+argon-compiler = { workspace = true }
+argon-expr = { workspace = true }
+argon-io = { workspace = true }
+argon-parser = { workspace = true }
+argon-util = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }
-parse18-runtime = { workspace = true, default-features = false }
+parse18-runtime = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }
-embedded-io = { workspace = true, features = ["std"] }
+embedded-io = { workspace = true }
 num-bigint = { workspace = true }
 tempfile = { workspace = true }
 walkdir = { workspace = true }
