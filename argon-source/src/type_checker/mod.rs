@@ -1,22 +1,25 @@
 use crate::modifiers::{ERASURE_MODE, IS_WITNESS, ModifierParser};
 use alloc::borrow::{Cow, ToOwned};
-use alloc::collections::{BTreeMap, VecDeque};
+use alloc::collections::VecDeque;
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, Method, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, TubeName};
+use argon_compiler::{
+    Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
+    Method, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner,
+    SubstFunctionSignature, Trait, TubeName,
+};
 use argon_expr::{
-    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, EnumType,
+    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    LocalVariable, LoopLabels, MethodInstanceType, Normalizer, NormalizerScanner, Pattern,
-    RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
+    LocalVariable, LoopLabels, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral,
+    RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
-use argon_util::{CompileError, Fuel, MultiSlice, UniqueIdentifier};
-use core::cmp::Ordering;
+use argon_util::{CompileError, Fuel, UniqueIdentifier};
 use core::fmt::{Debug, Formatter};
 use core::hash::{Hash, Hasher};
 use core::{mem, ptr};
@@ -25,6 +28,10 @@ use mitsein::vec1;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
+
+mod overload;
+
+use overload::{OverloadResolver, substitute_arg_in_param_types};
 
 pub fn type_check_type_expr(
     context: Context,
@@ -822,9 +829,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         );
 
                         selected_overload.args.extend(
-                            selected_overload.unspecified_parameters
+                            selected_overload
+                                .unspecified_parameters
                                 .drain(..)
-                                .map(|_| Expr::Error)
+                                .map(|_| Expr::Error),
                         );
                     }
 
@@ -1188,12 +1196,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let ex = self.check(ex, &ex_type);
 
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::Raise {
-                        ex: Box::new(ex),
-                    },
+                    checked_expr: Expr::Raise { ex: Box::new(ex) },
                     inferred_type: Expr::never_type(),
                 })
-            },
+            }
 
             ast::Expr::Summon { .. } => todo!("infer summon expressions"),
 
@@ -1321,7 +1327,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::BoxedType(Box::new(inner.checked_expr)),
                     inferred_type: inner.inferred_type,
                 })
-            },
+            }
             ast::Expr::Box { value } => {
                 let value = self.infer(value).infer_fully();
                 TypeInferResult::Complete(InferredType {
@@ -1331,7 +1337,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     },
                     inferred_type: Expr::BoxedType(Box::new(value.inferred_type)),
                 })
-            },
+            }
             ast::Expr::Unbox { value } => {
                 let mut value = self.infer(value).infer_fully();
 
@@ -1340,7 +1346,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         self.context.normalize_fuel(),
                         ExprNormalizer {
                             model: &mut self.model,
-                        }
+                        },
                     );
                     norm.normalize(&mut value.inferred_type);
                 }
@@ -1359,7 +1365,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     },
                     inferred_type,
                 })
-            },
+            }
         }
     }
 
@@ -1486,7 +1492,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     return TypeInferResult::error();
                 };
 
-                let mut curried_closure_params = Vec::with_capacity(selected_overload.unspecified_parameters.len());
+                let mut curried_closure_params =
+                    Vec::with_capacity(selected_overload.unspecified_parameters.len());
                 while let Some(param) = selected_overload.unspecified_parameters.pop_front() {
                     let closure_param = ClosureParameterVariable {
                         id: UniqueIdentifier::new(),
@@ -1497,7 +1504,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         is_witness: false,
                     };
 
-                    let closure_param_var = Variable::ClosureParameter(Box::new(closure_param.clone()));
+                    let closure_param_var =
+                        Variable::ClosureParameter(Box::new(closure_param.clone()));
 
                     if let Some(owner) = selected_overload.overload.as_expression_owner() {
                         let param_var = param.to_parameter_var(owner, selected_overload.args.len());
@@ -1511,7 +1519,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     }
 
                     curried_closure_params.push(closure_param);
-                    selected_overload.args.push(Expr::Variable(closure_param_var))
+                    selected_overload
+                        .args
+                        .push(Expr::Variable(closure_param_var))
                 }
 
                 let mut inferred_type = selected_overload.into_inferred_type(self);
@@ -1556,13 +1566,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let index_call = self.process_method_call(
                     obj,
                     &Identifier::Index,
-                    VecDeque::from(vec![
-                        ArgumentInfo {
-                            call_location: &call.location,
-                            arg: index,
-                            list_type: FunctionParameterListType::NormalList,
-                        },
-                    ]),
+                    VecDeque::from(vec![ArgumentInfo {
+                        call_location: &call.location,
+                        arg: index,
+                        list_type: FunctionParameterListType::NormalList,
+                    }]),
                     None,
                 );
                 let result = self.infer_call(index_call);
@@ -1971,11 +1979,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
 
                 ast::Expr::Identifier(identifier) => {
-                    let callee = self.process_lookup(
-                        &func_expr.location,
-                        identifier,
-                        assigned_value,
-                    );
+                    let callee =
+                        self.process_lookup(&func_expr.location, identifier, assigned_value);
 
                     if !arguments.is_empty() && matches!(callee, CalleeInfo::VariableStore(..)) {
                         self.report_invalid_assignment_target(call_location);
@@ -1994,12 +1999,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
 
                 ast::Expr::Dot { o, member } => {
-                    return self.process_method_call(
-                        o,
-                        &member.value,
-                        arguments,
-                        assigned_value,
-                    );
+                    return self.process_method_call(o, &member.value, arguments, assigned_value);
                 }
 
                 ast::Expr::Index { obj, index } => {
@@ -2018,8 +2018,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             callee: CalleeInfo::IndexUpdate(obj, index, assigned_value),
                             arguments,
                         };
-                    }
-                    else {
+                    } else {
                         return CallInfo {
                             location: call_location,
                             callee: CalleeInfo::Index(obj, index),
@@ -2085,13 +2084,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
         // Find enum variants
         if let CalleeInfo::Overloadable(instance_overloads) = &mut instance.callee {
-            if let Some(e) =
-                instance_overloads.iter().flatten().find_map(
-                    |overload| match overload {
-                        Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
-                        _ => None,
-                    },
-                )
+            if let Some(e) = instance_overloads
+                .iter()
+                .flatten()
+                .find_map(|overload| match overload {
+                    Overloadable::Base(scope::Overloadable::Enum(e)) => Some(e),
+                    _ => None,
+                })
             {
                 overload_groups.push(
                     e.clone()
@@ -2099,11 +2098,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .iter()
                         .cloned()
                         .filter(|v| v.metadata().name == *member)
-                        .map(|v| {
-                            Overloadable::Base(scope::Overloadable::EnumVariant(
-                                v.clone(),
-                            ))
-                        })
+                        .map(|v| Overloadable::Base(scope::Overloadable::EnumVariant(v.clone())))
                         .collect(),
                 );
             }
@@ -2178,10 +2173,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     .filter(|entry| {
                         entry.method.metadata().name == adjusted_member_name
                             && self.access.allows_access(
-                            &Declaration::Method(entry.method.clone()),
-                            instance_type_as_method_owner.as_ref(),
-                            entry.access,
-                        )
+                                &Declaration::Method(entry.method.clone()),
+                                instance_type_as_method_owner.as_ref(),
+                                entry.access,
+                            )
                     })
                     .map(|entry| Overloadable::InstanceMethod {
                         method: entry.method.clone(),
@@ -2216,8 +2211,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                         ArgumentInfo {
                                             call_location,
                                             arg: o,
-                                            list_type:
-                                            FunctionParameterListType::NormalList,
+                                            list_type: FunctionParameterListType::NormalList,
                                         },
                                         instance.clone(),
                                     ))
@@ -2541,7 +2535,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let mut inferred = self.resolve_inferred_type(infer, expected_type);
 
         let mut transformations = Vec::new();
-        if !self.type_matches_expected(&mut transformations, &inferred.inferred_type, expected_type) {
+        if !self.type_matches_expected(&mut transformations, &inferred.inferred_type, expected_type)
+        {
             self.context
                 .reporter()
                 .report_error(CompileError::type_mismatch(
@@ -2745,9 +2740,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
             ast::Pattern::String(s) => {
                 let mut transformations = Vec::new();
-                if !self
-                    .type_matches_expected(&mut transformations, &pattern_type, ExpectedType::Exact(&Expr::string_type()))
-                {
+                if !self.type_matches_expected(
+                    &mut transformations,
+                    &pattern_type,
+                    ExpectedType::Exact(&Expr::string_type()),
+                ) {
                     todo!()
                 }
 
@@ -2763,9 +2760,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
             ast::Pattern::Int(i) => {
                 let mut transformations = Vec::new();
-                if !self
-                    .type_matches_expected(&mut transformations, &pattern_type, ExpectedType::Exact(&Expr::int_type()))
-                {
+                if !self.type_matches_expected(
+                    &mut transformations,
+                    &pattern_type,
+                    ExpectedType::Exact(&Expr::int_type()),
+                ) {
                     todo!()
                 }
 
@@ -2777,9 +2776,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
             ast::Pattern::Bool(b) => {
                 let mut transformations = Vec::new();
-                if !self
-                    .type_matches_expected(&mut transformations, &pattern_type, ExpectedType::Exact(&Expr::bool_type()))
-                {
+                if !self.type_matches_expected(
+                    &mut transformations,
+                    &pattern_type,
+                    ExpectedType::Exact(&Expr::bool_type()),
+                ) {
                     todo!()
                 }
 
@@ -2992,9 +2993,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         Expr::BoxedType(actual_unboxed) => {
                             if let Expr::BoxedType(expected_unboxed) = expected_type {
                                 expected_type = *expected_unboxed;
-                            }
-                            else {
-                                transformations.push(TypeCheckValueTransformation::Unbox((*actual_unboxed).clone()));
+                            } else {
+                                transformations.push(TypeCheckValueTransformation::Unbox(
+                                    (*actual_unboxed).clone(),
+                                ));
                             }
 
                             actual_type = *actual_unboxed;
@@ -3006,7 +3008,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                     match expected_type {
                         Expr::BoxedType(expected_unboxed) => {
-                            transformations.push(TypeCheckValueTransformation::Box((*expected_unboxed).clone()));
+                            transformations.push(TypeCheckValueTransformation::Box(
+                                (*expected_unboxed).clone(),
+                            ));
                             expected_type = *expected_unboxed;
                             continue;
                         }
@@ -3031,8 +3035,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         match actual_type {
             PartiallyInferredType::Full(actual_type) => {
                 let mut transformations = Vec::new();
-                self.type_matches_expected(&mut transformations, actual_type, expected_type) &&
-                    (allow_transform || transformations.is_empty())
+                self.type_matches_expected(&mut transformations, actual_type, expected_type)
+                    && (allow_transform || transformations.is_empty())
             }
             PartiallyInferredType::Closure => {
                 let ExpectedType::Exact(expected_type) = expected_type else {
@@ -3052,9 +3056,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
             PartiallyInferredType::Tuple(elements) => match expected_type {
                 ExpectedType::AnyMetaType
-                | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => elements
-                    .iter()
-                    .all(|e| self.partially_inferred_type_matches_expected(false, e, expected_type)),
+                | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => {
+                    elements.iter().all(|e| {
+                        self.partially_inferred_type_matches_expected(false, e, expected_type)
+                    })
+                }
 
                 ExpectedType::Exact(Expr::Tuple { items }) if items.len() == elements.len() => {
                     elements.iter().zip(items.iter()).all(|(actual, expected)| {
@@ -3072,15 +3078,20 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     }
 
     fn get_exception_trait(&self) -> Arc<dyn Trait> {
-        let Some(core_tube) = self.scope.lookup_tube(&TubeName(vec1![ "Argon".to_owned(), "Core".to_owned() ])) else {
+        let Some(core_tube) = self
+            .scope
+            .lookup_tube(&TubeName(vec1!["Argon".to_owned(), "Core".to_owned()]))
+        else {
             todo!()
         };
 
-        let Some(exception_module) = core_tube.module(&ModulePath(vec![ "Exception".to_owned() ])) else {
+        let Some(exception_module) = core_tube.module(&ModulePath(vec!["Exception".to_owned()]))
+        else {
             todo!()
         };
 
-        let group = exception_module.export_groups()
+        let group = exception_module
+            .export_groups()
             .get(&Identifier::Named("Exception".to_owned()))
             .iter()
             .flat_map(|group| group.iter())
@@ -3220,7 +3231,11 @@ fn get_condition_vars(
     when_false_vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
 ) {
     match condition {
-        Expr::Condition { value, when_true_witness, when_false_witness } => {
+        Expr::Condition {
+            value,
+            when_true_witness,
+            when_false_witness,
+        } => {
             when_true_vars.extend(when_true_witness.iter().map(Box::as_ref).cloned());
             when_false_vars.extend(when_false_witness.iter().map(Box::as_ref).cloned());
             get_condition_vars(value, when_true_vars, when_false_vars);
@@ -3303,560 +3318,17 @@ enum CalleeInfo<'a> {
     Overloadable(Vec<Vec<Overloadable<'a>>>),
     TypeN,
     Index(&'a WithLocation<ast::Expr>, &'a WithLocation<ast::Expr>),
-    IndexUpdate(&'a WithLocation<ast::Expr>, &'a WithLocation<ast::Expr>, AssignedValue<'a>),
+    IndexUpdate(
+        &'a WithLocation<ast::Expr>,
+        &'a WithLocation<ast::Expr>,
+        AssignedValue<'a>,
+    ),
 }
 
 struct CallInfo<'a> {
     location: &'a Location,
     callee: CalleeInfo<'a>,
     arguments: VecDeque<ArgumentInfo<'a>>,
-}
-
-struct OverloadResolver<'parent, 'access, 'scope, 'model, 'e> {
-    type_checker: &'parent mut TypeChecker<'access, 'scope, 'model>,
-    call_location: &'e Location,
-    rejected_overloads: Vec<(Overloadable<'e>, OverloadRejectionReason)>,
-}
-
-impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 'scope, 'model, 'e> {
-    fn new(
-        type_checker: &'parent mut TypeChecker<'access, 'scope, 'model>,
-        call_location: &'e Location,
-    ) -> Self {
-        Self {
-            type_checker,
-            call_location,
-            rejected_overloads: Vec::new(),
-        }
-    }
-
-    fn resolve_overload_lookup(
-        mut self,
-        overload_lookup: Vec<Vec<Overloadable<'e>>>,
-        mut args: VecDeque<ArgumentInfo<'e>>,
-    ) -> ResolvedOverload<'e> {
-        let mut inferred_args = args
-            .iter()
-            .map(|arg| self.type_checker.infer(arg.arg))
-            .collect::<VecDeque<_>>();
-
-        let overload = 'find_overload: {
-            for group in overload_lookup {
-                for mut group in self.group_overloads_by_arity(group, MultiSlice::from(&args)) {
-                    let mut i = 0;
-                    while i < group.len() {
-                        if let Some(reason) = self.is_overload_applicable(
-                            &group[i],
-                            MultiSlice::from(&args),
-                            MultiSlice::from(&inferred_args),
-                        ) {
-                            let overload = group.swap_remove(i);
-                            self.rejected_overloads.push((overload, reason));
-                        } else {
-                            i += 1;
-                        }
-                    }
-
-                    let Some(selected_overload) = group.pop() else {
-                        continue;
-                    };
-
-                    if !group.is_empty() {
-                        self.type_checker.context.reporter().report_error(
-                            CompileError::ambiguous_overload(self.call_location.clone()),
-                        );
-                    }
-
-                    break 'find_overload selected_overload;
-                }
-            }
-
-            self.type_checker
-                .context
-                .reporter()
-                .report_error(CompileError::invalid_overload(self.call_location.clone()));
-
-            return ResolvedOverload {
-                overload: None,
-                extra_argument_info: args,
-                extra_inferred_args: inferred_args,
-            };
-        };
-
-        let selected = self.select_overload(overload, &mut args, &mut inferred_args);
-
-        ResolvedOverload {
-            overload: Some(selected),
-            extra_argument_info: args,
-            extra_inferred_args: inferred_args,
-        }
-    }
-
-    fn group_overloads_by_arity(
-        &mut self,
-        overloads: Vec<Overloadable<'e>>,
-        args: MultiSlice<'_, ArgumentInfo<'e>>,
-    ) -> impl Iterator<Item = Vec<Overloadable<'e>>> + 'e {
-        let mut groups: BTreeMap<OverloadArityRank, Vec<Overloadable>> = BTreeMap::new();
-
-        for overload in overloads {
-            match self.rank_by_arity(&overload, args.clone()) {
-                Some(rank) => groups.entry(rank).or_default().push(overload),
-                None => self
-                    .rejected_overloads
-                    .push((overload, OverloadRejectionReason::ParameterListTypeMismatch)),
-            }
-        }
-
-        groups.into_values()
-    }
-
-    fn rank_by_arity(
-        &self,
-        overload: &Overloadable<'e>,
-        mut args: MultiSlice<'_, ArgumentInfo<'e>>,
-    ) -> Option<OverloadArityRank> {
-        let sig = overload.signature();
-
-        let mut params = &sig.parameters[..];
-
-        let mut num_inferred = 0;
-
-        args.push_front_vec(overload.initial_arguments_info());
-
-        loop {
-            let Some((param, tail_params)) = params.split_first() else {
-                if args.is_empty() {
-                    return Some(OverloadArityRank::Exact(num_inferred));
-                } else {
-                    return Some(OverloadArityRank::More(args.len()));
-                }
-            };
-
-            if let Some(arg) = args.first() {
-                if param.list_type == arg.list_type {
-                    args.pop_front();
-                } else if param.list_type == FunctionParameterListType::NormalList {
-                    return None;
-                } else {
-                    num_inferred += 1;
-                }
-            } else if param.list_type == FunctionParameterListType::NormalList {
-                return Some(OverloadArityRank::Less(params.len()));
-            } else {
-                num_inferred += 1;
-            }
-
-            params = tail_params;
-        }
-    }
-
-    fn is_overload_applicable(
-        &self,
-        overload: &Overloadable<'e>,
-        mut args: MultiSlice<'_, ArgumentInfo<'e>>,
-        mut inferred_args: MultiSlice<'_, TypeInferResult<'e>>,
-    ) -> Option<OverloadRejectionReason> {
-        let sig = overload.signature();
-
-        let mut model = self.type_checker.model.clone();
-        let mut scope = LocalVariableScope::new(
-            &*self.type_checker.scope as &dyn Scope<ExprContext = TypeCheckExprContext>,
-        );
-        let mut type_checker = TypeChecker {
-            context: self.type_checker.context.clone(),
-            model: &mut model,
-            access: self.type_checker.access,
-            scope: &mut scope,
-        };
-
-        let mut return_type = sig.return_type.clone();
-
-        let mut params = VecDeque::from(sig.parameters);
-        let mut parameter_index = 0;
-
-        args.push_front_vec(overload.initial_arguments_info());
-        inferred_args.push_front_vec(overload.initial_arguments());
-
-        'processed_all_args: loop {
-            let Some(param) = params.pop_front() else {
-                break;
-            };
-
-            // Skip substitution if an expression owner is not available.
-            // This is safe because these overloads either do not have parameters
-            // or they have a single parameter and a fixed result type.
-
-            let v: Option<Variable<TypeCheckExprContext>> =
-                overload.as_expression_owner().map(|owner| {
-                    Variable::Parameter(Box::new(
-                        param.clone().to_parameter_var(owner, parameter_index),
-                    ))
-                });
-
-            'processed_arg: {
-                'list_type_mismatch: {
-                    if let (Some(arg), Some(inferred_arg)) = (args.first(), inferred_args.first()) {
-                        if param.list_type != arg.list_type {
-                            break 'list_type_mismatch;
-                        }
-
-                        if !type_checker.partially_inferred_type_matches_expected(
-                            true,
-                            &inferred_arg.partially_inferred_type(),
-                            ExpectedType::Exact(&param.param_type),
-                        ) {
-                            return Some(OverloadRejectionReason::ParameterTypeMismatch {
-                                parameter_index,
-                            });
-                        }
-
-                        if let Some(v) = v {
-                            self.substitute_inferred_arg_in_param_types(
-                                &mut params,
-                                &mut return_type,
-                                v,
-                                &inferred_arg,
-                            );
-                        }
-
-                        args.pop_front();
-                        inferred_args.pop_front();
-                        break 'processed_arg;
-                    }
-                    else if param.list_type == FunctionParameterListType::NormalList {
-                        break 'processed_all_args;
-                    }
-                }
-
-                match param.list_type {
-                    FunctionParameterListType::NormalList => {
-                        return Some(OverloadRejectionReason::ParameterListTypeMismatch);
-                    }
-                    FunctionParameterListType::InferrableList(_) => {
-                        let hole = Hole::new(self.call_location.clone(), param.param_type.clone());
-                        if let Some(v) = v {
-                            substitute_arg_in_param_types(
-                                &mut params,
-                                &mut return_type,
-                                v,
-                                &Expr::Hole(hole),
-                            );
-                        }
-                    }
-                    FunctionParameterListType::RequiresList => {
-                        todo!("implicit resolution")
-                    }
-                }
-            }
-
-            parameter_index += 1;
-        }
-
-        None
-    }
-
-    fn substitute_inferred_arg_in_param_types(
-        &self,
-        params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
-        return_type: &mut Expr<TypeCheckExprContext>,
-        v: Variable<TypeCheckExprContext>,
-        arg: &TypeInferResult<'e>,
-    ) {
-        if let TypeInferResult::Complete(inferred_type) = arg {
-            substitute_arg_in_param_types(
-                params,
-                return_type,
-                v,
-                &inferred_type.checked_expr,
-            );
-        } else {
-            let hole = Hole::new(self.call_location.clone(), v.var_type().clone());
-            substitute_arg_in_param_types(params, return_type, v, &Expr::Hole(hole));
-        }
-    }
-
-    fn select_overload(
-        &mut self,
-        overload: Overloadable<'e>,
-        args: &mut VecDeque<ArgumentInfo<'e>>,
-        inferred_args: &mut VecDeque<TypeInferResult<'e>>,
-    ) -> SelectedOverload<'e> {
-        let sig = overload.signature();
-
-        let mut return_type = sig.return_type;
-
-        let mut params = VecDeque::from(sig.parameters);
-        let mut parameter_index = 0;
-
-        for initial_arg in overload.initial_arguments_info().into_iter().rev() {
-            args.push_front(initial_arg);
-        }
-
-        for initial_arg in overload.initial_arguments().into_iter().rev() {
-            inferred_args.push_front(initial_arg);
-        }
-
-        let mut selected_args = Vec::with_capacity(inferred_args.len());
-
-
-
-        'processed_all_args: loop {
-            let Some(param) = params.pop_front() else {
-                break;
-            };
-
-            let v: Option<Variable<TypeCheckExprContext>> =
-                overload.as_expression_owner().map(|owner| {
-                    let param_var = param.clone().to_parameter_var(owner, parameter_index);
-                    Variable::Parameter(Box::new(param_var))
-                });
-
-
-            'processed_arg: {
-                'list_type_mismatch: {
-                    if let Some(arg) = args.front() {
-                        if param.list_type != arg.list_type {
-                            break 'list_type_mismatch;
-                        }
-
-                        let arg_result = inferred_args
-                            .pop_front()
-                            .expect("inferred_args should not be empty when args is not empty");
-
-                        let arg_expr = self.type_checker.check_inferred_type(
-                            &arg.arg.location,
-                            arg_result,
-                            ExpectedType::Exact(&param.param_type),
-                        );
-
-                        if let Some(v) = v {
-                            substitute_arg_in_param_types(
-                                &mut params,
-                                &mut return_type,
-                                v,
-                                &arg_expr.checked_expr,
-                            );
-                        }
-
-                        selected_args.push(arg_expr.checked_expr);
-
-                        args.pop_front();
-                        break 'processed_arg;
-                    }
-                    else if param.list_type == FunctionParameterListType::NormalList {
-                        params.push_front(param);
-                        break 'processed_all_args;
-                    }
-                }
-
-                match param.list_type {
-                    FunctionParameterListType::NormalList => {
-                        unreachable!(
-                            "Parameter list type mismatch should have been caught earlier"
-                        );
-                    }
-                    FunctionParameterListType::InferrableList(_) => {
-                        let hole = Hole::new(self.call_location.clone(), param.param_type);
-
-                        if let Some(v) = v {
-                            substitute_arg_in_param_types(
-                                &mut params,
-                                &mut return_type,
-                                v,
-                                &Expr::Hole(hole.clone()),
-                            );
-                        }
-
-                        selected_args.push(Expr::Hole(hole));
-                    }
-                    FunctionParameterListType::RequiresList => {
-                        todo!("implicit resolution")
-                    }
-                }
-            }
-
-            parameter_index += 1;
-        }
-
-        SelectedOverload {
-            call_location: self.call_location,
-            overload,
-
-            args: selected_args,
-            return_type,
-            unspecified_parameters: params,
-        }
-    }
-}
-
-
-fn substitute_arg_in_param_types(
-    params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
-    return_type: &mut Expr<TypeCheckExprContext>,
-    v: Variable<TypeCheckExprContext>,
-    arg: &Expr<TypeCheckExprContext>,
-) {
-    let mut scanner = SubstScanner::new();
-    scanner.add_substitution(v, Cow::Borrowed(arg));
-
-    for param in params.iter_mut() {
-        scanner.scan(&mut param.param_type);
-    }
-
-    scanner.scan(return_type);
-}
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum OverloadArityRank {
-    Exact(usize),
-    More(usize),
-    Less(usize),
-}
-
-impl Ord for OverloadArityRank {
-    fn cmp(&self, other: &Self) -> Ordering {
-        use OverloadArityRank::*;
-
-        match (self, other) {
-            (Exact(left), Exact(right)) | (More(left), More(right)) | (Less(left), Less(right)) => {
-                left.cmp(right)
-            }
-
-            (Exact(_), _) => Ordering::Less,
-            (_, Exact(_)) => Ordering::Greater,
-            (More(_), Less(_)) => Ordering::Less,
-            (Less(_), More(_)) => Ordering::Greater,
-        }
-    }
-}
-
-impl PartialOrd for OverloadArityRank {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-enum OverloadRejectionReason {
-    ParameterListTypeMismatch,
-    ParameterTypeMismatch { parameter_index: usize },
-}
-
-struct ResolvedOverload<'e> {
-    overload: Option<SelectedOverload<'e>>,
-    extra_argument_info: VecDeque<ArgumentInfo<'e>>,
-    extra_inferred_args: VecDeque<TypeInferResult<'e>>,
-}
-
-struct SelectedOverload<'e> {
-    call_location: &'e Location,
-    overload: Overloadable<'e>,
-    args: Vec<Expr<TypeCheckExprContext>>,
-    return_type: Expr<TypeCheckExprContext>,
-    unspecified_parameters: VecDeque<SignatureParameter<TypeCheckExprContext>>,
-}
-
-impl<'a> SelectedOverload<'a> {
-    fn into_inferred_type(mut self, checker: &TypeChecker<'_, '_, '_>) -> InferredType {
-        let expr = match self.overload {
-            Overloadable::Base(scope::Overloadable::Function(f)) => Expr::FunctionCall {
-                function: f,
-                arguments: self.args,
-            },
-            Overloadable::Base(scope::Overloadable::Record(r)) => Expr::RecordType(RecordType {
-                record: r,
-                arguments: self.args,
-            }),
-            Overloadable::Base(scope::Overloadable::Enum(e)) => Expr::EnumType(EnumType {
-                enum_: e,
-                arguments: self.args,
-            }),
-            Overloadable::Base(scope::Overloadable::Trait(t)) => Expr::TraitType(TraitType {
-                trait_: t,
-                arguments: self.args,
-            }),
-            Overloadable::Base(scope::Overloadable::EnumVariant(v)) => {
-                if !v.clone().fields().is_empty() {
-                    checker
-                        .context
-                        .reporter()
-                        .report_error(CompileError::invalid_overload(self.call_location.clone()));
-                }
-
-                let enum_type = match &self.return_type {
-                    Expr::Error => return InferredType::error(),
-                    Expr::EnumType(e) => e.clone(),
-                    _ => panic!("Expected enum type"),
-                };
-
-                Expr::EnumVariantLiteral {
-                    enum_type,
-                    variant: v,
-                    arguments: self.args,
-                    fields: vec![],
-                }
-            }
-            Overloadable::Base(scope::Overloadable::Instance(i)) => Expr::NewInstance {
-                instance: i.clone(),
-                arguments: self.args,
-            },
-            Overloadable::InstanceMethod {
-                method,
-                trait_type,
-                obj,
-            } => Expr::MethodCall {
-                method,
-                instance_type: MethodInstanceType::Trait(trait_type),
-                receiver: Box::new(obj),
-                arguments: self.args,
-            },
-            Overloadable::ExtensionMethod(f, _, _) => Expr::FunctionCall {
-                function: f,
-                arguments: self.args,
-            },
-            Overloadable::RecordField {
-                record_type,
-                field,
-                record_value,
-                ..
-            } => Expr::RecordFieldLoad {
-                record_type: Box::new(record_type),
-                field,
-                record_value: Box::new(record_value),
-            },
-            Overloadable::RecordFieldStore {
-                record_type,
-                field,
-                record_value,
-                ..
-            } => {
-                let value = self
-                    .args
-                    .pop()
-                    .expect("Record field store should have an argument");
-
-                if !field.metadata().is_mutable {
-                    checker
-                        .context
-                        .reporter()
-                        .report_error(CompileError::can_not_mutate(self.call_location.clone()));
-                }
-
-                Expr::RecordFieldStore {
-                    record_type: Box::new(record_type),
-                    field,
-                    record_value: Box::new(record_value),
-                    new_value: Box::new(value),
-                }
-            }
-        };
-
-        InferredType {
-            checked_expr: expr,
-            inferred_type: self.return_type,
-        }
-    }
 }
 
 struct BranchTyper {
