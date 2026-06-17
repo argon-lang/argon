@@ -41,8 +41,7 @@ pub(super) fn emit_pattern(
                     dest: Box::new(r.clone()),
                     value: Box::new(value_reg.clone()),
                 });
-            }
-            else {
+            } else {
                 emitter.emit(vf::Instruction::Move {
                     dest: Box::new(r.clone()),
                     src: Box::new(value_reg.clone()),

@@ -102,7 +102,7 @@ where
             fields: fields
                 .into_iter()
                 .map(|field| RecordFieldLiteral {
-                    name: field.name,
+                    field: field.field,
                     value: shifter.shift(field.value),
                 })
                 .collect(),
@@ -219,7 +219,7 @@ where
             fields: fields
                 .into_iter()
                 .map(|field| RecordFieldLiteral {
-                    name: field.name,
+                    field: field.field,
                     value: shifter.shift(field.value),
                 })
                 .collect(),

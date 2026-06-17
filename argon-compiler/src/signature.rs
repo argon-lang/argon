@@ -20,9 +20,10 @@ impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
     where
         S: ExprScannerMut<EC = EC> + ?Sized,
     {
-        self.parameters.iter_mut().all(|parameter| {
-            parameter.scan_mut(scanner)
-        }) && scanner.scan(&mut self.return_type)
+        self.parameters
+            .iter_mut()
+            .all(|parameter| parameter.scan_mut(scanner))
+            && scanner.scan(&mut self.return_type)
             && self
                 .ensures_clauses
                 .iter_mut()
@@ -113,7 +114,9 @@ impl<EC: ExprContext + ?Sized> SignatureParameter<EC> {
     where
         S: ExprScannerMut<EC = EC> + ?Sized,
     {
-        self.bindings.iter_mut().all(|binding| scanner.scan(&mut binding.param_type))
+        self.bindings
+            .iter_mut()
+            .all(|binding| scanner.scan(&mut binding.param_type))
             && scanner.scan(&mut self.param_type)
     }
 

@@ -10,6 +10,7 @@ pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 pub mod vtable;
+pub mod z3expr;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::erased_sig::ImportSpecifier;
@@ -61,6 +62,8 @@ pub trait ContextObject: ThreadSafe {
     fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern;
 
     fn normalize_fuel(&self) -> Fuel;
+    
+    fn z3_rlimit(&self) -> u32;
 }
 
 pub type Context = Arc<dyn ContextObject>;

@@ -48,6 +48,7 @@ tempfile = "3.27.0"
 unicode-general-category = { version = "1.1.0" }
 walkdir = "2.5.0"
 windows-sys = "0.61.2"
+z3 = { version = "0.20.0", features = ["vendored"] }
 
 [workspace.lints.rust]
 macro_use_extern_crate = "deny"

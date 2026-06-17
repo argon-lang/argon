@@ -971,7 +971,6 @@ struct FunctionSignatureBuilder<'a> {
     instance_param: Option<Variable<DefaultExprContext>>,
     type_param_mapping: HashMap<Variable<DefaultExprContext>, vf::Token>,
     param_var_mapping: HashMap<Variable<DefaultExprContext>, MappedParamVar>,
-
 }
 
 impl<'a> FunctionSignatureBuilder<'a> {
@@ -995,7 +994,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
         token_params.extend(
             self.type_param_mapping
                 .iter()
-                .map(|(var, index)| (var.clone(), index.clone()))
+                .map(|(var, index)| (var.clone(), index.clone())),
         );
 
         TokenEmitter {
@@ -1022,9 +1021,12 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
                 let index = self.token_parameters.len();
                 self.token_parameters.push(Box::new(tp));
-                self.type_param_mapping.insert(param, vf::Token::TokenParameter {
-                    index: BigUint::from(index),
-                });
+                self.type_param_mapping.insert(
+                    param,
+                    vf::Token::TokenParameter {
+                        index: BigUint::from(index),
+                    },
+                );
                 self.arg_consumers.push(ArgConsumer::Token);
             }
             ErasureMode::Concrete => {
@@ -1095,7 +1097,9 @@ impl<'a> FunctionSignatureBuilder<'a> {
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let mut token_emitter = TokenEmitter {
             encoder: self.encoder,
-            token_params: self.instance_type_params.iter()
+            token_params: self
+                .instance_type_params
+                .iter()
                 .chain(self.type_param_mapping.iter())
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
@@ -1312,12 +1316,10 @@ impl TokenEmitterCommon for ExprEmitter<'_> {
         &mut self,
         v: &Variable<DefaultExprContext>,
     ) -> Result<Option<vf::Token>, InternalCompilerError> {
-        Ok(self.known_vars
-            .get(v)
-            .and_then(|real| match real {
-                VariableRealization::Tok(tk) => Some(tk.clone()),
-                _ => None,
-            }))
+        Ok(self.known_vars.get(v).and_then(|real| match real {
+            VariableRealization::Tok(tk) => Some(tk.clone()),
+            _ => None,
+        }))
     }
 
     fn vm_encoder(&mut self) -> &mut VmEncoder {
@@ -1548,7 +1550,7 @@ impl<'a> ExprEmitter<'a> {
 
             Expr::Condition { value, .. } => self.expr(value, output)?,
 
-            Expr::Box { t, value } => {
+            Expr::Box { t: _, value } => {
                 let rb = output.output_register(self, e)?;
                 let unboxed_value = self.expr(value, AnyRegister)?;
 
@@ -1777,21 +1779,11 @@ impl<'a> ExprEmitter<'a> {
                 fields,
             } => {
                 let rb = output.output_register(self, e)?;
-                let declared_fields = variant.clone().fields();
 
                 let mut vm_fields = Vec::with_capacity(fields.len());
                 for field in fields {
-                    let declared_field = declared_fields
-                        .iter()
-                        .find(|declared_field| declared_field.metadata().name == field.name)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "enum variant literal references unknown field {:?}",
-                                field.name
-                            )
-                        });
                     let field_id =
-                        BigUint::from(self.encoder.get_record_field_id(declared_field.clone()));
+                        BigUint::from(self.encoder.get_record_field_id(field.field.clone()));
                     let value = self.expr(&field.value, AnyRegister)?;
                     vm_fields.push(Box::new(vf::RecordFieldLiteral {
                         field_id,
@@ -1955,7 +1947,56 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
-            // Match
+            Expr::Match { value, cases } => {
+                let (result, output) = output.into_known_location(self, e)?;
+                let value_reg = self.expr(value, AnyRegister)?;
+                let match_block = self.claim_block_id();
+
+                let (block, _) = self.with_nested_block(|emitter| {
+                    for case in cases {
+                        let when_true_label = emitter.claim_block_id();
+                        let when_false_label = emitter.claim_block_id();
+                        let value_reg = value_reg.clone();
+                        let output = output.clone();
+                        let match_block = match_block.clone();
+
+                        let (condition, _) = emitter.with_nested_block(|emitter| {
+                            pattern::emit_pattern(
+                                emitter,
+                                &when_false_label,
+                                value_reg,
+                                &case.pattern,
+                            )
+                        })?;
+
+                        let (when_true, _) = emitter.with_nested_block(|emitter| {
+                            emitter.expr(&case.body, output)?;
+                            emitter.emit(vf::Instruction::BlockBreak {
+                                block_id: Box::new(match_block),
+                            });
+                            Err::<(), _>(EmitStop::Branch)
+                        })?;
+
+                        emitter.emit(vf::Instruction::IfElse {
+                            condition: Box::new(condition),
+                            when_true_block_id: Box::new(when_true_label),
+                            when_false_block_id: Box::new(when_false_label),
+                            when_true: Box::new(when_true),
+                            when_false: Box::new(vf::Block {
+                                instructions: vec![],
+                            }),
+                        });
+                    }
+
+                    emitter.emit(vf::Instruction::Unreachable {});
+                    Ok(())
+                })?;
+
+                self.emit_block(match_block, block);
+
+                result
+            }
+
             Expr::MethodCall {
                 method,
                 instance_type,
@@ -2078,18 +2119,11 @@ impl<'a> ExprEmitter<'a> {
                 fields,
             } => {
                 let rb = output.output_register(self, e)?;
-                let declared_fields = record_type.record.clone().fields();
 
                 let mut vm_fields = Vec::with_capacity(fields.len());
                 for field in fields {
-                    let declared_field = declared_fields
-                        .iter()
-                        .find(|declared_field| declared_field.metadata().name == field.name)
-                        .unwrap_or_else(|| {
-                            panic!("record literal references unknown field {:?}", field.name)
-                        });
                     let field_id =
-                        BigUint::from(self.encoder.get_record_field_id(declared_field.clone()));
+                        BigUint::from(self.encoder.get_record_field_id(field.field.clone()));
                     let value = self.expr(&field.value, AnyRegister)?;
                     vm_fields.push(Box::new(vf::RecordFieldLiteral {
                         field_id,

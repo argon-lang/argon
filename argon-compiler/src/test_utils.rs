@@ -1,8 +1,17 @@
+use crate::access::AccessToken;
 use crate::platform::PlatformExtern;
-use crate::{CompileErrorReporter, Context, ContextObject};
+use crate::scope::{Lookup, Scope};
+use crate::{
+    erased_sig, CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum,
+    EnumVariant, EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName,
+    Unload,
+};
 use alloc::{string::String, sync::Arc, vec::Vec};
+use argon_expr::{BlockLabel, BlockLabelDeclaration, Expr, LoopLabels};
+use argon_parser::ast::Identifier;
 use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
+use core::fmt::{Debug, Formatter};
 use hashbrown::HashMap;
 use parse18_runtime::WithLocation;
 
@@ -61,10 +70,120 @@ impl ContextObject for TestContext {
     fn normalize_fuel(&self) -> Fuel {
         Fuel::new(5)
     }
+
+    fn z3_rlimit(&self) -> u32 {
+        10000
+    }
 }
 
 impl From<TestContext> for Context {
     fn from(context: TestContext) -> Self {
         Arc::new(context)
+    }
+}
+
+#[derive(Debug)]
+pub struct TestEnum {
+    variants: Arc<Vec<Arc<dyn EnumVariant>>>,
+}
+
+impl TestEnum {
+    pub fn new(variants: Vec<Arc<dyn EnumVariant>>) -> Self {
+        Self {
+            variants: Arc::new(variants),
+        }
+    }
+}
+
+impl Unload for TestEnum {
+    fn unload(&self) {}
+}
+
+impl Enum for TestEnum {
+    fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier {
+        panic!("test enum import_specifier should not be called")
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        panic!("test enum signature should not be called")
+    }
+
+    fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>> {
+        self.variants.clone()
+    }
+}
+
+pub struct TestEnumVariant {
+    metadata: EnumVariantMetadata,
+}
+
+impl TestEnumVariant {
+    pub fn new(name: &str) -> Self {
+        Self {
+            metadata: EnumVariantMetadata {
+                name: Identifier::Named(name.into()),
+            },
+        }
+    }
+}
+
+impl Debug for TestEnumVariant {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TestEnumVariant")
+            .field("name", &self.metadata.name)
+            .finish()
+    }
+}
+
+impl Unload for TestEnumVariant {
+    fn unload(&self) {}
+}
+
+impl EnumVariant for TestEnumVariant {
+    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum> {
+        panic!("test variant owning_enum should not be called")
+    }
+
+    fn metadata(&self) -> &EnumVariantMetadata {
+        &self.metadata
+    }
+
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        Arc::new(FunctionSignature {
+            parameters: Vec::new(),
+            return_type: Expr::bool_type(),
+            ensures_clauses: Vec::new(),
+        })
+    }
+
+    fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
+        Arc::new(Vec::new())
+    }
+}
+
+pub struct TestScope;
+
+impl Scope for TestScope {
+    type ExprContext = DefaultExprContext;
+    fn lookup(&self, _: &Identifier, _: &AccessToken) -> Lookup<Self::ExprContext> {
+        Lookup::Empty
+    }
+    fn lookup_assign(&self, _: &Identifier, _: &AccessToken) -> Lookup<Self::ExprContext> {
+        Lookup::Empty
+    }
+    fn lookup_tube(&self, _: &TubeName) -> Option<Arc<Tube>> {
+        None
+    }
+    fn lookup_block_label(
+        &self,
+        _: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
+        None
+    }
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
+        None
+    }
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
+        None
     }
 }

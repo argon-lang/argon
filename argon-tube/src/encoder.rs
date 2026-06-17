@@ -14,7 +14,7 @@ use num_bigint::{BigInt, BigUint};
 use crate::ids::TubeIdProvider;
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, LocalVariable,
-    MethodInstanceType, Pattern, RecordFieldPattern, RecordType, TraitType, Variable,
+    MatchCase, MethodInstanceType, Pattern, RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
 
@@ -1018,6 +1018,13 @@ impl TubeEncoder {
                 value: Box::new(self.emit_expr(value)?),
                 pattern: Box::new(self.emit_pattern(pattern)?),
             },
+            Expr::Match { value, cases } => tf::Expr::Match {
+                value: Box::new(self.emit_expr(value)?),
+                cases: cases
+                    .iter()
+                    .map(|case| self.emit_match_case(case).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
             Expr::Or(a, b) => tf::Expr::Or {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
@@ -1082,7 +1089,6 @@ impl TubeEncoder {
                 fields,
             } => {
                 let RecordType { record, arguments } = record_type;
-                let declared_fields = record.clone().fields();
                 tf::Expr::RecordLiteral {
                     record: Box::new(tf::RecordType {
                         id: BigUint::from(self.get_record_id(record.clone())),
@@ -1094,18 +1100,9 @@ impl TubeEncoder {
                     fields: fields
                         .iter()
                         .map(|field| {
-                            let declared_field = declared_fields
-                                .iter()
-                                .find(|declared_field| declared_field.metadata().name == field.name)
-                                .unwrap_or_else(|| {
-                                    panic!(
-                                        "record literal references unknown field {:?}",
-                                        field.name
-                                    )
-                                });
                             Ok(Box::new(tf::RecordFieldLiteral {
                                 field_id: BigUint::from(
-                                    self.get_record_field_id(declared_field.clone()),
+                                    self.get_record_field_id(field.field.clone()),
                                 ),
                                 value: Box::new(self.emit_expr(&field.value)?),
                             }))
@@ -1141,44 +1138,30 @@ impl TubeEncoder {
                 variant,
                 arguments,
                 fields,
-            } => {
-                let declared_fields = variant.clone().fields();
-                tf::Expr::EnumVariantLiteral {
-                    enum_type: Box::new(tf::EnumType {
-                        id: BigUint::from(self.get_enum_id(enum_type.enum_.clone())),
-                        args: enum_type
-                            .arguments
-                            .iter()
-                            .map(|arg| self.emit_expr(arg).map(Box::new))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
-                    variant_id: BigUint::from(self.get_enum_variant_id(variant.clone())),
-                    args: arguments
+            } => tf::Expr::EnumVariantLiteral {
+                enum_type: Box::new(tf::EnumType {
+                    id: BigUint::from(self.get_enum_id(enum_type.enum_.clone())),
+                    args: enum_type
+                        .arguments
                         .iter()
                         .map(|arg| self.emit_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
-                    fields: fields
-                        .iter()
-                        .map(|field| {
-                            let declared_field = declared_fields
-                                .iter()
-                                .find(|declared_field| declared_field.metadata().name == field.name)
-                                .unwrap_or_else(|| {
-                                    panic!(
-                                        "enum variant literal references unknown field {:?}",
-                                        field.name
-                                    )
-                                });
-                            Ok(Box::new(tf::RecordFieldLiteral {
-                                field_id: BigUint::from(
-                                    self.get_record_field_id(declared_field.clone()),
-                                ),
-                                value: Box::new(self.emit_expr(&field.value)?),
-                            }))
-                        })
-                        .collect::<Result<Vec<_>, InternalCompilerError>>()?,
-                }
-            }
+                }),
+                variant_id: BigUint::from(self.get_enum_variant_id(variant.clone())),
+                args: arguments
+                    .iter()
+                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+                fields: fields
+                    .iter()
+                    .map(|field| {
+                        Ok(Box::new(tf::RecordFieldLiteral {
+                            field_id: BigUint::from(self.get_record_field_id(field.field.clone())),
+                            value: Box::new(self.emit_expr(&field.value)?),
+                        }))
+                    })
+                    .collect::<Result<Vec<_>, InternalCompilerError>>()?,
+            },
             Expr::Finally {
                 block_body,
                 finally_body,
@@ -1247,6 +1230,16 @@ impl TubeEncoder {
             Pattern::String(s) => tf::Pattern::String { s: s.clone() },
             Pattern::Int(i) => tf::Pattern::Int { i: i.clone() },
             Pattern::Bool(b) => tf::Pattern::Bool { b: *b },
+        })
+    }
+
+    fn emit_match_case(
+        &mut self,
+        case: &MatchCase<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::MatchCase, InternalCompilerError> {
+        Ok(tf::MatchCase {
+            pattern: Box::new(self.emit_pattern(&case.pattern)?),
+            body: Box::new(self.emit_expr(&case.body)?),
         })
     }
 

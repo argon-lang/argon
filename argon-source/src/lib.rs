@@ -134,6 +134,10 @@ mod tests {
         fn normalize_fuel(&self) -> Fuel {
             Fuel::new(5)
         }
+
+        fn z3_rlimit(&self) -> u32 {
+            10000
+        }
     }
 
     fn test_context() -> (Arc<TestContext>, Context) {

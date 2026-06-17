@@ -89,6 +89,10 @@ impl ContextObject for RunnerContext {
     fn normalize_fuel(&self) -> Fuel {
         Fuel::new(5)
     }
+
+    fn z3_rlimit(&self) -> u32 {
+        20000
+    }
 }
 
 impl From<RunnerContext> for Context {

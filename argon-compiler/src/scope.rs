@@ -1,6 +1,9 @@
 use crate::access::AccessToken;
 use crate::signature::SignatureParameter;
-use crate::{DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Record, Trait, Tube, TubeName};
+use crate::{
+    DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Record, Trait,
+    Tube, TubeName,
+};
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
@@ -57,7 +60,6 @@ impl<EC: ExprContext + ?Sized> Scope for &dyn Scope<ExprContext = EC> {
         (**self).lookup_tube(name)
     }
 
-
     fn lookup_block_label(
         &self,
         name: &Identifier,
@@ -88,7 +90,6 @@ impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         (**self).lookup_tube(name)
     }
-
 
     fn lookup_block_label(
         &self,
@@ -239,7 +240,6 @@ impl<Sc: Scope> Scope for ParameterScope<Sc> {
         self.parent.lookup_tube(name)
     }
 
-
     fn lookup_block_label(
         &self,
         _name: &Identifier,
@@ -295,7 +295,6 @@ impl<Sc: Scope> Scope for InstanceParameterScope<Sc> {
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         self.parent.lookup_tube(name)
     }
-
 
     fn lookup_block_label(
         &self,

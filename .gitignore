@@ -11,3 +11,5 @@ node_modules/
 
 *.artube
 
+.z3-trace
+

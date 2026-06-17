@@ -13,6 +13,7 @@ hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
+z3 = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }

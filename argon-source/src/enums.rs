@@ -2,23 +2,23 @@ use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use alloc::borrow::Cow;
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
     Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
     TypeDeclaration, Unload,
 };
-use argon_expr::{EnumType, Expr, ExprScannerMut, ExpressionOwner, SubstScanner, Variable};
+use argon_expr::{EnumType, Expr, ExpressionOwner, SubstScanner, Variable};
 use argon_parser::ast;
+use argon_parser::ast::FunctionParameterListType;
 use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, mutex_lock};
 use core::fmt::Debug;
 use num_bigint::BigUint;
-use argon_compiler::scope::ParameterScope;
-use argon_parser::ast::FunctionParameterListType;
 use parse18_runtime::WithLocation;
 
 pub struct SourceEnum {
@@ -284,7 +284,8 @@ impl EnumVariant for SourceEnumVariant {
 
                     match &mut param.list_type {
                         FunctionParameterListType::NormalList => {
-                            param.list_type = FunctionParameterListType::InferrableList(BigUint::ZERO);
+                            param.list_type =
+                                FunctionParameterListType::InferrableList(BigUint::ZERO);
                         }
                         FunctionParameterListType::InferrableList(n) => {
                             *n += 1u32;
@@ -305,10 +306,7 @@ impl EnumVariant for SourceEnumVariant {
 
                 let return_type = Expr::<DefaultExprContext>::EnumType(EnumType {
                     enum_: self.owner.clone(),
-                    arguments: SignatureParser::get_parameter_variables(
-                        &param_owner,
-                        &parameters,
-                    )
+                    arguments: SignatureParser::get_parameter_variables(&param_owner, &parameters)
                         .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
                         .collect(),
                 });

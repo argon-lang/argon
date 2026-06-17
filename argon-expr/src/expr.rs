@@ -55,6 +55,9 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub enum Expr<EC: ExprContext + ?Sized> {
     Error,
     Hole(EC::Hole),
@@ -350,6 +353,9 @@ impl FromStr for Builtin {
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct MatchCase<EC: ExprContext + ?Sized> {
     pub pattern: Pattern<EC>,
     pub body: Expr<EC>,
@@ -366,15 +372,18 @@ impl<EC: ExprContext + ?Sized> Clone for MatchCase<EC> {
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct RecordFieldLiteral<EC: ExprContext + ?Sized> {
-    pub name: Identifier,
+    pub field: EC::RecordField,
     pub value: Expr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> Clone for RecordFieldLiteral<EC> {
     fn clone(&self) -> Self {
         Self {
-            name: self.name.clone(),
+            field: self.field.clone(),
             value: self.value.clone(),
         }
     }
@@ -390,6 +399,9 @@ pub enum ErasureMode {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct RecordType<EC: ExprContext + ?Sized> {
     pub record: EC::Record,
     pub arguments: Vec<Expr<EC>>,
@@ -398,6 +410,9 @@ pub struct RecordType<EC: ExprContext + ?Sized> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct EnumType<EC: ExprContext + ?Sized> {
     pub enum_: EC::Enum,
     pub arguments: Vec<Expr<EC>>,
@@ -406,6 +421,9 @@ pub struct EnumType<EC: ExprContext + ?Sized> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct TraitType<EC: ExprContext + ?Sized> {
     pub trait_: EC::Trait,
     pub arguments: Vec<Expr<EC>>,
@@ -414,6 +432,9 @@ pub struct TraitType<EC: ExprContext + ?Sized> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct InstanceType<EC: ExprContext + ?Sized> {
     pub instance: EC::Instance,
     pub arguments: Vec<Expr<EC>>,
@@ -422,6 +443,9 @@ pub struct InstanceType<EC: ExprContext + ?Sized> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub enum MethodInstanceType<EC: ExprContext + ?Sized> {
     Trait(TraitType<EC>),
 }

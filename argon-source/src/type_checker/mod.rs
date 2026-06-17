@@ -11,12 +11,7 @@ use argon_compiler::{
     Method, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner,
     SubstFunctionSignature, Trait, TubeName,
 };
-use argon_expr::{
-    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
-    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    LocalVariable, LoopLabels, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral,
-    RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
-};
+use argon_expr::{BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, Fuel, UniqueIdentifier};
@@ -29,9 +24,11 @@ use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
 
+mod exhaustive;
 mod overload;
 
 use overload::{OverloadResolver, substitute_arg_in_param_types};
+use crate::type_checker::exhaustive::ExhaustiveChecker;
 
 pub fn type_check_type_expr(
     context: Context,
@@ -271,6 +268,11 @@ enum TypeInferResult<'a> {
         false_body: Box<TypeInferResult<'a>>,
     },
 
+    Match {
+        expression: Box<Expr<TypeCheckExprContext>>,
+        arms: Vec<InferResultMatchArm<'a>>,
+    },
+
     Sequence {
         init_exprs: Vec1<Expr<TypeCheckExprContext>>,
         last_result: Box<TypeInferResult<'a>>,
@@ -285,7 +287,7 @@ impl<'a> TypeInferResult<'a> {
     fn partially_inferred_type<'b>(&'b self) -> PartiallyInferredType<'b> {
         match self {
             TypeInferResult::Complete(inferred_type) => {
-                PartiallyInferredType::Full(&inferred_type.inferred_type)
+                PartiallyInferredType::Full(Cow::Borrowed(&inferred_type.inferred_type))
             }
             TypeInferResult::Closure { .. } => PartiallyInferredType::Closure,
             TypeInferResult::Tuple { elements, .. } => PartiallyInferredType::Tuple(
@@ -296,6 +298,11 @@ impl<'a> TypeInferResult<'a> {
             ),
             TypeInferResult::Finally { body_result, .. } => body_result.partially_inferred_type(),
             TypeInferResult::IfElse { true_body, .. } => true_body.partially_inferred_type(),
+            TypeInferResult::Match { arms, .. } => {
+                arms.first()
+                    .map(|arm| arm.body.partially_inferred_type())
+                    .unwrap_or_else(|| PartiallyInferredType::Full(Cow::Owned(Expr::never_type())))
+            }
             TypeInferResult::Sequence { last_result, .. } => last_result.partially_inferred_type(),
         }
     }
@@ -306,6 +313,13 @@ impl<'a> TypeInferResult<'a> {
             _ => todo!("infer_fully: {:?}", self),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+struct InferResultMatchArm<'a> {
+    location: &'a Location,
+    pattern: Pattern<TypeCheckExprContext>,
+    body: TypeInferResult<'a>,
 }
 
 #[derive(Debug, Clone)]
@@ -325,7 +339,7 @@ impl InferredType {
 
 #[derive(Debug)]
 enum PartiallyInferredType<'b> {
-    Full(&'b Expr<TypeCheckExprContext>),
+    Full(Cow<'b, Expr<TypeCheckExprContext>>),
     Closure,
     Tuple(Vec<PartiallyInferredType<'b>>),
 }
@@ -869,8 +883,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             continue;
                         }
 
-                        let Some((name, field)) =
-                            remaining_fields.remove_entry(&field_literal.value.name.value)
+                        let Some(field) =
+                            remaining_fields.remove(&field_literal.value.name.value)
                         else {
                             self.context.reporter().report_error(
                                 CompileError::unknown_record_literal_field(
@@ -882,12 +896,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         };
 
                         let mut field_type = DefaultToTypeCheckExprContextShifter
-                            .shift((*field.field_type()).clone());
+                            .shift((*field.clone().field_type()).clone());
                         subst.scan(&mut field_type);
 
                         let value = self.check(&field_literal.value.value, &field_type);
 
-                        converted_fields.push(RecordFieldLiteral { name, value });
+                        converted_fields.push(RecordFieldLiteral { field, value });
                     }
                     drop(subst);
 
@@ -1183,7 +1197,127 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 })
             }
 
-            ast::Expr::Match { .. } => todo!("infer match expressions"),
+            ast::Expr::Match { value, cases } => {
+                enum CaseResults<'a> {
+                    FullyInferred(Vec<(&'a Location, Pattern<TypeCheckExprContext>, InferredType)>),
+                    InferResults(Vec<InferResultMatchArm<'a>>),
+                }
+
+                impl<'a> CaseResults<'a> {
+                    fn as_infer_results(&mut self) -> &mut Vec<InferResultMatchArm<'a>> {
+                        match self {
+                            CaseResults::FullyInferred(cases) => {
+                                let infer_res = mem::take(cases)
+                                    .into_iter()
+                                    .map(|(location, pattern, inferred)| {
+                                        InferResultMatchArm {
+                                            location,
+                                            pattern,
+                                            body: TypeInferResult::Complete(inferred),
+                                        }
+                                    })
+                                    .collect();
+
+                                *self = CaseResults::InferResults(infer_res);
+
+                                match self {
+                                    CaseResults::InferResults(infer_res) => infer_res,
+                                    _ => unreachable!(),
+                                }
+                            }
+
+                            CaseResults::InferResults(infer_res) => infer_res,
+                        }
+                    }
+                }
+
+                let value = self.infer(value).infer_fully();
+
+                let mut case_res = CaseResults::FullyInferred(Vec::new());
+                let mut branch_typer = BranchTyper::new();
+
+                for case in cases {
+                    let pattern = self.check_pattern(&case.value.pattern, value.inferred_type.clone());
+
+                    let body = {
+                        let mut nested = with_nested_scope!(self);
+                        let mut pattern_vars = Vec::new();
+                        get_pattern_vars(&pattern, &mut pattern_vars);
+                        for v in pattern_vars {
+                            nested.scope.add_variable(Variable::Local(Box::new(v)));
+                        }
+                        nested.infer(&case.value.body)
+                    };
+
+                    match (&mut case_res, body) {
+                        (CaseResults::FullyInferred(cases), TypeInferResult::Complete(inferred)) => {
+                            branch_typer.add_branch(self, &inferred.inferred_type);
+                            cases.push((&case.location, pattern, inferred));
+                        }
+
+                        (case_res, body) => {
+                            case_res.as_infer_results().push(InferResultMatchArm {
+                                location: &case.location,
+                                pattern,
+                                body,
+                            });
+                        },
+                    }
+                }
+
+                let mut exhaustive_check = ExhaustiveChecker {
+                    location: &expr.location,
+                    tc: self,
+                };
+
+                let is_exhaustive = match &case_res {
+                    CaseResults::FullyInferred(arms) => {
+                        let patterns = arms.iter().map(|(_, pattern, _)| pattern);
+                        exhaustive_check.check(&value.inferred_type, patterns)
+                    }
+
+
+                    CaseResults::InferResults(arms) => {
+                        let patterns = arms.iter().map(|arm| &arm.pattern);
+                        exhaustive_check.check(&value.inferred_type, patterns)
+                    }
+                };
+
+                if !is_exhaustive {
+                    todo!("report exhaustive check failure");
+                }
+
+                match case_res {
+                    CaseResults::FullyInferred(inferred_res) => {
+                        let branch_type = branch_typer.into_branch_type();
+
+                        let cases = inferred_res
+                            .into_iter()
+                            .map(|(_, pattern, inferred)| {
+                                MatchCase {
+                                    pattern,
+                                    body: inferred.checked_expr
+                                }
+                            })
+                            .collect();
+
+                        TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::Match {
+                                value: Box::new(value.checked_expr),
+                                cases,
+                            },
+                            inferred_type: branch_type,
+                        })
+                    }
+
+                    CaseResults::InferResults(infer_res) => {
+                        TypeInferResult::Match {
+                            expression: Box::new(value.checked_expr),
+                            arms: infer_res,
+                        }
+                    }
+                }
+            },
             ast::Expr::NewTraitObject { .. } => todo!("infer trait object construction"),
 
             ast::Expr::Raise { ex } => {
@@ -1885,45 +2019,54 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     where
         'e: 'b,
     {
-        for (arg_result, arg) in args {
-            match expr_result.partially_inferred_type() {
-                PartiallyInferredType::Full(func_type @ Expr::FunctionType { a, r }) => {
-                    let func_type = func_type.clone();
-                    let r = (**r).clone();
+        'args: for (arg_result, arg) in args {
+            let t = 'not_func_type: {
+                match expr_result.partially_inferred_type() {
+                    PartiallyInferredType::Full(t) => {
+                        match t.as_ref() {
+                            func_type @ Expr::FunctionType { a, r } => {
+                                let func_type = func_type.clone();
+                                let r = (**r).clone();
 
-                    let checked_arg = self.check_inferred_type(
-                        &arg.arg.location,
-                        arg_result,
-                        ExpectedType::Exact(&a.var_type),
-                    );
-                    let f = self.check_inferred_type(
-                        &arg.arg.location,
-                        expr_result,
-                        ExpectedType::Exact(&func_type),
-                    );
+                                let checked_arg = self.check_inferred_type(
+                                    &arg.arg.location,
+                                    arg_result,
+                                    ExpectedType::Exact(&a.var_type),
+                                );
+                                let f = self.check_inferred_type(
+                                    &arg.arg.location,
+                                    expr_result,
+                                    ExpectedType::Exact(&func_type),
+                                );
 
-                    expr_result = TypeInferResult::Complete(InferredType {
-                        checked_expr: Expr::FunctionObjectCall {
-                            function: Box::new(f.checked_expr),
-                            argument: Box::new(checked_arg.checked_expr),
-                        },
-                        inferred_type: r,
-                    });
+                                expr_result = TypeInferResult::Complete(InferredType {
+                                    checked_expr: Expr::FunctionObjectCall {
+                                        function: Box::new(f.checked_expr),
+                                        argument: Box::new(checked_arg.checked_expr),
+                                    },
+                                    inferred_type: r,
+                                });
+                                continue 'args;
+                            }
+
+                            _ => break 'not_func_type PartiallyInferredType::Full(t),
+                        }
+                    }
+
+                    PartiallyInferredType::Closure => todo!(),
+
+                    t => break 'not_func_type t,
                 }
+            };
 
-                PartiallyInferredType::Closure => todo!(),
+            self.context
+                .reporter()
+                .report_error(CompileError::function_type_required(
+                    arg.call_location.clone(),
+                    format!("{:?}", t),
+                ));
 
-                t => {
-                    self.context
-                        .reporter()
-                        .report_error(CompileError::function_type_required(
-                            arg.call_location.clone(),
-                            format!("{:?}", t),
-                        ));
-
-                    return TypeInferResult::error();
-                }
-            }
+            return TypeInferResult::error();
         }
 
         expr_result
@@ -2510,6 +2653,43 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         when_false: Box::new(checked_false_body),
                     },
                     inferred_type: true_body_inferred.inferred_type,
+                }
+            }
+            TypeInferResult::Match { expression, arms } => {
+                let mut cases = Vec::with_capacity(arms.len());
+                let mut arms_iter = arms.into_iter();
+                let selected_type;
+
+                if let Some(arm) = arms_iter.next() {
+                    let first_inferred = self.resolve_inferred_type(arm.body, expected_type);
+                    selected_type = first_inferred.inferred_type;
+                    cases.push(MatchCase {
+                        pattern: arm.pattern,
+                        body: first_inferred.checked_expr,
+                    });
+
+                    for arm in arms_iter {
+                        let inferred = self.check_inferred_type(
+                            arm.location,
+                            arm.body,
+                            ExpectedType::Exact(&selected_type),
+                        );
+                        cases.push(MatchCase {
+                            pattern: arm.pattern,
+                            body: inferred.checked_expr,
+                        });
+                    }
+                }
+                else {
+                    selected_type = Expr::never_type();
+                }
+
+                InferredType {
+                    checked_expr: Expr::Match {
+                        value: expression,
+                        cases
+                    },
+                    inferred_type: selected_type,
                 }
             }
             TypeInferResult::Sequence {
@@ -3196,13 +3376,12 @@ impl TypeCheckValueTransformation {
     }
 }
 
-fn substitute_holes_for_args(
+fn build_subst_holes_for_args(
     location: &Location,
+    subst: &mut SubstScanner<TypeCheckExprContext>,
     owner: &ExpressionOwner<TypeCheckExprContext>,
-    sig: &mut FunctionSignature<TypeCheckExprContext>,
+    sig: &FunctionSignature<TypeCheckExprContext>,
 ) -> Vec<Hole> {
-    let mut subst = SubstScanner::new();
-
     let holes = sig
         .parameters
         .iter()
@@ -3219,6 +3398,17 @@ fn substitute_holes_for_args(
             hole
         })
         .collect::<Vec<_>>();
+
+    holes
+}
+
+fn substitute_holes_for_args(
+    location: &Location,
+    owner: &ExpressionOwner<TypeCheckExprContext>,
+    sig: &mut FunctionSignature<TypeCheckExprContext>,
+) -> Vec<Hole> {
+    let mut subst = SubstScanner::new();
+    let holes = build_subst_holes_for_args(location, &mut subst, owner, sig);
 
     sig.scan_mut(&mut subst);
 

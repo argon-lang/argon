@@ -8,6 +8,9 @@ use num_bigint::BigInt;
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub enum Pattern<EC: ExprContext + ?Sized> {
     Error,
     Discard {
@@ -29,6 +32,9 @@ pub enum Pattern<EC: ExprContext + ?Sized> {
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
 #[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
 pub struct RecordFieldPattern<EC: ExprContext + ?Sized> {
     pub field: EC::RecordField,
     pub pattern: Pattern<EC>,

@@ -16,7 +16,7 @@ use argon_compiler::{
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
-    LocalVariable, MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral,
+    LocalVariable, MatchCase, MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral,
     RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
@@ -1182,7 +1182,7 @@ impl TubeDecoder {
                     .map(|field| {
                         let record_field = self.record_field(field.field_id);
                         RecordFieldLiteral {
-                            name: record_field.metadata().name.clone(),
+                            field: record_field,
                             value: self.decode_expr(*field.value),
                         }
                     })
@@ -1252,7 +1252,13 @@ impl TubeDecoder {
                 return_type: Box::new(self.decode_expr(*return_type)),
                 body: Box::new(self.decode_expr(*body)),
             },
-            tf::Expr::Match { .. } => todo!("decode match expression"),
+            tf::Expr::Match { value, cases } => Expr::Match {
+                value: Box::new(self.decode_expr(*value)),
+                cases: cases
+                    .into_iter()
+                    .map(|case| self.decode_match_case(*case))
+                    .collect(),
+            },
             tf::Expr::Or { a, b } => Expr::Or(
                 Box::new(self.decode_expr(*a)),
                 Box::new(self.decode_expr(*b)),
@@ -1317,7 +1323,7 @@ impl TubeDecoder {
                     .map(|field| {
                         let record_field = self.record_field(field.field_id);
                         RecordFieldLiteral {
-                            name: record_field.metadata().name.clone(),
+                            field: record_field,
                             value: self.decode_expr(*field.value),
                         }
                     })
@@ -1407,6 +1413,13 @@ impl TubeDecoder {
             tf::Pattern::String { s } => Pattern::String(s),
             tf::Pattern::Int { i } => Pattern::Int(i),
             tf::Pattern::Bool { b } => Pattern::Bool(b),
+        }
+    }
+
+    fn decode_match_case(self: &Arc<Self>, case: tf::MatchCase) -> MatchCase<DefaultExprContext> {
+        MatchCase {
+            pattern: self.decode_pattern(*case.pattern),
+            body: self.decode_expr(*case.body),
         }
     }
 
