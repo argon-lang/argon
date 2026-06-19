@@ -1680,7 +1680,9 @@ impl TubeDecoder {
             tf::ExpressionOwner::Enum { index } => {
                 argon_expr::ExpressionOwner::Enum(self.enum_decl(index))
             }
-            tf::ExpressionOwner::Trait { .. } => todo!("decode trait expression owner"),
+            tf::ExpressionOwner::Trait { index } => {
+                argon_expr::ExpressionOwner::Trait(self.trait_decl(index))
+            },
             tf::ExpressionOwner::Instance { index } => {
                 argon_expr::ExpressionOwner::Instance(self.instance(index))
             }

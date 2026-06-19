@@ -8,16 +8,8 @@ use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpe
 use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::scanner::{CaptureScanner, FreeVariableScanner};
 use argon_compiler::vtable::{VTableTarget, build_vtable};
-use argon_compiler::{
-    BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
-    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
-    MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
-    RecordField, RecordFieldOwner, Trait, Tube, TubeName, UnaryOperatorIdentifier,
-};
-use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
-    NormalizerScanner, TraitType, Variable,
-};
+use argon_compiler::{BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum, EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method, MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, Tube, TubeName, UnaryOperatorIdentifier};
+use argon_expr::{BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable, MethodInstanceType, NormalizerScanner, SubstScanner, TraitType, Variable};
 use argon_format::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
 use core::mem;
@@ -1344,10 +1336,14 @@ impl TokenEmitterCommon for ExprEmitter<'_> {
         &mut self,
         v: &Variable<DefaultExprContext>,
     ) -> Result<Option<vf::Token>, InternalCompilerError> {
-        Ok(self.known_vars.get(v).and_then(|real| match real {
-            VariableRealization::Tok(tk) => Some(tk.clone()),
-            _ => None,
-        }))
+        Ok(
+            self.known_vars
+                .get(v)
+                .and_then(|real| match real {
+                    VariableRealization::Tok(tk) => Some(tk.clone()),
+                    _ => None,
+                }),
+        )
     }
 
     fn vm_encoder(&mut self) -> &mut VmEncoder {
@@ -1803,7 +1799,7 @@ impl<'a> ExprEmitter<'a> {
                 let enum_type_token = self.token_expr(&Expr::EnumType(enum_type.clone()))?;
                 let args = self.emit_arguments(
                     ExpressionOwner::EnumVariant(variant.clone()),
-                    variant.clone().signature(),
+                    &variant.clone().signature(),
                     arguments,
                 )?;
                 let variant_id = BigUint::from(self.encoder.get_enum_variant_id(variant.clone()));
@@ -1855,7 +1851,7 @@ impl<'a> ExprEmitter<'a> {
                 let sig = function.clone().signature();
                 let func_args = self.emit_arguments(
                     ExpressionOwner::Function(function.clone()),
-                    sig,
+                    &sig,
                     arguments,
                 )?;
                 self.emit(vf::Instruction::FunctionCall {
@@ -2015,21 +2011,44 @@ impl<'a> ExprEmitter<'a> {
                 let frb = output.output_function_result(self, e)?;
 
                 let instance_type_expr = instance_type.clone().into_expr();
-                let instance_type = self.token_expr(&instance_type_expr)?;
+                let instance_type_token = self.token_expr(&instance_type_expr)?;
 
                 let receiver_reg = self.expr(receiver, AnyRegister)?;
 
                 let method_id = self.encoder.get_method_id(method.clone());
-                let sig = method.clone().signature();
+                let mut sig = method.clone().signature().as_ref().clone();
+
+
+
+                {
+                    let method_owner_expr_owner;
+                    let method_owner_sig;
+                    let instance_type_args;
+                    match instance_type {
+                        MethodInstanceType::Trait(trait_type) => {
+                            method_owner_expr_owner = ExpressionOwner::Trait(trait_type.trait_.clone());
+                            method_owner_sig = trait_type.trait_.clone().signature().as_ref().clone();
+                            instance_type_args = &trait_type.arguments;
+                        }
+                    }
+
+                    let mut subst = SubstScanner::new();
+                    subst.add_function_parameter_substitutions(
+                        method_owner_expr_owner,
+                        &method_owner_sig,
+                        instance_type_args,
+                    );
+                    sig.scan_mut(&mut subst);
+                }
 
                 let args =
-                    self.emit_arguments(ExpressionOwner::Method(method.clone()), sig, arguments)?;
+                    self.emit_arguments(ExpressionOwner::Method(method.clone()), &sig, arguments)?;
 
                 self.emit(vf::Instruction::InstanceMethodCall {
                     dest: Box::new(frb.function_result()),
 
                     method_id: BigUint::from(method_id),
-                    instance_type: Box::new(instance_type),
+                    instance_type: Box::new(instance_type_token),
 
                     instance_object: Box::new(receiver_reg),
                     token_args: args.token_arguments,
@@ -2049,7 +2068,7 @@ impl<'a> ExprEmitter<'a> {
                 let sig = instance.clone().signature();
                 let args = self.emit_arguments(
                     ExpressionOwner::Instance(instance.clone()),
-                    sig,
+                    &sig,
                     arguments,
                 )?;
 
@@ -2351,10 +2370,10 @@ impl<'a> ExprEmitter<'a> {
     fn emit_arguments(
         &mut self,
         owner: ExpressionOwner<DefaultExprContext>,
-        sig: Arc<FunctionSignature<DefaultExprContext>>,
+        sig: &FunctionSignature<DefaultExprContext>,
         args: &[Expr<DefaultExprContext>],
     ) -> EmitResult<FunctionArguments> {
-        let sig_with_mapping = self.encoder.emit_function_signature(&owner, &sig)?;
+        let sig_with_mapping = self.encoder.emit_function_signature(&owner, sig)?;
         self.emit_arguments_common(sig_with_mapping, args)
     }
 
