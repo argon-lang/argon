@@ -9,11 +9,11 @@
 
         import Argon.Core::*
         
-        trait MyTrait[token A: type]
+        trait MyTrait(token A: type)
             public def self.identity(a: A): A = a
         end
 
-        instance MyInst: MyTrait[String]
+        instance MyInst: MyTrait(String)
         end
         
         proc main(): () do

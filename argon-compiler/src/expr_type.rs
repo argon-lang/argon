@@ -1,10 +1,11 @@
-use crate::{DefaultExprContext, EmptyHole, FunctionSignature};
+use crate::shifter::{DefaultExprAssociatedTypes, DefaultToExprTypeContextShifter};
+use crate::{DefaultExprContext, EmptyHole, FunctionSignature, SubstFunctionSignature};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use crate::shifter::{DefaultExprAssociatedTypes, DefaultToExprTypeContextShifter};
 use argon_expr::{
-    Builtin, Expr, ExprContextShifter, ExpressionOwner, Pattern, SubstScanner, Variable,
+    Builtin, Expr, ExprContextShifter, ExpressionOwner, MethodInstanceType, Pattern, SubstScanner,
+    Variable,
 };
 
 pub trait ExprTypeContext: DefaultExprAssociatedTypes {
@@ -87,6 +88,13 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
             )
         }
 
+        Expr::MethodCall {
+            method,
+            instance_type,
+            arguments,
+            ..
+        } => method_call_return_type(method.clone(), instance_type, arguments.as_ref()),
+
         Expr::Sequence(items) => get_expr_type(items.last()),
 
         Expr::StringLiteral(_) => Expr::string_type(),
@@ -157,8 +165,28 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
             get_expr_type(&trait_type)
         }
 
-        Expr::FunctionResultValue | Expr::MethodCall { .. } | Expr::RecordLiteral { .. } => todo!(),
+        Expr::FunctionResultValue | Expr::RecordLiteral { .. } => todo!(),
     }
+}
+
+fn method_call_return_type<EC: ExprTypeContext + ?Sized>(
+    method: EC::Method,
+    instance_type: &MethodInstanceType<EC>,
+    arguments: &[Expr<EC>],
+) -> Expr<EC> {
+    let mut sig = shift_signature(method.clone().signature());
+
+    match instance_type {
+        MethodInstanceType::Trait(trait_type) => {
+            let owner = ExpressionOwner::Trait(trait_type.trait_.clone());
+            let owner_sig = shift_signature(trait_type.trait_.clone().signature());
+            let mut subst = SubstScanner::new();
+            subst.add_function_parameter_substitutions(owner, &owner_sig, &trait_type.arguments);
+            sig.scan_mut(&mut subst);
+        }
+    }
+
+    return_type_for_args(ExpressionOwner::Method(method), sig, arguments)
 }
 
 fn shift_signature<EC: ExprTypeContext + ?Sized>(
