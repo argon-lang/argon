@@ -13,6 +13,7 @@ use argon_compiler::{
     RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
     TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
     access::AccessModifier,
+    vtable::{VTable, build_vtable},
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
@@ -1682,7 +1683,7 @@ impl TubeDecoder {
             }
             tf::ExpressionOwner::Trait { index } => {
                 argon_expr::ExpressionOwner::Trait(self.trait_decl(index))
-            },
+            }
             tf::ExpressionOwner::Instance { index } => {
                 argon_expr::ExpressionOwner::Instance(self.instance(index))
             }
@@ -1830,6 +1831,7 @@ struct DecodedTrait {
     import: Mutex<Option<ImportSpecifier>>,
     signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
     methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+    vtable: Mutex<Option<Arc<VTable>>>,
 }
 
 impl DecodedTrait {
@@ -1840,6 +1842,7 @@ impl DecodedTrait {
             import: Mutex::new(None),
             signature: Mutex::new(None),
             methods: Mutex::new(None),
+            vtable: Mutex::new(None),
         }
     }
 }
@@ -1855,6 +1858,7 @@ impl Unload for DecodedTrait {
         clear_cached(&self.import);
         clear_cached(&self.signature);
         clear_cached(&self.methods);
+        clear_cached(&self.vtable);
     }
 }
 
@@ -1887,6 +1891,17 @@ impl Trait for DecodedTrait {
                     })
                     .collect(),
             )
+        })
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        get_or_init_cached(&self.vtable, || {
+            let trait_ref: Arc<dyn Trait> = self.clone();
+            Arc::new(build_vtable(
+                self.decoder.context.clone(),
+                MethodOwner::Trait(trait_ref),
+                None,
+            ))
         })
     }
 }
@@ -1981,6 +1996,7 @@ struct DecodedInstance {
     import: Mutex<Option<ImportSpecifier>>,
     signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
     methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+    vtable: Mutex<Option<Arc<VTable>>>,
 }
 
 impl DecodedInstance {
@@ -1991,6 +2007,7 @@ impl DecodedInstance {
             import: Mutex::new(None),
             signature: Mutex::new(None),
             methods: Mutex::new(None),
+            vtable: Mutex::new(None),
         }
     }
 }
@@ -2006,6 +2023,7 @@ impl Unload for DecodedInstance {
         clear_cached(&self.import);
         clear_cached(&self.signature);
         clear_cached(&self.methods);
+        clear_cached(&self.vtable);
     }
 }
 
@@ -2042,6 +2060,17 @@ impl Instance for DecodedInstance {
                     })
                     .collect(),
             )
+        })
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        get_or_init_cached(&self.vtable, || {
+            let instance_ref: Arc<dyn Instance> = self.clone();
+            Arc::new(build_vtable(
+                self.decoder.context.clone(),
+                MethodOwner::Instance(instance_ref),
+                None,
+            ))
         })
     }
 }

@@ -2,17 +2,17 @@ use argon_expr::{ExprScannerMut, TypeComparer, Unify};
 extern crate alloc;
 pub mod access;
 pub mod erased_sig;
+pub mod erasure;
 pub mod expr_type;
 pub mod platform;
 pub mod scanner;
-pub mod shifter;
 pub mod scope;
+pub mod shifter;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 pub mod vtable;
 pub mod z3expr;
-pub mod erasure;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::erased_sig::ImportSpecifier;
@@ -553,6 +553,7 @@ pub trait Trait: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
 pub trait Instance: Debug + Unload + ThreadSafe {
@@ -560,6 +561,7 @@ pub trait Instance: Debug + Unload + ThreadSafe {
     fn erasure_mode(&self) -> ErasureMode;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
 macro_rules! impl_dyn_stub_traits {

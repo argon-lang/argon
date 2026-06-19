@@ -24,6 +24,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>AR0013</ExpectedError>
+    <ExpectedError>AR0017</ExpectedError>
 
 </ArgonTest>

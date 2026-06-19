@@ -7,9 +7,18 @@ use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::scanner::{CaptureScanner, FreeVariableScanner};
-use argon_compiler::vtable::{VTableTarget, build_vtable};
-use argon_compiler::{BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum, EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method, MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, Tube, TubeName, UnaryOperatorIdentifier};
-use argon_expr::{BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable, MethodInstanceType, NormalizerScanner, SubstScanner, TraitType, Variable};
+use argon_compiler::vtable::VTableTarget;
+use argon_compiler::{
+    BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
+    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
+    MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
+    RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, Tube, TubeName,
+    UnaryOperatorIdentifier,
+};
+use argon_expr::{
+    BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
+    MethodInstanceType, NormalizerScanner, SubstScanner, TraitType, Variable,
+};
 use argon_format::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
 use core::mem;
@@ -811,7 +820,10 @@ impl VmEncoder {
             .map(|(index, method)| (method.method.clone(), index))
             .collect::<HashMap<_, _>>();
 
-        let vtable = build_vtable(self.context.clone(), owner);
+        let vtable = match owner {
+            MethodOwner::Trait(trait_) => trait_.vtable(),
+            MethodOwner::Instance(instance) => instance.vtable(),
+        };
         let entries = vtable
             .entries()
             .iter()
@@ -1229,7 +1241,10 @@ trait TokenEmitterCommon {
                 args: self.token_exprs(&enum_type.arguments)?,
             }),
 
-            Expr::NewInstance { instance, arguments }  => Ok(vf::Token::InstanceValue {
+            Expr::NewInstance {
+                instance,
+                arguments,
+            } => Ok(vf::Token::InstanceValue {
                 instance_id: BigUint::from(self.vm_encoder().get_instance_id(instance.clone())),
                 args: self.token_exprs(arguments)?,
             }),
@@ -1336,14 +1351,10 @@ impl TokenEmitterCommon for ExprEmitter<'_> {
         &mut self,
         v: &Variable<DefaultExprContext>,
     ) -> Result<Option<vf::Token>, InternalCompilerError> {
-        Ok(
-            self.known_vars
-                .get(v)
-                .and_then(|real| match real {
-                    VariableRealization::Tok(tk) => Some(tk.clone()),
-                    _ => None,
-                }),
-        )
+        Ok(self.known_vars.get(v).and_then(|real| match real {
+            VariableRealization::Tok(tk) => Some(tk.clone()),
+            _ => None,
+        }))
     }
 
     fn vm_encoder(&mut self) -> &mut VmEncoder {
@@ -2018,16 +2029,16 @@ impl<'a> ExprEmitter<'a> {
                 let method_id = self.encoder.get_method_id(method.clone());
                 let mut sig = method.clone().signature().as_ref().clone();
 
-
-
                 {
                     let method_owner_expr_owner;
                     let method_owner_sig;
                     let instance_type_args;
                     match instance_type {
                         MethodInstanceType::Trait(trait_type) => {
-                            method_owner_expr_owner = ExpressionOwner::Trait(trait_type.trait_.clone());
-                            method_owner_sig = trait_type.trait_.clone().signature().as_ref().clone();
+                            method_owner_expr_owner =
+                                ExpressionOwner::Trait(trait_type.trait_.clone());
+                            method_owner_sig =
+                                trait_type.trait_.clone().signature().as_ref().clone();
                             instance_type_args = &trait_type.arguments;
                         }
                     }

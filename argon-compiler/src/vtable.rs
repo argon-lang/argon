@@ -1,6 +1,6 @@
 use crate::access::AccessModifier;
 use crate::{
-    Context, DefaultExprContext, DefaultExprComparer, FunctionSignature, Method, MethodEntry,
+    Context, DefaultExprComparer, DefaultExprContext, FunctionSignature, Method, MethodEntry,
     MethodOwner, MethodSlot, SubstFunctionSignature,
 };
 use alloc::borrow::Cow;
@@ -9,8 +9,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use argon_expr::{Expr, ExpressionOwner, InstanceType, SubstScanner, TraitType};
 use argon_expr::{ExprScannerMut, Unify, Variable};
+use argon_parser::Location;
+use argon_util::CompileError;
 use hashbrown::{HashMap, HashSet};
 
+#[derive(Clone)]
 pub struct VTable {
     entries: HashMap<VTableSlot, VTableSlotValue>,
 }
@@ -79,7 +82,11 @@ pub enum VTableTarget {
     Ambiguous(HashSet<Arc<dyn Method>>),
 }
 
-pub fn build_vtable(context: Context, method_owner: MethodOwner) -> VTable {
+pub fn build_vtable(
+    context: Context,
+    method_owner: MethodOwner,
+    location: Option<Location>,
+) -> VTable {
     let parent;
     let is_concrete;
 
@@ -94,8 +101,7 @@ pub fn build_vtable(context: Context, method_owner: MethodOwner) -> VTable {
             is_concrete = true;
             parent = match &i.clone().signature().return_type {
                 Expr::TraitType(tt) => {
-                    let mut parent =
-                        build_vtable(context.clone(), MethodOwner::Trait(tt.trait_.clone()));
+                    let mut parent = tt.trait_.clone().vtable().as_ref().clone();
                     let mut subst = SubstScanner::new();
                     subst.add_function_parameter_substitutions(
                         ExpressionOwner::Trait(tt.trait_.clone()),
@@ -118,6 +124,7 @@ pub fn build_vtable(context: Context, method_owner: MethodOwner) -> VTable {
         current: VTable {
             entries: HashMap::new(),
         },
+        concrete_location: location,
     };
 
     builder.build_single_type_vtable(method_owner);
@@ -133,6 +140,7 @@ struct VTableBuilder {
     context: Context,
     parent: VTable,
     current: VTable,
+    concrete_location: Option<Location>,
 }
 
 impl VTableBuilder {
@@ -147,9 +155,12 @@ impl VTableBuilder {
                     .filter(|(slot, _)| !self.current.entries.contains_key(*slot)),
             )
             .for_each(|(_, slot_value)| match slot_value.target {
-                VTableTarget::Abstract | VTableTarget::Ambiguous(_) => {
-                    todo!("abstract method in concrete vtable")
-                }
+                VTableTarget::Abstract | VTableTarget::Ambiguous(_) => self
+                    .context
+                    .reporter()
+                    .report_error(CompileError::abstract_method_error(
+                        self.concrete_location.clone(),
+                    )),
 
                 VTableTarget::Implementation(_) => {}
             })

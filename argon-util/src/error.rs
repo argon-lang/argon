@@ -274,11 +274,11 @@ impl CompileError {
         Self::new(ErrorCode::CouldNotInfer, "Could not infer type", Some(loc))
     }
 
-    pub fn abstract_method_error(loc: Location) -> Self {
+    pub fn abstract_method_error(loc: Option<Location>) -> Self {
         Self::new(
             ErrorCode::AbstractMethod,
             "Abstract method in non-abstract type",
-            Some(loc),
+            loc,
         )
     }
 

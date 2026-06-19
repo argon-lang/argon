@@ -470,6 +470,9 @@ impl TubeEncoder {
                         .map(|method| self.emit_method_entry(method).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?;
 
+                    // Force VTable creation to trigger any errors.
+                    trait_.clone().vtable();
+
                     tf::TubeFileEntry::TraitDefinition {
                         definition: Box::new(tf::TraitDefinition {
                             trait_id,
@@ -498,6 +501,9 @@ impl TubeEncoder {
                         .iter()
                         .map(|method| self.emit_method_entry(method).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?;
+
+                    // Force VTable creation to trigger any errors.
+                    instance.clone().vtable();
 
                     tf::TubeFileEntry::InstanceDefinition {
                         definition: Box::new(tf::InstanceDefinition {

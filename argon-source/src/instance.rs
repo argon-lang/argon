@@ -1,5 +1,5 @@
 use crate::method::{MethodClosure, SourceMethod};
-use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser, ERASURE_MODE_CONCRETE};
+use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ERASURE_MODE_CONCRETE, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
@@ -7,6 +7,7 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
+use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
     Context, DefaultExprContext, ErasureMode, Instance, MethodEntry, MethodOwner, TypeDeclaration,
     Unload,
@@ -25,6 +26,7 @@ pub struct SourceInstance {
     erasure_mode: ErasureMode,
     signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
     methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+    vtable: Mutex<Option<Arc<VTable>>>,
 }
 
 impl SourceInstance {
@@ -48,6 +50,7 @@ impl SourceInstance {
                 erasure_mode,
                 signature: Mutex::new(None),
                 methods: Mutex::new(None),
+                vtable: Mutex::new(None),
             }),
         }
     }
@@ -86,6 +89,7 @@ impl Unload for SourceInstance {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
         *mutex_lock(&self.methods) = None;
+        *mutex_lock(&self.vtable) = None;
     }
 }
 
@@ -156,6 +160,22 @@ impl Instance for SourceInstance {
 
         let result = Arc::new(methods);
         *methods_store = Some(result.clone());
+        result
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        let mut vtable_store = mutex_lock(&self.vtable);
+        if let Some(ref vtable) = *vtable_store {
+            return vtable.clone();
+        }
+
+        let instance_ref: Arc<dyn Instance> = self.clone();
+        let result = Arc::new(build_vtable(
+            self.context.clone(),
+            MethodOwner::Instance(instance_ref),
+            Some(self.decl.name.location.clone()),
+        ));
+        *vtable_store = Some(result.clone());
         result
     }
 }

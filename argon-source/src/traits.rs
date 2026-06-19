@@ -7,6 +7,7 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
+use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
     Context, DefaultExprContext, MethodEntry, MethodOwner, Trait, TypeDeclaration, Unload,
 };
@@ -22,6 +23,7 @@ pub struct SourceTrait {
     closure: Box<dyn DeclarationClosure>,
     signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
     methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
+    vtable: Mutex<Option<Arc<VTable>>>,
 }
 
 impl SourceTrait {
@@ -43,6 +45,7 @@ impl SourceTrait {
                 closure,
                 signature: Mutex::new(None),
                 methods: Mutex::new(None),
+                vtable: Mutex::new(None),
             }),
         }
     }
@@ -65,6 +68,7 @@ impl Unload for SourceTrait {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
         *mutex_lock(&self.methods) = None;
+        *mutex_lock(&self.vtable) = None;
     }
 }
 
@@ -132,6 +136,22 @@ impl Trait for SourceTrait {
 
         let result = Arc::new(methods);
         *methods_store = Some(result.clone());
+        result
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        let mut vtable_store = mutex_lock(&self.vtable);
+        if let Some(ref vtable) = *vtable_store {
+            return vtable.clone();
+        }
+
+        let trait_ref: Arc<dyn Trait> = self.clone();
+        let result = Arc::new(build_vtable(
+            self.context.clone(),
+            MethodOwner::Trait(trait_ref),
+            Some(self.decl.name.location.clone()),
+        ));
+        *vtable_store = Some(result.clone());
         result
     }
 }
