@@ -1436,7 +1436,9 @@ impl TubeEncoder {
             ExpressionOwner::Enum(enum_) => tf::ExpressionOwner::Enum {
                 index: self.get_enum_id(enum_.clone()).into(),
             },
-            ExpressionOwner::Trait(_) => todo!("emit trait expression owners"),
+            ExpressionOwner::Trait(trait_) => tf::ExpressionOwner::Trait {
+                index: self.get_trait_id(trait_.clone()).into(),
+            },
             ExpressionOwner::EnumVariant(variant) => tf::ExpressionOwner::EnumVariant {
                 index: self.get_enum_variant_id(variant.clone()).into(),
             },
