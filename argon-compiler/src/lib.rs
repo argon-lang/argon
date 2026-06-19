@@ -1,16 +1,18 @@
-use argon_expr::{ExprScannerMut, Unify};
+use argon_expr::{ExprScannerMut, TypeComparer, Unify};
 extern crate alloc;
 pub mod access;
 pub mod erased_sig;
 pub mod expr_type;
 pub mod platform;
 pub mod scanner;
+pub mod shifter;
 pub mod scope;
 pub mod signature;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 pub mod vtable;
 pub mod z3expr;
+pub mod erasure;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::erased_sig::ImportSpecifier;
@@ -799,11 +801,11 @@ impl Normalizer for DefaultExprNormalizer {
     }
 }
 
-pub struct DefaultExprUnify {
+pub struct DefaultExprComparer {
     pub context: Context,
 }
 
-impl Unify for DefaultExprUnify {
+impl Unify for DefaultExprComparer {
     type EC = DefaultExprContext;
     type Norm<'a>
         = DefaultExprNormalizer
@@ -822,3 +824,5 @@ impl Unify for DefaultExprUnify {
         match a {}
     }
 }
+
+impl TypeComparer for DefaultExprComparer {}

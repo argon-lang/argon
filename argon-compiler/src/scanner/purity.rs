@@ -6,7 +6,7 @@ use argon_expr::{Expr, ExprContext, ExprScanner};
 use core::marker::PhantomData;
 
 pub struct PurityScanner<EC: ?Sized> {
-    found_impure_function_call: bool,
+    found_impure: bool,
     _phantom: PhantomData<*const EC>,
 }
 
@@ -25,7 +25,7 @@ where
 {
     pub fn new() -> Self {
         Self {
-            found_impure_function_call: false,
+            found_impure: false,
             _phantom: PhantomData,
         }
     }
@@ -33,11 +33,11 @@ where
     pub fn contains_impure_function_call(expr: &Expr<EC>) -> bool {
         let mut scanner = Self::new();
         scanner.scan(expr);
-        scanner.found_impure_function_call()
+        scanner.found_impure()
     }
 
-    pub fn found_impure_function_call(&self) -> bool {
-        self.found_impure_function_call
+    pub fn found_impure(&self) -> bool {
+        self.found_impure
     }
 }
 
@@ -60,12 +60,17 @@ where
         match expr {
             Expr::FunctionCall { function, .. } => {
                 if function.metadata().effect_info == EffectInfo::Effectful {
-                    self.found_impure_function_call = true;
+                    self.found_impure = true;
                     return false;
                 }
             }
 
-            Expr::MethodCall { .. } => todo!(),
+            Expr::MethodCall { method, .. } => {
+                if method.metadata().effect_info == EffectInfo::Effectful {
+                    self.found_impure = true;
+                    return false;
+                }
+            }
 
             Expr::RecordFieldLoad { field, .. } => {
                 if field.metadata().is_mutable {
@@ -75,7 +80,6 @@ where
 
             Expr::Error
             | Expr::Break { .. }
-            | Expr::BreakIf { .. }
             | Expr::Retry { .. }
             | Expr::Finally { .. }
             | Expr::Raise { .. }

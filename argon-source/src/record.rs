@@ -12,7 +12,7 @@ use argon_compiler::{
     Context, DefaultExprContext, EnumVariant, Record, RecordField, RecordFieldMetadata,
     RecordFieldOwner, TypeDeclaration, Unload,
 };
-use argon_expr::{Expr, ExpressionOwner};
+use argon_expr::{ErasureMode, Expr, ExpressionOwner};
 use argon_parser::ast;
 use argon_util::MultiSlice;
 use argon_util::sync::{Mutex, mutex_lock};
@@ -252,7 +252,7 @@ impl RecordField for SourceRecordField {
 
         let field_type = type_check_type_expr(
             self.owner.context().clone(),
-            TypeCheckOptions::new(&access_token, &scope),
+            TypeCheckOptions::new(&access_token, &scope, ErasureMode::Concrete),
             &self.field.field_type,
         );
 

@@ -1,5 +1,5 @@
 use crate::method::{MethodClosure, SourceMethod};
-use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, ModifierParser};
+use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser, ERASURE_MODE_CONCRETE};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
@@ -36,7 +36,7 @@ impl SourceInstance {
         let mut modifiers =
             ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
         let access = modifiers.parse(&ACCESS_MODIFIER_GLOBAL);
-        let erasure_mode = modifiers.parse(&ERASURE_MODE);
+        let erasure_mode = modifiers.parse(&ERASURE_MODE_CONCRETE);
         modifiers.done();
 
         DeclarationResult {

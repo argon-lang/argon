@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Erased method error</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc printMessage(n: Int): () =
+            puts "Hello World"
+
+        trait MyTrait
+            public erased def self.erasedFunc(a: Int)(b: Int): Int = a + b
+        end
+
+        instance MyInst: MyTrait
+        end
+
+        proc main(): () do
+            let o = MyInst
+            printMessage(o.erasedFunc 1 2)
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>AR000D</ExpectedError>
+
+</ArgonTest>

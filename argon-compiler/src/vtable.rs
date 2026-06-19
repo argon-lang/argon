@@ -1,6 +1,6 @@
 use crate::access::AccessModifier;
 use crate::{
-    Context, DefaultExprContext, DefaultExprUnify, FunctionSignature, Method, MethodEntry,
+    Context, DefaultExprContext, DefaultExprComparer, FunctionSignature, Method, MethodEntry,
     MethodOwner, MethodSlot, SubstFunctionSignature,
 };
 use alloc::borrow::Cow;
@@ -336,7 +336,7 @@ impl VTableBuilder {
     }
 
     fn type_matches(&self, a: Expr<DefaultExprContext>, b: Expr<DefaultExprContext>) -> bool {
-        let mut unify = DefaultExprUnify {
+        let mut unify = DefaultExprComparer {
             context: self.context.clone(),
         };
 

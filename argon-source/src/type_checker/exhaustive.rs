@@ -1,8 +1,6 @@
-#![allow(dead_code)]
-
 use super::{
-    DefaultToTypeCheckExprContextShifter, ExprNormalizer, TypeCheckExprContext, TypeChecker,
-    build_subst_holes_for_args,
+    build_subst_holes_for_args, default_to_type_check_shifter, ExprNormalizer,
+    TypeCheckExprContext, TypeChecker,
 };
 use alloc::{sync::Arc, vec, vec::Vec};
 #[cfg(test)]
@@ -119,7 +117,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                     .iter()
                     .map(|variant| {
                         let sig = variant.clone().signature().as_ref().clone();
-                        let mut sig = sig.shift(&mut DefaultToTypeCheckExprContextShifter);
+                        let mut sig = sig.shift(&mut default_to_type_check_shifter());
                         let mut subst = SubstScanner::new();
                         build_subst_holes_for_args(
                             self.location,
@@ -143,8 +141,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                         }));
                         conj.extend(variant.clone().fields().iter().map(|field| {
                             let field_type = field.clone().field_type().as_ref().clone();
-                            let mut field_type =
-                                DefaultToTypeCheckExprContextShifter.shift(field_type);
+                            let mut field_type = default_to_type_check_shifter().shift(field_type);
                             subst.scan(&mut field_type);
 
                             let field_term = z3expr.enum_field(value, field);
@@ -419,7 +416,7 @@ mod tests {
         );
         let mut model = Model::new();
         let scope = TestScope;
-        let shifted_scope = ShiftedScope::new(&scope, DefaultToTypeCheckExprContextShifter);
+        let shifted_scope = ShiftedScope::new(&scope, default_to_type_check_shifter());
         let mut local_scope = argon_compiler::scope::LocalVariableScope::new(shifted_scope);
         let mut tc = TypeChecker {
             context: context.clone(),
@@ -452,7 +449,7 @@ mod tests {
         );
         let mut model = Model::new();
         let scope = TestScope;
-        let shifted_scope = ShiftedScope::new(&scope, DefaultToTypeCheckExprContextShifter);
+        let shifted_scope = ShiftedScope::new(&scope, default_to_type_check_shifter());
         let mut local_scope = argon_compiler::scope::LocalVariableScope::new(shifted_scope);
         let mut tc = TypeChecker {
             context: context.clone(),
@@ -495,7 +492,7 @@ mod tests {
         );
         let mut model = Model::new();
         let scope = TestScope;
-        let shifted_scope = ShiftedScope::new(&scope, DefaultToTypeCheckExprContextShifter);
+        let shifted_scope = ShiftedScope::new(&scope, default_to_type_check_shifter());
         let mut local_scope = argon_compiler::scope::LocalVariableScope::new(shifted_scope);
         let mut tc = TypeChecker {
             context: context.clone(),

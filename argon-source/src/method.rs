@@ -1,7 +1,4 @@
-use crate::modifiers::{
-    ACCESS_MODIFIER, ERASURE_MODE, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT,
-    METHOD_SLOT_CONCRETE, ModifierParser,
-};
+use crate::modifiers::{ACCESS_MODIFIER, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT, METHOD_SLOT_CONCRETE, ModifierParser, ERASURE_MODE_NON_TOKEN};
 use crate::module::DeclarationResult;
 use crate::signature::SignatureParser;
 use crate::type_checker::{TypeCheckOptions, type_check_expr};
@@ -13,9 +10,11 @@ use argon_compiler::{
     Context, DefaultExprContext, EffectInfo, FunctionImplementation, FunctionSignature, Method,
     MethodInstanceParameter, MethodMetadata, MethodOwner, Unload,
 };
-use argon_expr::{Expr, ExpressionOwner, InstanceParameterVariable, TraitType, Variable};
+use argon_expr::{
+    ErasureMode, Expr, ExpressionOwner, InstanceParameterVariable, TraitType, Variable,
+};
 use argon_parser::ast;
-use argon_util::MultiSlice;
+use argon_util::{CompileError, MultiSlice};
 use argon_util::sync::{Mutex, ThreadSafe, mutex_lock};
 use core::fmt::Debug;
 
@@ -44,12 +43,21 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
             ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
         let is_abstract = decl.body.is_none();
         let access = modifiers.parse(&ACCESS_MODIFIER);
+        let erasure_mode = modifiers.parse(&ERASURE_MODE_NON_TOKEN);
+        if erasure_mode == ErasureMode::Erased && !decl.purity {
+            context
+                .reporter()
+                .report_error(CompileError::impure_erased_function(
+                    decl.name.location.clone(),
+                ));
+        }
+
         let metadata = MethodMetadata {
             name: decl.name.value.clone(),
             access,
             is_abstract,
             is_inline: modifiers.parse(&IS_INLINE),
-            erasure_mode: modifiers.parse(&ERASURE_MODE),
+            erasure_mode,
             is_witness: modifiers.parse(&IS_WITNESS),
             slot: modifiers.parse(if is_abstract {
                 &METHOD_SLOT_ABSTRACT
@@ -184,7 +192,7 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
 
                 let expr = type_check_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&access_token, &parameter_scope),
+                    TypeCheckOptions::new(&access_token, &parameter_scope, self.metadata.erasure_mode),
                     body.as_ref(),
                     &signature.return_type,
                 );

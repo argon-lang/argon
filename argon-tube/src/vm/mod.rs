@@ -1622,26 +1622,6 @@ impl<'a> ExprEmitter<'a> {
                 Err(EmitStop::Branch)?
             }
 
-            Expr::BreakIf {
-                label,
-                value,
-                condition,
-            } => {
-                let (block_id, break_output) = self.get_block_id(label)?;
-                let block_id = block_id.clone();
-                let break_output = break_output.clone();
-
-                self.expr(value, break_output)?;
-                let condition = self.expr(condition, AnyRegister)?;
-
-                self.emit(vf::Instruction::BlockBreakIf {
-                    block_id: Box::new(block_id),
-                    condition: Box::new(condition),
-                });
-
-                output.output_unit_result(self)?
-            }
-
             Expr::Builtin(builtin) => {
                 fn emit_value_op<O: ExprOutput>(
                     emitter: &mut ExprEmitter<'_>,

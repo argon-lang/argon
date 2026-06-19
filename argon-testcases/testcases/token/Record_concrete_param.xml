@@ -9,7 +9,7 @@
 
         import Argon.Core::*
         
-        record MyRecord[T: type]
+        record MyRecord (T: type)
             name: String
         end
 
@@ -26,6 +26,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>AR0011</ExpectedError>
+    <ExpectedError>AR001C</ExpectedError>
 
 </ArgonTest>

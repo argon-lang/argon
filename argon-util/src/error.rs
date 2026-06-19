@@ -52,6 +52,8 @@ pub enum ErrorCode {
     DuplicateRecordLiteralField = 0x0027,
     UnknownRecordLiteralField = 0x0028,
     MissingRecordLiteralField = 0x0029,
+    MutableErasedLocalVariable = 0x002A,
+    ImpureErasedFunction = 0x002B,
 }
 
 impl ErrorCode {
@@ -189,6 +191,22 @@ impl CompileError {
         Self::new(
             ErrorCode::ErasedExpressionNotAllowed,
             "Erased expression not allowed",
+            Some(loc),
+        )
+    }
+
+    pub fn mutable_erased_local_variable(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::MutableErasedLocalVariable,
+            "Mutable erased local variable",
+            Some(loc),
+        )
+    }
+
+    pub fn impure_erased_function(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::ImpureErasedFunction,
+            "Impure erased function or method",
             Some(loc),
         )
     }

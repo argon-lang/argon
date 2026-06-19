@@ -9,11 +9,11 @@
 
         import Argon.Core::*
         
-        trait MyTrait[A: type]
+        trait MyTrait (A: type)
             public def self.identity(a: A): A = a
         end
 
-        instance MyInst: MyTrait[String]
+        instance MyInst: MyTrait String
         end
         
         proc main(): () do
@@ -24,6 +24,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>AR0011</ExpectedError>
+    <ExpectedError>AR001C</ExpectedError>
 
 </ArgonTest>

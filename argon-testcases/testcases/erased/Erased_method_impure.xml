@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Erased method impure</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        trait MyTrait
+            public erased proc _.erased_method(): Int = 1
+        end
+
+        proc main(): () do
+            puts "Hello World"
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>AR002B</ExpectedError>
+
+</ArgonTest>

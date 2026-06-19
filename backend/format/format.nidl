@@ -601,11 +601,6 @@ enum expr {
         block-id: block-id;
         value: expr;
     },
-    break-if {
-        block-id: block-id;
-        value: expr;
-        condition: expr;
-    },
     closure {
         v: closure-parameter-var;
         return-type: expr;

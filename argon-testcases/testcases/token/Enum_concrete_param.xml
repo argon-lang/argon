@@ -8,7 +8,7 @@
 
         import Argon.Core::*
 
-        enum Option [T: type]
+        enum Option (T: type)
             Some(value: T)
             None
         end
@@ -24,6 +24,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>AR0011</ExpectedError>
+    <ExpectedError>AR001C</ExpectedError>
 
 </ArgonTest>

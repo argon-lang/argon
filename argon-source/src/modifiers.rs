@@ -140,6 +140,16 @@ pub const ERASURE_MODE: ModifierSpec<ErasureMode> = slice1![
     modifier_spec_entry!(&[], ErasureMode::Concrete),
 ];
 
+pub const ERASURE_MODE_NON_TOKEN: ModifierSpec<ErasureMode> = slice1![
+    modifier_spec_entry!(&[Modifier::Erased], ErasureMode::Erased),
+    modifier_spec_entry!(&[], ErasureMode::Concrete),
+];
+
+pub const ERASURE_MODE_CONCRETE: ModifierSpec<ErasureMode> = slice1![
+    modifier_spec_entry!(&[Modifier::Token], ErasureMode::Token),
+    modifier_spec_entry!(&[], ErasureMode::Concrete),
+];
+
 pub const METHOD_SLOT_CONCRETE: ModifierSpec<MethodSlot> = slice1![
     modifier_spec_entry!(&[], MethodSlot::Final),
     modifier_spec_entry!(&[Modifier::Virtual], MethodSlot::Virtual),

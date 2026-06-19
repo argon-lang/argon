@@ -1,7 +1,4 @@
-use super::{
-    ArgumentInfo, ExpectedType, Hole, InferredType, Overloadable, TypeCheckExprContext,
-    TypeChecker, TypeInferResult,
-};
+use super::{ArgumentInfo, default_to_type_check_shifter, ExpectedType, Hole, InferredType, TypeCheckExprContext, TypeChecker, TypeInferResult};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
@@ -9,14 +6,136 @@ use alloc::vec;
 use alloc::vec::Vec;
 use argon_compiler::scope::{self, LocalVariableScope, Scope};
 use argon_compiler::signature::SignatureParameter;
-use argon_expr::{
-    EnumType, Expr, ExprScannerMut, MethodInstanceType, RecordType, SubstScanner, TraitType,
-    Variable,
-};
+use argon_expr::{EnumType, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, MethodInstanceType, RecordType, SubstScanner, TraitType, Variable};
 use argon_parser::ast::FunctionParameterListType;
 use argon_util::{CompileError, MultiSlice};
 use core::cmp::Ordering;
+use alloc::sync::Arc;
+use argon_compiler::{Function, FunctionSignature, Method, RecordField, SubstFunctionSignature};
 use parse18_runtime::Location;
+
+
+
+#[derive(Debug)]
+pub(super) enum Overloadable<'a> {
+    Base(scope::Overloadable),
+    InstanceMethod {
+        method: Arc<dyn Method>,
+        trait_type: TraitType<TypeCheckExprContext>,
+        obj: Expr<TypeCheckExprContext>,
+    },
+    ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
+    RecordField {
+        record_type: Expr<TypeCheckExprContext>,
+        field: Arc<dyn RecordField>,
+        field_type: Expr<TypeCheckExprContext>,
+        record_value: Expr<TypeCheckExprContext>,
+    },
+    RecordFieldStore {
+        record_type: Expr<TypeCheckExprContext>,
+        field: Arc<dyn RecordField>,
+        field_type: Expr<TypeCheckExprContext>,
+        record_value: Expr<TypeCheckExprContext>,
+    },
+}
+
+impl<'a> Overloadable<'a> {
+    fn initial_arguments_info(&self) -> Vec<ArgumentInfo<'a>> {
+        match self {
+            Overloadable::Base(_) => vec![],
+            Overloadable::InstanceMethod { .. } => vec![],
+            Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
+            Overloadable::RecordField { .. } => vec![],
+            Overloadable::RecordFieldStore { .. } => vec![],
+        }
+    }
+
+    fn initial_arguments(&self) -> Vec<TypeInferResult<'static>> {
+        match self {
+            Overloadable::Base(_) => vec![],
+            Overloadable::InstanceMethod { .. } => vec![],
+            Overloadable::ExtensionMethod(_, _, arg) => {
+                vec![TypeInferResult::Complete(arg.clone())]
+            }
+            Overloadable::RecordField { .. } => vec![],
+            Overloadable::RecordFieldStore { .. } => vec![],
+        }
+    }
+
+    pub(super) fn as_expression_owner(&self) -> Option<ExpressionOwner<TypeCheckExprContext>> {
+        match self {
+            Overloadable::Base(base) => Some(base.as_expression_owner()),
+            Overloadable::InstanceMethod { method, .. } => {
+                Some(ExpressionOwner::Method(method.clone()))
+            }
+            Overloadable::ExtensionMethod(f, _, _) => Some(ExpressionOwner::Function(f.clone())),
+            Overloadable::RecordField { .. } => None,
+            Overloadable::RecordFieldStore { .. } => None,
+        }
+    }
+
+    fn signature(&self) -> FunctionSignature<TypeCheckExprContext> {
+        match self {
+            Overloadable::Base(base) => {
+                let mut shifter = default_to_type_check_shifter();
+                base.signature().as_ref().clone().shift(&mut shifter)
+            }
+            Overloadable::InstanceMethod {
+                method, trait_type, ..
+            } => {
+                let trait_sig = trait_type
+                    .trait_
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut default_to_type_check_shifter());
+
+                let mut sig = method
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut default_to_type_check_shifter());
+                let mut subst = SubstScanner::new();
+                subst.add_function_parameter_substitutions(
+                    ExpressionOwner::Trait(trait_type.trait_.clone()),
+                    &trait_sig,
+                    &trait_type.arguments,
+                );
+                sig.scan_mut(&mut subst);
+
+                sig
+            }
+            Overloadable::ExtensionMethod(f, _, _) => {
+                let mut shifter = default_to_type_check_shifter();
+                f.clone().signature().as_ref().clone().shift(&mut shifter)
+            }
+            Overloadable::RecordField { field_type, .. } => FunctionSignature {
+                parameters: vec![],
+                return_type: field_type.clone(),
+                ensures_clauses: vec![],
+            },
+            Overloadable::RecordFieldStore { field_type, .. } => FunctionSignature {
+                parameters: vec![SignatureParameter {
+                    list_type: FunctionParameterListType::NormalList,
+                    name: None,
+                    erasure_mode: ErasureMode::Concrete,
+                    param_type: field_type.clone(),
+                    bindings: vec![],
+                }],
+                return_type: Expr::unit(),
+                ensures_clauses: vec![],
+            },
+        }
+    }
+}
+
+impl From<scope::Overloadable> for Overloadable<'_> {
+    fn from(value: scope::Overloadable) -> Self {
+        Overloadable::Base(value)
+    }
+}
 
 pub(super) struct OverloadResolver<'parent, 'access, 'scope, 'model, 'e> {
     type_checker: &'parent mut TypeChecker<'access, 'scope, 'model>,
@@ -174,6 +293,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             model: &mut model,
             access: self.type_checker.access,
             scope: &mut scope,
+            erasure_check_mode: self.type_checker.erasure_check_mode,
         };
 
         let mut return_type = sig.return_type.clone();
@@ -215,6 +335,22 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             return Some(OverloadRejectionReason::ParameterTypeMismatch {
                                 parameter_index,
                             });
+                        }
+
+                        let mut inferred_arg = Cow::Borrowed(inferred_arg);
+
+                        if param.erasure_mode == ErasureMode::Token && self.type_checker.is_type(param.param_type.clone()) {
+                            match inferred_arg.as_ref() {
+                                TypeInferResult::Complete(inferred) if !self.type_checker.treat_as_token(&inferred.checked_expr) => {
+                                    let mut inferred = inferred.clone();
+
+                                    inferred.checked_expr = Expr::BoxedType(Box::new(inferred.checked_expr));
+
+                                    inferred_arg = Cow::Owned(TypeInferResult::Complete(inferred));
+                                }
+
+                                _ => {}
+                            }
                         }
 
                         if let Some(v) = v {
@@ -321,11 +457,19 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             .pop_front()
                             .expect("inferred_args should not be empty when args is not empty");
 
-                        let arg_expr = self.type_checker.check_inferred_type(
+                        let mut arg_expr = self.type_checker.check_inferred_type(
                             &arg.arg.location,
                             arg_result,
                             ExpectedType::Exact(&param.param_type),
                         );
+
+                        if
+                            param.erasure_mode == ErasureMode::Token &&
+                            self.type_checker.is_type(param.param_type.clone()) &&
+                            !self.type_checker.treat_as_token(&arg_expr.checked_expr)
+                        {
+                            arg_expr.checked_expr = Expr::BoxedType(Box::new(arg_expr.checked_expr));
+                        }
 
                         if let Some(v) = v {
                             substitute_arg_in_param_types(

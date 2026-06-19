@@ -7,6 +7,7 @@ edition = "2024"
 argon-util = { workspace = true }
 argon-parser = { workspace = true }
 derivative = { workspace = true }
+esexpr = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }
 num-bigint = { workspace = true }

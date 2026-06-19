@@ -65,11 +65,6 @@ where
         Expr::BoolLiteral(_) => true,
         Expr::Block { label, body } => default_scan_label(scanner, label) && scanner.scan(body),
         Expr::Break { label, value } => default_scan_label(scanner, label) && scanner.scan(value),
-        Expr::BreakIf {
-            label,
-            value,
-            condition,
-        } => default_scan_label(scanner, label) && scanner.scan(value) && scanner.scan(condition),
         Expr::Builtin(builtin) => default_scan_builtin(scanner, builtin),
         Expr::Condition {
             value,
@@ -366,15 +361,6 @@ where
         }
         Expr::Break { label, value } => {
             default_scan_label_mut(scanner, label) && scanner.scan(value.as_mut())
-        }
-        Expr::BreakIf {
-            label,
-            value,
-            condition,
-        } => {
-            default_scan_label_mut(scanner, label)
-                && scanner.scan(value.as_mut())
-                && scanner.scan(condition.as_mut())
         }
         Expr::Builtin(builtin) => default_scan_builtin_mut(scanner, builtin),
         Expr::Condition {

@@ -3,20 +3,13 @@ use alloc::borrow::{Cow, ToOwned};
 use alloc::collections::VecDeque;
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::access::AccessToken;
+use argon_compiler::expr_type::ExprTypeContext;
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
+use argon_compiler::shifter::DefaultToExprTypeContextShifter;
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{
-    Context, Declaration, DefaultExprContext, Function, FunctionImplementation, FunctionSignature,
-    Method, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner,
-    SubstFunctionSignature, Trait, TubeName,
-};
-use argon_expr::{
-    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
-    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
-    RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
-};
+use argon_compiler::{Context, Declaration, DefaultExprComparer, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, TubeName};
+use argon_expr::{BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, Fuel, UniqueIdentifier};
@@ -27,21 +20,22 @@ use hashbrown::{HashMap, HashSet, hash_map};
 use mitsein::vec1;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
+use argon_compiler::erasure::ErasureScanner;
 use parse18_runtime::{Location, WithLocation};
 
 mod exhaustive;
 mod overload;
 
 use crate::type_checker::exhaustive::ExhaustiveChecker;
-use overload::{OverloadResolver, substitute_arg_in_param_types};
+use overload::{OverloadResolver, Overloadable, substitute_arg_in_param_types};
 
 pub fn type_check_type_expr(
     context: Context,
     options: TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
 ) -> Expr<DefaultExprContext> {
-    let TypeCheckOptions { access, scope } = options;
-    let shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
+    let TypeCheckOptions { access, scope, erasure_mode } = options;
+    let shifted_scope = ShiftedScope::new(scope, default_to_type_check_shifter());
     let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
     let mut checker = TypeChecker {
@@ -49,11 +43,16 @@ pub fn type_check_type_expr(
         access,
         scope: &mut local_scope,
         model: &mut model,
+        erasure_check_mode: erasure_mode,
     };
 
     let expr = checker.check_type(e);
 
-    TypeCheckToDefaultExprContextShifter { context, model }.shift(expr)
+    let result = TypeCheckToDefaultExprContextShifter { context: context.clone(), model }.shift(expr);
+
+    check_erasure(context, options, e, &result);
+
+    result
 }
 
 pub fn type_check_expr(
@@ -62,8 +61,8 @@ pub fn type_check_expr(
     e: &WithLocation<ast::Expr>,
     expected_type: &Expr<DefaultExprContext>,
 ) -> Expr<DefaultExprContext> {
-    let TypeCheckOptions { access, scope } = options;
-    let shifted_scope = ShiftedScope::new(scope, DefaultToTypeCheckExprContextShifter);
+    let TypeCheckOptions { access, scope, erasure_mode } = options;
+    let shifted_scope = ShiftedScope::new(scope, default_to_type_check_shifter());
     let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
     let mut checker = TypeChecker {
@@ -71,25 +70,48 @@ pub fn type_check_expr(
         access,
         scope: &mut local_scope,
         model: &mut model,
+        erasure_check_mode: erasure_mode,
     };
 
-    let expected_type = DefaultToTypeCheckExprContextShifter.shift(expected_type.clone());
+    let expected_type = default_to_type_check_shifter().shift(expected_type.clone());
     let expr = checker.check(e, &expected_type);
 
-    TypeCheckToDefaultExprContextShifter { context, model }.shift(expr)
+    let result = TypeCheckToDefaultExprContextShifter { context: context.clone(), model }.shift(expr);
+
+    check_erasure(context, options, e, &result);
+
+    result
+}
+
+fn check_erasure(
+    context: Context,
+    options: TypeCheckOptions<'_>,
+    e: &WithLocation<ast::Expr>,
+    result: &Expr<DefaultExprContext>,
+) {
+    let mut erasure_scanner = ErasureScanner {
+        context: context.clone(),
+        comparer: &mut DefaultExprComparer { context },
+        expected_erasure: options.erasure_mode,
+        location: &e.location,
+        suppress_errors: false,
+    };
+    erasure_scanner.scan(&result);
 }
 
 pub struct TypeCheckOptions<'a> {
     access: &'a AccessToken,
     scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
+    erasure_mode: ErasureMode,
 }
 
 impl<'a> TypeCheckOptions<'a> {
     pub fn new(
         access: &'a AccessToken,
         scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
+        erasure_mode: ErasureMode,
     ) -> Self {
-        Self { access, scope }
+        Self { access, scope, erasure_mode }
     }
 }
 
@@ -107,6 +129,8 @@ impl ExprContext for TypeCheckExprContext {
     type Trait = <DefaultExprContext as ExprContext>::Trait;
     type Instance = <DefaultExprContext as ExprContext>::Instance;
 }
+
+type ExpectedType<'a> = argon_expr::ExpectedType<'a, TypeCheckExprContext>;
 
 struct TypeCheckToDefaultExprContextShifter {
     context: Context,
@@ -133,15 +157,15 @@ impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
     }
 }
 
-#[derive(Clone, Copy)]
-struct DefaultToTypeCheckExprContextShifter;
+type DefaultTypeCheckShifter = DefaultToExprTypeContextShifter<TypeCheckExprContext>;
 
-impl ExprContextShifter for DefaultToTypeCheckExprContextShifter {
-    type EC1 = DefaultExprContext;
-    type EC2 = TypeCheckExprContext;
+fn default_to_type_check_shifter() -> DefaultTypeCheckShifter {
+    DefaultToExprTypeContextShifter::default()
+}
 
-    fn shift_hole(&mut self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2> {
-        match hole {}
+impl ExprTypeContext for TypeCheckExprContext {
+    fn get_hole_type(hole: &Hole) -> Expr<Self> {
+        hole.hole_info.hole_type.clone()
     }
 }
 
@@ -173,11 +197,11 @@ impl Normalizer for ExprNormalizer<'_> {
         let signature = function.clone().signature();
         let owner: ExpressionOwner<TypeCheckExprContext> =
             ExpressionOwner::Function(function.clone());
-        let mut body = DefaultToTypeCheckExprContextShifter.shift(body.clone());
+        let mut body = default_to_type_check_shifter().shift(body.clone());
 
         let arguments = mem::take(arguments);
         let mut subst = SubstScanner::new();
-        let mut shifter = DefaultToTypeCheckExprContextShifter;
+        let mut shifter = default_to_type_check_shifter();
         let signature = signature.as_ref().clone().shift(&mut shifter);
         subst.add_function_parameter_substitutions(owner, &signature, &arguments);
         subst.scan(&mut body);
@@ -348,138 +372,12 @@ enum PartiallyInferredType<'b> {
     Tuple(Vec<PartiallyInferredType<'b>>),
 }
 
-#[derive(Debug, Clone, Copy)]
-enum ExpectedType<'a> {
-    AnyMetaType,
-    Exact(&'a Expr<TypeCheckExprContext>),
-}
-
-#[derive(Debug)]
-enum Overloadable<'a> {
-    Base(scope::Overloadable),
-    InstanceMethod {
-        method: Arc<dyn Method>,
-        trait_type: TraitType<TypeCheckExprContext>,
-        obj: Expr<TypeCheckExprContext>,
-    },
-    ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
-    RecordField {
-        record_type: Expr<TypeCheckExprContext>,
-        field: Arc<dyn RecordField>,
-        field_type: Expr<TypeCheckExprContext>,
-        record_value: Expr<TypeCheckExprContext>,
-    },
-    RecordFieldStore {
-        record_type: Expr<TypeCheckExprContext>,
-        field: Arc<dyn RecordField>,
-        field_type: Expr<TypeCheckExprContext>,
-        record_value: Expr<TypeCheckExprContext>,
-    },
-}
-
-impl<'a> Overloadable<'a> {
-    fn initial_arguments_info(&self) -> Vec<ArgumentInfo<'a>> {
-        match self {
-            Overloadable::Base(_) => vec![],
-            Overloadable::InstanceMethod { .. } => vec![],
-            Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
-            Overloadable::RecordField { .. } => vec![],
-            Overloadable::RecordFieldStore { .. } => vec![],
-        }
-    }
-
-    fn initial_arguments(&self) -> Vec<TypeInferResult<'static>> {
-        match self {
-            Overloadable::Base(_) => vec![],
-            Overloadable::InstanceMethod { .. } => vec![],
-            Overloadable::ExtensionMethod(_, _, arg) => {
-                vec![TypeInferResult::Complete(arg.clone())]
-            }
-            Overloadable::RecordField { .. } => vec![],
-            Overloadable::RecordFieldStore { .. } => vec![],
-        }
-    }
-
-    fn as_expression_owner(&self) -> Option<ExpressionOwner<TypeCheckExprContext>> {
-        match self {
-            Overloadable::Base(base) => Some(base.as_expression_owner()),
-            Overloadable::InstanceMethod { method, .. } => {
-                Some(ExpressionOwner::Method(method.clone()))
-            }
-            Overloadable::ExtensionMethod(f, _, _) => Some(ExpressionOwner::Function(f.clone())),
-            Overloadable::RecordField { .. } => None,
-            Overloadable::RecordFieldStore { .. } => None,
-        }
-    }
-
-    fn signature(&self) -> FunctionSignature<TypeCheckExprContext> {
-        match self {
-            Overloadable::Base(base) => {
-                let mut shifter = DefaultToTypeCheckExprContextShifter;
-                base.signature().as_ref().clone().shift(&mut shifter)
-            }
-            Overloadable::InstanceMethod {
-                method, trait_type, ..
-            } => {
-                let trait_sig = trait_type
-                    .trait_
-                    .clone()
-                    .signature()
-                    .as_ref()
-                    .clone()
-                    .shift(&mut DefaultToTypeCheckExprContextShifter);
-
-                let mut sig = method
-                    .clone()
-                    .signature()
-                    .as_ref()
-                    .clone()
-                    .shift(&mut DefaultToTypeCheckExprContextShifter);
-                let mut subst = SubstScanner::new();
-                subst.add_function_parameter_substitutions(
-                    ExpressionOwner::Trait(trait_type.trait_.clone()),
-                    &trait_sig,
-                    &trait_type.arguments,
-                );
-                sig.scan_mut(&mut subst);
-
-                sig
-            }
-            Overloadable::ExtensionMethod(f, _, _) => {
-                let mut shifter = DefaultToTypeCheckExprContextShifter;
-                f.clone().signature().as_ref().clone().shift(&mut shifter)
-            }
-            Overloadable::RecordField { field_type, .. } => FunctionSignature {
-                parameters: vec![],
-                return_type: field_type.clone(),
-                ensures_clauses: vec![],
-            },
-            Overloadable::RecordFieldStore { field_type, .. } => FunctionSignature {
-                parameters: vec![SignatureParameter {
-                    list_type: FunctionParameterListType::NormalList,
-                    name: None,
-                    erasure_mode: ErasureMode::Concrete,
-                    param_type: field_type.clone(),
-                    bindings: vec![],
-                }],
-                return_type: Expr::unit(),
-                ensures_clauses: vec![],
-            },
-        }
-    }
-}
-
-impl From<scope::Overloadable> for Overloadable<'_> {
-    fn from(value: scope::Overloadable) -> Self {
-        Overloadable::Base(value)
-    }
-}
-
 struct TypeChecker<'access, 'scope, 'model> {
     context: Context,
     access: &'access AccessToken,
     scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     model: &'model mut Model,
+    erasure_check_mode: ErasureMode,
 }
 
 macro_rules! with_nested_scope {
@@ -491,6 +389,7 @@ macro_rules! with_nested_scope {
                 &mut *$tc.scope as &mut dyn Scope<ExprContext = TypeCheckExprContext>,
             ),
             model: $tc.model,
+            erasure_check_mode: $tc.erasure_check_mode,
         }
     };
 }
@@ -512,7 +411,34 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn check_type_with_meta_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> InferredType {
         let infer = self.infer(expr);
-        self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType)
+        let mut inferred = self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType);
+
+        if !self.treat_as_token(&inferred.checked_expr) {
+            inferred.checked_expr = Expr::BoxedType(Box::new(inferred.checked_expr));
+        }
+
+        inferred
+    }
+
+    fn treat_as_token(&self, expr: &Expr<TypeCheckExprContext>) -> bool {
+        match expr {
+            Expr::EnumType(_)
+            | Expr::FunctionType { .. }
+            | Expr::InstanceType(_)
+            | Expr::RecordType(_)
+            | Expr::TraitType(_)
+            | Expr::Tuple { .. }
+            | Expr::Type(_)
+            | Expr::BigType(_)
+            | Expr::BoxedType(_) => true,
+
+            Expr::FunctionCall { function, .. } =>
+                function.metadata().erasure_mode == ErasureMode::Token,
+
+            Expr::Variable(v) => v.erasure_mode() == ErasureMode::Token,
+
+            _ => false,
+        }
     }
 
     fn infer<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> TypeInferResult<'e> {
@@ -529,14 +455,18 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 })
             }
 
-            ast::Expr::BoolLiteral(value) => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::BoolLiteral(*value),
-                inferred_type: Expr::bool_type(),
-            }),
-            ast::Expr::IntLiteral(value) => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::IntLiteral(value.clone()),
-                inferred_type: Expr::int_type(),
-            }),
+            ast::Expr::BoolLiteral(value) => {
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::BoolLiteral(*value),
+                    inferred_type: Expr::bool_type(),
+                })
+            },
+            ast::Expr::IntLiteral(value) => {
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::IntLiteral(value.clone()),
+                    inferred_type: Expr::int_type(),
+                })
+            },
 
             ast::Expr::Break { label, value } => {
                 let block_label = match label {
@@ -862,7 +792,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .enumerate()
                     {
                         let v = param.clone().to_parameter_var(expr_owner.clone(), i);
-                        let v = DefaultToTypeCheckExprContextShifter
+                        let v = default_to_type_check_shifter()
                             .shift_variable(Variable::Parameter(Box::new(v)));
                         subst.add_substitution(v, Cow::Borrowed(arg));
                     }
@@ -898,7 +828,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             continue;
                         };
 
-                        let mut field_type = DefaultToTypeCheckExprContextShifter
+                        let mut field_type = default_to_type_check_shifter()
                             .shift((*field.clone().field_type()).clone());
                         subst.scan(&mut field_type);
 
@@ -1590,6 +1520,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let is_witness = mp.parse(IS_WITNESS);
                 mp.done();
 
+                if erasure_mode == ErasureMode::Erased && v.is_mutable {
+                    self.context.reporter().report_error(
+                        CompileError::mutable_erased_local_variable(stmt.location.clone()),
+                    );
+                }
+
                 let v = Box::new(LocalVariable {
                     id: UniqueIdentifier::new(),
                     name: v.name.clone(),
@@ -1616,12 +1552,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             CalleeInfo::Builtin(builtin) => {
                 self.infer_builtin(call.location, builtin, call.arguments)
             }
-            CalleeInfo::Variable(v) => self.infer_variable(v, call.arguments),
+            CalleeInfo::Variable(v) => self.infer_variable(call.location, v, call.arguments),
             CalleeInfo::VariableStore(v, value) => {
                 self.infer_variable_store(call.location, v, value)
             }
             CalleeInfo::VariableTupleElement(vte) => {
-                self.infer_variable_tuple_element(vte, call.arguments)
+                self.infer_variable_tuple_element(call.location, vte, call.arguments)
             }
             CalleeInfo::Overloadable(overloads) => {
                 let resolved = OverloadResolver::new(self, call.location)
@@ -2014,15 +1950,19 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn infer_variable<'e>(
         &mut self,
+        _var_location: &'e Location,
         v: Variable<TypeCheckExprContext>,
         args: VecDeque<ArgumentInfo<'e>>,
     ) -> TypeInferResult<'e> {
         let t = v.var_type().clone();
         let expr = Expr::Variable(v);
-        let res = TypeInferResult::Complete(InferredType {
+
+        let inferred = InferredType {
             checked_expr: expr,
             inferred_type: t,
-        });
+        };
+
+        let res = TypeInferResult::Complete(inferred);
 
         self.infer_function_object_call(res, args)
     }
@@ -2052,6 +1992,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn infer_variable_tuple_element<'e>(
         &mut self,
+        _location: &Location,
         vte: VariableTupleElement<TypeCheckExprContext>,
         args: VecDeque<ArgumentInfo<'e>>,
     ) -> TypeInferResult<'e> {
@@ -2329,13 +2270,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .iter()
                         .find(|field| field.metadata().name == *member)
                         .map(|field| {
-                            let mut field_type = DefaultToTypeCheckExprContextShifter
+                            let mut field_type = default_to_type_check_shifter()
                                 .shift((*field.clone().field_type()).clone());
 
                             let mut subst = SubstScanner::new();
                             let record_sig = (*r.clone().signature())
                                 .clone()
-                                .shift(&mut DefaultToTypeCheckExprContextShifter);
+                                .shift(&mut default_to_type_check_shifter());
 
                             subst.add_function_parameter_substitutions(
                                 ExpressionOwner::Record(r.clone()),
@@ -2826,7 +2767,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         Option<Box<LocalVariable<TypeCheckExprContext>>>,
         Option<Box<LocalVariable<TypeCheckExprContext>>>,
     ) {
-        let is_pure_cond = PurityScanner::contains_impure_function_call(cond_expr);
+        let is_pure_cond = !PurityScanner::contains_impure_function_call(cond_expr);
 
         let when_true_var = is_pure_cond.then(|| self.create_if_branch_var(cond_expr, true));
         let when_false_var = is_pure_cond.then(|| self.create_if_branch_var(cond_expr, false));
@@ -2936,7 +2877,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         let enum_type = enum_type.clone();
 
                         let sig = v.clone().signature().as_ref().clone();
-                        let mut sig = sig.shift(&mut DefaultToTypeCheckExprContextShifter);
+                        let mut sig = sig.shift(&mut default_to_type_check_shifter());
                         substitute_holes_for_args(
                             &pattern.location,
                             &ExpressionOwner::EnumVariant(v.clone()),
@@ -3155,11 +3096,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         );
     }
 
-    fn is_type(&mut self, mut expr: Expr<TypeCheckExprContext>) -> bool {
+    fn is_type(&self, mut expr: Expr<TypeCheckExprContext>) -> bool {
+        let mut model = self.model.clone();
         let mut norm = NormalizerScanner::new(
             self.context.normalize_fuel(),
             ExprNormalizer {
-                model: &mut self.model,
+                model: &mut model,
             },
         );
         norm.normalize(&mut expr);
@@ -3209,7 +3151,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     match actual_type {
                         Expr::Type(ref n) => match &expected_type {
                             Expr::BigType(_) => return true,
-                            Expr::Type(n2) => match (&**n, &**n2) {
+                            Expr::Type(n2) => match (&**n, n2.as_ref()) {
                                 (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
                                     return n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2;
                                 }

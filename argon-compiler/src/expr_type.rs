@@ -1,13 +1,26 @@
-use crate::{DefaultExprContext, FunctionSignature};
+use crate::{DefaultExprContext, EmptyHole, FunctionSignature};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use argon_expr::{Builtin, Expr, ExpressionOwner, Pattern, SubstScanner, Variable};
+use crate::shifter::{DefaultExprAssociatedTypes, DefaultToExprTypeContextShifter};
+use argon_expr::{
+    Builtin, Expr, ExprContextShifter, ExpressionOwner, Pattern, SubstScanner, Variable,
+};
 
-pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext> {
+pub trait ExprTypeContext: DefaultExprAssociatedTypes {
+    fn get_hole_type(hole: &Self::Hole) -> Expr<Self>;
+}
+
+impl ExprTypeContext for DefaultExprContext {
+    fn get_hole_type(hole: &EmptyHole) -> Expr<Self> {
+        match *hole {}
+    }
+}
+
+pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> {
     match expr {
         Expr::Error => Expr::Error,
-        Expr::Hole(hole) => match *hole {},
+        Expr::Hole(hole) => EC::get_hole_type(hole),
 
         Expr::And(_, _)
         | Expr::BoolLiteral(_)
@@ -27,8 +40,6 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Break { .. } | Expr::Raise { .. } | Expr::Retry { .. } => Expr::never_type(),
 
-        Expr::BreakIf { .. } => Expr::unit(),
-
         Expr::BigType(value) => Expr::BigType(value + 1),
 
         Expr::Box { t, .. } => Expr::BoxedType(t.clone()),
@@ -44,7 +55,11 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             arguments,
         } => {
             let owner = ExpressionOwner::Function(function.clone());
-            return_type_for_args(owner, function.clone().signature(), arguments.as_ref())
+            return_type_for_args(
+                owner,
+                shift_signature(function.clone().signature()),
+                arguments.as_ref(),
+            )
         }
 
         Expr::FunctionObjectCall { function, .. } => match get_expr_type(&**function) {
@@ -65,7 +80,11 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             arguments,
         } => {
             let owner = ExpressionOwner::Instance(instance.clone());
-            return_type_for_args(owner, instance.clone().signature(), arguments.as_ref())
+            return_type_for_args(
+                owner,
+                shift_signature(instance.clone().signature()),
+                arguments.as_ref(),
+            )
         }
 
         Expr::Sequence(items) => get_expr_type(items.last()),
@@ -93,7 +112,9 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Variable(variable) => variable.var_type().clone(),
 
-        Expr::RecordFieldLoad { field, .. } => (*field.clone().field_type()).clone(),
+        Expr::RecordFieldLoad { field, .. } => {
+            shift_default_expr((*field.clone().field_type()).clone())
+        }
 
         Expr::RecordFieldStore { .. } => Expr::unit(),
 
@@ -101,7 +122,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             let owner = ExpressionOwner::Record(record_type.record.clone());
             return_type_for_args(
                 owner,
-                record_type.record.clone().signature(),
+                shift_signature(record_type.record.clone().signature()),
                 &record_type.arguments,
             )
         }
@@ -110,7 +131,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             let owner = ExpressionOwner::Enum(enum_type.enum_.clone());
             return_type_for_args(
                 owner,
-                enum_type.enum_.clone().signature(),
+                shift_signature(enum_type.enum_.clone().signature()),
                 &enum_type.arguments,
             )
         }
@@ -121,7 +142,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             let owner = ExpressionOwner::Trait(trait_type.trait_.clone());
             return_type_for_args(
                 owner,
-                trait_type.trait_.clone().signature(),
+                shift_signature(trait_type.trait_.clone().signature()),
                 &trait_type.arguments,
             )
         }
@@ -130,7 +151,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
             let owner = ExpressionOwner::Instance(instance_type.instance.clone());
             let trait_type = return_type_for_args(
                 owner,
-                instance_type.instance.clone().signature(),
+                shift_signature(instance_type.instance.clone().signature()),
                 &instance_type.arguments,
             );
             get_expr_type(&trait_type)
@@ -138,6 +159,19 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::FunctionResultValue | Expr::MethodCall { .. } | Expr::RecordLiteral { .. } => todo!(),
     }
+}
+
+fn shift_signature<EC: ExprTypeContext + ?Sized>(
+    signature: Arc<FunctionSignature<DefaultExprContext>>,
+) -> FunctionSignature<EC> {
+    signature
+        .as_ref()
+        .clone()
+        .shift(&mut DefaultToExprTypeContextShifter::<EC>::default())
+}
+
+fn shift_default_expr<EC: ExprTypeContext + ?Sized>(expr: Expr<DefaultExprContext>) -> Expr<EC> {
+    DefaultToExprTypeContextShifter::<EC>::default().shift(expr)
 }
 
 pub fn get_pattern_type(pattern: &Pattern<DefaultExprContext>) -> Expr<DefaultExprContext> {
@@ -155,7 +189,7 @@ pub fn get_pattern_type(pattern: &Pattern<DefaultExprContext>) -> Expr<DefaultEx
     }
 }
 
-fn get_builtin_type(builtin: &Builtin<DefaultExprContext>) -> Expr<DefaultExprContext> {
+fn get_builtin_type<EC: ExprTypeContext + ?Sized>(builtin: &Builtin<EC>) -> Expr<EC> {
     match builtin {
         Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
             Expr::type_n(0)
@@ -202,11 +236,11 @@ fn get_builtin_type(builtin: &Builtin<DefaultExprContext>) -> Expr<DefaultExprCo
     }
 }
 
-fn return_type_for_args(
-    owner: ExpressionOwner<DefaultExprContext>,
-    signature: Arc<FunctionSignature<DefaultExprContext>>,
-    arguments: &[Expr<DefaultExprContext>],
-) -> Expr<DefaultExprContext> {
+fn return_type_for_args<EC: ExprTypeContext + ?Sized>(
+    owner: ExpressionOwner<EC>,
+    signature: FunctionSignature<EC>,
+    arguments: &[Expr<EC>],
+) -> Expr<EC> {
     let mut return_type = signature.return_type.clone();
 
     for (index, (parameter, argument)) in signature.parameters.iter().zip(arguments).enumerate() {

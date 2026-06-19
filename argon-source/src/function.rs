@@ -13,9 +13,9 @@ use argon_compiler::{
     Context, DefaultExprContext, EffectInfo, Function, FunctionImplementation, FunctionMetadata,
     Unload,
 };
-use argon_expr::ExpressionOwner;
+use argon_expr::{ErasureMode, ExpressionOwner};
 use argon_parser::ast;
-use argon_util::MultiSlice;
+use argon_util::{CompileError, MultiSlice};
 use argon_util::sync::{Mutex, mutex_lock};
 use core::fmt::Debug;
 
@@ -37,9 +37,18 @@ impl SourceFunction {
         let mut modifiers =
             ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
         let access = modifiers.parse(&ACCESS_MODIFIER_GLOBAL);
+        let erasure_mode = modifiers.parse(&ERASURE_MODE);
+        if erasure_mode == ErasureMode::Erased && !decl.purity {
+            context
+                .reporter()
+                .report_error(CompileError::impure_erased_function(
+                    decl.name.location.clone(),
+                ));
+        }
+
         let metadata = FunctionMetadata {
             is_inline: modifiers.parse(&IS_INLINE),
-            erasure_mode: modifiers.parse(&ERASURE_MODE),
+            erasure_mode,
             is_witness: modifiers.parse(&IS_WITNESS),
             effect_info: if decl.purity {
                 EffectInfo::Pure
@@ -139,7 +148,7 @@ impl Function for SourceFunction {
 
                 let expr = type_check_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&access_token, &scope),
+                    TypeCheckOptions::new(&access_token, &scope, self.metadata.erasure_mode),
                     body.as_ref(),
                     &signature.return_type,
                 );

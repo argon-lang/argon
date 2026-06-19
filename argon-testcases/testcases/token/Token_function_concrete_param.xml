@@ -8,15 +8,15 @@
 
         import Argon.Core::*
 
-        inline token def doSomething[A: type]: String = "x"
+        inline token def doSomething '(A: type): String = "x"
 
         proc main(): () do
-            let x = doSomething[Int]
+            let x = doSomething '(Int)
             puts x
         end
             
     ]]></InputSource>
 
-    <ExpectedError>AR0011</ExpectedError>
+    <ExpectedError>AR001C</ExpectedError>
 
 </ArgonTest>

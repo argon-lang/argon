@@ -965,15 +965,6 @@ impl TubeEncoder {
                 block_id: Box::new(self.emit_block_id(label)),
                 value: Box::new(self.emit_expr(value)?),
             },
-            Expr::BreakIf {
-                label,
-                value,
-                condition,
-            } => tf::Expr::BreakIf {
-                block_id: Box::new(self.emit_block_id(label)),
-                value: Box::new(self.emit_expr(value)?),
-                condition: Box::new(self.emit_expr(condition)?),
-            },
             Expr::Unbox { t, value } => tf::Expr::Unbox {
                 t: Box::new(self.emit_expr(t)?),
                 value: Box::new(self.emit_expr(value)?),
