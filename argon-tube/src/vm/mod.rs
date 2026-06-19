@@ -1223,6 +1223,20 @@ trait TokenEmitterCommon {
                 })
             }
 
+            Expr::ConjunctionType { lhs, rhs } => Ok(vf::Token::Builtin {
+                b: Box::new(vf::BuiltinType::Conjunction {
+                    lhs: Box::new(self.token_expr(lhs)?),
+                    rhs: Box::new(self.token_expr(rhs)?),
+                }),
+            }),
+
+            Expr::DisjunctionType { lhs, rhs } => Ok(vf::Token::Builtin {
+                b: Box::new(vf::BuiltinType::Disjunction {
+                    lhs: Box::new(self.token_expr(lhs)?),
+                    rhs: Box::new(self.token_expr(rhs)?),
+                }),
+            }),
+
             Expr::FunctionType { a, r } => Ok(vf::Token::Function {
                 input: Box::new(self.token_expr(&a.var_type)?),
                 output: Box::new(self.token_expr(r)?),
@@ -1292,14 +1306,6 @@ trait TokenEmitterCommon {
             Builtin::NeverType => vf::BuiltinType::Never {},
             Builtin::ArrayType { element_type } => vf::BuiltinType::Array {
                 element_type: Box::new(self.token_expr(element_type)?),
-            },
-            Builtin::ConjunctionType { lhs, rhs } => vf::BuiltinType::Conjunction {
-                lhs: Box::new(self.token_expr(lhs)?),
-                rhs: Box::new(self.token_expr(rhs)?),
-            },
-            Builtin::DisjunctionType { lhs, rhs } => vf::BuiltinType::Disjunction {
-                lhs: Box::new(self.token_expr(lhs)?),
-                rhs: Box::new(self.token_expr(rhs)?),
             },
             _ => return Ok(None),
         }))
@@ -1633,6 +1639,16 @@ impl<'a> ExprEmitter<'a> {
                 Err(EmitStop::Branch)?
             }
 
+            Expr::ConjunctionType { .. } | Expr::DisjunctionType { .. } => {
+                let t = self.token_expr(e)?;
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::LoadToken {
+                    dest: Box::new(rb.register().clone()),
+                    token: Box::new(t),
+                });
+                rb.into_result(self)?
+            }
+
             Expr::Builtin(builtin) => {
                 fn emit_value_op<O: ExprOutput>(
                     emitter: &mut ExprEmitter<'_>,
@@ -1684,10 +1700,7 @@ impl<'a> ExprEmitter<'a> {
                     | Builtin::BoolType
                     | Builtin::StringType
                     | Builtin::NeverType
-                    | Builtin::ArrayType { .. }
-                    | Builtin::ConjunctionType { .. }
-                    | Builtin::DisjunctionType { .. }
-                    | Builtin::EqualToType { .. } => {
+                    | Builtin::ArrayType { .. } => {
                         let t = self.token_expr(e)?;
                         let rb = output.output_register(self, e)?;
                         self.emit(vf::Instruction::LoadToken {

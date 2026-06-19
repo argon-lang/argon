@@ -4,7 +4,7 @@ use alloc::collections::VecDeque;
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::erasure::ErasureScanner;
-use argon_compiler::expr_type::ExprTypeContext;
+use argon_compiler::expr_type::{get_expr_type, ExprTypeContext};
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::shifter::DefaultToExprTypeContextShifter;
@@ -723,7 +723,26 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         });
                     }
 
-                    ast::BinaryOperator::PropEqual => todo!(),
+                    ast::BinaryOperator::PropEqual => {
+                        let a_inferred = self.infer(a).infer_fully();
+                        let b_inferred = self.infer(b).infer_fully();
+
+                        let mut branch_typer = BranchTyper::new();
+                        branch_typer.add_branch(self, &a_inferred.inferred_type);
+                        branch_typer.add_branch(self, &b_inferred.inferred_type);
+                        let compare_type = branch_typer.into_branch_type();
+
+                        let meta_type = get_expr_type(&compare_type);
+
+                        return TypeInferResult::Complete(InferredType {
+                            checked_expr: Expr::EqualToType {
+                                r#type: Box::new(compare_type),
+                                lhs: Box::new(a_inferred.checked_expr),
+                                rhs: Box::new(b_inferred.checked_expr),
+                            },
+                            inferred_type: meta_type,
+                        });
+                    }
                     ast::BinaryOperator::PropDisjunction => todo!(),
                     ast::BinaryOperator::PropConjunction => todo!(),
 
@@ -992,7 +1011,30 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 checked_expr: Expr::BigType(value.clone()),
                 inferred_type: Expr::BigType(value + 1),
             }),
-            ast::Expr::Assert { .. } => todo!("infer assert expressions"),
+            ast::Expr::Assert { t } => {
+                let t = self.check_type(t);
+                let value = self.resolve_implicit(&t);
+
+                let local = LocalVariable {
+                    id: UniqueIdentifier::new(),
+                    name: None,
+                    var_type: t,
+                    erasure_mode: ErasureMode::Erased,
+                    is_witness: true,
+                    is_mutable: false,
+                };
+
+                let v = Variable::Local(Box::new(local.clone()));
+
+                self.scope.add_variable(v);
+
+                let decl = Expr::VariableBinding(Box::new(local), Box::new(value.checked_expr));
+
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: decl,
+                    inferred_type: Expr::unit(),
+                })
+            }
             ast::Expr::Block { body, finally_body } => {
                 let mut result = self.infer_block(body);
 
@@ -2840,10 +2882,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
-            var_type: Expr::Builtin(Builtin::EqualToType {
+            var_type: Expr::EqualToType {
+                r#type: Box::new(Expr::bool_type()),
                 lhs: Box::new(cond_expr.clone()),
                 rhs: Box::new(Expr::BoolLiteral(equal_to_value)),
-            }),
+            },
             erasure_mode: ErasureMode::Erased,
             is_witness: false,
             is_mutable: false,
@@ -3118,6 +3161,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
 
         patterns
+    }
+
+    fn resolve_implicit(&mut self, _t: &Expr<TypeCheckExprContext>) -> InferredType {
+        todo!("resolve_implicit")
     }
 
     fn report_invalid_builtin(&self, location: &Location, name: impl AsRef<str>) {

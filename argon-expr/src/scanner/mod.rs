@@ -66,6 +66,12 @@ where
         Expr::Block { label, body } => default_scan_label(scanner, label) && scanner.scan(body),
         Expr::Break { label, value } => default_scan_label(scanner, label) && scanner.scan(value),
         Expr::Builtin(builtin) => default_scan_builtin(scanner, builtin),
+        Expr::ConjunctionType { lhs, rhs } | Expr::DisjunctionType { lhs, rhs } => {
+            scanner.scan(lhs) && scanner.scan(rhs)
+        }
+        Expr::EqualToType { r#type, lhs, rhs } => {
+            scanner.scan(r#type) && scanner.scan(lhs) && scanner.scan(rhs)
+        }
         Expr::Condition {
             value,
             when_true_witness,
@@ -210,10 +216,7 @@ where
         | Builtin::StringEq { lhs, rhs }
         | Builtin::StringNe { lhs, rhs }
         | Builtin::BoolEq { lhs, rhs }
-        | Builtin::BoolNe { lhs, rhs }
-        | Builtin::ConjunctionType { lhs, rhs }
-        | Builtin::DisjunctionType { lhs, rhs }
-        | Builtin::EqualToType { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        | Builtin::BoolNe { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
         Builtin::ArrayCreateUnsafeUninitialized {
             element_type,
             length,
@@ -363,6 +366,14 @@ where
             default_scan_label_mut(scanner, label) && scanner.scan(value.as_mut())
         }
         Expr::Builtin(builtin) => default_scan_builtin_mut(scanner, builtin),
+        Expr::ConjunctionType { lhs, rhs } | Expr::DisjunctionType { lhs, rhs } => {
+            scanner.scan(lhs.as_mut()) && scanner.scan(rhs.as_mut())
+        }
+        Expr::EqualToType { r#type, lhs, rhs } => {
+            scanner.scan(r#type.as_mut())
+                && scanner.scan(lhs.as_mut())
+                && scanner.scan(rhs.as_mut())
+        }
         Expr::Condition {
             value,
             when_true_witness,
@@ -521,10 +532,7 @@ where
         | Builtin::StringEq { lhs, rhs }
         | Builtin::StringNe { lhs, rhs }
         | Builtin::BoolEq { lhs, rhs }
-        | Builtin::BoolNe { lhs, rhs }
-        | Builtin::ConjunctionType { lhs, rhs }
-        | Builtin::DisjunctionType { lhs, rhs }
-        | Builtin::EqualToType { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        | Builtin::BoolNe { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
         Builtin::ArrayCreateUnsafeUninitialized {
             element_type,
             length,

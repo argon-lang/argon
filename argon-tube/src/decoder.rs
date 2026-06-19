@@ -1143,6 +1143,19 @@ impl TubeDecoder {
                 label: self.decode_block_id(*block_id),
                 value: Box::new(self.decode_expr(*value)),
             },
+            tf::Expr::ConjunctionType { lhs, rhs } => Expr::ConjunctionType {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Expr::DisjunctionType { lhs, rhs } => Expr::DisjunctionType {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Expr::EqualToType { r#type, lhs, rhs } => Expr::EqualToType {
+                r#type: Box::new(self.decode_expr(*r#type)),
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
             tf::Expr::EnumType { enum_type } => Expr::EnumType(EnumType {
                 enum_: self.enum_decl(enum_type.id),
                 arguments: enum_type
@@ -1369,14 +1382,6 @@ impl TubeDecoder {
             tf::Builtin::ArrayType { element_type } => Builtin::ArrayType {
                 element_type: Box::new(self.decode_expr(*element_type)),
             },
-            tf::Builtin::ConjunctionType { lhs, rhs } => Builtin::ConjunctionType {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
-            },
-            tf::Builtin::DisjunctionType { lhs, rhs } => Builtin::DisjunctionType {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
-            },
             tf::Builtin::IntNegate { value } => Builtin::IntNegate {
                 value: Box::new(self.decode_expr(*value)),
             },
@@ -1492,10 +1497,6 @@ impl TubeDecoder {
                 array: Box::new(self.decode_expr(*array)),
                 index: Box::new(self.decode_expr(*index)),
                 value: Box::new(self.decode_expr(*value)),
-            },
-            tf::Builtin::EqualTo { lhs, rhs } => Builtin::EqualToType {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
             },
             tf::Builtin::EqualToRefl { .. } => todo!("decode equal-to-refl builtin"),
         }

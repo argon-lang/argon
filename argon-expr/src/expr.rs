@@ -71,10 +71,23 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         value: Box<Expr<EC>>,
     },
     Builtin(Builtin<EC>),
+    ConjunctionType {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
     Closure {
         v: Box<ClosureParameterVariable<EC>>,
         return_type: Box<Expr<EC>>,
         body: Box<Expr<EC>>,
+    },
+    DisjunctionType {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    EqualToType {
+        r#type: Box<Expr<EC>>,
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
     },
     Condition {
         value: Box<Expr<EC>>,
@@ -324,18 +337,6 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         index: Box<Expr<EC>>,
         value: Box<Expr<EC>>,
     },
-    ConjunctionType {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
-    },
-    DisjunctionType {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
-    },
-    EqualToType {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
-    },
 }
 
 impl<EC: ExprContext + ?Sized> Builtin<EC> {
@@ -371,9 +372,6 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
             Builtin::ArrayLength { .. } => "array_length",
             Builtin::ArrayGet { .. } => "array_get",
             Builtin::ArraySet { .. } => "array_set",
-            Builtin::ConjunctionType { .. } => "conjunction_type",
-            Builtin::DisjunctionType { .. } => "disjunction_type",
-            Builtin::EqualToType { .. } => "equal_to_type",
         }
     }
 }

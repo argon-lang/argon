@@ -54,11 +54,9 @@ where
                     }
 
 
-                    Expr::Builtin(
-                        Builtin::EqualToType { .. } |
-                        Builtin::ConjunctionType { .. } |
-                        Builtin::DisjunctionType { .. }
-                    ) => {
+                    Expr::EqualToType { .. }
+                    | Expr::ConjunctionType { .. }
+                    | Expr::DisjunctionType { .. } => {
                         todo!()
                     }
 

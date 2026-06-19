@@ -30,6 +30,10 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
         | Expr::Not(_)
         | Expr::Or(_, _) => Expr::bool_type(),
 
+        Expr::ConjunctionType { .. } | Expr::DisjunctionType { .. } | Expr::EqualToType { .. } => {
+            Expr::type_n(0)
+        }
+
         Expr::Closure { v, return_type, .. } => Expr::FunctionType {
             a: v.clone(),
             r: return_type.clone(),
@@ -247,10 +251,6 @@ fn get_builtin_type<EC: ExprTypeContext + ?Sized>(builtin: &Builtin<EC>) -> Expr
         Builtin::ArrayGet { element_type, .. } => (**element_type).clone(),
 
         Builtin::ArraySet { .. } => Expr::unit(),
-
-        Builtin::ConjunctionType { .. }
-        | Builtin::DisjunctionType { .. }
-        | Builtin::EqualToType { .. } => Expr::Error,
     }
 }
 

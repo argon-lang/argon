@@ -601,10 +601,23 @@ enum expr {
         block-id: block-id;
         value: expr;
     },
+    conjunction-type {
+        lhs: expr;
+        rhs: expr;
+    },
     closure {
         v: closure-parameter-var;
         return-type: expr;
         body: expr;
+    },
+    disjunction-type {
+        lhs: expr;
+        rhs: expr;
+    },
+    equal-to-type {
+        type: expr;
+        lhs: expr;
+        rhs: expr;
     },
     condition {
         value: expr;
@@ -825,17 +838,7 @@ enum builtin {
     array-type {
         element-type: expr;
     },
-    
-    conjunction-type {
-        lhs: expr;
-        rhs: expr;
-    },
-    disjunction-type {
-        lhs: expr;
-        rhs: expr;
-    },
-    
-    
+
     int-negate { value: expr; },
     int-bit-not { value: expr; },
     int-add { lhs: expr; rhs: expr; },
@@ -878,11 +881,6 @@ enum builtin {
         array: expr;
         index: expr;
         value: expr;
-    },
-    
-    equal-to {
-        lhs: expr;
-        rhs: expr;
     },
     equal-to-refl {
         value: expr;

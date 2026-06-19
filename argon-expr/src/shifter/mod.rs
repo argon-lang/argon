@@ -60,6 +60,19 @@ where
             value: Box::new(shifter.shift(*value)),
         },
         Expr::Builtin(builtin) => Expr::Builtin(default_shift_builtin(shifter, builtin)),
+        Expr::ConjunctionType { lhs, rhs } => Expr::ConjunctionType {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Expr::DisjunctionType { lhs, rhs } => Expr::DisjunctionType {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Expr::EqualToType { r#type, lhs, rhs } => Expr::EqualToType {
+            r#type: Box::new(shifter.shift(*r#type)),
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
         Expr::Condition {
             value,
             when_true_witness,
@@ -396,18 +409,6 @@ where
             array: Box::new(shifter.shift(*array)),
             index: Box::new(shifter.shift(*index)),
             value: Box::new(shifter.shift(*value)),
-        },
-        Builtin::ConjunctionType { lhs, rhs } => Builtin::ConjunctionType {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
-        },
-        Builtin::DisjunctionType { lhs, rhs } => Builtin::DisjunctionType {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
-        },
-        Builtin::EqualToType { lhs, rhs } => Builtin::EqualToType {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
         },
     }
 }

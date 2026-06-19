@@ -899,6 +899,19 @@ impl TubeEncoder {
             Expr::Builtin(builtin) => tf::Expr::Builtin {
                 builtin: Box::new(self.encode_builtin(builtin)?),
             },
+            Expr::ConjunctionType { lhs, rhs } => tf::Expr::ConjunctionType {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Expr::DisjunctionType { lhs, rhs } => tf::Expr::DisjunctionType {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Expr::EqualToType { r#type, lhs, rhs } => tf::Expr::EqualToType {
+                r#type: Box::new(self.emit_expr(r#type)?),
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
             Expr::FunctionCall {
                 function,
                 arguments,
@@ -1189,14 +1202,6 @@ impl TubeEncoder {
             Builtin::ArrayType { element_type } => tf::Builtin::ArrayType {
                 element_type: Box::new(self.emit_expr(element_type)?),
             },
-            Builtin::ConjunctionType { lhs, rhs } => tf::Builtin::ConjunctionType {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
-            },
-            Builtin::DisjunctionType { lhs, rhs } => tf::Builtin::DisjunctionType {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
-            },
             Builtin::IntNegate { value } => tf::Builtin::IntNegate {
                 value: Box::new(self.emit_expr(value)?),
             },
@@ -1312,10 +1317,6 @@ impl TubeEncoder {
                 array: Box::new(self.emit_expr(array)?),
                 index: Box::new(self.emit_expr(index)?),
                 value: Box::new(self.emit_expr(value)?),
-            },
-            Builtin::EqualToType { lhs, rhs } => tf::Builtin::EqualTo {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
             },
         })
     }

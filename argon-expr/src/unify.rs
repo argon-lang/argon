@@ -34,6 +34,42 @@ pub trait Unify {
             (Expr::BoolLiteral(a), Expr::BoolLiteral(b)) => a == b,
             (Expr::Builtin(a), Expr::Builtin(b)) => self.unify_builtin(a, b),
             (Expr::BoxedType(a), Expr::BoxedType(b)) => self.unify(*a, *b),
+            (
+                Expr::ConjunctionType {
+                    lhs: a_lhs,
+                    rhs: a_rhs,
+                },
+                Expr::ConjunctionType {
+                    lhs: b_lhs,
+                    rhs: b_rhs,
+                },
+            )
+            | (
+                Expr::DisjunctionType {
+                    lhs: a_lhs,
+                    rhs: a_rhs,
+                },
+                Expr::DisjunctionType {
+                    lhs: b_lhs,
+                    rhs: b_rhs,
+                },
+            ) => self.unify(*a_lhs, *b_lhs) && self.unify(*a_rhs, *b_rhs),
+            (
+                Expr::EqualToType {
+                    r#type: a_type,
+                    lhs: a_lhs,
+                    rhs: a_rhs,
+                },
+                Expr::EqualToType {
+                    r#type: b_type,
+                    lhs: b_lhs,
+                    rhs: b_rhs,
+                },
+            ) => {
+                self.unify(*a_type, *b_type)
+                    && self.unify(*a_lhs, *b_lhs)
+                    && self.unify(*a_rhs, *b_rhs)
+            }
             (Expr::EnumType(a), Expr::EnumType(b)) => {
                 a.enum_ == b.enum_ && self.unify_all(a.arguments, b.arguments)
             }
@@ -291,36 +327,6 @@ pub trait Unify {
                     rhs: a_rhs,
                 },
                 Builtin::BoolNe {
-                    lhs: b_lhs,
-                    rhs: b_rhs,
-                },
-            )
-            | (
-                Builtin::ConjunctionType {
-                    lhs: a_lhs,
-                    rhs: a_rhs,
-                },
-                Builtin::ConjunctionType {
-                    lhs: b_lhs,
-                    rhs: b_rhs,
-                },
-            )
-            | (
-                Builtin::DisjunctionType {
-                    lhs: a_lhs,
-                    rhs: a_rhs,
-                },
-                Builtin::DisjunctionType {
-                    lhs: b_lhs,
-                    rhs: b_rhs,
-                },
-            )
-            | (
-                Builtin::EqualToType {
-                    lhs: a_lhs,
-                    rhs: a_rhs,
-                },
-                Builtin::EqualToType {
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },

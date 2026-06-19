@@ -362,7 +362,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                     FunctionParameterListType::NormalList => {
                         return Some(OverloadRejectionReason::ParameterListTypeMismatch);
                     }
-                    FunctionParameterListType::InferrableList(_) => {
+                    FunctionParameterListType::InferrableList(_) | FunctionParameterListType::RequiresList => {
                         let hole = Hole::new(self.call_location.clone(), param.param_type.clone());
                         if let Some(v) = v {
                             substitute_arg_in_param_types(
@@ -372,9 +372,6 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                                 &Expr::Hole(hole),
                             );
                         }
-                    }
-                    FunctionParameterListType::RequiresList => {
-                        todo!("implicit resolution")
                     }
                 }
             }
@@ -499,7 +496,18 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                         selected_args.push(Expr::Hole(hole));
                     }
                     FunctionParameterListType::RequiresList => {
-                        todo!("implicit resolution")
+                        let arg = self.type_checker.resolve_implicit(&param.param_type);
+
+                        if let Some(v) = v {
+                            substitute_arg_in_param_types(
+                                &mut params,
+                                &mut return_type,
+                                v,
+                                &arg.checked_expr,
+                            );
+                        }
+
+                        selected_args.push(arg.checked_expr);
                     }
                 }
             }
