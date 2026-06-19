@@ -1209,15 +1209,14 @@ trait TokenEmitterCommon {
         match &t {
             Expr::BoxedType(_) => Ok(vf::Token::Boxed {}),
 
-            Expr::Builtin { builtin, arguments } => {
-                let builtin = match encode_token_builtin_type(*builtin) {
+            Expr::Builtin(builtin) => {
+                let builtin = match self.token_builtin_type(builtin)? {
                     Some(builtin) => builtin,
                     None => return self.fallback_token_expr(&t),
                 };
 
                 Ok(vf::Token::Builtin {
                     b: Box::new(builtin),
-                    args: self.token_exprs(arguments)?,
                 })
             }
 
@@ -1269,6 +1268,30 @@ trait TokenEmitterCommon {
             .into_iter()
             .map(|expr| self.token_expr(expr).map(Box::new))
             .collect()
+    }
+
+    fn token_builtin_type(
+        &mut self,
+        builtin: &Builtin<DefaultExprContext>,
+    ) -> Result<Option<vf::BuiltinType>, InternalCompilerError> {
+        Ok(Some(match builtin {
+            Builtin::IntType => vf::BuiltinType::Int {},
+            Builtin::BoolType => vf::BuiltinType::Bool {},
+            Builtin::StringType => vf::BuiltinType::String {},
+            Builtin::NeverType => vf::BuiltinType::Never {},
+            Builtin::ArrayType { element_type } => vf::BuiltinType::Array {
+                element_type: Box::new(self.token_expr(element_type)?),
+            },
+            Builtin::ConjunctionType { lhs, rhs } => vf::BuiltinType::Conjunction {
+                lhs: Box::new(self.token_expr(lhs)?),
+                rhs: Box::new(self.token_expr(rhs)?),
+            },
+            Builtin::DisjunctionType { lhs, rhs } => vf::BuiltinType::Disjunction {
+                lhs: Box::new(self.token_expr(lhs)?),
+                rhs: Box::new(self.token_expr(rhs)?),
+            },
+            _ => return Ok(None),
+        }))
     }
 }
 
@@ -1619,109 +1642,50 @@ impl<'a> ExprEmitter<'a> {
                 output.output_unit_result(self)?
             }
 
-            Expr::Builtin { builtin, arguments } => {
-                fn emit_op<O: ExprOutput>(
+            Expr::Builtin(builtin) => {
+                fn emit_value_op<O: ExprOutput>(
                     emitter: &mut ExprEmitter<'_>,
                     e: &Expr<DefaultExprContext>,
-                    builtin: vf::BuiltinOp,
-                    arguments: &[Expr<DefaultExprContext>],
                     output: O,
+                    op: impl FnOnce(vf::RegisterId) -> vf::BuiltinOp,
                 ) -> EmitResult<O::ResultType> {
                     let rb = output.output_register(emitter, e)?;
-
-                    let mut registers = Vec::with_capacity(arguments.len() + 1);
-                    registers.push(Box::new(rb.register().clone()));
-
-                    for e in arguments {
-                        let r = emitter.expr(e, AnyRegister)?;
-                        registers.push(Box::new(r));
-                    }
-
+                    let dest = rb.register().clone();
                     emitter.emit(vf::Instruction::Builtin {
-                        op: builtin,
-                        tokens: vec![],
-                        registers,
+                        op: Box::new(op(dest)),
                     });
-
                     rb.into_result(emitter)
                 }
 
-                fn emit_parameterized_op<O: ExprOutput>(
+                fn emit_void_op<O: ExprOutput>(
                     emitter: &mut ExprEmitter<'_>,
-                    e: &Expr<DefaultExprContext>,
-                    builtin: vf::BuiltinOp,
-                    arguments: &[Expr<DefaultExprContext>],
                     output: O,
+                    op: vf::BuiltinOp,
                 ) -> EmitResult<O::ResultType> {
-                    let rb = output.output_register(emitter, e)?;
-
-                    let mut registers = Vec::with_capacity(arguments.len());
-                    registers.push(Box::new(rb.register().clone()));
-
-                    let Some((type_arg, arguments)) = arguments.split_first() else {
-                        todo!("return a proper error")
-                    };
-
-                    let t = emitter.token_expr(type_arg)?;
-
-                    for e in arguments {
-                        let r = emitter.expr(e, AnyRegister)?;
-                        registers.push(Box::new(r));
-                    }
-
-                    emitter.emit(vf::Instruction::Builtin {
-                        op: builtin,
-                        tokens: vec![Box::new(t)],
-                        registers,
-                    });
-
-                    rb.into_result(emitter)
-                }
-
-                fn emit_parameterized_void_op<O: ExprOutput>(
-                    emitter: &mut ExprEmitter<'_>,
-                    builtin: vf::BuiltinOp,
-                    arguments: &[Expr<DefaultExprContext>],
-                    output: O,
-                ) -> EmitResult<O::ResultType> {
-                    let Some((type_arg, arguments)) = arguments.split_first() else {
-                        todo!("return a proper error")
-                    };
-
-                    let mut registers = Vec::with_capacity(arguments.len());
-
-                    let t = emitter.token_expr(type_arg)?;
-
-                    for e in arguments {
-                        let r = emitter.expr(e, AnyRegister)?;
-                        registers.push(Box::new(r));
-                    }
-
-                    emitter.emit(vf::Instruction::Builtin {
-                        op: builtin,
-                        tokens: vec![Box::new(t)],
-                        registers,
-                    });
-
+                    emitter.emit(vf::Instruction::Builtin { op: Box::new(op) });
                     output.output_unit_result(emitter)
                 }
 
-                macro_rules! op {
-                    ($name: ident) => {
-                        emit_op(self, e, vf::BuiltinOp::$name, arguments, output)?
-                    };
+                macro_rules! unary_op {
+                    ($variant:ident, $value:expr) => {{
+                        let value = self.expr($value, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| vf::BuiltinOp::$variant {
+                            dest: Box::new(dest),
+                            value: Box::new(value),
+                        })?
+                    }};
                 }
 
-                macro_rules! parameterized_op {
-                    ($name: ident) => {
-                        emit_parameterized_op(self, e, vf::BuiltinOp::$name, arguments, output)?
-                    };
-                }
-
-                macro_rules! parameterized_void_op {
-                    ($name: ident) => {
-                        emit_parameterized_void_op(self, vf::BuiltinOp::$name, arguments, output)?
-                    };
+                macro_rules! binary_op {
+                    ($variant:ident, $lhs:expr, $rhs:expr) => {{
+                        let lhs = self.expr($lhs, AnyRegister)?;
+                        let rhs = self.expr($rhs, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| vf::BuiltinOp::$variant {
+                            dest: Box::new(dest),
+                            lhs: Box::new(lhs),
+                            rhs: Box::new(rhs),
+                        })?
+                    }};
                 }
 
                 match builtin {
@@ -1729,10 +1693,10 @@ impl<'a> ExprEmitter<'a> {
                     | Builtin::BoolType
                     | Builtin::StringType
                     | Builtin::NeverType
-                    | Builtin::ArrayType
-                    | Builtin::ConjunctionType
-                    | Builtin::DisjunctionType
-                    | Builtin::EqualToType => {
+                    | Builtin::ArrayType { .. }
+                    | Builtin::ConjunctionType { .. }
+                    | Builtin::DisjunctionType { .. }
+                    | Builtin::EqualToType { .. } => {
                         let t = self.token_expr(e)?;
                         let rb = output.output_register(self, e)?;
                         self.emit(vf::Instruction::LoadToken {
@@ -1742,33 +1706,93 @@ impl<'a> ExprEmitter<'a> {
                         rb.into_result(self)?
                     }
 
-                    Builtin::IntNegate => op!(IntNegate),
-                    Builtin::IntBitNot => op!(IntBitNot),
-                    Builtin::IntAdd => op!(IntAdd),
-                    Builtin::IntSub => op!(IntSub),
-                    Builtin::IntMul => op!(IntMul),
-                    Builtin::IntBitAnd => op!(IntBitAnd),
-                    Builtin::IntBitOr => op!(IntBitOr),
-                    Builtin::IntBitXor => op!(IntBitXor),
-                    Builtin::IntBitShiftLeft => op!(IntBitShiftLeft),
-                    Builtin::IntBitShiftRight => op!(IntBitShiftRight),
-                    Builtin::IntEq => op!(IntEq),
-                    Builtin::IntNe => op!(IntNe),
-                    Builtin::IntLt => op!(IntLt),
-                    Builtin::IntLe => op!(IntLe),
-                    Builtin::IntGt => op!(IntGt),
-                    Builtin::IntGe => op!(IntGe),
-                    Builtin::StringConcat => op!(StringConcat),
-                    Builtin::StringEq => op!(StringEq),
-                    Builtin::StringNe => op!(StringNe),
-                    Builtin::BoolEq => op!(BoolEq),
-                    Builtin::BoolNe => op!(BoolNe),
-                    Builtin::ArrayCreateUnsafeUninitialized => {
-                        parameterized_op!(ArrayCreateUnsafeUninitialized)
+                    Builtin::IntNegate { value } => unary_op!(IntNegate, value),
+                    Builtin::IntBitNot { value } => unary_op!(IntBitNot, value),
+                    Builtin::IntAdd { lhs, rhs } => binary_op!(IntAdd, lhs, rhs),
+                    Builtin::IntSub { lhs, rhs } => binary_op!(IntSub, lhs, rhs),
+                    Builtin::IntMul { lhs, rhs } => binary_op!(IntMul, lhs, rhs),
+                    Builtin::IntBitAnd { lhs, rhs } => binary_op!(IntBitAnd, lhs, rhs),
+                    Builtin::IntBitOr { lhs, rhs } => binary_op!(IntBitOr, lhs, rhs),
+                    Builtin::IntBitXor { lhs, rhs } => binary_op!(IntBitXor, lhs, rhs),
+                    Builtin::IntBitShiftLeft { lhs, rhs } => {
+                        binary_op!(IntBitShiftLeft, lhs, rhs)
                     }
-                    Builtin::ArrayLength => parameterized_op!(ArrayLength),
-                    Builtin::ArrayGet => parameterized_op!(ArrayGet),
-                    Builtin::ArraySet => parameterized_void_op!(ArraySet),
+                    Builtin::IntBitShiftRight { lhs, rhs } => {
+                        binary_op!(IntBitShiftRight, lhs, rhs)
+                    }
+                    Builtin::IntEq { lhs, rhs } => binary_op!(IntEq, lhs, rhs),
+                    Builtin::IntNe { lhs, rhs } => binary_op!(IntNe, lhs, rhs),
+                    Builtin::IntLt { lhs, rhs } => binary_op!(IntLt, lhs, rhs),
+                    Builtin::IntLe { lhs, rhs } => binary_op!(IntLe, lhs, rhs),
+                    Builtin::IntGt { lhs, rhs } => binary_op!(IntGt, lhs, rhs),
+                    Builtin::IntGe { lhs, rhs } => binary_op!(IntGe, lhs, rhs),
+                    Builtin::StringConcat { lhs, rhs } => binary_op!(StringConcat, lhs, rhs),
+                    Builtin::StringEq { lhs, rhs } => binary_op!(StringEq, lhs, rhs),
+                    Builtin::StringNe { lhs, rhs } => binary_op!(StringNe, lhs, rhs),
+                    Builtin::BoolEq { lhs, rhs } => binary_op!(BoolEq, lhs, rhs),
+                    Builtin::BoolNe { lhs, rhs } => binary_op!(BoolNe, lhs, rhs),
+                    Builtin::ArrayCreateUnsafeUninitialized {
+                        element_type,
+                        length,
+                    } => {
+                        let element_type = self.token_expr(element_type)?;
+                        let length = self.expr(length, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| {
+                            vf::BuiltinOp::ArrayCreateUnsafeUninitialized {
+                                element_type: Box::new(element_type),
+                                dest: Box::new(dest),
+                                length: Box::new(length),
+                            }
+                        })?
+                    }
+                    Builtin::ArrayLength {
+                        element_type,
+                        array,
+                    } => {
+                        let element_type = self.token_expr(element_type)?;
+                        let array = self.expr(array, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| vf::BuiltinOp::ArrayLength {
+                            element_type: Box::new(element_type),
+                            dest: Box::new(dest),
+                            array: Box::new(array),
+                        })?
+                    }
+                    Builtin::ArrayGet {
+                        element_type,
+                        array,
+                        index,
+                    } => {
+                        let element_type = self.token_expr(element_type)?;
+                        let array = self.expr(array, AnyRegister)?;
+                        let index = self.expr(index, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| vf::BuiltinOp::ArrayGet {
+                            element_type: Box::new(element_type),
+                            dest: Box::new(dest),
+                            array: Box::new(array),
+                            index: Box::new(index),
+                        })?
+                    }
+                    Builtin::ArraySet {
+                        element_type,
+                        array,
+                        index,
+                        value,
+                    } => {
+                        let element_type = self.token_expr(element_type)?;
+                        let array = self.expr(array, AnyRegister)?;
+                        let index = self.expr(index, AnyRegister)?;
+                        let value = self.expr(value, AnyRegister)?;
+                        emit_void_op(
+                            self,
+                            output,
+                            vf::BuiltinOp::ArraySet {
+                                element_type: Box::new(element_type),
+                                array: Box::new(array),
+                                index: Box::new(index),
+                                value: Box::new(value),
+                            },
+                        )?
+                    }
                 }
             }
 
@@ -2849,18 +2873,5 @@ fn import_specifier_tube(import: &ImportSpecifier) -> &TubeName {
     match import {
         ImportSpecifier::Global { tube, .. } => tube,
         ImportSpecifier::Local { parent, .. } => import_specifier_tube(parent),
-    }
-}
-
-fn encode_token_builtin_type(builtin: Builtin) -> Option<vf::BuiltinType> {
-    match builtin {
-        Builtin::IntType => Some(vf::BuiltinType::Int {}),
-        Builtin::BoolType => Some(vf::BuiltinType::Bool {}),
-        Builtin::StringType => Some(vf::BuiltinType::String {}),
-        Builtin::NeverType => Some(vf::BuiltinType::Never {}),
-        Builtin::ArrayType => Some(vf::BuiltinType::Array {}),
-        Builtin::ConjunctionType => Some(vf::BuiltinType::Conjunction {}),
-        Builtin::DisjunctionType => Some(vf::BuiltinType::Disjunction {}),
-        _ => None,
     }
 }

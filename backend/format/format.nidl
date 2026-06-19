@@ -589,9 +589,6 @@ enum expr {
     },
     builtin {
         builtin: builtin;
-        
-        @esexpr:(vararg)
-        args: list[expr];
     },
     boxed {
         t: expr;
@@ -825,48 +822,76 @@ record record-field-pattern {
 
 
 @esexpr:(derive-codec)
-simple enum builtin {
+enum builtin {
     int-type,
     bool-type,
     string-type,
-    never-type, 
-    array-type,
+    never-type,
+    array-type {
+        element-type: expr;
+    },
     
-    conjunction-type,
-    disjunction-type,
+    conjunction-type {
+        lhs: expr;
+        rhs: expr;
+    },
+    disjunction-type {
+        lhs: expr;
+        rhs: expr;
+    },
     
     
-    int-negate,
-    int-bit-not,
-    int-add,
-    int-sub,
-    int-mul,
-    int-bit-and,
-    int-bit-or,
-    int-bit-xor,
-    int-bit-shift-left,
-    int-bit-shift-right,
-    int-eq,
-    int-ne,
-    int-lt,
-    int-le,
-    int-gt,
-    int-ge,
+    int-negate { value: expr; },
+    int-bit-not { value: expr; },
+    int-add { lhs: expr; rhs: expr; },
+    int-sub { lhs: expr; rhs: expr; },
+    int-mul { lhs: expr; rhs: expr; },
+    int-bit-and { lhs: expr; rhs: expr; },
+    int-bit-or { lhs: expr; rhs: expr; },
+    int-bit-xor { lhs: expr; rhs: expr; },
+    int-bit-shift-left { lhs: expr; rhs: expr; },
+    int-bit-shift-right { lhs: expr; rhs: expr; },
+    int-eq { lhs: expr; rhs: expr; },
+    int-ne { lhs: expr; rhs: expr; },
+    int-lt { lhs: expr; rhs: expr; },
+    int-le { lhs: expr; rhs: expr; },
+    int-gt { lhs: expr; rhs: expr; },
+    int-ge { lhs: expr; rhs: expr; },
     
-    string-concat,
-    string-eq,
-    string-ne,
+    string-concat { lhs: expr; rhs: expr; },
+    string-eq { lhs: expr; rhs: expr; },
+    string-ne { lhs: expr; rhs: expr; },
 
-    bool-eq,
-    bool-ne,
-
-    array-create-unsafe-uninitialized,
-    array-length,
-    array-get,
-    array-set,
-
-    equal-to,
-    equal-to-refl,
+    bool-eq { lhs: expr; rhs: expr; },
+    bool-ne { lhs: expr; rhs: expr; },
+    
+    array-create-unsafe-uninitialized {
+        element-type: expr;
+        length: expr;
+    },
+    array-length {
+        element-type: expr;
+        array: expr;
+    },
+    array-get {
+        element-type: expr;
+        array: expr;
+        index: expr;
+    },
+    array-set {
+        element-type: expr;
+        array: expr;
+        index: expr;
+        value: expr;
+    },
+    
+    equal-to {
+        lhs: expr;
+        rhs: expr;
+    },
+    equal-to-refl {
+        value: expr;
+    },
 }
 
 @esexpr:(derive-codec)

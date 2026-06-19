@@ -62,7 +62,7 @@ pub trait ContextObject: ThreadSafe {
     fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern;
 
     fn normalize_fuel(&self) -> Fuel;
-    
+
     fn z3_rlimit(&self) -> u32;
 }
 

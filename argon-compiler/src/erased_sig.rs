@@ -63,7 +63,7 @@ pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedS
     normalizer.normalize(&mut t);
 
     match t {
-        Expr::Builtin { builtin, arguments } => erase_builtin(context, builtin, arguments),
+        Expr::Builtin(builtin) => erase_builtin(context, builtin),
 
         Expr::FunctionType { a, r } => ErasedSignatureType::Function(
             Box::new(erase_type(context, a.var_type)),
@@ -108,21 +108,14 @@ pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedS
     }
 }
 
-fn erase_builtin(
-    context: &Context,
-    builtin: Builtin,
-    mut arguments: Vec<Expr<DefaultExprContext>>,
-) -> ErasedSignatureType {
+fn erase_builtin(context: &Context, builtin: Builtin<DefaultExprContext>) -> ErasedSignatureType {
     match builtin {
         Builtin::IntType => ErasedSignatureType::Int,
         Builtin::BoolType => ErasedSignatureType::Bool,
         Builtin::StringType => ErasedSignatureType::String,
         Builtin::NeverType => ErasedSignatureType::Never,
-        Builtin::ArrayType => {
-            let Some(arg) = arguments.pop() else {
-                return ErasedSignatureType::Erased;
-            };
-            ErasedSignatureType::Array(Box::new(erase_type(context, arg)))
+        Builtin::ArrayType { element_type } => {
+            ErasedSignatureType::Array(Box::new(erase_type(context, *element_type)))
         }
         _ => ErasedSignatureType::Erased,
     }

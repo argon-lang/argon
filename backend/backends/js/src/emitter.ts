@@ -6,7 +6,6 @@ import type * as ir from "@argon-lang/js-backend-api/vm.js";
 import { Identifier } from "@argon-lang/js-backend-api/vm.js";
 import { JsExtern } from "@argon-lang/js-backend-api";
 import type { IterableElement, JsonObject, JsonValue, ReadonlyDeep } from "type-fest";
-import type { TupleOf } from "type-fest";
 
 import { name as isValidIdName } from "estree-util-is-identifier-name";
 
@@ -34,33 +33,29 @@ abstract class TokenEmitter {
             case "builtin":
                 switch(t.b.$type) {
                     case "bool":
-                        checkArgs(0)(t.args);
                         return {
                             type: "Literal",
                             value: "boolean",
                         };
 
                     case "int":
-                        checkArgs(0)(t.args);
                         return {
                             type: "Literal",
                             value: "bigint",
                         };
 
                     case "string":
-                        checkArgs(0)(t.args);
                         return {
                             type: "Literal",
                             value: "string",
                         };
 
                     case "array": {
-                        const [arg] = checkArgs(1)(t.args);
                         return {
                             type: "NewExpression",
                             callee: this.#moduleEmitter.getArgonRuntimeExport("ArrayType"),
                             arguments: [
-                                this.buildTokenValue(arg),
+                                this.buildTokenValue(t.b.elementType),
                             ],
                         };
                     }
@@ -1621,312 +1616,268 @@ class BlockEmitter extends EmitterBase {
                 break;
 
             case "builtin": {
-                const op = <N extends number>(n: N, f: (...args: Readonly<TupleOf<N, ir.RegisterId>>) => void) => {
-                    checkArgs(0)(insn.tokens);
-                    const args = checkArgs(n)(insn.registers);
-                    f(...args);
+                const op = insn.op;
+
+                const unary = (operator: estree.UnaryOperator, op: ir.BuiltinOp & { readonly value: ir.RegisterId, readonly dest: ir.RegisterId }) => {
+                    assign(op.dest, {
+                        type: "UnaryExpression",
+                        prefix: true,
+                        operator,
+                        argument: this.getReg(op.value),
+                    });
                 };
 
-                const unary = (operator: estree.UnaryOperator) =>
-                    op(2, (dest: ir.RegisterId, a: ir.RegisterId)=> {
-                        assign(dest, {
-                            type: "UnaryExpression",
-                            prefix: true,
-                            operator,
-                            argument: this.getReg(a),
-                        });
+                const binary = (operator: estree.BinaryOperator, op: ir.BuiltinOp & { readonly lhs: ir.RegisterId, readonly rhs: ir.RegisterId, readonly dest: ir.RegisterId }) => {
+                    assign(op.dest, {
+                        type: "BinaryExpression",
+                        left: this.getReg(op.lhs),
+                        operator,
+                        right: this.getReg(op.rhs)
                     });
-
-                const binary = (operator: estree.BinaryOperator) =>
-                    op(3, (dest: ir.RegisterId, a: ir.RegisterId, b: ir.RegisterId) => {
-                        assign(dest, {
-                            type: "BinaryExpression",
-                            left: this.getReg(a),
-                            operator,
-                            right: this.getReg(b)
-                        });
-                    });
-
-                const parameterizedOp = <N extends number>(n: N, f: (elementType: ir.Token, ...args: Readonly<TupleOf<N, ir.RegisterId>>) => void) => {
-                    const [elementType] = checkArgs(1)(insn.tokens);
-                    const args = checkArgs(n)(insn.registers);
-                    f(elementType, ...args);
                 };
 
-                switch(insn.op) {
+                switch(op.$type) {
                     case "int-negate":
-                        unary("-");
+                        unary("-", op);
                         break;
 
                     case "int-bit-not":
-                        unary("~");
+                        unary("~", op);
                         break;
 
                     case "bool-not":
-                        unary("!");
+                        unary("!", op);
                         break;
 
                     case "int-add":
-                        binary("+");
+                        binary("+", op);
                         break;
 
                     case "int-sub":
-                        binary("-");
+                        binary("-", op);
                         break;
 
                     case "int-mul":
-                        binary("*");
+                        binary("*", op);
                         break;
 
                     case "int-bit-and":
-                        binary("&");
+                        binary("&", op);
                         break;
 
                     case "int-bit-or":
-                        binary("|");
+                        binary("|", op);
                         break;
 
                     case "int-bit-xor":
-                        binary("^");
+                        binary("^", op);
                         break;
 
                     case "int-bit-shift-left":
-                        binary("<<");
+                        binary("<<", op);
                         break;
 
                     case "int-bit-shift-right":
-                        binary(">>");
+                        binary(">>", op);
                         break;
 
                     case "string-concat":
-                    {
-                        let dest = insn.registers[0];
-                        if(dest === undefined) {
-                            throw new Error("string-concat must have a destination");
-                        }
-
-                        let args = insn.registers.slice(1);
-
-                        let expr: estree.Expression =
-                            args.length === 0
-                                ? {
-                                    type: "Literal",
-                                    value: "",
-                                }
-                                : args
-                                    .map<estree.Expression>(reg => this.getReg(reg))
-                                    .reduce((left, right) => ({
-                                        type: "BinaryExpression",
-                                        operator: "+",
-                                        left,
-                                        right,
-                                    }));
-
-                        assign(dest, expr);
+                        binary("+", op);
                         break;
-                    }
 
                     case "int-eq":
                     case "string-eq":
                     case "bool-eq":
-                        binary("===");
+                        binary("===", op);
                         break;
 
                     case "int-ne":
                     case "string-ne":
                     case "bool-ne":
-                        binary("!==");
+                        binary("!==", op);
                         break;
 
                     case "int-lt":
-                        binary("<");
+                        binary("<", op);
                         break;
 
                     case "int-le":
-                        binary("<=");
+                        binary("<=", op);
                         break;
 
                     case "int-gt":
-                        binary(">");
+                        binary(">", op);
                         break;
 
                     case "int-ge":
-                        binary(">=");
+                        binary(">=", op);
                         break;
 
                     case "array-create-unsafe-uninitialized": {
-                        parameterizedOp(2, (_elementType, dest, size) => {
-                            this.stmts.push({
-                                type: "IfStatement",
-                                test: {
-                                    type: "BinaryExpression",
-                                    operator: ">",
-                                    left: this.getReg(size),
-                                    right: {
-                                        type: "CallExpression",
+                        this.stmts.push({
+                            type: "IfStatement",
+                            test: {
+                                type: "BinaryExpression",
+                                operator: ">",
+                                left: this.getReg(op.length),
+                                right: {
+                                    type: "CallExpression",
+                                    optional: false,
+                                    callee: {
+                                        type: "MemberExpression",
+                                        computed: false,
                                         optional: false,
-                                        callee: {
+                                        object: {
+                                            type: "Identifier",
+                                            name: "globalThis",
+                                        },
+                                        property: {
+                                            type: "Identifier",
+                                            name: "BigInt",
+                                        },
+                                    },
+                                    arguments: [
+                                        {
                                             type: "MemberExpression",
                                             computed: false,
                                             optional: false,
                                             object: {
-                                                type: "Identifier",
-                                                name: "globalThis",
-                                            },
-                                            property: {
-                                                type: "Identifier",
-                                                name: "BigInt",
-                                            },
-                                        },
-                                        arguments: [
-                                            {
                                                 type: "MemberExpression",
                                                 computed: false,
                                                 optional: false,
                                                 object: {
-                                                    type: "MemberExpression",
-                                                    computed: false,
-                                                    optional: false,
-                                                    object: {
-                                                        type: "Identifier",
-                                                        name: "globalThis",
-                                                    },
-                                                    property: {
-                                                        type: "Identifier",
-                                                        name: "Number",
-                                                    },
+                                                    type: "Identifier",
+                                                    name: "globalThis",
                                                 },
                                                 property: {
                                                     type: "Identifier",
-                                                    name: "MAX_SAFE_INTEGER",
+                                                    name: "Number",
                                                 },
                                             },
-                                        ],
-                                    },
-                                },
-                                consequent: {
-                                    type: "BlockStatement",
-                                    body: [
-                                        {
-                                            type: "ThrowStatement",
-                                            argument: {
-                                                type: "NewExpression",
-                                                callee: {
-                                                    type: "MemberExpression",
-                                                    computed: false,
-                                                    optional: false,
-                                                    object: {
-                                                        type: "Identifier",
-                                                        name: "globalThis",
-                                                    },
-                                                    property: {
-                                                        type: "Identifier",
-                                                        name: "Error",
-                                                    },
-                                                },
-                                                arguments: [
-                                                    {
-                                                        type: "Literal",
-                                                        value: "Array too large",
-                                                    },
-                                                ],
+                                            property: {
+                                                type: "Identifier",
+                                                name: "MAX_SAFE_INTEGER",
                                             },
                                         },
                                     ],
                                 },
-                            });
-
-                            assign(dest, {
-                                type: "NewExpression",
-                                callee: {
-                                    type: "MemberExpression",
-                                    computed: false,
-                                    optional: false,
-                                    object: {
-                                        type: "Identifier",
-                                        name: "globalThis",
-                                    },
-                                    property: {
-                                        type: "Identifier",
-                                        name: "Array",
-                                    },
-                                },
-                                arguments: [
+                            },
+                            consequent: {
+                                type: "BlockStatement",
+                                body: [
                                     {
-                                        type: "CallExpression",
-                                        optional: false,
-                                        callee: {
-                                            type: "MemberExpression",
-                                            computed: false,
-                                            optional: false,
-                                            object: {
-                                                type: "Identifier",
-                                                name: "globalThis",
+                                        type: "ThrowStatement",
+                                        argument: {
+                                            type: "NewExpression",
+                                            callee: {
+                                                type: "MemberExpression",
+                                                computed: false,
+                                                optional: false,
+                                                object: {
+                                                    type: "Identifier",
+                                                    name: "globalThis",
+                                                },
+                                                property: {
+                                                    type: "Identifier",
+                                                    name: "Error",
+                                                },
                                             },
-                                            property: {
-                                                type: "Identifier",
-                                                name: "Number",
-                                            },
+                                            arguments: [
+                                                {
+                                                    type: "Literal",
+                                                    value: "Array too large",
+                                                },
+                                            ],
                                         },
-                                        arguments: [
-                                            this.getReg(size),
-                                        ],
                                     },
                                 ],
-                            });
+                            },
+                        });
+
+                        assign(op.dest, {
+                            type: "NewExpression",
+                            callee: {
+                                type: "MemberExpression",
+                                computed: false,
+                                optional: false,
+                                object: {
+                                    type: "Identifier",
+                                    name: "globalThis",
+                                },
+                                property: {
+                                    type: "Identifier",
+                                    name: "Array",
+                                },
+                            },
+                            arguments: [
+                                {
+                                    type: "CallExpression",
+                                    optional: false,
+                                    callee: {
+                                        type: "MemberExpression",
+                                        computed: false,
+                                        optional: false,
+                                        object: {
+                                            type: "Identifier",
+                                            name: "globalThis",
+                                        },
+                                        property: {
+                                            type: "Identifier",
+                                            name: "Number",
+                                        },
+                                    },
+                                    arguments: [
+                                        this.getReg(op.length),
+                                    ],
+                                },
+                            ],
                         });
                         break;
                     }
 
                     case "array-length":
-                        parameterizedOp(2, (_elementType, dest, arr) => {
-                            assign(dest, {
-                                type: "MemberExpression",
-                                object: this.getReg(arr),
-                                property: {
-                                    type: "Identifier",
-                                    name: "length",
-                                },
-                                computed: false,
-                                optional: false,
-                            });
+                        assign(op.dest, {
+                            type: "MemberExpression",
+                            object: this.getReg(op.array),
+                            property: {
+                                type: "Identifier",
+                                name: "length",
+                            },
+                            computed: false,
+                            optional: false,
                         });
                         break;
 
                     case "array-get":
-                        parameterizedOp(3, (_elementType, dest, arr, index) => {
-                            assign(dest, {
-                                type: "MemberExpression",
-                                object: this.getReg(arr),
-                                property: this.getReg(index),
-                                computed: true,
-                                optional: false,
-                            });
+                        assign(op.dest, {
+                            type: "MemberExpression",
+                            object: this.getReg(op.array),
+                            property: this.getReg(op.index),
+                            computed: true,
+                            optional: false,
                         });
                         break;
 
                     case "array-set":
-                        parameterizedOp(3, (_elementType, arr, index, value) => {
-                            stmts.push({
-                                type: "ExpressionStatement",
-                                expression: {
-                                    type: "AssignmentExpression",
-                                    left: {
-                                        type: "MemberExpression",
-                                        object: this.getReg(arr),
-                                        property: this.getReg(index),
-                                        computed: true,
-                                        optional: false,
-                                    },
-                                    operator: "=",
-                                    right: this.getReg(value),
-                                }
-                            });
+                        stmts.push({
+                            type: "ExpressionStatement",
+                            expression: {
+                                type: "AssignmentExpression",
+                                left: {
+                                    type: "MemberExpression",
+                                    object: this.getReg(op.array),
+                                    property: this.getReg(op.index),
+                                    computed: true,
+                                    optional: false,
+                                },
+                                operator: "=",
+                                right: this.getReg(op.value),
+                            }
                         });
                         break;
 
                     default:
-                        insn.op satisfies never;
+                        op satisfies never;
                 }
                 break;
             }
@@ -2770,13 +2721,3 @@ function jsonToExpression(expr: JsonValue): estree.Expression {
 }
 
 
-
-function checkArgs<N extends number>(n: N): <T>(args: readonly T[]) => Readonly<TupleOf<N, T>> {
-    return <T>(args: readonly T[]): Readonly<TupleOf<N, T>> => {
-        if(args.length !== n) {
-            throw new Error(`Expected ${n} arguments, got ${args.length}`);
-        }
-
-        return args as TupleOf<N, T>;
-    };
-}

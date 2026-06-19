@@ -4,7 +4,6 @@ use argon_parser::ast::Identifier;
 use argon_util::UniqueIdentifier;
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
-use core::str::FromStr;
 use derivative::Derivative;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
@@ -76,10 +75,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         value: Box<Expr<EC>>,
         condition: Box<Expr<EC>>,
     },
-    Builtin {
-        builtin: Builtin,
-        arguments: Vec<Expr<EC>>,
-    },
+    Builtin(Builtin<EC>),
     Closure {
         v: Box<ClosureParameterVariable<EC>>,
         return_type: Box<Expr<EC>>,
@@ -188,38 +184,25 @@ pub enum Expr<EC: ExprContext + ?Sized> {
 
 impl<EC: ExprContext + ?Sized> Expr<EC> {
     pub fn bool_type() -> Expr<EC> {
-        Expr::Builtin {
-            builtin: Builtin::BoolType,
-            arguments: vec![],
-        }
+        Expr::Builtin(Builtin::BoolType)
     }
 
     pub fn int_type() -> Expr<EC> {
-        Expr::Builtin {
-            builtin: Builtin::IntType,
-            arguments: vec![],
-        }
+        Expr::Builtin(Builtin::IntType)
     }
 
     pub fn string_type() -> Expr<EC> {
-        Expr::Builtin {
-            builtin: Builtin::StringType,
-            arguments: vec![],
-        }
+        Expr::Builtin(Builtin::StringType)
     }
 
     pub fn never_type() -> Expr<EC> {
-        Expr::Builtin {
-            builtin: Builtin::NeverType,
-            arguments: vec![],
-        }
+        Expr::Builtin(Builtin::NeverType)
     }
 
     pub fn array_type(element_type: Expr<EC>) -> Expr<EC> {
-        Expr::Builtin {
-            builtin: Builtin::ArrayType,
-            arguments: vec![element_type],
-        }
+        Expr::Builtin(Builtin::ArrayType {
+            element_type: Box::new(element_type),
+        })
     }
 
     pub fn unit() -> Expr<EC> {
@@ -231,122 +214,171 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Builtin {
+#[derive(Derivative)]
+#[derivative(Debug(bound = ""))]
+#[derivative(Clone(bound = ""))]
+#[derivative(PartialEq(bound = ""))]
+#[derivative(Eq(bound = ""))]
+#[derivative(Hash(bound = ""))]
+pub enum Builtin<EC: ExprContext + ?Sized> {
     IntType,
     BoolType,
     StringType,
     NeverType,
-    ArrayType,
-    IntNegate,
-    IntBitNot,
-    IntAdd,
-    IntSub,
-    IntMul,
-    IntBitAnd,
-    IntBitOr,
-    IntBitXor,
-    IntBitShiftLeft,
-    IntBitShiftRight,
-    IntEq,
-    IntNe,
-    IntLt,
-    IntLe,
-    IntGt,
-    IntGe,
-    StringConcat,
-    StringEq,
-    StringNe,
-    BoolEq,
-    BoolNe,
-    ArrayCreateUnsafeUninitialized,
-    ArrayLength,
-    ArrayGet,
-    ArraySet,
-    ConjunctionType,
-    DisjunctionType,
-    EqualToType,
+    ArrayType {
+        element_type: Box<Expr<EC>>,
+    },
+    IntNegate {
+        value: Box<Expr<EC>>,
+    },
+    IntBitNot {
+        value: Box<Expr<EC>>,
+    },
+    IntAdd {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntSub {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntMul {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntBitAnd {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntBitOr {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntBitXor {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntBitShiftLeft {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntBitShiftRight {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntEq {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntNe {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntLt {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntLe {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntGt {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    IntGe {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    StringConcat {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    StringEq {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    StringNe {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    BoolEq {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    BoolNe {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    ArrayCreateUnsafeUninitialized {
+        element_type: Box<Expr<EC>>,
+        length: Box<Expr<EC>>,
+    },
+    ArrayLength {
+        element_type: Box<Expr<EC>>,
+        array: Box<Expr<EC>>,
+    },
+    ArrayGet {
+        element_type: Box<Expr<EC>>,
+        array: Box<Expr<EC>>,
+        index: Box<Expr<EC>>,
+    },
+    ArraySet {
+        element_type: Box<Expr<EC>>,
+        array: Box<Expr<EC>>,
+        index: Box<Expr<EC>>,
+        value: Box<Expr<EC>>,
+    },
+    ConjunctionType {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    DisjunctionType {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
+    EqualToType {
+        lhs: Box<Expr<EC>>,
+        rhs: Box<Expr<EC>>,
+    },
 }
 
-impl Builtin {
-    pub fn as_str(self) -> &'static str {
+impl<EC: ExprContext + ?Sized> Builtin<EC> {
+    pub fn as_str(&self) -> &'static str {
         match self {
             Builtin::IntType => "int_type",
             Builtin::BoolType => "bool_type",
             Builtin::StringType => "string_type",
             Builtin::NeverType => "never_type",
-            Builtin::ArrayType => "array_type",
-            Builtin::IntNegate => "int_negate",
-            Builtin::IntBitNot => "int_bitnot",
-            Builtin::IntAdd => "int_add",
-            Builtin::IntSub => "int_sub",
-            Builtin::IntMul => "int_mul",
-            Builtin::IntBitAnd => "int_bitand",
-            Builtin::IntBitOr => "int_bitor",
-            Builtin::IntBitXor => "int_bitxor",
-            Builtin::IntBitShiftLeft => "int_bitshiftleft",
-            Builtin::IntBitShiftRight => "int_bitshiftright",
-            Builtin::IntEq => "int_eq",
-            Builtin::IntNe => "int_ne",
-            Builtin::IntLt => "int_lt",
-            Builtin::IntLe => "int_le",
-            Builtin::IntGt => "int_gt",
-            Builtin::IntGe => "int_ge",
-            Builtin::StringConcat => "string_concat",
-            Builtin::StringEq => "string_eq",
-            Builtin::StringNe => "string_ne",
-            Builtin::BoolEq => "bool_eq",
-            Builtin::BoolNe => "bool_ne",
-            Builtin::ArrayCreateUnsafeUninitialized => "array_create_unsafe_uninitialized",
-            Builtin::ArrayLength => "array_length",
-            Builtin::ArrayGet => "array_get",
-            Builtin::ArraySet => "array_set",
-            Builtin::ConjunctionType => "conjunction_type",
-            Builtin::DisjunctionType => "disjunction_type",
-            Builtin::EqualToType => "equal_to_type",
-        }
-    }
-}
-
-impl FromStr for Builtin {
-    type Err = ();
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "int_type" => Ok(Builtin::IntType),
-            "bool_type" => Ok(Builtin::BoolType),
-            "string_type" => Ok(Builtin::StringType),
-            "never_type" => Ok(Builtin::NeverType),
-            "array_type" => Ok(Builtin::ArrayType),
-            "int_negate" => Ok(Builtin::IntNegate),
-            "int_bitnot" => Ok(Builtin::IntBitNot),
-            "int_add" => Ok(Builtin::IntAdd),
-            "int_sub" => Ok(Builtin::IntSub),
-            "int_mul" => Ok(Builtin::IntMul),
-            "int_bitand" => Ok(Builtin::IntBitAnd),
-            "int_bitor" => Ok(Builtin::IntBitOr),
-            "int_bitxor" => Ok(Builtin::IntBitXor),
-            "int_bitshiftleft" => Ok(Builtin::IntBitShiftLeft),
-            "int_bitshiftright" => Ok(Builtin::IntBitShiftRight),
-            "int_eq" => Ok(Builtin::IntEq),
-            "int_ne" => Ok(Builtin::IntNe),
-            "int_lt" => Ok(Builtin::IntLt),
-            "int_le" => Ok(Builtin::IntLe),
-            "int_gt" => Ok(Builtin::IntGt),
-            "int_ge" => Ok(Builtin::IntGe),
-            "string_concat" => Ok(Builtin::StringConcat),
-            "string_eq" => Ok(Builtin::StringEq),
-            "string_ne" => Ok(Builtin::StringNe),
-            "bool_eq" => Ok(Builtin::BoolEq),
-            "bool_ne" => Ok(Builtin::BoolNe),
-            "array_create_unsafe_uninitialized" => Ok(Builtin::ArrayCreateUnsafeUninitialized),
-            "array_length" => Ok(Builtin::ArrayLength),
-            "array_get" => Ok(Builtin::ArrayGet),
-            "array_set" => Ok(Builtin::ArraySet),
-            "conjunction_type" => Ok(Builtin::ConjunctionType),
-            "disjunction_type" => Ok(Builtin::DisjunctionType),
-            "equal_to_type" => Ok(Builtin::EqualToType),
-            _ => Err(()),
+            Builtin::ArrayType { .. } => "array_type",
+            Builtin::IntNegate { .. } => "int_negate",
+            Builtin::IntBitNot { .. } => "int_bitnot",
+            Builtin::IntAdd { .. } => "int_add",
+            Builtin::IntSub { .. } => "int_sub",
+            Builtin::IntMul { .. } => "int_mul",
+            Builtin::IntBitAnd { .. } => "int_bitand",
+            Builtin::IntBitOr { .. } => "int_bitor",
+            Builtin::IntBitXor { .. } => "int_bitxor",
+            Builtin::IntBitShiftLeft { .. } => "int_bitshiftleft",
+            Builtin::IntBitShiftRight { .. } => "int_bitshiftright",
+            Builtin::IntEq { .. } => "int_eq",
+            Builtin::IntNe { .. } => "int_ne",
+            Builtin::IntLt { .. } => "int_lt",
+            Builtin::IntLe { .. } => "int_le",
+            Builtin::IntGt { .. } => "int_gt",
+            Builtin::IntGe { .. } => "int_ge",
+            Builtin::StringConcat { .. } => "string_concat",
+            Builtin::StringEq { .. } => "string_eq",
+            Builtin::StringNe { .. } => "string_ne",
+            Builtin::BoolEq { .. } => "bool_eq",
+            Builtin::BoolNe { .. } => "bool_ne",
+            Builtin::ArrayCreateUnsafeUninitialized { .. } => "array_create_unsafe_uninitialized",
+            Builtin::ArrayLength { .. } => "array_length",
+            Builtin::ArrayGet { .. } => "array_get",
+            Builtin::ArraySet { .. } => "array_set",
+            Builtin::ConjunctionType { .. } => "conjunction_type",
+            Builtin::DisjunctionType { .. } => "disjunction_type",
+            Builtin::EqualToType { .. } => "equal_to_type",
         }
     }
 }

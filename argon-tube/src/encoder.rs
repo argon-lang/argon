@@ -890,12 +890,8 @@ impl TubeEncoder {
                 index: BigUint::from(*index),
                 tuple: Box::new(self.emit_expr(tuple)?),
             },
-            Expr::Builtin { builtin, arguments } => tf::Expr::Builtin {
-                builtin: encode_builtin(*builtin)?,
-                args: arguments
-                    .iter()
-                    .map(|arg| self.emit_expr(arg).map(Box::new))
-                    .collect::<Result<Vec<_>, _>>()?,
+            Expr::Builtin(builtin) => tf::Expr::Builtin {
+                builtin: Box::new(self.encode_builtin(builtin)?),
             },
             Expr::FunctionCall {
                 function,
@@ -1181,6 +1177,149 @@ impl TubeEncoder {
                 value: Box::new(self.emit_expr(value)?),
             },
             _ => todo!("Unimplement emit_expr for {:?}", expr),
+        })
+    }
+
+    fn encode_builtin(
+        &mut self,
+        builtin: &Builtin<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::Builtin, InternalCompilerError> {
+        Ok(match builtin {
+            Builtin::IntType => tf::Builtin::IntType {},
+            Builtin::BoolType => tf::Builtin::BoolType {},
+            Builtin::StringType => tf::Builtin::StringType {},
+            Builtin::NeverType => tf::Builtin::NeverType {},
+            Builtin::ArrayType { element_type } => tf::Builtin::ArrayType {
+                element_type: Box::new(self.emit_expr(element_type)?),
+            },
+            Builtin::ConjunctionType { lhs, rhs } => tf::Builtin::ConjunctionType {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::DisjunctionType { lhs, rhs } => tf::Builtin::DisjunctionType {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntNegate { value } => tf::Builtin::IntNegate {
+                value: Box::new(self.emit_expr(value)?),
+            },
+            Builtin::IntBitNot { value } => tf::Builtin::IntBitNot {
+                value: Box::new(self.emit_expr(value)?),
+            },
+            Builtin::IntAdd { lhs, rhs } => tf::Builtin::IntAdd {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntSub { lhs, rhs } => tf::Builtin::IntSub {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntMul { lhs, rhs } => tf::Builtin::IntMul {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntBitAnd { lhs, rhs } => tf::Builtin::IntBitAnd {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntBitOr { lhs, rhs } => tf::Builtin::IntBitOr {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntBitXor { lhs, rhs } => tf::Builtin::IntBitXor {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntBitShiftLeft { lhs, rhs } => tf::Builtin::IntBitShiftLeft {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntBitShiftRight { lhs, rhs } => tf::Builtin::IntBitShiftRight {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntEq { lhs, rhs } => tf::Builtin::IntEq {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntNe { lhs, rhs } => tf::Builtin::IntNe {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntLt { lhs, rhs } => tf::Builtin::IntLt {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntLe { lhs, rhs } => tf::Builtin::IntLe {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntGt { lhs, rhs } => tf::Builtin::IntGt {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::IntGe { lhs, rhs } => tf::Builtin::IntGe {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::StringConcat { lhs, rhs } => tf::Builtin::StringConcat {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::StringEq { lhs, rhs } => tf::Builtin::StringEq {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::StringNe { lhs, rhs } => tf::Builtin::StringNe {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::BoolEq { lhs, rhs } => tf::Builtin::BoolEq {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::BoolNe { lhs, rhs } => tf::Builtin::BoolNe {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
+            Builtin::ArrayCreateUnsafeUninitialized {
+                element_type,
+                length,
+            } => tf::Builtin::ArrayCreateUnsafeUninitialized {
+                element_type: Box::new(self.emit_expr(element_type)?),
+                length: Box::new(self.emit_expr(length)?),
+            },
+            Builtin::ArrayLength {
+                element_type,
+                array,
+            } => tf::Builtin::ArrayLength {
+                element_type: Box::new(self.emit_expr(element_type)?),
+                array: Box::new(self.emit_expr(array)?),
+            },
+            Builtin::ArrayGet {
+                element_type,
+                array,
+                index,
+            } => tf::Builtin::ArrayGet {
+                element_type: Box::new(self.emit_expr(element_type)?),
+                array: Box::new(self.emit_expr(array)?),
+                index: Box::new(self.emit_expr(index)?),
+            },
+            Builtin::ArraySet {
+                element_type,
+                array,
+                index,
+                value,
+            } => tf::Builtin::ArraySet {
+                element_type: Box::new(self.emit_expr(element_type)?),
+                array: Box::new(self.emit_expr(array)?),
+                index: Box::new(self.emit_expr(index)?),
+                value: Box::new(self.emit_expr(value)?),
+            },
+            Builtin::EqualToType { lhs, rhs } => tf::Builtin::EqualTo {
+                lhs: Box::new(self.emit_expr(lhs)?),
+                rhs: Box::new(self.emit_expr(rhs)?),
+            },
         })
     }
 
@@ -1537,42 +1676,4 @@ fn encode_parameter_list_type(
         }
         FunctionParameterListType::RequiresList => tf::FunctionParameterListType::RequiresList {},
     }
-}
-
-fn encode_builtin(builtin: Builtin) -> Result<tf::Builtin, InternalCompilerError> {
-    Ok(match builtin {
-        Builtin::IntType => tf::Builtin::IntType,
-        Builtin::BoolType => tf::Builtin::BoolType,
-        Builtin::StringType => tf::Builtin::StringType,
-        Builtin::NeverType => tf::Builtin::NeverType,
-        Builtin::ArrayType => tf::Builtin::ArrayType,
-        Builtin::ConjunctionType => tf::Builtin::ConjunctionType,
-        Builtin::DisjunctionType => tf::Builtin::DisjunctionType,
-        Builtin::IntNegate => tf::Builtin::IntNegate,
-        Builtin::IntBitNot => tf::Builtin::IntBitNot,
-        Builtin::IntAdd => tf::Builtin::IntAdd,
-        Builtin::IntSub => tf::Builtin::IntSub,
-        Builtin::IntMul => tf::Builtin::IntMul,
-        Builtin::IntBitAnd => tf::Builtin::IntBitAnd,
-        Builtin::IntBitOr => tf::Builtin::IntBitOr,
-        Builtin::IntBitXor => tf::Builtin::IntBitXor,
-        Builtin::IntBitShiftLeft => tf::Builtin::IntBitShiftLeft,
-        Builtin::IntBitShiftRight => tf::Builtin::IntBitShiftRight,
-        Builtin::IntEq => tf::Builtin::IntEq,
-        Builtin::IntNe => tf::Builtin::IntNe,
-        Builtin::IntLt => tf::Builtin::IntLt,
-        Builtin::IntLe => tf::Builtin::IntLe,
-        Builtin::IntGt => tf::Builtin::IntGt,
-        Builtin::IntGe => tf::Builtin::IntGe,
-        Builtin::StringConcat => tf::Builtin::StringConcat,
-        Builtin::StringEq => tf::Builtin::StringEq,
-        Builtin::StringNe => tf::Builtin::StringNe,
-        Builtin::BoolEq => tf::Builtin::BoolEq,
-        Builtin::BoolNe => tf::Builtin::BoolNe,
-        Builtin::ArrayCreateUnsafeUninitialized => tf::Builtin::ArrayCreateUnsafeUninitialized,
-        Builtin::ArrayLength => tf::Builtin::ArrayLength,
-        Builtin::ArrayGet => tf::Builtin::ArrayGet,
-        Builtin::ArraySet => tf::Builtin::ArraySet,
-        Builtin::EqualToType => tf::Builtin::EqualTo,
-    })
 }

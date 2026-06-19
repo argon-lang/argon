@@ -11,7 +11,12 @@ use argon_compiler::{
     Method, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner,
     SubstFunctionSignature, Trait, TubeName,
 };
-use argon_expr::{BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement};
+use argon_expr::{
+    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
+    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
+    LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
+    RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
+};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, Fuel, UniqueIdentifier};
@@ -27,8 +32,8 @@ use parse18_runtime::{Location, WithLocation};
 mod exhaustive;
 mod overload;
 
-use overload::{OverloadResolver, substitute_arg_in_param_types};
 use crate::type_checker::exhaustive::ExhaustiveChecker;
+use overload::{OverloadResolver, substitute_arg_in_param_types};
 
 pub fn type_check_type_expr(
     context: Context,
@@ -298,11 +303,10 @@ impl<'a> TypeInferResult<'a> {
             ),
             TypeInferResult::Finally { body_result, .. } => body_result.partially_inferred_type(),
             TypeInferResult::IfElse { true_body, .. } => true_body.partially_inferred_type(),
-            TypeInferResult::Match { arms, .. } => {
-                arms.first()
-                    .map(|arm| arm.body.partially_inferred_type())
-                    .unwrap_or_else(|| PartiallyInferredType::Full(Cow::Owned(Expr::never_type())))
-            }
+            TypeInferResult::Match { arms, .. } => arms
+                .first()
+                .map(|arm| arm.body.partially_inferred_type())
+                .unwrap_or_else(|| PartiallyInferredType::Full(Cow::Owned(Expr::never_type()))),
             TypeInferResult::Sequence { last_result, .. } => last_result.partially_inferred_type(),
         }
     }
@@ -883,8 +887,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             continue;
                         }
 
-                        let Some(field) =
-                            remaining_fields.remove(&field_literal.value.name.value)
+                        let Some(field) = remaining_fields.remove(&field_literal.value.name.value)
                         else {
                             self.context.reporter().report_error(
                                 CompileError::unknown_record_literal_field(
@@ -982,10 +985,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             }
                         })
                         .collect::<Vec<_>>();
-                    Expr::Builtin {
-                        builtin: Builtin::StringConcat,
-                        arguments: parts,
-                    }
+                    parts
+                        .into_iter()
+                        .reduce(|lhs, rhs| {
+                            Expr::Builtin(Builtin::StringConcat {
+                                lhs: Box::new(lhs),
+                                rhs: Box::new(rhs),
+                            })
+                        })
+                        .unwrap_or_else(|| Expr::StringLiteral(Box::from("")))
                 };
 
                 TypeInferResult::Complete(InferredType {
@@ -1209,12 +1217,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             CaseResults::FullyInferred(cases) => {
                                 let infer_res = mem::take(cases)
                                     .into_iter()
-                                    .map(|(location, pattern, inferred)| {
-                                        InferResultMatchArm {
-                                            location,
-                                            pattern,
-                                            body: TypeInferResult::Complete(inferred),
-                                        }
+                                    .map(|(location, pattern, inferred)| InferResultMatchArm {
+                                        location,
+                                        pattern,
+                                        body: TypeInferResult::Complete(inferred),
                                     })
                                     .collect();
 
@@ -1237,7 +1243,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let mut branch_typer = BranchTyper::new();
 
                 for case in cases {
-                    let pattern = self.check_pattern(&case.value.pattern, value.inferred_type.clone());
+                    let pattern =
+                        self.check_pattern(&case.value.pattern, value.inferred_type.clone());
 
                     let body = {
                         let mut nested = with_nested_scope!(self);
@@ -1250,7 +1257,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     };
 
                     match (&mut case_res, body) {
-                        (CaseResults::FullyInferred(cases), TypeInferResult::Complete(inferred)) => {
+                        (
+                            CaseResults::FullyInferred(cases),
+                            TypeInferResult::Complete(inferred),
+                        ) => {
                             branch_typer.add_branch(self, &inferred.inferred_type);
                             cases.push((&case.location, pattern, inferred));
                         }
@@ -1261,7 +1271,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 pattern,
                                 body,
                             });
-                        },
+                        }
                     }
                 }
 
@@ -1275,7 +1285,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         let patterns = arms.iter().map(|(_, pattern, _)| pattern);
                         exhaustive_check.check(&value.inferred_type, patterns)
                     }
-
 
                     CaseResults::InferResults(arms) => {
                         let patterns = arms.iter().map(|arm| &arm.pattern);
@@ -1293,11 +1302,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                         let cases = inferred_res
                             .into_iter()
-                            .map(|(_, pattern, inferred)| {
-                                MatchCase {
-                                    pattern,
-                                    body: inferred.checked_expr
-                                }
+                            .map(|(_, pattern, inferred)| MatchCase {
+                                pattern,
+                                body: inferred.checked_expr,
                             })
                             .collect();
 
@@ -1310,14 +1317,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         })
                     }
 
-                    CaseResults::InferResults(infer_res) => {
-                        TypeInferResult::Match {
-                            expression: Box::new(value.checked_expr),
-                            arms: infer_res,
-                        }
-                    }
+                    CaseResults::InferResults(infer_res) => TypeInferResult::Match {
+                        expression: Box::new(value.checked_expr),
+                        arms: infer_res,
+                    },
                 }
-            },
+            }
             ast::Expr::NewTraitObject { .. } => todo!("infer trait object construction"),
 
             ast::Expr::Raise { ex } => {
@@ -1737,132 +1742,186 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn infer_builtin<'e>(
         &mut self,
         location: &'e Location,
-        builtin: Builtin,
+        builtin_name: &str,
         args: VecDeque<ArgumentInfo<'e>>,
     ) -> TypeInferResult<'e> {
-        match builtin {
-            Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
-                self.infer_fixed_builtin(location, builtin, args, [], Expr::type_n(0))
-            }
+        macro_rules! nullary_builtin {
+            ($variant:ident) => {
+                self.infer_fixed_builtin(
+                    location,
+                    builtin_name,
+                    args,
+                    || [],
+                    || Expr::type_n(0),
+                    |[]| Builtin::$variant,
+                )
+            };
+        }
 
-            Builtin::ArrayType => self.infer_parameterized_builtin(
+        macro_rules! fixed_builtin {
+            (
+                $variant:ident,
+                [$($param_type:expr),* $(,)?] => $result_type:expr,
+                { $($field:ident),+ $(,)? }
+            ) => {
+                self.infer_fixed_builtin(
+                    location,
+                    builtin_name,
+                    args,
+                    || [$($param_type),*],
+                    || $result_type,
+                    |[$($field),+]| Builtin::$variant {
+                        $(
+                            $field: Box::new($field),
+                        )+
+                    },
+                )
+            };
+        }
+
+        macro_rules! int_to_int_binary_builtin {
+            ($variant:ident) => {
+                fixed_builtin!(
+                    $variant,
+                    [Expr::int_type(), Expr::int_type()] => Expr::int_type(),
+                    { lhs, rhs }
+                )
+            };
+        }
+
+        macro_rules! int_to_bool_binary_builtin {
+            ($variant:ident) => {
+                fixed_builtin!(
+                    $variant,
+                    [Expr::int_type(), Expr::int_type()] => Expr::bool_type(),
+                    { lhs, rhs }
+                )
+            };
+        }
+
+        macro_rules! same_type_bool_binary_builtin {
+            ($variant:ident, $type_expr:expr) => {
+                fixed_builtin!(
+                    $variant,
+                    [$type_expr, $type_expr] => Expr::bool_type(),
+                    { lhs, rhs }
+                )
+            };
+        }
+
+        macro_rules! parameterized_builtin {
+            (
+                $variant:ident,
+                $type_arg:ident,
+                [$($param_type:expr),* $(,)?] => $result_type:expr,
+                { $($field:ident),* $(,)? }
+            ) => {
+                self.infer_parameterized_builtin(
+                    location,
+                    builtin_name,
+                    args,
+                    |$type_arg| {
+                        let _ = &$type_arg;
+                        [$($param_type),*]
+                    },
+                    |$type_arg, _type_arg_type| {
+                        let _ = &$type_arg;
+                        $result_type
+                    },
+                    |$type_arg, [$($field),*]| Builtin::$variant {
+                        $type_arg: Box::new($type_arg),
+                        $(
+                            $field: Box::new($field),
+                        )*
+                    },
+                )
+            };
+        }
+
+        match builtin_name {
+            "int_type" => nullary_builtin!(IntType),
+            "bool_type" => nullary_builtin!(BoolType),
+            "string_type" => nullary_builtin!(StringType),
+            "never_type" => nullary_builtin!(NeverType),
+            "array_type" => self.infer_parameterized_builtin(
                 location,
-                builtin,
+                builtin_name,
                 args,
                 |_| [],
                 |_, element_type_type| element_type_type,
-            ),
-
-            Builtin::IntNegate | Builtin::IntBitNot => self.infer_fixed_builtin(
-                location,
-                builtin,
-                args,
-                [Expr::int_type()],
-                Expr::int_type(),
-            ),
-
-            Builtin::IntAdd
-            | Builtin::IntSub
-            | Builtin::IntMul
-            | Builtin::IntBitAnd
-            | Builtin::IntBitOr
-            | Builtin::IntBitXor
-            | Builtin::IntBitShiftLeft
-            | Builtin::IntBitShiftRight => self.infer_fixed_builtin(
-                location,
-                builtin,
-                args,
-                [Expr::int_type(), Expr::int_type()],
-                Expr::int_type(),
-            ),
-
-            Builtin::IntEq
-            | Builtin::IntNe
-            | Builtin::IntLt
-            | Builtin::IntLe
-            | Builtin::IntGt
-            | Builtin::IntGe => self.infer_fixed_builtin(
-                location,
-                builtin,
-                args,
-                [Expr::int_type(), Expr::int_type()],
-                Expr::bool_type(),
-            ),
-
-            Builtin::StringConcat => {
-                let checked_args = args
-                    .iter()
-                    .map(|arg| self.check(arg.arg, &Expr::string_type()))
-                    .collect();
-
-                TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::Builtin {
-                        builtin,
-                        arguments: checked_args,
-                    },
-                    inferred_type: Expr::string_type(),
-                })
-            }
-
-            Builtin::StringEq | Builtin::StringNe => self.infer_fixed_builtin(
-                location,
-                builtin,
-                args,
-                [Expr::string_type(), Expr::string_type()],
-                Expr::bool_type(),
-            ),
-
-            Builtin::BoolEq | Builtin::BoolNe => self.infer_fixed_builtin(
-                location,
-                builtin,
-                args,
-                [Expr::bool_type(), Expr::bool_type()],
-                Expr::bool_type(),
-            ),
-
-            Builtin::ArrayCreateUnsafeUninitialized => self.infer_parameterized_builtin(
-                location,
-                builtin,
-                args,
-                |_| [Expr::int_type()],
-                |element_type, _| Expr::array_type(element_type.clone()),
-            ),
-
-            Builtin::ArrayLength => self.infer_parameterized_builtin(
-                location,
-                builtin,
-                args,
-                |element_type| [Expr::array_type(element_type.clone())],
-                |_, _| Expr::int_type(),
-            ),
-
-            Builtin::ArrayGet => self.infer_parameterized_builtin(
-                location,
-                builtin,
-                args,
-                |element_type| [Expr::array_type(element_type.clone()), Expr::int_type()],
-                |element_type, _| element_type.clone(),
-            ),
-
-            Builtin::ArraySet => self.infer_parameterized_builtin(
-                location,
-                builtin,
-                args,
-                |element_type| {
-                    [
-                        Expr::array_type(element_type.clone()),
-                        Expr::int_type(),
-                        element_type.clone(),
-                    ]
+                |element_type, []| Builtin::ArrayType {
+                    element_type: Box::new(element_type),
                 },
-                |_, _| Expr::unit(),
             ),
 
-            Builtin::ConjunctionType | Builtin::DisjunctionType | Builtin::EqualToType => {
-                self.report_invalid_builtin(
-                    location,
-                    format!("{} (not implemented)", builtin.as_str()),
-                );
+            "int_negate" => fixed_builtin!(
+                IntNegate,
+                [Expr::int_type()] => Expr::int_type(),
+                { value }
+            ),
+            "int_bitnot" => fixed_builtin!(
+                IntBitNot,
+                [Expr::int_type()] => Expr::int_type(),
+                { value }
+            ),
+
+            "int_add" => int_to_int_binary_builtin!(IntAdd),
+            "int_sub" => int_to_int_binary_builtin!(IntSub),
+            "int_mul" => int_to_int_binary_builtin!(IntMul),
+            "int_bitand" => int_to_int_binary_builtin!(IntBitAnd),
+            "int_bitor" => int_to_int_binary_builtin!(IntBitOr),
+            "int_bitxor" => int_to_int_binary_builtin!(IntBitXor),
+            "int_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft),
+            "int_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight),
+
+            "int_eq" => int_to_bool_binary_builtin!(IntEq),
+            "int_ne" => int_to_bool_binary_builtin!(IntNe),
+            "int_lt" => int_to_bool_binary_builtin!(IntLt),
+            "int_le" => int_to_bool_binary_builtin!(IntLe),
+            "int_gt" => int_to_bool_binary_builtin!(IntGt),
+            "int_ge" => int_to_bool_binary_builtin!(IntGe),
+
+            "string_concat" => fixed_builtin!(
+                StringConcat,
+                [Expr::string_type(), Expr::string_type()] => Expr::string_type(),
+                { lhs, rhs }
+            ),
+            "string_eq" => same_type_bool_binary_builtin!(StringEq, Expr::string_type()),
+            "string_ne" => same_type_bool_binary_builtin!(StringNe, Expr::string_type()),
+            "bool_eq" => same_type_bool_binary_builtin!(BoolEq, Expr::bool_type()),
+            "bool_ne" => same_type_bool_binary_builtin!(BoolNe, Expr::bool_type()),
+
+            "array_create_unsafe_uninitialized" => parameterized_builtin!(
+                ArrayCreateUnsafeUninitialized,
+                element_type,
+                [Expr::int_type()] => Expr::array_type(element_type.clone()),
+                { length }
+            ),
+            "array_length" => parameterized_builtin!(
+                ArrayLength,
+                element_type,
+                [Expr::array_type(element_type.clone())] => Expr::int_type(),
+                { array }
+            ),
+            "array_get" => parameterized_builtin!(
+                ArrayGet,
+                element_type,
+                [Expr::array_type(element_type.clone()), Expr::int_type()] => element_type.clone(),
+                { array, index }
+            ),
+            "array_set" => parameterized_builtin!(
+                ArraySet,
+                element_type,
+                [
+                    Expr::array_type(element_type.clone()),
+                    Expr::int_type(),
+                    element_type.clone(),
+                ] => Expr::unit(),
+                { array, index, value }
+            ),
+
+            _ => {
+                self.report_invalid_builtin(location, builtin_name);
                 TypeInferResult::error()
             }
         }
@@ -1871,35 +1930,37 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn infer_fixed_builtin<'e, const ARG_COUNT: usize>(
         &mut self,
         location: &Location,
-        builtin: Builtin,
+        builtin_name: &str,
         args: VecDeque<ArgumentInfo<'e>>,
-        expected_arg_types: [Expr<TypeCheckExprContext>; ARG_COUNT],
-        inferred_type: Expr<TypeCheckExprContext>,
+        create_expected_arg_types: impl FnOnce() -> [Expr<TypeCheckExprContext>; ARG_COUNT],
+        create_inferred_type: impl FnOnce() -> Expr<TypeCheckExprContext>,
+        create_builtin: impl FnOnce(
+            [Expr<TypeCheckExprContext>; ARG_COUNT],
+        ) -> Builtin<TypeCheckExprContext>,
     ) -> TypeInferResult<'e> {
         if args.len() != ARG_COUNT {
-            self.report_builtin_arity_error(location, builtin, ARG_COUNT, args.len());
+            self.report_builtin_arity_error(location, builtin_name, ARG_COUNT, args.len());
             return TypeInferResult::error();
         }
 
         let checked_args = args
             .iter()
-            .zip(expected_arg_types)
+            .zip(create_expected_arg_types())
             .map(|(arg, expected_type)| self.check(arg.arg, &expected_type))
-            .collect();
+            .collect::<Vec<_>>();
+        let checked_args: [Expr<TypeCheckExprContext>; ARG_COUNT] =
+            checked_args.try_into().unwrap_or_else(|_| unreachable!());
 
         TypeInferResult::Complete(InferredType {
-            checked_expr: Expr::Builtin {
-                builtin,
-                arguments: checked_args,
-            },
-            inferred_type,
+            checked_expr: Expr::Builtin(create_builtin(checked_args)),
+            inferred_type: create_inferred_type(),
         })
     }
 
     fn infer_parameterized_builtin<'e, const REST_ARG_COUNT: usize>(
         &mut self,
         location: &'e Location,
-        builtin: Builtin,
+        builtin_name: &str,
         mut args: VecDeque<ArgumentInfo<'e>>,
         create_rest_arg_types: impl FnOnce(
             &Expr<TypeCheckExprContext>,
@@ -1908,12 +1969,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             &Expr<TypeCheckExprContext>,
             Expr<TypeCheckExprContext>,
         ) -> Expr<TypeCheckExprContext>,
+        create_builtin: impl FnOnce(
+            Expr<TypeCheckExprContext>,
+            [Expr<TypeCheckExprContext>; REST_ARG_COUNT],
+        ) -> Builtin<TypeCheckExprContext>,
     ) -> TypeInferResult<'e> {
         let expected_arg_count = REST_ARG_COUNT + 1;
         let total_arg_count = args.len();
 
         let Some(element_type_arg) = args.pop_front() else {
-            self.report_builtin_arity_error(location, builtin, expected_arg_count, 0);
+            self.report_builtin_arity_error(location, builtin_name, expected_arg_count, 0);
             return TypeInferResult::error();
         };
 
@@ -1924,23 +1989,25 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
         let expected_rest_arg_types = create_rest_arg_types(&element_type);
         if args.len() != REST_ARG_COUNT {
-            self.report_builtin_arity_error(location, builtin, expected_arg_count, total_arg_count);
+            self.report_builtin_arity_error(
+                location,
+                builtin_name,
+                expected_arg_count,
+                total_arg_count,
+            );
             return TypeInferResult::error();
         }
 
-        let mut checked_args = Vec::with_capacity(total_arg_count);
-        checked_args.push(element_type.clone());
-        checked_args.extend(
-            args.iter()
-                .zip(expected_rest_arg_types)
-                .map(|(arg, expected_type)| self.check(arg.arg, &expected_type)),
-        );
+        let checked_args = args
+            .iter()
+            .zip(expected_rest_arg_types)
+            .map(|(arg, expected_type)| self.check(arg.arg, &expected_type))
+            .collect::<Vec<_>>();
+        let checked_args: [Expr<TypeCheckExprContext>; REST_ARG_COUNT] =
+            checked_args.try_into().unwrap_or_else(|_| unreachable!());
 
         TypeInferResult::Complete(InferredType {
-            checked_expr: Expr::Builtin {
-                builtin,
-                arguments: checked_args,
-            },
+            checked_expr: Expr::Builtin(create_builtin(element_type.clone(), checked_args)),
             inferred_type: create_result_type(&element_type, element_type_type),
         })
     }
@@ -2022,36 +2089,34 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         'args: for (arg_result, arg) in args {
             let t = 'not_func_type: {
                 match expr_result.partially_inferred_type() {
-                    PartiallyInferredType::Full(t) => {
-                        match t.as_ref() {
-                            func_type @ Expr::FunctionType { a, r } => {
-                                let func_type = func_type.clone();
-                                let r = (**r).clone();
+                    PartiallyInferredType::Full(t) => match t.as_ref() {
+                        func_type @ Expr::FunctionType { a, r } => {
+                            let func_type = func_type.clone();
+                            let r = (**r).clone();
 
-                                let checked_arg = self.check_inferred_type(
-                                    &arg.arg.location,
-                                    arg_result,
-                                    ExpectedType::Exact(&a.var_type),
-                                );
-                                let f = self.check_inferred_type(
-                                    &arg.arg.location,
-                                    expr_result,
-                                    ExpectedType::Exact(&func_type),
-                                );
+                            let checked_arg = self.check_inferred_type(
+                                &arg.arg.location,
+                                arg_result,
+                                ExpectedType::Exact(&a.var_type),
+                            );
+                            let f = self.check_inferred_type(
+                                &arg.arg.location,
+                                expr_result,
+                                ExpectedType::Exact(&func_type),
+                            );
 
-                                expr_result = TypeInferResult::Complete(InferredType {
-                                    checked_expr: Expr::FunctionObjectCall {
-                                        function: Box::new(f.checked_expr),
-                                        argument: Box::new(checked_arg.checked_expr),
-                                    },
-                                    inferred_type: r,
-                                });
-                                continue 'args;
-                            }
-
-                            _ => break 'not_func_type PartiallyInferredType::Full(t),
+                            expr_result = TypeInferResult::Complete(InferredType {
+                                checked_expr: Expr::FunctionObjectCall {
+                                    function: Box::new(f.checked_expr),
+                                    argument: Box::new(checked_arg.checked_expr),
+                                },
+                                inferred_type: r,
+                            });
+                            continue 'args;
                         }
-                    }
+
+                        _ => break 'not_func_type PartiallyInferredType::Full(t),
+                    },
 
                     PartiallyInferredType::Closure => todo!(),
 
@@ -2105,18 +2170,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         };
                     }
 
-                    let Ok(builtin) = builtin_name.parse::<Builtin>() else {
-                        self.report_invalid_builtin(&func_expr.location, builtin_name);
-                        return CallInfo {
-                            location: call_location,
-                            callee: CalleeInfo::Error,
-                            arguments,
-                        };
-                    };
-
                     return CallInfo {
                         location: call_location,
-                        callee: CalleeInfo::Builtin(builtin),
+                        callee: CalleeInfo::Builtin(builtin_name),
                         arguments,
                     };
                 }
@@ -2679,15 +2735,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             body: inferred.checked_expr,
                         });
                     }
-                }
-                else {
+                } else {
                     selected_type = Expr::never_type();
                 }
 
                 InferredType {
                     checked_expr: Expr::Match {
                         value: expression,
-                        cases
+                        cases,
                     },
                     inferred_type: selected_type,
                 }
@@ -2787,10 +2842,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
-            var_type: Expr::Builtin {
-                builtin: Builtin::EqualToType,
-                arguments: vec![cond_expr.clone(), Expr::BoolLiteral(equal_to_value)],
-            },
+            var_type: Expr::Builtin(Builtin::EqualToType {
+                lhs: Box::new(cond_expr.clone()),
+                rhs: Box::new(Expr::BoolLiteral(equal_to_value)),
+            }),
             erasure_mode: ErasureMode::Erased,
             is_witness: false,
             is_mutable: false,
@@ -3082,7 +3137,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn report_builtin_arity_error(
         &self,
         location: &Location,
-        builtin: Builtin,
+        builtin_name: &str,
         expected: usize,
         actual: usize,
     ) {
@@ -3095,7 +3150,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             location,
             format!(
                 "{} (expected {expected} {argument_word}, got {actual})",
-                builtin.as_str()
+                builtin_name
             ),
         );
     }
@@ -3163,10 +3218,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             _ => {}
                         },
 
-                        Expr::Builtin {
-                            builtin: Builtin::NeverType,
-                            ..
-                        } => {
+                        Expr::Builtin(Builtin::NeverType) => {
                             return true;
                         }
 
@@ -3501,7 +3553,7 @@ struct AssignedValue<'e> {
 enum CalleeInfo<'a> {
     Error,
     Expr(&'a WithLocation<ast::Expr>),
-    Builtin(Builtin),
+    Builtin(&'a str),
     Variable(Variable<TypeCheckExprContext>),
     VariableStore(Variable<TypeCheckExprContext>, AssignedValue<'a>),
     VariableTupleElement(VariableTupleElement<TypeCheckExprContext>),
@@ -3538,10 +3590,7 @@ impl BranchTyper {
         t: &Expr<TypeCheckExprContext>,
     ) {
         match self.branch_type {
-            Expr::Builtin {
-                builtin: Builtin::NeverType,
-                ..
-            } => {
+            Expr::Builtin(Builtin::NeverType) => {
                 self.branch_type = t.clone();
             }
 

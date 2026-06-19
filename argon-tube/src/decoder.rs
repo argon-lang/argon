@@ -1131,10 +1131,7 @@ impl TubeDecoder {
                 t: Box::new(self.decode_expr(*t)),
                 value: Box::new(self.decode_expr(*value)),
             },
-            tf::Expr::Builtin { builtin, args } => Expr::Builtin {
-                builtin: decode_builtin(builtin),
-                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
-            },
+            tf::Expr::Builtin { builtin } => Expr::Builtin(self.decode_builtin(*builtin)),
             tf::Expr::Boxed { t } => Expr::BoxedType(Box::new(self.decode_expr(*t))),
             tf::Expr::Block { label, body } => Expr::Block {
                 label: self.decode_block_label(*label),
@@ -1367,6 +1364,147 @@ impl TubeDecoder {
             tf::Expr::VariableStore { v, value } => {
                 Expr::VariableStore(self.decode_var(*v), Box::new(self.decode_expr(*value)))
             }
+        }
+    }
+
+    fn decode_builtin(self: &Arc<Self>, builtin: tf::Builtin) -> Builtin<DefaultExprContext> {
+        match builtin {
+            tf::Builtin::IntType {} => Builtin::IntType,
+            tf::Builtin::BoolType {} => Builtin::BoolType,
+            tf::Builtin::StringType {} => Builtin::StringType,
+            tf::Builtin::NeverType {} => Builtin::NeverType,
+            tf::Builtin::ArrayType { element_type } => Builtin::ArrayType {
+                element_type: Box::new(self.decode_expr(*element_type)),
+            },
+            tf::Builtin::ConjunctionType { lhs, rhs } => Builtin::ConjunctionType {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::DisjunctionType { lhs, rhs } => Builtin::DisjunctionType {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntNegate { value } => Builtin::IntNegate {
+                value: Box::new(self.decode_expr(*value)),
+            },
+            tf::Builtin::IntBitNot { value } => Builtin::IntBitNot {
+                value: Box::new(self.decode_expr(*value)),
+            },
+            tf::Builtin::IntAdd { lhs, rhs } => Builtin::IntAdd {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntSub { lhs, rhs } => Builtin::IntSub {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntMul { lhs, rhs } => Builtin::IntMul {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntBitAnd { lhs, rhs } => Builtin::IntBitAnd {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntBitOr { lhs, rhs } => Builtin::IntBitOr {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntBitXor { lhs, rhs } => Builtin::IntBitXor {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntBitShiftLeft { lhs, rhs } => Builtin::IntBitShiftLeft {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntBitShiftRight { lhs, rhs } => Builtin::IntBitShiftRight {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntEq { lhs, rhs } => Builtin::IntEq {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntNe { lhs, rhs } => Builtin::IntNe {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntLt { lhs, rhs } => Builtin::IntLt {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntLe { lhs, rhs } => Builtin::IntLe {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntGt { lhs, rhs } => Builtin::IntGt {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::IntGe { lhs, rhs } => Builtin::IntGe {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::StringConcat { lhs, rhs } => Builtin::StringConcat {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::StringEq { lhs, rhs } => Builtin::StringEq {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::StringNe { lhs, rhs } => Builtin::StringNe {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::BoolEq { lhs, rhs } => Builtin::BoolEq {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::BoolNe { lhs, rhs } => Builtin::BoolNe {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::ArrayCreateUnsafeUninitialized {
+                element_type,
+                length,
+            } => Builtin::ArrayCreateUnsafeUninitialized {
+                element_type: Box::new(self.decode_expr(*element_type)),
+                length: Box::new(self.decode_expr(*length)),
+            },
+            tf::Builtin::ArrayLength {
+                element_type,
+                array,
+            } => Builtin::ArrayLength {
+                element_type: Box::new(self.decode_expr(*element_type)),
+                array: Box::new(self.decode_expr(*array)),
+            },
+            tf::Builtin::ArrayGet {
+                element_type,
+                array,
+                index,
+            } => Builtin::ArrayGet {
+                element_type: Box::new(self.decode_expr(*element_type)),
+                array: Box::new(self.decode_expr(*array)),
+                index: Box::new(self.decode_expr(*index)),
+            },
+            tf::Builtin::ArraySet {
+                element_type,
+                array,
+                index,
+                value,
+            } => Builtin::ArraySet {
+                element_type: Box::new(self.decode_expr(*element_type)),
+                array: Box::new(self.decode_expr(*array)),
+                index: Box::new(self.decode_expr(*index)),
+                value: Box::new(self.decode_expr(*value)),
+            },
+            tf::Builtin::EqualTo { lhs, rhs } => Builtin::EqualToType {
+                lhs: Box::new(self.decode_expr(*lhs)),
+                rhs: Box::new(self.decode_expr(*rhs)),
+            },
+            tf::Builtin::EqualToRefl { .. } => todo!("decode equal-to-refl builtin"),
         }
     }
 
@@ -2405,44 +2543,5 @@ fn decode_parameter_list_type(
             FunctionParameterListType::InferrableList(level)
         }
         tf::FunctionParameterListType::RequiresList {} => FunctionParameterListType::RequiresList,
-    }
-}
-
-fn decode_builtin(builtin: tf::Builtin) -> Builtin {
-    match builtin {
-        tf::Builtin::IntType => Builtin::IntType,
-        tf::Builtin::BoolType => Builtin::BoolType,
-        tf::Builtin::StringType => Builtin::StringType,
-        tf::Builtin::NeverType => Builtin::NeverType,
-        tf::Builtin::ArrayType => Builtin::ArrayType,
-        tf::Builtin::ConjunctionType => Builtin::ConjunctionType,
-        tf::Builtin::DisjunctionType => Builtin::DisjunctionType,
-        tf::Builtin::IntNegate => Builtin::IntNegate,
-        tf::Builtin::IntBitNot => Builtin::IntBitNot,
-        tf::Builtin::IntAdd => Builtin::IntAdd,
-        tf::Builtin::IntSub => Builtin::IntSub,
-        tf::Builtin::IntMul => Builtin::IntMul,
-        tf::Builtin::IntBitAnd => Builtin::IntBitAnd,
-        tf::Builtin::IntBitOr => Builtin::IntBitOr,
-        tf::Builtin::IntBitXor => Builtin::IntBitXor,
-        tf::Builtin::IntBitShiftLeft => Builtin::IntBitShiftLeft,
-        tf::Builtin::IntBitShiftRight => Builtin::IntBitShiftRight,
-        tf::Builtin::IntEq => Builtin::IntEq,
-        tf::Builtin::IntNe => Builtin::IntNe,
-        tf::Builtin::IntLt => Builtin::IntLt,
-        tf::Builtin::IntLe => Builtin::IntLe,
-        tf::Builtin::IntGt => Builtin::IntGt,
-        tf::Builtin::IntGe => Builtin::IntGe,
-        tf::Builtin::StringConcat => Builtin::StringConcat,
-        tf::Builtin::StringEq => Builtin::StringEq,
-        tf::Builtin::StringNe => Builtin::StringNe,
-        tf::Builtin::BoolEq => Builtin::BoolEq,
-        tf::Builtin::BoolNe => Builtin::BoolNe,
-        tf::Builtin::ArrayCreateUnsafeUninitialized => Builtin::ArrayCreateUnsafeUninitialized,
-        tf::Builtin::ArrayLength => Builtin::ArrayLength,
-        tf::Builtin::ArrayGet => Builtin::ArrayGet,
-        tf::Builtin::ArraySet => Builtin::ArraySet,
-        tf::Builtin::EqualTo => Builtin::EqualToType,
-        tf::Builtin::EqualToRefl => todo!("decode equal-to-refl builtin"),
     }
 }

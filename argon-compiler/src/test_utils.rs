@@ -2,9 +2,8 @@ use crate::access::AccessToken;
 use crate::platform::PlatformExtern;
 use crate::scope::{Lookup, Scope};
 use crate::{
-    erased_sig, CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum,
-    EnumVariant, EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName,
-    Unload,
+    CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum, EnumVariant,
+    EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName, Unload, erased_sig,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_expr::{BlockLabel, BlockLabelDeclaration, Expr, LoopLabels};

@@ -1,12 +1,17 @@
 #![allow(dead_code)]
 
 use super::{
-    build_subst_holes_for_args, DefaultToTypeCheckExprContextShifter, ExprNormalizer,
-    TypeCheckExprContext, TypeChecker,
+    DefaultToTypeCheckExprContextShifter, ExprNormalizer, TypeCheckExprContext, TypeChecker,
+    build_subst_holes_for_args,
 };
 use alloc::{sync::Arc, vec, vec::Vec};
-use argon_compiler::{Context, Enum, EnumVariant, z3expr::Z3Expr};
-use argon_expr::{Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, NormalizerScanner, Pattern, SubstScanner};
+#[cfg(test)]
+use argon_compiler::Context;
+use argon_compiler::{Enum, EnumVariant, z3expr::Z3Expr};
+use argon_expr::{
+    Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, NormalizerScanner, Pattern,
+    SubstScanner,
+};
 use core::str::FromStr;
 use num_bigint::BigInt;
 use parse18_runtime::Location;
@@ -22,7 +27,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
     pub(super) fn check<'b>(
         &mut self,
         value_type: &Expr<TypeCheckExprContext>,
-        patterns: impl IntoIterator<Item=&'b Pattern<TypeCheckExprContext>>,
+        patterns: impl IntoIterator<Item = &'b Pattern<TypeCheckExprContext>>,
     ) -> bool {
         let mut z3expr = Z3Expr::<TypeCheckExprContext>::new(self.tc.context.clone());
         let value = Dynamic::fresh_const("argon_match_value", &z3expr.argon_value_sort().value);
@@ -58,28 +63,19 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
         }
 
         match value_type {
-            Expr::Builtin {
-                builtin: Builtin::BoolType,
-                ..
-            } => tester(
+            Expr::Builtin(Builtin::BoolType) => tester(
                 z3expr,
                 &z3expr.argon_value_sort().value_testers.bool_literal,
                 value,
             ),
 
-            Expr::Builtin {
-                builtin: Builtin::IntType,
-                ..
-            } => tester(
+            Expr::Builtin(Builtin::IntType) => tester(
                 z3expr,
                 &z3expr.argon_value_sort().value_testers.int_literal,
                 value,
             ),
 
-            Expr::Builtin {
-                builtin: Builtin::StringType,
-                ..
-            } => tester(
+            Expr::Builtin(Builtin::StringType) => tester(
                 z3expr,
                 &z3expr.argon_value_sort().value_testers.string_literal,
                 value,
@@ -139,38 +135,22 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                         let enum_variant_term = z3expr.enum_variant_term(&variant);
 
                         conj.push(value_variant.eq(&enum_variant_term));
-                        conj.push(z3expr.is_variant_of(
-                            &enum_term,
-                            &enum_variant_term
-                        ));
-                        conj.extend(
-                            sig.parameters.into_iter().enumerate()
-                                .map(|(i, param)| {
-                                    let param_term = z3expr.enum_variant_arg(value, i);
-                                    
-                                    self.value_type_constraint(
-                                        z3expr,
-                                        &param_term,
-                                        &param.param_type
-                                    )
-                                })
-                        );
-                        conj.extend(
-                            variant.clone().fields().iter()
-                                .map(|field| {
-                                    let field_type = field.clone().field_type().as_ref().clone();
-                                    let mut field_type = DefaultToTypeCheckExprContextShifter.shift(field_type);
-                                    subst.scan(&mut field_type);
+                        conj.push(z3expr.is_variant_of(&enum_term, &enum_variant_term));
+                        conj.extend(sig.parameters.into_iter().enumerate().map(|(i, param)| {
+                            let param_term = z3expr.enum_variant_arg(value, i);
 
-                                    let field_term = z3expr.enum_field(value, field);
-                                    
-                                    self.value_type_constraint(
-                                        z3expr,
-                                        &field_term,
-                                        &field_type
-                                    )
-                                })
-                        );
+                            self.value_type_constraint(z3expr, &param_term, &param.param_type)
+                        }));
+                        conj.extend(variant.clone().fields().iter().map(|field| {
+                            let field_type = field.clone().field_type().as_ref().clone();
+                            let mut field_type =
+                                DefaultToTypeCheckExprContextShifter.shift(field_type);
+                            subst.scan(&mut field_type);
+
+                            let field_term = z3expr.enum_field(value, field);
+
+                            self.value_type_constraint(z3expr, &field_term, &field_type)
+                        }));
 
                         bool_and(&conj)
                     })
@@ -421,14 +401,14 @@ fn z3_int_from_big_int(value: &BigInt) -> Int {
 
 #[cfg(test)]
 mod tests {
-    use mitsein::vec1;
     use super::*;
-    use argon_compiler::test_utils::TestScope;
-    use argon_compiler::{ModulePath, TubeName};
+    use crate::type_checker::Model;
     use argon_compiler::access::AccessToken;
     use argon_compiler::scope::ShiftedScope;
+    use argon_compiler::test_utils::TestScope;
+    use argon_compiler::{ModulePath, TubeName};
     use argon_expr::EnumType;
-    use crate::type_checker::Model;
+    use mitsein::vec1;
 
     #[test]
     fn bool_patterns_are_exhaustive_when_both_literals_are_present() {
@@ -495,10 +475,10 @@ mod tests {
 
     #[test]
     fn enum_patterns_are_exhaustive_when_every_variant_is_present() {
-        let variant_a = Arc::new(argon_compiler::test_utils::TestEnumVariant::new("A"))
-            as Arc<dyn EnumVariant>;
-        let variant_b = Arc::new(argon_compiler::test_utils::TestEnumVariant::new("B"))
-            as Arc<dyn EnumVariant>;
+        let variant_a =
+            Arc::new(argon_compiler::test_utils::TestEnumVariant::new("A")) as Arc<dyn EnumVariant>;
+        let variant_b =
+            Arc::new(argon_compiler::test_utils::TestEnumVariant::new("B")) as Arc<dyn EnumVariant>;
         let enum_ = Arc::new(argon_compiler::test_utils::TestEnum::new(vec![
             variant_a.clone(),
             variant_b.clone(),

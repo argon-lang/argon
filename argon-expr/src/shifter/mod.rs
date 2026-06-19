@@ -1,5 +1,5 @@
 use crate::{
-    BlockLabel, ClosureParameterVariable, EnumType, Expr, ExprContext, ExpressionOwner,
+    BlockLabel, Builtin, ClosureParameterVariable, EnumType, Expr, ExprContext, ExpressionOwner,
     InstanceParameterVariable, InstanceType, LocalVariable, LoopLabels, MatchCase,
     MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern,
     RecordType, TraitType, Variable,
@@ -68,13 +68,7 @@ where
             value: Box::new(shifter.shift(*value)),
             condition: Box::new(shifter.shift(*condition)),
         },
-        Expr::Builtin { builtin, arguments } => Expr::Builtin {
-            builtin,
-            arguments: arguments
-                .into_iter()
-                .map(|argument| shifter.shift(argument))
-                .collect(),
-        },
+        Expr::Builtin(builtin) => Expr::Builtin(default_shift_builtin(shifter, builtin)),
         Expr::Condition {
             value,
             when_true_witness,
@@ -281,6 +275,149 @@ where
         name: label.name,
         kind: label.kind,
         block_result_type: shifter.shift(label.block_result_type),
+    }
+}
+
+fn default_shift_builtin<S>(shifter: &mut S, builtin: Builtin<S::EC1>) -> Builtin<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    match builtin {
+        Builtin::IntType => Builtin::IntType,
+        Builtin::BoolType => Builtin::BoolType,
+        Builtin::StringType => Builtin::StringType,
+        Builtin::NeverType => Builtin::NeverType,
+        Builtin::ArrayType { element_type } => Builtin::ArrayType {
+            element_type: Box::new(shifter.shift(*element_type)),
+        },
+        Builtin::IntNegate { value } => Builtin::IntNegate {
+            value: Box::new(shifter.shift(*value)),
+        },
+        Builtin::IntBitNot { value } => Builtin::IntBitNot {
+            value: Box::new(shifter.shift(*value)),
+        },
+        Builtin::IntAdd { lhs, rhs } => Builtin::IntAdd {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntSub { lhs, rhs } => Builtin::IntSub {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntMul { lhs, rhs } => Builtin::IntMul {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntBitAnd { lhs, rhs } => Builtin::IntBitAnd {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntBitOr { lhs, rhs } => Builtin::IntBitOr {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntBitXor { lhs, rhs } => Builtin::IntBitXor {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntBitShiftLeft { lhs, rhs } => Builtin::IntBitShiftLeft {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntBitShiftRight { lhs, rhs } => Builtin::IntBitShiftRight {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntEq { lhs, rhs } => Builtin::IntEq {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntNe { lhs, rhs } => Builtin::IntNe {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntLt { lhs, rhs } => Builtin::IntLt {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntLe { lhs, rhs } => Builtin::IntLe {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntGt { lhs, rhs } => Builtin::IntGt {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::IntGe { lhs, rhs } => Builtin::IntGe {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::StringConcat { lhs, rhs } => Builtin::StringConcat {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::StringEq { lhs, rhs } => Builtin::StringEq {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::StringNe { lhs, rhs } => Builtin::StringNe {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::BoolEq { lhs, rhs } => Builtin::BoolEq {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::BoolNe { lhs, rhs } => Builtin::BoolNe {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::ArrayCreateUnsafeUninitialized {
+            element_type,
+            length,
+        } => Builtin::ArrayCreateUnsafeUninitialized {
+            element_type: Box::new(shifter.shift(*element_type)),
+            length: Box::new(shifter.shift(*length)),
+        },
+        Builtin::ArrayLength {
+            element_type,
+            array,
+        } => Builtin::ArrayLength {
+            element_type: Box::new(shifter.shift(*element_type)),
+            array: Box::new(shifter.shift(*array)),
+        },
+        Builtin::ArrayGet {
+            element_type,
+            array,
+            index,
+        } => Builtin::ArrayGet {
+            element_type: Box::new(shifter.shift(*element_type)),
+            array: Box::new(shifter.shift(*array)),
+            index: Box::new(shifter.shift(*index)),
+        },
+        Builtin::ArraySet {
+            element_type,
+            array,
+            index,
+            value,
+        } => Builtin::ArraySet {
+            element_type: Box::new(shifter.shift(*element_type)),
+            array: Box::new(shifter.shift(*array)),
+            index: Box::new(shifter.shift(*index)),
+            value: Box::new(shifter.shift(*value)),
+        },
+        Builtin::ConjunctionType { lhs, rhs } => Builtin::ConjunctionType {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::DisjunctionType { lhs, rhs } => Builtin::DisjunctionType {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
+        Builtin::EqualToType { lhs, rhs } => Builtin::EqualToType {
+            lhs: Box::new(shifter.shift(*lhs)),
+            rhs: Box::new(shifter.shift(*rhs)),
+        },
     }
 }
 

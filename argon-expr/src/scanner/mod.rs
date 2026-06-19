@@ -1,5 +1,5 @@
 use crate::{
-    BlockLabel, EnumType, Expr, ExprContext, InstanceType, LoopLabels, MatchCase,
+    BlockLabel, Builtin, EnumType, Expr, ExprContext, InstanceType, LoopLabels, MatchCase,
     MethodInstanceType, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType,
     Variable,
 };
@@ -70,7 +70,7 @@ where
             value,
             condition,
         } => default_scan_label(scanner, label) && scanner.scan(value) && scanner.scan(condition),
-        Expr::Builtin { arguments, .. } => arguments.iter().all(|argument| scanner.scan(argument)),
+        Expr::Builtin(builtin) => default_scan_builtin(scanner, builtin),
         Expr::Condition {
             value,
             when_true_witness,
@@ -187,6 +187,63 @@ where
     S: ExprScanner + ?Sized,
 {
     scanner.scan(&label.block_result_type)
+}
+
+fn default_scan_builtin<S>(scanner: &mut S, builtin: &Builtin<S::EC>) -> bool
+where
+    S: ExprScanner + ?Sized,
+{
+    match builtin {
+        Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => true,
+        Builtin::ArrayType { element_type } => scanner.scan(element_type),
+        Builtin::IntNegate { value } | Builtin::IntBitNot { value } => scanner.scan(value),
+        Builtin::IntAdd { lhs, rhs }
+        | Builtin::IntSub { lhs, rhs }
+        | Builtin::IntMul { lhs, rhs }
+        | Builtin::IntBitAnd { lhs, rhs }
+        | Builtin::IntBitOr { lhs, rhs }
+        | Builtin::IntBitXor { lhs, rhs }
+        | Builtin::IntBitShiftLeft { lhs, rhs }
+        | Builtin::IntBitShiftRight { lhs, rhs }
+        | Builtin::IntEq { lhs, rhs }
+        | Builtin::IntNe { lhs, rhs }
+        | Builtin::IntLt { lhs, rhs }
+        | Builtin::IntLe { lhs, rhs }
+        | Builtin::IntGt { lhs, rhs }
+        | Builtin::IntGe { lhs, rhs }
+        | Builtin::StringConcat { lhs, rhs }
+        | Builtin::StringEq { lhs, rhs }
+        | Builtin::StringNe { lhs, rhs }
+        | Builtin::BoolEq { lhs, rhs }
+        | Builtin::BoolNe { lhs, rhs }
+        | Builtin::ConjunctionType { lhs, rhs }
+        | Builtin::DisjunctionType { lhs, rhs }
+        | Builtin::EqualToType { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        Builtin::ArrayCreateUnsafeUninitialized {
+            element_type,
+            length,
+        } => scanner.scan(element_type) && scanner.scan(length),
+        Builtin::ArrayLength {
+            element_type,
+            array,
+        } => scanner.scan(element_type) && scanner.scan(array),
+        Builtin::ArrayGet {
+            element_type,
+            array,
+            index,
+        } => scanner.scan(element_type) && scanner.scan(array) && scanner.scan(index),
+        Builtin::ArraySet {
+            element_type,
+            array,
+            index,
+            value,
+        } => {
+            scanner.scan(element_type)
+                && scanner.scan(array)
+                && scanner.scan(index)
+                && scanner.scan(value)
+        }
+    }
 }
 
 pub fn default_scan_loop_labels<S>(scanner: &mut S, labels: &LoopLabels<S::EC>) -> bool
@@ -319,9 +376,7 @@ where
                 && scanner.scan(value.as_mut())
                 && scanner.scan(condition.as_mut())
         }
-        Expr::Builtin { arguments, .. } => {
-            arguments.iter_mut().all(|argument| scanner.scan(argument))
-        }
+        Expr::Builtin(builtin) => default_scan_builtin_mut(scanner, builtin),
         Expr::Condition {
             value,
             when_true_witness,
@@ -452,6 +507,63 @@ where
     S: ExprScannerMut + ?Sized,
 {
     scanner.scan(&mut label.block_result_type)
+}
+
+fn default_scan_builtin_mut<S>(scanner: &mut S, builtin: &mut Builtin<S::EC>) -> bool
+where
+    S: ExprScannerMut + ?Sized,
+{
+    match builtin {
+        Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => true,
+        Builtin::ArrayType { element_type } => scanner.scan(element_type),
+        Builtin::IntNegate { value } | Builtin::IntBitNot { value } => scanner.scan(value),
+        Builtin::IntAdd { lhs, rhs }
+        | Builtin::IntSub { lhs, rhs }
+        | Builtin::IntMul { lhs, rhs }
+        | Builtin::IntBitAnd { lhs, rhs }
+        | Builtin::IntBitOr { lhs, rhs }
+        | Builtin::IntBitXor { lhs, rhs }
+        | Builtin::IntBitShiftLeft { lhs, rhs }
+        | Builtin::IntBitShiftRight { lhs, rhs }
+        | Builtin::IntEq { lhs, rhs }
+        | Builtin::IntNe { lhs, rhs }
+        | Builtin::IntLt { lhs, rhs }
+        | Builtin::IntLe { lhs, rhs }
+        | Builtin::IntGt { lhs, rhs }
+        | Builtin::IntGe { lhs, rhs }
+        | Builtin::StringConcat { lhs, rhs }
+        | Builtin::StringEq { lhs, rhs }
+        | Builtin::StringNe { lhs, rhs }
+        | Builtin::BoolEq { lhs, rhs }
+        | Builtin::BoolNe { lhs, rhs }
+        | Builtin::ConjunctionType { lhs, rhs }
+        | Builtin::DisjunctionType { lhs, rhs }
+        | Builtin::EqualToType { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        Builtin::ArrayCreateUnsafeUninitialized {
+            element_type,
+            length,
+        } => scanner.scan(element_type) && scanner.scan(length),
+        Builtin::ArrayLength {
+            element_type,
+            array,
+        } => scanner.scan(element_type) && scanner.scan(array),
+        Builtin::ArrayGet {
+            element_type,
+            array,
+            index,
+        } => scanner.scan(element_type) && scanner.scan(array) && scanner.scan(index),
+        Builtin::ArraySet {
+            element_type,
+            array,
+            index,
+            value,
+        } => {
+            scanner.scan(element_type)
+                && scanner.scan(array)
+                && scanner.scan(index)
+                && scanner.scan(value)
+        }
+    }
 }
 
 pub fn default_scan_loop_labels_mut<S>(scanner: &mut S, labels: &mut LoopLabels<S::EC>) -> bool
@@ -601,10 +713,10 @@ mod tests {
 
     #[test]
     fn scanner_short_circuits_when_scan_returns_false() {
-        let expr = Expr::Builtin {
-            builtin: Builtin::BoolEq,
-            arguments: vec![Expr::Hole(1), Expr::Hole(2), Expr::Hole(3)],
-        };
+        let expr = Expr::Builtin(Builtin::BoolEq {
+            lhs: Box::new(Expr::Hole(1)),
+            rhs: Box::new(Expr::Hole(2)),
+        });
         let mut scanner = StopAtHole {
             stop_at: 2,
             visited: Vec::new(),
@@ -627,19 +739,17 @@ mod tests {
 
     #[test]
     fn mutable_scanner_can_modify_exprs() {
-        let mut expr = Expr::Builtin {
-            builtin: Builtin::BoolEq,
-            arguments: vec![Expr::Hole(1), Expr::Hole(2)],
-        };
+        let mut expr = Expr::Builtin(Builtin::BoolEq {
+            lhs: Box::new(Expr::Hole(1)),
+            rhs: Box::new(Expr::Hole(2)),
+        });
 
         assert!(ReplaceHoles.scan(&mut expr));
 
         assert!(matches!(
             expr,
-            Expr::Builtin {
-                arguments,
-                ..
-            } if matches!(arguments.as_slice(), [Expr::Hole(11), Expr::Hole(12)])
+            Expr::Builtin(Builtin::BoolEq { lhs, rhs })
+                if matches!((&*lhs, &*rhs), (Expr::Hole(11), Expr::Hole(12)))
         ));
     }
 }

@@ -35,7 +35,7 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::BoxedType(t) => get_expr_type(&*t),
 
-        Expr::Builtin { builtin, arguments } => get_builtin_type(*builtin, arguments),
+        Expr::Builtin(builtin) => get_builtin_type(builtin),
 
         Expr::Finally { block_body, .. } => get_expr_type(&**block_body),
 
@@ -83,10 +83,10 @@ pub fn get_expr_type(expr: &Expr<DefaultExprContext>) -> Expr<DefaultExprContext
 
         Expr::Type(level) => match &**level {
             Expr::IntLiteral(level) => Expr::type_n(level + 1),
-            level => Expr::Type(Box::new(Expr::Builtin {
-                builtin: Builtin::IntAdd,
-                arguments: alloc::vec![level.clone(), Expr::IntLiteral(1.into())],
-            })),
+            level => Expr::Type(Box::new(Expr::Builtin(Builtin::IntAdd {
+                lhs: Box::new(level.clone()),
+                rhs: Box::new(Expr::IntLiteral(1.into())),
+            }))),
         },
 
         Expr::Unbox { t, .. } => (**t).clone(),
@@ -155,58 +155,50 @@ pub fn get_pattern_type(pattern: &Pattern<DefaultExprContext>) -> Expr<DefaultEx
     }
 }
 
-fn get_builtin_type(
-    builtin: Builtin,
-    arguments: &[Expr<DefaultExprContext>],
-) -> Expr<DefaultExprContext> {
+fn get_builtin_type(builtin: &Builtin<DefaultExprContext>) -> Expr<DefaultExprContext> {
     match builtin {
         Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
             Expr::type_n(0)
         }
 
-        Builtin::ArrayType => arguments
-            .into_iter()
-            .next()
-            .map(|element_type| get_expr_type(element_type))
-            .unwrap_or(Expr::Error),
+        Builtin::ArrayType { element_type } => get_expr_type(element_type),
 
-        Builtin::IntNegate
-        | Builtin::IntBitNot
-        | Builtin::IntAdd
-        | Builtin::IntSub
-        | Builtin::IntMul
-        | Builtin::IntBitAnd
-        | Builtin::IntBitOr
-        | Builtin::IntBitXor
-        | Builtin::IntBitShiftLeft
-        | Builtin::IntBitShiftRight
-        | Builtin::ArrayLength => Expr::int_type(),
+        Builtin::IntNegate { .. }
+        | Builtin::IntBitNot { .. }
+        | Builtin::IntAdd { .. }
+        | Builtin::IntSub { .. }
+        | Builtin::IntMul { .. }
+        | Builtin::IntBitAnd { .. }
+        | Builtin::IntBitOr { .. }
+        | Builtin::IntBitXor { .. }
+        | Builtin::IntBitShiftLeft { .. }
+        | Builtin::IntBitShiftRight { .. }
+        | Builtin::ArrayLength { .. } => Expr::int_type(),
 
-        Builtin::IntEq
-        | Builtin::IntNe
-        | Builtin::IntLt
-        | Builtin::IntLe
-        | Builtin::IntGt
-        | Builtin::IntGe
-        | Builtin::StringEq
-        | Builtin::StringNe
-        | Builtin::BoolEq
-        | Builtin::BoolNe => Expr::bool_type(),
+        Builtin::IntEq { .. }
+        | Builtin::IntNe { .. }
+        | Builtin::IntLt { .. }
+        | Builtin::IntLe { .. }
+        | Builtin::IntGt { .. }
+        | Builtin::IntGe { .. }
+        | Builtin::StringEq { .. }
+        | Builtin::StringNe { .. }
+        | Builtin::BoolEq { .. }
+        | Builtin::BoolNe { .. } => Expr::bool_type(),
 
-        Builtin::StringConcat => Expr::string_type(),
+        Builtin::StringConcat { .. } => Expr::string_type(),
 
-        Builtin::ArrayCreateUnsafeUninitialized => arguments
-            .into_iter()
-            .next()
-            .cloned()
-            .map(Expr::array_type)
-            .unwrap_or(Expr::Error),
+        Builtin::ArrayCreateUnsafeUninitialized { element_type, .. } => {
+            Expr::array_type((**element_type).clone())
+        }
 
-        Builtin::ArrayGet => arguments.into_iter().next().cloned().unwrap_or(Expr::Error),
+        Builtin::ArrayGet { element_type, .. } => (**element_type).clone(),
 
-        Builtin::ArraySet => Expr::unit(),
+        Builtin::ArraySet { .. } => Expr::unit(),
 
-        Builtin::ConjunctionType | Builtin::DisjunctionType | Builtin::EqualToType => Expr::Error,
+        Builtin::ConjunctionType { .. }
+        | Builtin::DisjunctionType { .. }
+        | Builtin::EqualToType { .. } => Expr::Error,
     }
 }
 

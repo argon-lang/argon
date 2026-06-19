@@ -240,9 +240,17 @@ enum builtin-type {
     bool,
     string,
     never,
-    array,
-    conjunction,
-    disjunction,
+    array {
+        element-type: token;
+    },
+    conjunction {
+        lhs: token;
+        rhs: token;
+    },
+    disjunction {
+        lhs: token;
+        rhs: token;
+    },
 }
 
 @esexpr:(derive-codec)
@@ -445,9 +453,6 @@ enum method-owner {
 enum token {
     builtin {
         b: builtin-type;
-
-        @esexpr:(vararg)
-        args: list[token];
     },
     function {
         input: token;
@@ -563,12 +568,6 @@ enum instruction {
 
     builtin {
         op: builtin-op;
-
-        @esexpr:(vararg)
-        tokens: list[token];
-
-        @esexpr:(vararg)
-        registers: list[register-id];
     },
 
     const-bool {
@@ -818,36 +817,54 @@ enum function-result {
 }
 
 @esexpr:(derive-codec)
-simple enum builtin-op {
-    int-negate,
-    int-bit-not,
-    int-add,
-    int-sub,
-    int-mul,
-    int-bit-and,
-    int-bit-or,
-    int-bit-xor,
-    int-bit-shift-left,
-    int-bit-shift-right,
-    int-eq,
-    int-ne,
-    int-lt,
-    int-le,
-    int-gt,
-    int-ge,
+enum builtin-op {
+    int-negate { dest: register-id; value: register-id; },
+    int-bit-not { dest: register-id; value: register-id; },
+    int-add { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-sub { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-mul { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-and { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-or { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-xor { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-shift-left { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-shift-right { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-eq { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-ne { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-lt { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-le { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-gt { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-ge { dest: register-id; lhs: register-id; rhs: register-id; },
 
-    string-concat,
-    string-eq,
-    string-ne,
+    string-concat { dest: register-id; lhs: register-id; rhs: register-id; },
+    string-eq { dest: register-id; lhs: register-id; rhs: register-id; },
+    string-ne { dest: register-id; lhs: register-id; rhs: register-id; },
 
-    bool-not,
-    bool-eq,
-    bool-ne,
+    bool-not { dest: register-id; value: register-id; },
+    bool-eq { dest: register-id; lhs: register-id; rhs: register-id; },
+    bool-ne { dest: register-id; lhs: register-id; rhs: register-id; },
 
-    array-create-unsafe-uninitialized,
-    array-length,
-    array-get,
-    array-set,
+    array-create-unsafe-uninitialized {
+        element-type: token;
+        dest: register-id;
+        length: register-id;
+    },
+    array-length {
+        element-type: token;
+        dest: register-id;
+        array: register-id;
+    },
+    array-get {
+        element-type: token;
+        dest: register-id;
+        array: register-id;
+        index: register-id;
+    },
+    array-set {
+        element-type: token;
+        array: register-id;
+        index: register-id;
+        value: register-id;
+    },
 }
 
 @esexpr:(derive-codec)
@@ -855,4 +872,3 @@ record field-extractor {
     r: register-id;
     field-id: nat;
 }
-
