@@ -1237,6 +1237,11 @@ trait TokenEmitterCommon {
                 args: self.token_exprs(&enum_type.arguments)?,
             }),
 
+            Expr::NewInstance { instance, arguments }  => Ok(vf::Token::InstanceValue {
+                instance_id: BigUint::from(self.vm_encoder().get_instance_id(instance.clone())),
+                args: self.token_exprs(arguments)?,
+            }),
+
             Expr::TraitType(trait_type) => Ok(vf::Token::Trait {
                 trait_id: BigUint::from(self.vm_encoder().get_trait_id(trait_type.trait_.clone())),
                 args: self.token_exprs(&trait_type.arguments)?,
