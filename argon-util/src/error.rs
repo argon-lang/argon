@@ -282,8 +282,8 @@ impl CompileError {
         )
     }
 
-    pub fn invalid_override(loc: Location) -> Self {
-        Self::new(ErrorCode::InvalidOverride, "Invalid override", Some(loc))
+    pub fn invalid_override(loc: Option<Location>) -> Self {
+        Self::new(ErrorCode::InvalidOverride, "Invalid override", loc)
     }
 
     pub fn override_access_narrowing(

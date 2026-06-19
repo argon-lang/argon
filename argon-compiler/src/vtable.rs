@@ -298,7 +298,11 @@ impl VTableBuilder {
         }
 
         if !found_override {
-            todo!()
+            self.context
+                .reporter()
+                .report_error(CompileError::invalid_override(
+                    self.concrete_location.clone(),
+                ))
         }
     }
 
