@@ -1,4 +1,7 @@
-use crate::modifiers::{ACCESS_MODIFIER, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT, METHOD_SLOT_CONCRETE, ModifierParser, ERASURE_MODE_NON_TOKEN};
+use crate::modifiers::{
+    ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT,
+    METHOD_SLOT_CONCRETE, ModifierParser,
+};
 use crate::module::DeclarationResult;
 use crate::signature::SignatureParser;
 use crate::type_checker::{TypeCheckOptions, type_check_expr};
@@ -14,8 +17,8 @@ use argon_expr::{
     ErasureMode, Expr, ExpressionOwner, InstanceParameterVariable, TraitType, Variable,
 };
 use argon_parser::ast;
-use argon_util::{CompileError, MultiSlice};
 use argon_util::sync::{Mutex, ThreadSafe, mutex_lock};
+use argon_util::{CompileError, MultiSlice};
 use core::fmt::Debug;
 
 pub trait MethodClosure: ThreadSafe {
@@ -192,7 +195,12 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
 
                 let expr = type_check_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&access_token, &parameter_scope, self.metadata.erasure_mode),
+                    TypeCheckOptions::new(
+                        &access_token,
+                        &parameter_scope,
+                        self.metadata.erasure_mode,
+                    )
+                    .with_effect_info(self.metadata.effect_info),
                     body.as_ref(),
                     &signature.return_type,
                 );

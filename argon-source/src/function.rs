@@ -15,8 +15,8 @@ use argon_compiler::{
 };
 use argon_expr::{ErasureMode, ExpressionOwner};
 use argon_parser::ast;
-use argon_util::{CompileError, MultiSlice};
 use argon_util::sync::{Mutex, mutex_lock};
+use argon_util::{CompileError, MultiSlice};
 use core::fmt::Debug;
 
 pub struct SourceFunction {
@@ -148,7 +148,8 @@ impl Function for SourceFunction {
 
                 let expr = type_check_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&access_token, &scope, self.metadata.erasure_mode),
+                    TypeCheckOptions::new(&access_token, &scope, self.metadata.erasure_mode)
+                        .with_effect_info(self.metadata.effect_info),
                     body.as_ref(),
                     &signature.return_type,
                 );

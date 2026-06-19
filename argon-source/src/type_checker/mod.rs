@@ -3,13 +3,23 @@ use alloc::borrow::{Cow, ToOwned};
 use alloc::collections::VecDeque;
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::access::AccessToken;
+use argon_compiler::erasure::ErasureScanner;
 use argon_compiler::expr_type::ExprTypeContext;
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::shifter::DefaultToExprTypeContextShifter;
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{Context, Declaration, DefaultExprComparer, DefaultExprContext, Function, FunctionImplementation, FunctionSignature, MethodOwner, ModuleExportBinding, ModulePath, RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, TubeName};
-use argon_expr::{BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut, ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement};
+use argon_compiler::{
+    Context, Declaration, DefaultExprComparer, DefaultExprContext, EffectInfo, Function,
+    FunctionImplementation, FunctionSignature, MethodOwner, ModuleExportBinding, ModulePath,
+    RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, TubeName,
+};
+use argon_expr::{
+    BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
+    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut,
+    ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
+    RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
+};
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
 use argon_util::{CompileError, Fuel, UniqueIdentifier};
@@ -20,7 +30,6 @@ use hashbrown::{HashMap, HashSet, hash_map};
 use mitsein::vec1;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
-use argon_compiler::erasure::ErasureScanner;
 use parse18_runtime::{Location, WithLocation};
 
 mod exhaustive;
@@ -34,7 +43,12 @@ pub fn type_check_type_expr(
     options: TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
 ) -> Expr<DefaultExprContext> {
-    let TypeCheckOptions { access, scope, erasure_mode } = options;
+    let TypeCheckOptions {
+        access,
+        scope,
+        erasure_mode,
+        ..
+    } = options;
     let shifted_scope = ShiftedScope::new(scope, default_to_type_check_shifter());
     let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
@@ -48,9 +62,14 @@ pub fn type_check_type_expr(
 
     let expr = checker.check_type(e);
 
-    let result = TypeCheckToDefaultExprContextShifter { context: context.clone(), model }.shift(expr);
+    let result = TypeCheckToDefaultExprContextShifter {
+        context: context.clone(),
+        model,
+    }
+    .shift(expr);
 
-    check_erasure(context, options, e, &result);
+    check_erasure(context.clone(), &options, e, &result);
+    check_purity(context, &options, e, &result);
 
     result
 }
@@ -61,7 +80,12 @@ pub fn type_check_expr(
     e: &WithLocation<ast::Expr>,
     expected_type: &Expr<DefaultExprContext>,
 ) -> Expr<DefaultExprContext> {
-    let TypeCheckOptions { access, scope, erasure_mode } = options;
+    let TypeCheckOptions {
+        access,
+        scope,
+        erasure_mode,
+        ..
+    } = options;
     let shifted_scope = ShiftedScope::new(scope, default_to_type_check_shifter());
     let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
@@ -76,16 +100,21 @@ pub fn type_check_expr(
     let expected_type = default_to_type_check_shifter().shift(expected_type.clone());
     let expr = checker.check(e, &expected_type);
 
-    let result = TypeCheckToDefaultExprContextShifter { context: context.clone(), model }.shift(expr);
+    let result = TypeCheckToDefaultExprContextShifter {
+        context: context.clone(),
+        model,
+    }
+    .shift(expr);
 
-    check_erasure(context, options, e, &result);
+    check_erasure(context.clone(), &options, e, &result);
+    check_purity(context, &options, e, &result);
 
     result
 }
 
 fn check_erasure(
     context: Context,
-    options: TypeCheckOptions<'_>,
+    options: &TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
     result: &Expr<DefaultExprContext>,
 ) {
@@ -99,10 +128,30 @@ fn check_erasure(
     erasure_scanner.scan(&result);
 }
 
+fn check_purity(
+    context: Context,
+    options: &TypeCheckOptions<'_>,
+    e: &WithLocation<ast::Expr>,
+    result: &Expr<DefaultExprContext>,
+) {
+    if options.effect_info != EffectInfo::Pure {
+        return;
+    }
+
+    let mut purity_scanner = PurityScanner::new();
+    purity_scanner.scan(result);
+    if purity_scanner.found_impure() {
+        context
+            .reporter()
+            .report_error(CompileError::purity_error(e.location.clone()));
+    }
+}
+
 pub struct TypeCheckOptions<'a> {
     access: &'a AccessToken,
     scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
     erasure_mode: ErasureMode,
+    effect_info: EffectInfo,
 }
 
 impl<'a> TypeCheckOptions<'a> {
@@ -111,7 +160,17 @@ impl<'a> TypeCheckOptions<'a> {
         scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
         erasure_mode: ErasureMode,
     ) -> Self {
-        Self { access, scope, erasure_mode }
+        Self {
+            access,
+            scope,
+            erasure_mode,
+            effect_info: EffectInfo::Effectful,
+        }
+    }
+
+    pub fn with_effect_info(mut self, effect_info: EffectInfo) -> Self {
+        self.effect_info = effect_info;
+        self
     }
 }
 
@@ -411,7 +470,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn check_type_with_meta_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> InferredType {
         let infer = self.infer(expr);
-        let mut inferred = self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType);
+        let mut inferred =
+            self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType);
 
         if !self.treat_as_token(&inferred.checked_expr) {
             inferred.checked_expr = Expr::BoxedType(Box::new(inferred.checked_expr));
@@ -432,8 +492,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             | Expr::BigType(_)
             | Expr::BoxedType(_) => true,
 
-            Expr::FunctionCall { function, .. } =>
-                function.metadata().erasure_mode == ErasureMode::Token,
+            Expr::FunctionCall { function, .. } => {
+                function.metadata().erasure_mode == ErasureMode::Token
+            }
 
             Expr::Variable(v) => v.erasure_mode() == ErasureMode::Token,
 
@@ -455,18 +516,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 })
             }
 
-            ast::Expr::BoolLiteral(value) => {
-                TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::BoolLiteral(*value),
-                    inferred_type: Expr::bool_type(),
-                })
-            },
-            ast::Expr::IntLiteral(value) => {
-                TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::IntLiteral(value.clone()),
-                    inferred_type: Expr::int_type(),
-                })
-            },
+            ast::Expr::BoolLiteral(value) => TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::BoolLiteral(*value),
+                inferred_type: Expr::bool_type(),
+            }),
+            ast::Expr::IntLiteral(value) => TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::IntLiteral(value.clone()),
+                inferred_type: Expr::int_type(),
+            }),
 
             ast::Expr::Break { label, value } => {
                 let block_label = match label {
@@ -3100,9 +3157,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let mut model = self.model.clone();
         let mut norm = NormalizerScanner::new(
             self.context.normalize_fuel(),
-            ExprNormalizer {
-                model: &mut model,
-            },
+            ExprNormalizer { model: &mut model },
         );
         norm.normalize(&mut expr);
 

@@ -1,6 +1,6 @@
 use super::{
-    build_subst_holes_for_args, default_to_type_check_shifter, ExprNormalizer,
-    TypeCheckExprContext, TypeChecker,
+    ExprNormalizer, TypeCheckExprContext, TypeChecker, build_subst_holes_for_args,
+    default_to_type_check_shifter,
 };
 use alloc::{sync::Arc, vec, vec::Vec};
 #[cfg(test)]
@@ -404,7 +404,7 @@ mod tests {
     use argon_compiler::scope::ShiftedScope;
     use argon_compiler::test_utils::TestScope;
     use argon_compiler::{ModulePath, TubeName};
-    use argon_expr::EnumType;
+    use argon_expr::{EnumType, ErasureMode};
     use mitsein::vec1;
 
     #[test]
@@ -423,6 +423,7 @@ mod tests {
             access: &access,
             scope: &mut local_scope,
             model: &mut model,
+            erasure_check_mode: ErasureMode::Concrete,
         };
         let location = Location {
             file: std::path::PathBuf::from("test"),
@@ -456,6 +457,7 @@ mod tests {
             access: &access,
             scope: &mut local_scope,
             model: &mut model,
+            erasure_check_mode: ErasureMode::Concrete,
         };
         let location = Location {
             file: std::path::PathBuf::from("test"),
@@ -499,6 +501,7 @@ mod tests {
             access: &access,
             scope: &mut local_scope,
             model: &mut model,
+            erasure_check_mode: ErasureMode::Concrete,
         };
         let location = Location {
             file: std::path::PathBuf::from("test"),

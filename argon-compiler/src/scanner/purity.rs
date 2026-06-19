@@ -74,19 +74,22 @@ where
 
             Expr::RecordFieldLoad { field, .. } => {
                 if field.metadata().is_mutable {
+                    self.found_impure = true;
                     return false;
                 }
             }
 
-            Expr::Error
-            | Expr::Break { .. }
+            Expr::Break { .. }
             | Expr::Retry { .. }
             | Expr::Finally { .. }
             | Expr::Raise { .. }
             | Expr::RecordFieldStore { .. }
-            | Expr::Sequence(_)
-            | Expr::VariableBinding(..)
             | Expr::VariableStore(..) => {
+                self.found_impure = true;
+                return false;
+            }
+
+            Expr::Error => {
                 return false;
             }
 
