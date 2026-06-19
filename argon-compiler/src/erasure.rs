@@ -1,7 +1,10 @@
 use crate::expr_type::ExprTypeContext;
 use crate::scanner::PurityScanner;
+use crate::shifter::DefaultToExprTypeContextShifter;
 use crate::{Context, FunctionSignature};
-use argon_expr::{default_scan, Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer};
+use argon_expr::{
+    default_scan, Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer,
+};
 use argon_util::CompileError;
 use parse18_runtime::Location;
 
@@ -103,7 +106,7 @@ where
                         self.scan_token(r);
                     }
 
-                    Expr::MethodCall { method, instance_type: _, receiver, arguments } => {
+                    Expr::MethodCall { method, instance_type, receiver, arguments } => {
                         if method.metadata().erasure_mode == ErasureMode::Erased {
                             self.erased_required();
                         }
@@ -111,7 +114,13 @@ where
                         self.prohibit_for_token();
                         self.scan(receiver);
 
-                        let sig = method.clone().signature();
+                        let mut sig = method
+                            .clone()
+                            .signature()
+                            .as_ref()
+                            .clone()
+                            .shift(&mut DefaultToExprTypeContextShifter::<Cmp::EC>::default());
+                        sig.substitute_method_instance_type_parameters(instance_type);
                         self.scan_arguments(&sig, arguments);
                     }
 

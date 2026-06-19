@@ -11,7 +11,7 @@ use argon_parser::ast::FunctionParameterListType;
 use argon_util::{CompileError, MultiSlice};
 use core::cmp::Ordering;
 use alloc::sync::Arc;
-use argon_compiler::{Function, FunctionSignature, Method, RecordField, SubstFunctionSignature};
+use argon_compiler::{Function, FunctionSignature, Method, RecordField};
 use parse18_runtime::Location;
 
 
@@ -83,27 +83,15 @@ impl<'a> Overloadable<'a> {
             Overloadable::InstanceMethod {
                 method, trait_type, ..
             } => {
-                let trait_sig = trait_type
-                    .trait_
-                    .clone()
-                    .signature()
-                    .as_ref()
-                    .clone()
-                    .shift(&mut default_to_type_check_shifter());
-
                 let mut sig = method
                     .clone()
                     .signature()
                     .as_ref()
                     .clone()
                     .shift(&mut default_to_type_check_shifter());
-                let mut subst = SubstScanner::new();
-                subst.add_function_parameter_substitutions(
-                    ExpressionOwner::Trait(trait_type.trait_.clone()),
-                    &trait_sig,
-                    &trait_type.arguments,
-                );
-                sig.scan_mut(&mut subst);
+                sig.substitute_method_instance_type_parameters(&MethodInstanceType::Trait(
+                    trait_type.clone(),
+                ));
 
                 sig
             }

@@ -1,8 +1,9 @@
+use crate::shifter::{DefaultExprAssociatedTypes, DefaultToExprTypeContextShifter};
 use alloc::borrow::Cow;
 use alloc::{boxed::Box, vec::Vec};
 use argon_expr::{
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
-    ParameterVariable, SubstScanner, Variable,
+    MethodInstanceType, ParameterVariable, SubstScanner, Variable,
 };
 use argon_parser::ast::{FunctionParameterListType, Identifier};
 use derivative::Derivative;
@@ -46,6 +47,33 @@ impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
                 .into_iter()
                 .map(|ensures_clause| shifter.shift(ensures_clause))
                 .collect(),
+        }
+    }
+
+    pub fn substitute_method_instance_type_parameters(
+        &mut self,
+        instance_type: &MethodInstanceType<EC>,
+    ) where
+        EC: DefaultExprAssociatedTypes,
+    {
+        match instance_type {
+            MethodInstanceType::Trait(trait_type) => {
+                let owner = ExpressionOwner::Trait(trait_type.trait_.clone());
+                let owner_sig = trait_type
+                    .trait_
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut DefaultToExprTypeContextShifter::<EC>::default());
+                let mut subst = SubstScanner::new();
+                subst.add_function_parameter_substitutions(
+                    owner,
+                    &owner_sig,
+                    &trait_type.arguments,
+                );
+                self.scan_mut(&mut subst);
+            }
         }
     }
 }

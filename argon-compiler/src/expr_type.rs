@@ -1,5 +1,5 @@
 use crate::shifter::{DefaultExprAssociatedTypes, DefaultToExprTypeContextShifter};
-use crate::{DefaultExprContext, EmptyHole, FunctionSignature, SubstFunctionSignature};
+use crate::{DefaultExprContext, EmptyHole, FunctionSignature};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -175,17 +175,7 @@ fn method_call_return_type<EC: ExprTypeContext + ?Sized>(
     arguments: &[Expr<EC>],
 ) -> Expr<EC> {
     let mut sig = shift_signature(method.clone().signature());
-
-    match instance_type {
-        MethodInstanceType::Trait(trait_type) => {
-            let owner = ExpressionOwner::Trait(trait_type.trait_.clone());
-            let owner_sig = shift_signature(trait_type.trait_.clone().signature());
-            let mut subst = SubstScanner::new();
-            subst.add_function_parameter_substitutions(owner, &owner_sig, &trait_type.arguments);
-            sig.scan_mut(&mut subst);
-        }
-    }
-
+    sig.substitute_method_instance_type_parameters(instance_type);
     return_type_for_args(ExpressionOwner::Method(method), sig, arguments)
 }
 

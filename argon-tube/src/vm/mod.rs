@@ -12,12 +12,11 @@ use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
     EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
     MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
-    RecordField, RecordFieldOwner, SubstFunctionSignature, Trait, Tube, TubeName,
-    UnaryOperatorIdentifier,
+    RecordField, RecordFieldOwner, Trait, Tube, TubeName, UnaryOperatorIdentifier,
 };
 use argon_expr::{
     BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
-    MethodInstanceType, NormalizerScanner, SubstScanner, TraitType, Variable,
+    NormalizerScanner, TraitType, Variable,
 };
 use argon_format::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
@@ -2028,29 +2027,7 @@ impl<'a> ExprEmitter<'a> {
 
                 let method_id = self.encoder.get_method_id(method.clone());
                 let mut sig = method.clone().signature().as_ref().clone();
-
-                {
-                    let method_owner_expr_owner;
-                    let method_owner_sig;
-                    let instance_type_args;
-                    match instance_type {
-                        MethodInstanceType::Trait(trait_type) => {
-                            method_owner_expr_owner =
-                                ExpressionOwner::Trait(trait_type.trait_.clone());
-                            method_owner_sig =
-                                trait_type.trait_.clone().signature().as_ref().clone();
-                            instance_type_args = &trait_type.arguments;
-                        }
-                    }
-
-                    let mut subst = SubstScanner::new();
-                    subst.add_function_parameter_substitutions(
-                        method_owner_expr_owner,
-                        &method_owner_sig,
-                        instance_type_args,
-                    );
-                    sig.scan_mut(&mut subst);
-                }
+                sig.substitute_method_instance_type_parameters(instance_type);
 
                 let args =
                     self.emit_arguments(ExpressionOwner::Method(method.clone()), &sig, arguments)?;
