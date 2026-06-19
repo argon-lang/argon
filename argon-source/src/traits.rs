@@ -149,6 +149,7 @@ impl Trait for SourceTrait {
         let result = Arc::new(build_vtable(
             self.context.clone(),
             MethodOwner::Trait(trait_ref),
+            self.access_token(),
             Some(self.decl.name.location.clone()),
         ));
         *vtable_store = Some(result.clone());

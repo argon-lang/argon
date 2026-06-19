@@ -11,8 +11,9 @@ use argon_compiler::{
     Identifier, Instance, Method, MethodEntry, MethodInstanceParameter, MethodMetadata,
     MethodOwner, MethodSlot, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
     RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
-    TubeCollectionBuilder, TubeMetadata, TubeName, UnaryOperatorIdentifier, Unload,
-    access::AccessModifier,
+    TubeCollectionBuilder, TubeMetadata, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
+    Unload,
+    access::{AccessModifier, AccessToken},
     vtable::{VTable, build_vtable},
 };
 use argon_expr::{
@@ -1897,9 +1898,12 @@ impl Trait for DecodedTrait {
     fn vtable(self: Arc<Self>) -> Arc<VTable> {
         get_or_init_cached(&self.vtable, || {
             let trait_ref: Arc<dyn Trait> = self.clone();
+            let mut access_token = access_token_for_import(trait_ref.clone().import_specifier());
+            access_token.add_type_permissions(TypeDeclaration::Trait(trait_ref.clone()));
             Arc::new(build_vtable(
                 self.decoder.context.clone(),
                 MethodOwner::Trait(trait_ref),
+                access_token,
                 None,
             ))
         })
@@ -2066,9 +2070,13 @@ impl Instance for DecodedInstance {
     fn vtable(self: Arc<Self>) -> Arc<VTable> {
         get_or_init_cached(&self.vtable, || {
             let instance_ref: Arc<dyn Instance> = self.clone();
+            let mut access_token =
+                access_token_for_import(instance_ref.clone().import_specifier());
+            access_token.add_type_permissions(TypeDeclaration::Instance(instance_ref.clone()));
             Arc::new(build_vtable(
                 self.decoder.context.clone(),
                 MethodOwner::Instance(instance_ref),
+                access_token,
                 None,
             ))
         })
@@ -2436,6 +2444,13 @@ fn get_or_init_cached<T: Clone, F: FnOnce() -> T>(cache: &Mutex<Option<T>>, init
 
 fn clear_cached<T>(cache: &Mutex<Option<T>>) {
     *mutex_lock(cache) = None;
+}
+
+fn access_token_for_import(import: ImportSpecifier) -> AccessToken {
+    match import {
+        ImportSpecifier::Global { tube, module, .. } => AccessToken::new(tube, module),
+        ImportSpecifier::Local { parent, .. } => access_token_for_import(*parent),
+    }
 }
 
 fn to_usize_index(n: BigUint) -> usize {

@@ -1,7 +1,7 @@
-use crate::access::AccessModifier;
+use crate::access::{AccessModifier, AccessToken};
 use crate::{
-    Context, DefaultExprComparer, DefaultExprContext, FunctionSignature, Method, MethodEntry,
-    MethodOwner, MethodSlot, SubstFunctionSignature,
+    Context, Declaration, DefaultExprComparer, DefaultExprContext, FunctionSignature, Method,
+    MethodEntry, MethodOwner, MethodSlot, SubstFunctionSignature,
 };
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -85,6 +85,7 @@ pub enum VTableTarget {
 pub fn build_vtable(
     context: Context,
     method_owner: MethodOwner,
+    access_token: AccessToken,
     location: Option<Location>,
 ) -> VTable {
     let parent;
@@ -124,6 +125,7 @@ pub fn build_vtable(
         current: VTable {
             entries: HashMap::new(),
         },
+        access_token,
         concrete_location: location,
     };
 
@@ -140,6 +142,7 @@ struct VTableBuilder {
     context: Context,
     parent: VTable,
     current: VTable,
+    access_token: AccessToken,
     concrete_location: Option<Location>,
 }
 
@@ -200,7 +203,7 @@ impl VTableBuilder {
             MethodSlot::Virtual | MethodSlot::Final | MethodSlot::Abstract => {}
 
             MethodSlot::Override | MethodSlot::FinalOverride | MethodSlot::AbstractOverride => {
-                self.override_matching_slots(method.clone(), sig.clone(), &target);
+                self.override_matching_slots(method.clone(), method_access, sig.clone(), &target);
             }
         }
 
@@ -247,6 +250,7 @@ impl VTableBuilder {
     fn override_matching_slots(
         &mut self,
         method: Arc<dyn Method>,
+        method_access: AccessModifier,
         sig: Arc<FunctionSignature<DefaultExprContext>>,
         target: &VTableTarget,
     ) {
@@ -271,7 +275,13 @@ impl VTableBuilder {
                 continue;
             }
 
-            // TODO: Access check
+            if !self.access_token.allows_access(
+                &Declaration::Method(slot.method.clone()),
+                Some(&method.clone().owner()),
+                slot_value.slot_access,
+            ) {
+                continue;
+            }
 
             if !self.signature_matches(
                 ExpressionOwner::Method(slot.method.clone()),
@@ -280,6 +290,16 @@ impl VTableBuilder {
                 sig.clone(),
             ) {
                 continue;
+            }
+
+            if slot_value.slot_access.is_wider_than(method_access) {
+                self.context
+                    .reporter()
+                    .report_error(CompileError::override_access_narrowing(
+                        self.concrete_location.clone(),
+                        slot_value.slot_access.display(),
+                        method_access.display(),
+                    ));
             }
 
             let mut new_value = slot_value.clone();

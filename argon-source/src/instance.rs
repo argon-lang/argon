@@ -173,6 +173,7 @@ impl Instance for SourceInstance {
         let result = Arc::new(build_vtable(
             self.context.clone(),
             MethodOwner::Instance(instance_ref),
+            self.access_token(),
             Some(self.decl.name.location.clone()),
         ));
         *vtable_store = Some(result.clone());

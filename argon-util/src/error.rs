@@ -287,14 +287,14 @@ impl CompileError {
     }
 
     pub fn override_access_narrowing(
-        loc: Location,
+        loc: Option<Location>,
         _expected_access: impl AsRef<str>,
         _actual_access: impl AsRef<str>,
     ) -> Self {
         Self::new(
             ErrorCode::OverrideAccessNarrowing,
             "Override access narrowing",
-            Some(loc),
+            loc,
         )
     }
 
