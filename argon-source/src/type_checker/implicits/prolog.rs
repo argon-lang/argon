@@ -1,10 +1,11 @@
-use super::{ImplicitResolver, ImplicitValue};
+use super::ImplicitResolver;
 use crate::type_checker::{
     ExprNormalizer, Hole, Model, TypeCheckExprContext, UnifyModel, default_to_type_check_shifter,
     unify_hole_impl,
 };
 use alloc::borrow::Cow;
 use alloc::rc::Rc;
+use argon_compiler::ImplicitValue;
 use argon_expr::{
     Builtin, ClosureParameterVariable, Expr, ExprContext, ExprScannerMut, ExpressionOwner,
     SubstScanner, Unify, Variable,
@@ -21,7 +22,7 @@ use parse18_runtime::Location;
 pub(super) struct PrologImplicitResolver<'a> {
     pub location: &'a Location,
     pub fuel: Fuel,
-    pub given_assertions: &'a [ImplicitValue],
+    pub given_assertions: &'a [ImplicitValue<TypeCheckExprContext>],
 }
 
 impl ImplicitResolver for PrologImplicitResolver<'_> {

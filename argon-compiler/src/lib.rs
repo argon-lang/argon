@@ -4,6 +4,7 @@ pub mod access;
 pub mod erased_sig;
 pub mod erasure;
 pub mod expr_type;
+mod implicits;
 pub mod platform;
 pub mod scanner;
 pub mod scope;
@@ -16,6 +17,7 @@ pub mod z3expr;
 
 pub use crate::access::AccessModifierGlobal;
 use crate::erased_sig::ImportSpecifier;
+pub use crate::implicits::ImplicitValue;
 use crate::platform::PlatformExtern;
 pub use crate::signature::{FunctionSignature, SubstFunctionSignature};
 use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};

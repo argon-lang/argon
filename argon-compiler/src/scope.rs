@@ -1,4 +1,5 @@
 use crate::access::AccessToken;
+use crate::implicits::ImplicitValue;
 use crate::signature::SignatureParameter;
 use crate::{
     DefaultExprContext, Enum, EnumVariant, Function, FunctionSignature, Instance, Record, Trait,
@@ -21,6 +22,8 @@ pub trait Scope {
 
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>>;
 
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>);
+
     fn lookup_block_label(
         &self,
         name: &Identifier,
@@ -36,6 +39,25 @@ pub trait LocalScope: Scope {
     fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool;
 
     fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>);
+}
+
+pub trait ImplicitGivens {
+    type ExprContext: ExprContext + ?Sized;
+
+    fn register_variable(&mut self, variable: Variable<Self::ExprContext>);
+    fn register_function(&mut self, function: Arc<dyn Function>);
+}
+
+impl<EC: ExprContext + ?Sized> ImplicitGivens for Vec<ImplicitValue<EC>> {
+    type ExprContext = EC;
+
+    fn register_variable(&mut self, variable: Variable<Self::ExprContext>) {
+        self.push(ImplicitValue::OfVar(variable));
+    }
+
+    fn register_function(&mut self, function: Arc<dyn Function>) {
+        self.push(ImplicitValue::OfFunction(function));
+    }
 }
 
 pub enum Lookup<EC: ExprContext + ?Sized> {
@@ -58,6 +80,10 @@ impl<EC: ExprContext + ?Sized> Scope for &dyn Scope<ExprContext = EC> {
 
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         (**self).lookup_tube(name)
+    }
+
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        (**self).given_assertions(givens)
     }
 
     fn lookup_block_label(
@@ -89,6 +115,10 @@ impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
 
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         (**self).lookup_tube(name)
+    }
+
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        (**self).given_assertions(givens)
     }
 
     fn lookup_block_label(
@@ -240,6 +270,16 @@ impl<Sc: Scope> Scope for ParameterScope<Sc> {
         self.parent.lookup_tube(name)
     }
 
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        for v in self.variable_lookup.values() {
+            if v.is_witness() {
+                givens.register_variable(v.clone());
+            }
+        }
+
+        self.parent.given_assertions(givens);
+    }
+
     fn lookup_block_label(
         &self,
         _name: &Identifier,
@@ -294,6 +334,10 @@ impl<Sc: Scope> Scope for InstanceParameterScope<Sc> {
 
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         self.parent.lookup_tube(name)
+    }
+
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        self.parent.given_assertions(givens);
     }
 
     fn lookup_block_label(
@@ -355,6 +399,16 @@ impl<Sc: Scope> Scope for LocalVariableScope<Sc> {
 
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         self.parent.lookup_tube(name)
+    }
+
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        for v in &self.variables {
+            if v.is_witness() {
+                givens.register_variable(v.clone());
+            }
+        }
+
+        self.parent.given_assertions(givens);
     }
 
     fn lookup_block_label(
@@ -508,6 +562,15 @@ where
         self.inner.lookup_tube(name)
     }
 
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        let mut shifted_givens = ShiftedImplicitGivens {
+            inner: givens,
+            shifter: self.shifter,
+        };
+
+        self.inner.given_assertions(&mut shifted_givens);
+    }
+
     fn lookup_block_label(
         &self,
         name: &Identifier,
@@ -527,5 +590,28 @@ where
         self.inner
             .latest_block_label()
             .map(|label| self.shift_block_label(label))
+    }
+}
+
+struct ShiftedImplicitGivens<'a, G: ?Sized, Sh> {
+    inner: &'a mut G,
+    shifter: Sh,
+}
+
+impl<G, Sh> ImplicitGivens for ShiftedImplicitGivens<'_, G, Sh>
+where
+    G: ImplicitGivens<ExprContext = Sh::EC2> + ?Sized,
+    Sh: ExprContextShifter + Copy,
+{
+    type ExprContext = Sh::EC1;
+
+    fn register_variable(&mut self, variable: Variable<Self::ExprContext>) {
+        let mut shifter = self.shifter;
+        self.inner
+            .register_variable(shifter.shift_variable(variable));
+    }
+
+    fn register_function(&mut self, function: Arc<dyn Function>) {
+        self.inner.register_function(function);
     }
 }

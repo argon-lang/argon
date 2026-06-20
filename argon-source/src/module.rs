@@ -6,7 +6,7 @@ use crate::traits::SourceTrait;
 use alloc::{boxed::Box, string::String, string::ToString, sync::Arc, vec::Vec};
 use argon_compiler::access::{AccessModifier, AccessModifierGlobal, AccessToken};
 use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
-use argon_compiler::scope::{Lookup, OverloadLookup, Overloadable, Scope};
+use argon_compiler::scope::{ImplicitGivens, Lookup, OverloadLookup, Overloadable, Scope};
 use argon_compiler::{
     Context, Declaration, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding,
     ModuleExportEntry, ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
@@ -50,11 +50,15 @@ impl ResolvedImportGroups {
         }
     }
 
+    fn entry_groups(&self) -> impl Iterator<Item = &Vec<ModuleExportEntry>> + '_ {
+        [&self.same_module, &self.same_tube, &self.other]
+            .into_iter()
+            .filter(|exports| !exports.is_empty())
+    }
+
     fn overload_groups(&self, groups: &mut Vec<Vec<Overloadable>>) {
         groups.extend(
-            [&self.same_module, &self.same_tube, &self.other]
-                .into_iter()
-                .filter(|exports| !exports.is_empty())
+            self.entry_groups()
                 .map(|exports| {
                     exports
                         .iter()
@@ -116,6 +120,24 @@ impl Scope for GlobalScope {
 
     fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
         self.tubes.tube(name)
+    }
+
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        let local_groups = self.current_module.export_groups();
+
+        let combined_entries = local_groups.values().flatten()
+            .chain(
+                self.resolved_imports.values()
+                    .flat_map(|resolved_group| resolved_group.entry_groups())
+                    .flatten()
+            );
+
+        for entry in combined_entries {
+            match &entry.binding {
+                ModuleExportBinding::Function(f) => givens.register_function(f.clone()),
+                _ => {},
+            }
+        }
     }
 
     fn lookup_block_label(

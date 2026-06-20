@@ -3170,11 +3170,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         t: &Expr<TypeCheckExprContext>,
         location: &Location,
     ) -> Expr<TypeCheckExprContext> {
+        let mut given_assertions = Vec::new();
+        self.scope.given_assertions(&mut given_assertions);
+
         implicits::ImplicitResolverInput {
             context: self.context.clone(),
             resolve_location: location,
             model: &mut self.model,
-            given_assertions: vec![],
+            given_assertions,
             known_var_values: HashMap::new(),
         }
         .try_resolve_implicit(t)

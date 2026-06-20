@@ -1,6 +1,6 @@
 use crate::access::AccessToken;
 use crate::platform::PlatformExtern;
-use crate::scope::{Lookup, Scope};
+use crate::scope::{ImplicitGivens, Lookup, Scope};
 use crate::{
     CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum, EnumVariant,
     EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName, Unload, erased_sig,
@@ -173,6 +173,7 @@ impl Scope for TestScope {
     fn lookup_tube(&self, _: &TubeName) -> Option<Arc<Tube>> {
         None
     }
+    fn given_assertions(&self, _: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {}
     fn lookup_block_label(
         &self,
         _: &Identifier,

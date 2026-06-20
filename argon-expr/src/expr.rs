@@ -526,6 +526,15 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
             Variable::ClosureParameter(variable) => variable.erasure_mode,
         }
     }
+
+    pub fn is_witness(&self) -> bool {
+        match self {
+            Variable::Local(variable) => variable.is_witness,
+            Variable::Parameter(param) => param.is_witness,
+            Variable::InstanceParameter(_) => false,
+            Variable::ClosureParameter(v) => v.is_witness,
+        }
+    }
 }
 
 pub struct VariableTupleElement<EC: ExprContext + ?Sized> {
