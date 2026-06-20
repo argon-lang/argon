@@ -6,10 +6,7 @@ use crate::type_checker::{
 use alloc::borrow::Cow;
 use alloc::rc::Rc;
 use argon_compiler::ImplicitValue;
-use argon_expr::{
-    Builtin, ClosureParameterVariable, Expr, ExprContext, ExprScannerMut, ExpressionOwner,
-    SubstScanner, Unify, Variable,
-};
+use argon_expr::{Builtin, ClosureParameterVariable, Expr, ExprContext, ExprScannerMut, ExpressionOwner, NormalizerScanner, SubstScanner, Unify, Variable};
 use argon_parser::ast::FunctionParameterListType;
 use argon_prover::{
     PartialProofResult, Predicate, PrologProver, PrologProverContext, Proof, ProofResult, Prover,
@@ -25,6 +22,111 @@ pub(super) struct PrologImplicitResolver<'a> {
     pub given_assertions: &'a [ImplicitValue<TypeCheckExprContext>],
 }
 
+impl PrologImplicitResolver<'_> {
+
+
+    fn expr_to_predicate(&self, mut expr: Expr<TypeCheckExprContext>, model: &mut Model) -> Rc<Predicate<ExprProverSyntax>> {
+        {
+            let mut norm = NormalizerScanner::new(
+                self.fuel.clone(),
+                ExprNormalizer { model }
+            );
+
+            norm.normalize(&mut expr);
+        }
+
+        match expr {
+            Expr::ConjunctionType { lhs, rhs } => {
+                return Rc::new(Predicate::And(
+                    self.expr_to_predicate(*lhs, model),
+                    self.expr_to_predicate(*rhs, model),
+                ));
+            },
+
+            Expr::DisjunctionType { lhs, rhs } => {
+                return Rc::new(Predicate::Or(
+                    self.expr_to_predicate(*lhs, model),
+                    self.expr_to_predicate(*rhs, model),
+                ));
+            },
+
+            Expr::FunctionType { a, r } => {
+                return Rc::new(Predicate::Implies(
+                    self.expr_to_predicate(a.var_type, model),
+                    self.expr_to_predicate(*r, model),
+                ));
+            },
+
+            Expr::EqualToType {
+                r#type: mut t,
+                lhs,
+                rhs,
+            } => {
+                {
+                    let mut norm = NormalizerScanner::new(
+                        self.fuel.clone(),
+                        ExprNormalizer { model }
+                    );
+
+                    norm.normalize(&mut t);
+                }
+
+                match t.as_ref() {
+                    Expr::Builtin(Builtin::BoolType) => {
+                        let a = self.expr_to_predicate_bool(*lhs);
+                        let b = self.expr_to_predicate_bool(*rhs);
+
+                        return match (a.as_ref(), b.as_ref()) {
+                            (Predicate::True, Predicate::True) => Rc::new(Predicate::True),
+                            (Predicate::True, Predicate::False) => Rc::new(Predicate::False),
+                            (Predicate::False, Predicate::True) => Rc::new(Predicate::False),
+                            (Predicate::False, Predicate::False) => Rc::new(Predicate::True),
+                            (_, Predicate::True) => a,
+                            (_, Predicate::False) => Rc::new(Predicate::Implies(a, b)),
+                            (Predicate::True, _) => b,
+                            (Predicate::False, _) => Rc::new(Predicate::Implies(b, a)),
+                            _ => Rc::new(Predicate::And(
+                                Rc::new(Predicate::Implies(a.clone(), b.clone())),
+                                Rc::new(Predicate::Implies(b, a)),
+                            ))
+                        };
+                    }
+                    _ => {
+                        expr = Expr::EqualToType {
+                            r#type: t,
+                            lhs,
+                            rhs,
+                        };
+                    }
+                }
+
+            }
+
+            _ => {}
+        }
+
+        Rc::new(Predicate::PredicateExpression(ExprWithExprType(ExprType::InhabitedType, expr)))
+    }
+
+    fn expr_to_predicate_bool(&self, expr: Expr<TypeCheckExprContext>) -> Rc<Predicate<ExprProverSyntax>> {
+        match expr {
+            Expr::BoolLiteral(true) => Rc::new(Predicate::True),
+            Expr::BoolLiteral(false) => Rc::new(Predicate::False),
+            Expr::And(a, b) => Rc::new(Predicate::And(
+                self.expr_to_predicate_bool(*a),
+                self.expr_to_predicate_bool(*b),
+            )),
+
+            Expr::Or(a, b) => Rc::new(Predicate::Or(
+                self.expr_to_predicate_bool(*a),
+                self.expr_to_predicate_bool(*b),
+            )),
+
+            _ => Rc::new(Predicate::PredicateExpression(ExprWithExprType(ExprType::BoolValue, expr.clone()))),
+        }
+    }
+}
+
 impl ImplicitResolver for PrologImplicitResolver<'_> {
     fn try_resolve_implicit(
         self,
@@ -33,9 +135,9 @@ impl ImplicitResolver for PrologImplicitResolver<'_> {
     ) -> Option<Expr<TypeCheckExprContext>> {
         let prover = PrologProver::new(&self, self.fuel.clone());
 
-        let goal = expr_to_predicate(t.clone());
+        let goal = self.expr_to_predicate(t.clone(), model);
 
-        let proof_result = prover.check(Rc::new(goal), model);
+        let proof_result = prover.check(goal, model);
 
         match proof_result {
             ProofResult::Yes(proof) => {
@@ -59,7 +161,7 @@ impl ProverContext for PrologImplicitResolver<'_> {
 
     fn fresh_assertions(
         &self,
-        _model: &Self::Model,
+        model: &Self::Model,
     ) -> Vec<(Proof<Self::ProofAtom>, Predicate<Self::Syntax>)> {
         let mut assertions = Vec::new();
 
@@ -177,7 +279,9 @@ impl ProverContext for PrologImplicitResolver<'_> {
             }
 
             let proof = Proof::Atomic(TCAtomicProof::ExprProof(proof_expr));
-            let assertion_type = expr_to_predicate_bool(predicate_expr);
+
+            let mut model = model.clone();
+            let assertion_type = Rc::unwrap_or_clone(self.expr_to_predicate(predicate_expr, &mut model));
 
             Some((proof, assertion_type))
         }));
@@ -235,61 +339,6 @@ pub(super) struct ExprProverSyntax;
 impl ProverSyntax for ExprProverSyntax {
     type Variable = Hole;
     type PredicateExpr = ExprWithExprType;
-}
-
-fn expr_to_predicate(expr: Expr<TypeCheckExprContext>) -> Predicate<ExprProverSyntax> {
-    match expr {
-        Expr::ConjunctionType { lhs, rhs } => Predicate::And(
-            Rc::new(expr_to_predicate(*lhs)),
-            Rc::new(expr_to_predicate(*rhs)),
-        ),
-
-        Expr::DisjunctionType { lhs, rhs } => Predicate::Or(
-            Rc::new(expr_to_predicate(*lhs)),
-            Rc::new(expr_to_predicate(*rhs)),
-        ),
-
-        Expr::FunctionType { a, r } => Predicate::Implies(
-            Rc::new(expr_to_predicate(a.var_type)),
-            Rc::new(expr_to_predicate(*r)),
-        ),
-
-        Expr::EqualToType {
-            r#type: _,
-            lhs,
-            rhs,
-        } => {
-            let a = Rc::new(expr_to_predicate(*lhs));
-            let b = Rc::new(expr_to_predicate(*rhs));
-
-            Predicate::And(
-                Rc::new(Predicate::Implies(a.clone(), b.clone())),
-                Rc::new(Predicate::Implies(b, a)),
-            )
-        }
-
-        _ => {
-            Predicate::PredicateExpression(ExprWithExprType(ExprType::InhabitedType, expr.clone()))
-        }
-    }
-}
-
-fn expr_to_predicate_bool(expr: Expr<TypeCheckExprContext>) -> Predicate<ExprProverSyntax> {
-    match expr {
-        Expr::BoolLiteral(true) => Predicate::True,
-        Expr::BoolLiteral(false) => Predicate::False,
-        Expr::And(a, b) => Predicate::And(
-            Rc::new(expr_to_predicate_bool(*a)),
-            Rc::new(expr_to_predicate_bool(*b)),
-        ),
-
-        Expr::Or(a, b) => Predicate::Or(
-            Rc::new(expr_to_predicate_bool(*a)),
-            Rc::new(expr_to_predicate_bool(*b)),
-        ),
-
-        _ => Predicate::PredicateExpression(ExprWithExprType(ExprType::BoolValue, expr.clone())),
-    }
 }
 
 fn proof_to_expr(p: Proof<TCAtomicProof>) -> Option<Expr<TypeCheckExprContext>> {

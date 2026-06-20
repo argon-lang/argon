@@ -134,7 +134,9 @@ impl Scope for GlobalScope {
 
         for entry in combined_entries {
             match &entry.binding {
-                ModuleExportBinding::Function(f) => givens.register_function(f.clone()),
+                ModuleExportBinding::Function(f) if f.metadata().is_witness => {
+                    givens.register_function(f.clone());
+                },
                 _ => {},
             }
         }

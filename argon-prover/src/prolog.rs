@@ -66,17 +66,17 @@ impl<'a, C: PrologProverContext> Prover<'a> for PrologProver<'a, C> {
 
     fn check(self, goal: Rc<Predicate<C::Syntax>>, model: &mut C::Model) -> ProofResult<C> {
         let model_ref = Rc::new(model.clone());
-        let Some(result) = self.solve(goal, model_ref.clone()).next() else {
+        let Some(result) = self.solve(goal, model_ref).next() else {
             return ProofResult::Unknown;
         };
 
         match result {
             PartialProofResult::Yes(proof, new_model) => {
-                *model = (*new_model).clone();
+                *model = Rc::unwrap_or_clone(new_model);
                 ProofResult::Yes(proof)
             }
             PartialProofResult::No(proof, new_model) => {
-                *model = (*new_model).clone();
+                *model = Rc::unwrap_or_clone(new_model);
                 ProofResult::No(proof)
             }
         }
@@ -485,9 +485,9 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
         rule: Rc<Predicate<C::Syntax>>,
         model: &mut Rc<C::Model>,
     ) -> bool {
-        let model2 = model.clone();
+        let mut model2 = model.clone();
 
-        let result = self.clone().unify(goal, rule, model);
+        let result = self.clone().unify(goal, rule, &mut model2);
         if result {
             *model = model2;
         }

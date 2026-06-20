@@ -2890,7 +2890,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 rhs: Box::new(Expr::BoolLiteral(equal_to_value)),
             },
             erasure_mode: ErasureMode::Erased,
-            is_witness: false,
+            is_witness: true,
             is_mutable: false,
         })
     }
