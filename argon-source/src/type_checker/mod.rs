@@ -3181,7 +3181,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             known_var_values: HashMap::new(),
         }
         .try_resolve_implicit(t)
-        .unwrap_or_else(|| todo!())
+        .unwrap_or_else(|| {
+            self.context
+                .reporter()
+                .report_error(CompileError::implicit_not_found(location.clone()));
+
+            Expr::Error
+        })
     }
 
     fn report_invalid_builtin(&self, location: &Location, name: impl AsRef<str>) {

@@ -1,0 +1,19 @@
+<ArgonTest>
+
+    <Name>Implicit not found</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            assert Int
+        end
+
+    </InputSource>
+
+    <ExpectedError>AR0015</ExpectedError>
+
+</ArgonTest>
