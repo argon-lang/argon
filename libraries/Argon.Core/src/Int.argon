@@ -20,7 +20,7 @@ public inline def operator <<< (a: Int) (b: Int): Int = __argon_builtin int_bits
 public inline def operator >>> (a: Int) (b: Int): Int = __argon_builtin int_bitshiftright a b
 
 public inline def operator = (a: Int) (b: Int): Bool = __argon_builtin int_eq a b
-public inline def operator != (a: Int) (b: Int): Bool = __argon_builtin int_ne a b
+public inline def operator != (a: Int) (b: Int): Bool = !(__argon_builtin int_eq a b)
 public inline def operator < (a: Int) (b: Int): Bool = __argon_builtin int_lt a b
 public inline def operator <= (a: Int) (b: Int): Bool = __argon_builtin int_le a b
 public inline def operator > (a: Int) (b: Int): Bool = __argon_builtin int_gt a b

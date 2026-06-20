@@ -111,7 +111,11 @@ impl<'a> SignatureParser<'a> {
 
         let conv_return_type = type_check_type_expr(
             self.context.clone(),
-            TypeCheckOptions::new(&self.access_token, &mut parameter_scope, ErasureMode::Concrete),
+            TypeCheckOptions::new(
+                &self.access_token,
+                &mut parameter_scope,
+                ErasureMode::Concrete,
+            ),
             &return_type.value.return_type,
         );
 
@@ -122,7 +126,11 @@ impl<'a> SignatureParser<'a> {
             .map(|clause| {
                 type_check_type_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&self.access_token, &mut parameter_scope, ErasureMode::Token),
+                    TypeCheckOptions::new(
+                        &self.access_token,
+                        &mut parameter_scope,
+                        ErasureMode::Token,
+                    ),
                     clause,
                 )
             })

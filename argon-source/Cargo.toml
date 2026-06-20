@@ -8,6 +8,7 @@ argon-compiler = { workspace = true }
 argon-expr = { workspace = true }
 argon-io = { workspace = true }
 argon-parser = { workspace = true }
+argon-prover = { workspace = true }
 argon-util = { workspace = true }
 hashbrown = { workspace = true }
 mitsein = { workspace = true }

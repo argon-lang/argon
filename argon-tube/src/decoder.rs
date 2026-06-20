@@ -1424,10 +1424,6 @@ impl TubeDecoder {
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntNe { lhs, rhs } => Builtin::IntNe {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
-            },
             tf::Builtin::IntLt { lhs, rhs } => Builtin::IntLt {
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
@@ -1452,15 +1448,7 @@ impl TubeDecoder {
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::StringNe { lhs, rhs } => Builtin::StringNe {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
-            },
             tf::Builtin::BoolEq { lhs, rhs } => Builtin::BoolEq {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
-            },
-            tf::Builtin::BoolNe { lhs, rhs } => Builtin::BoolNe {
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
@@ -1498,7 +1486,13 @@ impl TubeDecoder {
                 index: Box::new(self.decode_expr(*index)),
                 value: Box::new(self.decode_expr(*value)),
             },
-            tf::Builtin::EqualToRefl { .. } => todo!("decode equal-to-refl builtin"),
+            tf::Builtin::EqualToRefl { r#type, value } => Builtin::EqualToRefl {
+                r#type: Box::new(self.decode_expr(*r#type)),
+                value: Box::new(self.decode_expr(*value)),
+            },
+            tf::Builtin::UnsafeAssumeErased { r#type } => Builtin::UnsafeAssumeErased {
+                r#type: Box::new(self.decode_expr(*r#type)),
+            },
         }
     }
 
@@ -2071,8 +2065,7 @@ impl Instance for DecodedInstance {
     fn vtable(self: Arc<Self>) -> Arc<VTable> {
         get_or_init_cached(&self.vtable, || {
             let instance_ref: Arc<dyn Instance> = self.clone();
-            let mut access_token =
-                access_token_for_import(instance_ref.clone().import_specifier());
+            let mut access_token = access_token_for_import(instance_ref.clone().import_specifier());
             access_token.add_type_permissions(TypeDeclaration::Instance(instance_ref.clone()));
             Arc::new(build_vtable(
                 self.decoder.context.clone(),

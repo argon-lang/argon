@@ -207,16 +207,13 @@ where
         | Builtin::IntBitShiftLeft { lhs, rhs }
         | Builtin::IntBitShiftRight { lhs, rhs }
         | Builtin::IntEq { lhs, rhs }
-        | Builtin::IntNe { lhs, rhs }
         | Builtin::IntLt { lhs, rhs }
         | Builtin::IntLe { lhs, rhs }
         | Builtin::IntGt { lhs, rhs }
         | Builtin::IntGe { lhs, rhs }
         | Builtin::StringConcat { lhs, rhs }
         | Builtin::StringEq { lhs, rhs }
-        | Builtin::StringNe { lhs, rhs }
-        | Builtin::BoolEq { lhs, rhs }
-        | Builtin::BoolNe { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        | Builtin::BoolEq { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
         Builtin::ArrayCreateUnsafeUninitialized {
             element_type,
             length,
@@ -241,6 +238,8 @@ where
                 && scanner.scan(index)
                 && scanner.scan(value)
         }
+        Builtin::EqualToRefl { r#type, value } => scanner.scan(r#type) && scanner.scan(value),
+        Builtin::UnsafeAssumeErased { r#type } => scanner.scan(r#type),
     }
 }
 
@@ -523,16 +522,13 @@ where
         | Builtin::IntBitShiftLeft { lhs, rhs }
         | Builtin::IntBitShiftRight { lhs, rhs }
         | Builtin::IntEq { lhs, rhs }
-        | Builtin::IntNe { lhs, rhs }
         | Builtin::IntLt { lhs, rhs }
         | Builtin::IntLe { lhs, rhs }
         | Builtin::IntGt { lhs, rhs }
         | Builtin::IntGe { lhs, rhs }
         | Builtin::StringConcat { lhs, rhs }
         | Builtin::StringEq { lhs, rhs }
-        | Builtin::StringNe { lhs, rhs }
-        | Builtin::BoolEq { lhs, rhs }
-        | Builtin::BoolNe { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        | Builtin::BoolEq { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
         Builtin::ArrayCreateUnsafeUninitialized {
             element_type,
             length,
@@ -557,6 +553,8 @@ where
                 && scanner.scan(index)
                 && scanner.scan(value)
         }
+        Builtin::EqualToRefl { r#type, value } => scanner.scan(r#type) && scanner.scan(value),
+        Builtin::UnsafeAssumeErased { r#type } => scanner.scan(r#type),
     }
 }
 

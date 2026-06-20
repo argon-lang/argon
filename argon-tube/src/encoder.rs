@@ -1244,10 +1244,6 @@ impl TubeEncoder {
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntNe { lhs, rhs } => tf::Builtin::IntNe {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
-            },
             Builtin::IntLt { lhs, rhs } => tf::Builtin::IntLt {
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
@@ -1272,15 +1268,7 @@ impl TubeEncoder {
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::StringNe { lhs, rhs } => tf::Builtin::StringNe {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
-            },
             Builtin::BoolEq { lhs, rhs } => tf::Builtin::BoolEq {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
-            },
-            Builtin::BoolNe { lhs, rhs } => tf::Builtin::BoolNe {
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
@@ -1317,6 +1305,13 @@ impl TubeEncoder {
                 array: Box::new(self.emit_expr(array)?),
                 index: Box::new(self.emit_expr(index)?),
                 value: Box::new(self.emit_expr(value)?),
+            },
+            Builtin::EqualToRefl { r#type, value } => tf::Builtin::EqualToRefl {
+                r#type: Box::new(self.emit_expr(r#type)?),
+                value: Box::new(self.emit_expr(value)?),
+            },
+            Builtin::UnsafeAssumeErased { r#type } => tf::Builtin::UnsafeAssumeErased {
+                r#type: Box::new(self.emit_expr(r#type)?),
             },
         })
     }

@@ -232,15 +232,12 @@ fn get_builtin_type<EC: ExprTypeContext + ?Sized>(builtin: &Builtin<EC>) -> Expr
         | Builtin::ArrayLength { .. } => Expr::int_type(),
 
         Builtin::IntEq { .. }
-        | Builtin::IntNe { .. }
         | Builtin::IntLt { .. }
         | Builtin::IntLe { .. }
         | Builtin::IntGt { .. }
         | Builtin::IntGe { .. }
         | Builtin::StringEq { .. }
-        | Builtin::StringNe { .. }
-        | Builtin::BoolEq { .. }
-        | Builtin::BoolNe { .. } => Expr::bool_type(),
+        | Builtin::BoolEq { .. } => Expr::bool_type(),
 
         Builtin::StringConcat { .. } => Expr::string_type(),
 
@@ -251,6 +248,14 @@ fn get_builtin_type<EC: ExprTypeContext + ?Sized>(builtin: &Builtin<EC>) -> Expr
         Builtin::ArrayGet { element_type, .. } => (**element_type).clone(),
 
         Builtin::ArraySet { .. } => Expr::unit(),
+
+        Builtin::EqualToRefl { r#type, value } => Expr::EqualToType {
+            r#type: r#type.clone(),
+            lhs: value.clone(),
+            rhs: value.clone(),
+        },
+
+        Builtin::UnsafeAssumeErased { r#type } => (**r#type).clone(),
     }
 }
 

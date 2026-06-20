@@ -4,7 +4,7 @@ use alloc::collections::VecDeque;
 use alloc::{boxed::Box, format, string::ToString, sync::Arc, vec, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::erasure::ErasureScanner;
-use argon_compiler::expr_type::{get_expr_type, ExprTypeContext};
+use argon_compiler::expr_type::{ExprTypeContext, get_expr_type};
 use argon_compiler::scanner::PurityScanner;
 use argon_compiler::scope::{self, LocalScope, LocalVariableScope, Lookup, Scope, ShiftedScope};
 use argon_compiler::shifter::DefaultToExprTypeContextShifter;
@@ -18,7 +18,8 @@ use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut,
     ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
-    RecordFieldLiteral, RecordType, SubstScanner, TraitType, Unify, Variable, VariableTupleElement,
+    RecordFieldLiteral, RecordType, SubstScanner, TraitType, TypeComparer, Unify, Variable,
+    VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -29,10 +30,10 @@ use core::{mem, ptr};
 use hashbrown::{HashMap, HashSet, hash_map};
 use mitsein::vec1;
 use mitsein::vec1::Vec1;
-use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
 
 mod exhaustive;
+mod implicits;
 mod overload;
 
 use crate::type_checker::exhaustive::ExhaustiveChecker;
@@ -120,7 +121,7 @@ fn check_erasure(
 ) {
     let mut erasure_scanner = ErasureScanner {
         context: context.clone(),
-        comparer: &mut DefaultExprComparer { context },
+        comparer: &mut DefaultExprComparer::new(context),
         expected_erasure: options.erasure_mode,
         location: &e.location,
         suppress_errors: false,
@@ -465,15 +466,19 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     }
 
     fn check_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> Expr<TypeCheckExprContext> {
-        self.check_type_with_meta_type(expr).checked_expr
+        self.check_type_with_meta_type(expr, false).checked_expr
     }
 
-    fn check_type_with_meta_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> InferredType {
+    fn check_type_with_meta_type<'e>(
+        &mut self,
+        expr: &'e WithLocation<ast::Expr>,
+        allow_erased: bool,
+    ) -> InferredType {
         let infer = self.infer(expr);
         let mut inferred =
             self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType);
 
-        if !self.treat_as_token(&inferred.checked_expr) {
+        if !allow_erased && !self.treat_as_token(&inferred.checked_expr) {
             inferred.checked_expr = Expr::BoxedType(Box::new(inferred.checked_expr));
         }
 
@@ -1012,13 +1017,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 inferred_type: Expr::BigType(value + 1),
             }),
             ast::Expr::Assert { t } => {
-                let t = self.check_type(t);
-                let value = self.resolve_implicit(&t);
+                let assert_type = self.check_type_with_meta_type(t, true).checked_expr;
+                let value = self.resolve_implicit(&assert_type, &t.location);
 
                 let local = LocalVariable {
                     id: UniqueIdentifier::new(),
                     name: None,
-                    var_type: t,
+                    var_type: assert_type,
                     erasure_mode: ErasureMode::Erased,
                     is_witness: true,
                     is_mutable: false,
@@ -1028,7 +1033,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                 self.scope.add_variable(v);
 
-                let decl = Expr::VariableBinding(Box::new(local), Box::new(value.checked_expr));
+                let decl = Expr::VariableBinding(Box::new(local), Box::new(value));
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: decl,
@@ -1069,7 +1074,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
             ast::Expr::FunctionType { a, r } => {
                 let arg_type = self.check_type(a);
-                let ret_type = self.check_type_with_meta_type(r);
+                let ret_type = self.check_type_with_meta_type(r, false);
 
                 // TODO: Figure out the proper kind
 
@@ -1489,7 +1494,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             ast::Expr::BoxedType { t } => {
-                let inner = self.check_type_with_meta_type(t);
+                let inner = self.check_type_with_meta_type(t, false);
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::BoxedType(Box::new(inner.checked_expr)),
@@ -1910,7 +1915,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             "int_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight),
 
             "int_eq" => int_to_bool_binary_builtin!(IntEq),
-            "int_ne" => int_to_bool_binary_builtin!(IntNe),
             "int_lt" => int_to_bool_binary_builtin!(IntLt),
             "int_le" => int_to_bool_binary_builtin!(IntLe),
             "int_gt" => int_to_bool_binary_builtin!(IntGt),
@@ -1922,9 +1926,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 { lhs, rhs }
             ),
             "string_eq" => same_type_bool_binary_builtin!(StringEq, Expr::string_type()),
-            "string_ne" => same_type_bool_binary_builtin!(StringNe, Expr::string_type()),
             "bool_eq" => same_type_bool_binary_builtin!(BoolEq, Expr::bool_type()),
-            "bool_ne" => same_type_bool_binary_builtin!(BoolNe, Expr::bool_type()),
 
             "array_create_unsafe_uninitialized" => parameterized_builtin!(
                 ArrayCreateUnsafeUninitialized,
@@ -2020,7 +2022,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let InferredType {
             checked_expr: element_type,
             inferred_type: element_type_type,
-        } = self.check_type_with_meta_type(element_type_arg.arg);
+        } = self.check_type_with_meta_type(element_type_arg.arg, false);
 
         let expected_rest_arg_types = create_rest_arg_types(&element_type);
         if args.len() != REST_ARG_COUNT {
@@ -2822,7 +2824,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
 
         for transformation in transformations {
-            transformation.transform(&mut inferred)
+            transformation.transform(&mut inferred.checked_expr, &mut inferred.inferred_type);
         }
 
         inferred
@@ -3163,8 +3165,20 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         patterns
     }
 
-    fn resolve_implicit(&mut self, _t: &Expr<TypeCheckExprContext>) -> InferredType {
-        todo!("resolve_implicit")
+    fn resolve_implicit(
+        &mut self,
+        t: &Expr<TypeCheckExprContext>,
+        location: &Location,
+    ) -> Expr<TypeCheckExprContext> {
+        implicits::ImplicitResolverInput {
+            context: self.context.clone(),
+            resolve_location: location,
+            model: &mut self.model,
+            given_assertions: vec![],
+            known_var_values: HashMap::new(),
+        }
+        .try_resolve_implicit(t)
+        .unwrap_or_else(|| todo!())
     }
 
     fn report_invalid_builtin(&self, location: &Location, name: impl AsRef<str>) {
@@ -3198,108 +3212,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 builtin_name
             ),
         );
-    }
-
-    fn is_type(&self, mut expr: Expr<TypeCheckExprContext>) -> bool {
-        let mut model = self.model.clone();
-        let mut norm = NormalizerScanner::new(
-            self.context.normalize_fuel(),
-            ExprNormalizer { model: &mut model },
-        );
-        norm.normalize(&mut expr);
-
-        match expr {
-            Expr::Type(_) => true,
-            Expr::BigType(_) => true,
-            Expr::Tuple { items } => items.into_iter().all(|item| self.is_type(item)),
-            _ => false,
-        }
-    }
-
-    fn type_matches_expected(
-        &mut self,
-        transformations: &mut Vec<TypeCheckValueTransformation>,
-        actual_type: &Expr<TypeCheckExprContext>,
-        expected_type: ExpectedType<'_>,
-    ) -> bool {
-        match expected_type {
-            ExpectedType::AnyMetaType => self.is_type(actual_type.clone()),
-
-            ExpectedType::Exact(expected_type) => {
-                let mut expected_type = expected_type.clone();
-                let mut actual_type = actual_type.clone();
-
-                loop {
-                    {
-                        let mut norm = NormalizerScanner::new(
-                            self.context.normalize_fuel(),
-                            ExprNormalizer {
-                                model: &mut self.model,
-                            },
-                        );
-                        norm.normalize(&mut expected_type);
-                    }
-
-                    {
-                        let mut norm = NormalizerScanner::new(
-                            self.context.normalize_fuel(),
-                            ExprNormalizer {
-                                model: &mut self.model,
-                            },
-                        );
-                        norm.normalize(&mut actual_type);
-                    }
-
-                    match actual_type {
-                        Expr::Type(ref n) => match &expected_type {
-                            Expr::BigType(_) => return true,
-                            Expr::Type(n2) => match (&**n, n2.as_ref()) {
-                                (Expr::IntLiteral(n), Expr::IntLiteral(n2)) => {
-                                    return n >= &BigInt::ZERO && n2 >= &BigInt::ZERO && n <= n2;
-                                }
-                                _ => {}
-                            },
-                            _ => {}
-                        },
-
-                        Expr::Builtin(Builtin::NeverType) => {
-                            return true;
-                        }
-
-                        Expr::BoxedType(actual_unboxed) => {
-                            if let Expr::BoxedType(expected_unboxed) = expected_type {
-                                expected_type = *expected_unboxed;
-                            } else {
-                                transformations.push(TypeCheckValueTransformation::Unbox(
-                                    (*actual_unboxed).clone(),
-                                ));
-                            }
-
-                            actual_type = *actual_unboxed;
-                            continue;
-                        }
-
-                        _ => {}
-                    }
-
-                    match expected_type {
-                        Expr::BoxedType(expected_unboxed) => {
-                            transformations.push(TypeCheckValueTransformation::Box(
-                                (*expected_unboxed).clone(),
-                            ));
-                            expected_type = *expected_unboxed;
-                            continue;
-                        }
-
-                        _ => {}
-                    }
-
-                    break;
-                }
-
-                self.unify(expected_type, actual_type)
-            }
-        }
     }
 
     fn partially_inferred_type_matches_expected(
@@ -3390,19 +3302,30 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
 impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
     type EC = TypeCheckExprContext;
+    type Model = Model;
+
     type Norm<'a>
         = ExprNormalizer<'a>
     where
         Self: 'a;
 
+    fn model(&self) -> &Self::Model {
+        &self.model
+    }
+
+    fn model_mut(&mut self) -> &mut Self::Model {
+        &mut self.model
+    }
+
     fn normalize_fuel(&self) -> Fuel {
         self.context.normalize_fuel()
     }
 
-    fn normalizer<'a>(&'a mut self) -> Self::Norm<'a> {
-        ExprNormalizer {
-            model: &mut self.model,
-        }
+    fn normalizer<'a>(model: &'a mut Self::Model) -> Self::Norm<'a>
+    where
+        Self: 'a,
+    {
+        ExprNormalizer { model }
     }
 
     fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: Expr<Self::EC>) -> bool {
@@ -3441,36 +3364,56 @@ impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
     }
 }
 
-enum TypeCheckValueTransformation {
-    Box(Expr<TypeCheckExprContext>),
-    Unbox(Expr<TypeCheckExprContext>),
+trait UnifyModel: Unify {
+    fn model(&mut self) -> &mut Model;
 }
 
-impl TypeCheckValueTransformation {
-    fn transform(self, e: &mut InferredType) {
-        match self {
-            TypeCheckValueTransformation::Box(t) => {
-                let checked_expr = mem::replace(&mut e.checked_expr, Expr::Error);
-                let inferred_type = mem::replace(&mut e.inferred_type, Expr::Error);
+impl<'access, 'scope, 'model> UnifyModel for TypeChecker<'access, 'scope, 'model> {
+    fn model(&mut self) -> &mut Model {
+        &mut self.model
+    }
+}
 
-                e.checked_expr = Expr::Box {
-                    t: Box::new(t),
-                    value: Box::new(checked_expr),
-                };
-                e.inferred_type = Expr::BoxedType(Box::new(inferred_type));
-            }
-            TypeCheckValueTransformation::Unbox(t) => {
-                let checked_expr = mem::replace(&mut e.checked_expr, Expr::Error);
+fn unify_hole_impl<U: UnifyModel<EC = TypeCheckExprContext>>(
+    unify: &mut U,
+    a: Hole,
+    b: Expr<TypeCheckExprContext>,
+) -> bool {
+    if let Expr::Hole(b) = &b
+        && a == *b
+    {
+        return false;
+    }
 
-                e.checked_expr = Expr::Unbox {
-                    t: Box::new(t.clone()),
-                    value: Box::new(checked_expr),
-                };
-                e.inferred_type = t;
+    match unify.model().hole_values.entry_ref(&a) {
+        hash_map::EntryRef::Occupied(oea) => {
+            let a_value = oea.get().clone();
+            unify.unify(a_value, b)
+        }
+        hash_map::EntryRef::Vacant(vea) => {
+            // TODO: Type check the hole
+            match b {
+                Expr::Hole(b) => match unify.model().hole_values.entry_ref(&b) {
+                    hash_map::EntryRef::Occupied(oeb) => {
+                        let b_value = oeb.get().clone();
+                        unify.model().hole_values.insert(a, b_value);
+                        true
+                    }
+                    hash_map::EntryRef::Vacant(veb) => {
+                        veb.insert(Expr::Hole(a));
+                        true
+                    }
+                },
+                _ => {
+                    vea.insert(b.clone());
+                    true
+                }
             }
         }
     }
 }
+
+impl<'access, 'scope, 'model> TypeComparer for TypeChecker<'access, 'scope, 'model> {}
 
 fn build_subst_holes_for_args(
     location: &Location,

@@ -90,6 +90,10 @@ impl ContextObject for RunnerContext {
         Fuel::new(5)
     }
 
+    fn prolog_fuel(&self) -> Fuel {
+        Fuel::new(10)
+    }
+
     fn z3_rlimit(&self) -> u32 {
         20000
     }

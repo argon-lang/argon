@@ -6,7 +6,9 @@ use alloc::sync::Arc;
 use argon_expr::{Expr, ExprContext, ExprContextShifter};
 use core::marker::PhantomData;
 
-pub struct DefaultToExprTypeContextShifter<EC: DefaultExprAssociatedTypes + ?Sized>(PhantomData<EC>);
+pub struct DefaultToExprTypeContextShifter<EC: DefaultExprAssociatedTypes + ?Sized>(
+    PhantomData<EC>,
+);
 
 impl<EC: DefaultExprAssociatedTypes + ?Sized> Clone for DefaultToExprTypeContextShifter<EC> {
     fn clone(&self) -> Self {
@@ -36,8 +38,7 @@ pub trait DefaultExprAssociatedTypes:
 {
 }
 
-impl<EC> DefaultExprAssociatedTypes for EC
-where
+impl<EC> DefaultExprAssociatedTypes for EC where
     EC: ExprContext<
             Function = Arc<dyn Function>,
             Method = Arc<dyn Method>,
@@ -47,7 +48,7 @@ where
             EnumVariant = Arc<dyn EnumVariant>,
             Trait = Arc<dyn Trait>,
             Instance = Arc<dyn Instance>,
-        > + ?Sized,
+        > + ?Sized
 {
 }
 

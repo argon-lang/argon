@@ -186,6 +186,7 @@ dependencies = [
  "argon-expr",
  "argon-io",
  "argon-parser",
+ "argon-prover",
  "argon-util",
  "embedded-io",
  "hashbrown 0.17.1",

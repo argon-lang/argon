@@ -1,8 +1,7 @@
+use crate::{Builtin, Expr, ExprContext, NormalizerScanner, Unify};
 use derivative::Derivative;
 use esexpr::core_types::num_bigint::BigInt;
-use crate::{Builtin, Expr, ExprContext, NormalizerScanner, Unify};
-
-
+use std::mem;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -24,11 +23,38 @@ pub enum TypeCompareTransformation<EC: ExprContext + ?Sized> {
     Unbox(Expr<EC>),
 }
 
+impl<EC: ExprContext + ?Sized> TypeCompareTransformation<EC> {
+    pub fn transform(self, e: &mut Expr<EC>, t: &mut Expr<EC>) {
+        match self {
+            TypeCompareTransformation::Box(box_type) => {
+                let e2 = mem::replace(e, Expr::Error);
+                let t2 = mem::replace(t, Expr::Error);
+
+                *e = Expr::Box {
+                    t: Box::new(box_type),
+                    value: Box::new(e2),
+                };
+                *t = Expr::BoxedType(Box::new(t2));
+            }
+            TypeCompareTransformation::Unbox(box_type) => {
+                let e2 = mem::replace(e, Expr::Error);
+
+                *e = Expr::Unbox {
+                    t: Box::new(box_type.clone()),
+                    value: Box::new(e2),
+                };
+                *t = box_type;
+            }
+        }
+    }
+}
 
 pub trait TypeComparer: Unify {
-    fn is_type(&mut self, mut expr: Expr<Self::EC>) -> bool {
+    fn is_type(&self, mut expr: Expr<Self::EC>) -> bool {
         {
-            let mut norm = NormalizerScanner::new(self.normalize_fuel(), self.normalizer());
+            let mut model = self.model().clone();
+            let mut norm =
+                NormalizerScanner::new(self.normalize_fuel(), Self::normalizer(&mut model));
             norm.normalize(&mut expr);
         }
 
@@ -55,12 +81,18 @@ pub trait TypeComparer: Unify {
 
                 loop {
                     {
-                        let mut norm = NormalizerScanner::new(self.normalize_fuel(), self.normalizer());
+                        let mut norm = NormalizerScanner::new(
+                            self.normalize_fuel(),
+                            Self::normalizer(self.model_mut()),
+                        );
                         norm.normalize(&mut expected_type);
                     }
 
                     {
-                        let mut norm = NormalizerScanner::new(self.normalize_fuel(), self.normalizer());
+                        let mut norm = NormalizerScanner::new(
+                            self.normalize_fuel(),
+                            Self::normalizer(self.model_mut()),
+                        );
                         norm.normalize(&mut actual_type);
                     }
 
@@ -98,9 +130,8 @@ pub trait TypeComparer: Unify {
 
                     match expected_type {
                         Expr::BoxedType(expected_unboxed) => {
-                            transformations.push(TypeCompareTransformation::Box(
-                                (*expected_unboxed).clone(),
-                            ));
+                            transformations
+                                .push(TypeCompareTransformation::Box((*expected_unboxed).clone()));
                             expected_type = *expected_unboxed;
                             continue;
                         }

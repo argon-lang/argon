@@ -829,7 +829,6 @@ enum builtin-op {
     int-bit-shift-left { dest: register-id; lhs: register-id; rhs: register-id; },
     int-bit-shift-right { dest: register-id; lhs: register-id; rhs: register-id; },
     int-eq { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-ne { dest: register-id; lhs: register-id; rhs: register-id; },
     int-lt { dest: register-id; lhs: register-id; rhs: register-id; },
     int-le { dest: register-id; lhs: register-id; rhs: register-id; },
     int-gt { dest: register-id; lhs: register-id; rhs: register-id; },
@@ -837,11 +836,9 @@ enum builtin-op {
 
     string-concat { dest: register-id; lhs: register-id; rhs: register-id; },
     string-eq { dest: register-id; lhs: register-id; rhs: register-id; },
-    string-ne { dest: register-id; lhs: register-id; rhs: register-id; },
 
     bool-not { dest: register-id; value: register-id; },
     bool-eq { dest: register-id; lhs: register-id; rhs: register-id; },
-    bool-ne { dest: register-id; lhs: register-id; rhs: register-id; },
 
     array-create-unsafe-uninitialized {
         element-type: token;

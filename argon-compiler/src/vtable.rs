@@ -371,9 +371,7 @@ impl VTableBuilder {
     }
 
     fn type_matches(&self, a: Expr<DefaultExprContext>, b: Expr<DefaultExprContext>) -> bool {
-        let mut unify = DefaultExprComparer {
-            context: self.context.clone(),
-        };
+        let mut unify = DefaultExprComparer::new(self.context.clone());
 
         unify.unify(a, b)
     }

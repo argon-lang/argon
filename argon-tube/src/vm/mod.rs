@@ -1725,16 +1725,13 @@ impl<'a> ExprEmitter<'a> {
                         binary_op!(IntBitShiftRight, lhs, rhs)
                     }
                     Builtin::IntEq { lhs, rhs } => binary_op!(IntEq, lhs, rhs),
-                    Builtin::IntNe { lhs, rhs } => binary_op!(IntNe, lhs, rhs),
                     Builtin::IntLt { lhs, rhs } => binary_op!(IntLt, lhs, rhs),
                     Builtin::IntLe { lhs, rhs } => binary_op!(IntLe, lhs, rhs),
                     Builtin::IntGt { lhs, rhs } => binary_op!(IntGt, lhs, rhs),
                     Builtin::IntGe { lhs, rhs } => binary_op!(IntGe, lhs, rhs),
                     Builtin::StringConcat { lhs, rhs } => binary_op!(StringConcat, lhs, rhs),
                     Builtin::StringEq { lhs, rhs } => binary_op!(StringEq, lhs, rhs),
-                    Builtin::StringNe { lhs, rhs } => binary_op!(StringNe, lhs, rhs),
                     Builtin::BoolEq { lhs, rhs } => binary_op!(BoolEq, lhs, rhs),
-                    Builtin::BoolNe { lhs, rhs } => binary_op!(BoolNe, lhs, rhs),
                     Builtin::ArrayCreateUnsafeUninitialized {
                         element_type,
                         length,
@@ -1797,6 +1794,11 @@ impl<'a> ExprEmitter<'a> {
                             },
                         )?
                     }
+                    Builtin::EqualToRefl { .. } | Builtin::UnsafeAssumeErased { .. } => Err(
+                        InternalCompilerError::TubeFormatError(TubeFormatError::InvalidTube(
+                            "Erased builtins must not be emitted to VM IR".to_owned(),
+                        )),
+                    )?,
                 }
             }
 
@@ -2278,16 +2280,18 @@ impl<'a> ExprEmitter<'a> {
             }
 
             Expr::VariableBinding(v, value) => {
-                let v = Variable::Local(v.clone());
-                let r = self.declare_var(v.clone())?;
-                if self.captured_vars.contains(&v) && v.is_mutable() {
-                    let value_reg = self.expr(value, AnyRegister)?;
-                    self.emit(vf::Instruction::NewReference {
-                        dest: Box::new(r),
-                        value: Box::new(value_reg),
-                    });
-                } else {
-                    self.expr(value, ExprOutputKnown::Register(r))?;
+                if v.erasure_mode != ErasureMode::Erased {
+                    let v = Variable::Local(v.clone());
+                    let r = self.declare_var(v.clone())?;
+                    if self.captured_vars.contains(&v) && v.is_mutable() {
+                        let value_reg = self.expr(value, AnyRegister)?;
+                        self.emit(vf::Instruction::NewReference {
+                            dest: Box::new(r),
+                            value: Box::new(value_reg),
+                        });
+                    } else {
+                        self.expr(value, ExprOutputKnown::Register(r))?;
+                    }
                 }
 
                 output.output_unit_result(self)?

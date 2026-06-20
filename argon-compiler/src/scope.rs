@@ -6,7 +6,10 @@ use crate::{
 };
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
-use argon_expr::{BlockLabel, BlockLabelDeclaration, ExprContext, ExprContextShifter, ExpressionOwner, InstanceParameterVariable, LoopLabels, Variable, VariableTupleElement};
+use argon_expr::{
+    BlockLabel, BlockLabelDeclaration, ExprContext, ExprContextShifter, ExpressionOwner,
+    InstanceParameterVariable, LoopLabels, Variable, VariableTupleElement,
+};
 use argon_parser::ast::Identifier;
 use hashbrown::{HashMap, HashSet};
 

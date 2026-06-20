@@ -278,10 +278,6 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
-    IntNe {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
-    },
     IntLt {
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
@@ -306,15 +302,7 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
-    StringNe {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
-    },
     BoolEq {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
-    },
-    BoolNe {
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
@@ -337,6 +325,13 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         index: Box<Expr<EC>>,
         value: Box<Expr<EC>>,
     },
+    EqualToRefl {
+        r#type: Box<Expr<EC>>,
+        value: Box<Expr<EC>>,
+    },
+    UnsafeAssumeErased {
+        r#type: Box<Expr<EC>>,
+    },
 }
 
 impl<EC: ExprContext + ?Sized> Builtin<EC> {
@@ -358,20 +353,19 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
             Builtin::IntBitShiftLeft { .. } => "int_bitshiftleft",
             Builtin::IntBitShiftRight { .. } => "int_bitshiftright",
             Builtin::IntEq { .. } => "int_eq",
-            Builtin::IntNe { .. } => "int_ne",
             Builtin::IntLt { .. } => "int_lt",
             Builtin::IntLe { .. } => "int_le",
             Builtin::IntGt { .. } => "int_gt",
             Builtin::IntGe { .. } => "int_ge",
             Builtin::StringConcat { .. } => "string_concat",
             Builtin::StringEq { .. } => "string_eq",
-            Builtin::StringNe { .. } => "string_ne",
             Builtin::BoolEq { .. } => "bool_eq",
-            Builtin::BoolNe { .. } => "bool_ne",
             Builtin::ArrayCreateUnsafeUninitialized { .. } => "array_create_unsafe_uninitialized",
             Builtin::ArrayLength { .. } => "array_length",
             Builtin::ArrayGet { .. } => "array_get",
             Builtin::ArraySet { .. } => "array_set",
+            Builtin::EqualToRefl { .. } => "equal_to_refl",
+            Builtin::UnsafeAssumeErased { .. } => "unsafe_assume_erased",
         }
     }
 }

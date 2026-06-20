@@ -65,6 +65,8 @@ pub trait ContextObject: ThreadSafe {
 
     fn normalize_fuel(&self) -> Fuel;
 
+    fn prolog_fuel(&self) -> Fuel;
+
     fn z3_rlimit(&self) -> u32;
 }
 
@@ -804,21 +806,41 @@ impl Normalizer for DefaultExprNormalizer {
 }
 
 pub struct DefaultExprComparer {
-    pub context: Context,
+    context: Context,
+    model: (),
+}
+
+impl DefaultExprComparer {
+    pub fn new(context: Context) -> Self {
+        Self { context, model: () }
+    }
 }
 
 impl Unify for DefaultExprComparer {
     type EC = DefaultExprContext;
+    type Model = ();
+
     type Norm<'a>
         = DefaultExprNormalizer
     where
         Self: 'a;
 
+    fn model(&self) -> &Self::Model {
+        &self.model
+    }
+
+    fn model_mut(&mut self) -> &mut Self::Model {
+        &mut self.model
+    }
+
     fn normalize_fuel(&self) -> Fuel {
         self.context.normalize_fuel()
     }
 
-    fn normalizer<'a>(&'a mut self) -> Self::Norm<'a> {
+    fn normalizer<'a>(_model: &'a mut Self::Model) -> Self::Norm<'a>
+    where
+        Self: 'a,
+    {
         DefaultExprNormalizer
     }
 

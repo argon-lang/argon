@@ -1,20 +1,24 @@
-use super::{ArgumentInfo, default_to_type_check_shifter, ExpectedType, Hole, InferredType, TypeCheckExprContext, TypeChecker, TypeInferResult};
+use super::{
+    ArgumentInfo, ExpectedType, Hole, InferredType, TypeCheckExprContext, TypeChecker,
+    TypeInferResult, default_to_type_check_shifter,
+};
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use argon_compiler::scope::{self, LocalVariableScope, Scope};
 use argon_compiler::signature::SignatureParameter;
-use argon_expr::{EnumType, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, MethodInstanceType, RecordType, SubstScanner, TraitType, Variable};
+use argon_compiler::{Function, FunctionSignature, Method, RecordField};
+use argon_expr::{
+    EnumType, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, MethodInstanceType, RecordType,
+    SubstScanner, TraitType, TypeComparer, Variable,
+};
 use argon_parser::ast::FunctionParameterListType;
 use argon_util::{CompileError, MultiSlice};
 use core::cmp::Ordering;
-use alloc::sync::Arc;
-use argon_compiler::{Function, FunctionSignature, Method, RecordField};
 use parse18_runtime::Location;
-
-
 
 #[derive(Debug)]
 pub(super) enum Overloadable<'a> {
@@ -327,12 +331,19 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
                         let mut inferred_arg = Cow::Borrowed(inferred_arg);
 
-                        if param.erasure_mode == ErasureMode::Token && self.type_checker.is_type(param.param_type.clone()) {
+                        if param.erasure_mode == ErasureMode::Token
+                            && self.type_checker.is_type(param.param_type.clone())
+                        {
                             match inferred_arg.as_ref() {
-                                TypeInferResult::Complete(inferred) if !self.type_checker.treat_as_token(&inferred.checked_expr) => {
+                                TypeInferResult::Complete(inferred)
+                                    if !self
+                                        .type_checker
+                                        .treat_as_token(&inferred.checked_expr) =>
+                                {
                                     let mut inferred = inferred.clone();
 
-                                    inferred.checked_expr = Expr::BoxedType(Box::new(inferred.checked_expr));
+                                    inferred.checked_expr =
+                                        Expr::BoxedType(Box::new(inferred.checked_expr));
 
                                     inferred_arg = Cow::Owned(TypeInferResult::Complete(inferred));
                                 }
@@ -362,7 +373,8 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                     FunctionParameterListType::NormalList => {
                         return Some(OverloadRejectionReason::ParameterListTypeMismatch);
                     }
-                    FunctionParameterListType::InferrableList(_) | FunctionParameterListType::RequiresList => {
+                    FunctionParameterListType::InferrableList(_)
+                    | FunctionParameterListType::RequiresList => {
                         let hole = Hole::new(self.call_location.clone(), param.param_type.clone());
                         if let Some(v) = v {
                             substitute_arg_in_param_types(
@@ -448,12 +460,12 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             ExpectedType::Exact(&param.param_type),
                         );
 
-                        if
-                            param.erasure_mode == ErasureMode::Token &&
-                            self.type_checker.is_type(param.param_type.clone()) &&
-                            !self.type_checker.treat_as_token(&arg_expr.checked_expr)
+                        if param.erasure_mode == ErasureMode::Token
+                            && self.type_checker.is_type(param.param_type.clone())
+                            && !self.type_checker.treat_as_token(&arg_expr.checked_expr)
                         {
-                            arg_expr.checked_expr = Expr::BoxedType(Box::new(arg_expr.checked_expr));
+                            arg_expr.checked_expr =
+                                Expr::BoxedType(Box::new(arg_expr.checked_expr));
                         }
 
                         if let Some(v) = v {
@@ -496,18 +508,15 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                         selected_args.push(Expr::Hole(hole));
                     }
                     FunctionParameterListType::RequiresList => {
-                        let arg = self.type_checker.resolve_implicit(&param.param_type);
+                        let arg = self
+                            .type_checker
+                            .resolve_implicit(&param.param_type, &self.call_location);
 
                         if let Some(v) = v {
-                            substitute_arg_in_param_types(
-                                &mut params,
-                                &mut return_type,
-                                v,
-                                &arg.checked_expr,
-                            );
+                            substitute_arg_in_param_types(&mut params, &mut return_type, v, &arg);
                         }
 
-                        selected_args.push(arg.checked_expr);
+                        selected_args.push(arg);
                     }
                 }
             }

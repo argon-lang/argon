@@ -1,6 +1,7 @@
 use crate::{Expr, ExprContext};
 use alloc::vec::Vec;
 use argon_util::Fuel;
+use std::mem;
 
 pub struct NormalizerScanner<S> {
     fuel: Fuel,
@@ -27,33 +28,74 @@ pub trait Normalizer {
 
 impl<EC: ExprContext + ?Sized, S: Normalizer<EC = EC>> NormalizerScanner<S> {
     pub fn normalize(&mut self, expr: &mut Expr<S::EC>) {
-        while !self.fuel.is_empty() {
+        let e2 = mem::replace(expr, Expr::Error);
+        *expr = self.normalize_impl(e2);
+    }
+
+    pub fn normalize_impl(&mut self, mut expr: Expr<S::EC>) -> Expr<S::EC> {
+        'updated_no_growth: while !self.fuel.is_empty() {
             'updated: {
                 match expr {
-                    Expr::Hole(hole) => {
+                    Expr::Hole(ref hole) => {
                         if let Some(resolved) = self.state.resolve_hole(hole) {
-                            *expr = resolved;
+                            expr = resolved;
                             break 'updated;
                         }
                     }
 
                     Expr::FunctionCall {
-                        function,
-                        arguments,
+                        ref function,
+                        ref mut arguments,
                     } => {
                         if let Some(body) = self.state.get_function_body(function, arguments) {
-                            *expr = body;
+                            expr = body;
                             break 'updated;
                         }
                     }
+
+                    Expr::Condition { value, .. } => {
+                        expr = *value;
+                        continue 'updated_no_growth;
+                    }
+
+                    Expr::Not(value) => {
+                        let value = self.normalize_impl(*value);
+                        match value {
+                            Expr::BoolLiteral(b) => {
+                                expr = Expr::BoolLiteral(!b);
+                                continue 'updated_no_growth;
+                            }
+                            Expr::Not(v) => {
+                                expr = *v;
+                                continue 'updated_no_growth;
+                            }
+                            Expr::And(mut a, mut b) => {
+                                a = Box::new(Expr::Not(a));
+                                b = Box::new(Expr::Not(b));
+                                expr = Expr::Or(a, b);
+                                continue 'updated_no_growth;
+                            }
+                            Expr::Or(mut a, mut b) => {
+                                a = Box::new(Expr::Not(a));
+                                b = Box::new(Expr::Not(b));
+                                expr = Expr::And(a, b);
+                                continue 'updated_no_growth;
+                            }
+                            _ => {
+                                expr = Expr::Not(Box::new(value));
+                            }
+                        }
+                    }
+
                     _ => {}
                 }
 
-                return;
+                break 'updated_no_growth;
             }
 
             self.fuel.consume();
-            self.normalize(expr);
         }
+
+        expr
     }
 }

@@ -336,10 +336,6 @@ where
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntNe { lhs, rhs } => Builtin::IntNe {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
-        },
         Builtin::IntLt { lhs, rhs } => Builtin::IntLt {
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
@@ -364,15 +360,7 @@ where
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::StringNe { lhs, rhs } => Builtin::StringNe {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
-        },
         Builtin::BoolEq { lhs, rhs } => Builtin::BoolEq {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
-        },
-        Builtin::BoolNe { lhs, rhs } => Builtin::BoolNe {
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
@@ -409,6 +397,13 @@ where
             array: Box::new(shifter.shift(*array)),
             index: Box::new(shifter.shift(*index)),
             value: Box::new(shifter.shift(*value)),
+        },
+        Builtin::EqualToRefl { r#type, value } => Builtin::EqualToRefl {
+            r#type: Box::new(shifter.shift(*r#type)),
+            value: Box::new(shifter.shift(*value)),
+        },
+        Builtin::UnsafeAssumeErased { r#type } => Builtin::UnsafeAssumeErased {
+            r#type: Box::new(shifter.shift(*r#type)),
         },
     }
 }

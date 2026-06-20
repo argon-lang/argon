@@ -850,7 +850,6 @@ enum builtin {
     int-bit-shift-left { lhs: expr; rhs: expr; },
     int-bit-shift-right { lhs: expr; rhs: expr; },
     int-eq { lhs: expr; rhs: expr; },
-    int-ne { lhs: expr; rhs: expr; },
     int-lt { lhs: expr; rhs: expr; },
     int-le { lhs: expr; rhs: expr; },
     int-gt { lhs: expr; rhs: expr; },
@@ -858,10 +857,8 @@ enum builtin {
     
     string-concat { lhs: expr; rhs: expr; },
     string-eq { lhs: expr; rhs: expr; },
-    string-ne { lhs: expr; rhs: expr; },
 
     bool-eq { lhs: expr; rhs: expr; },
-    bool-ne { lhs: expr; rhs: expr; },
     
     array-create-unsafe-uninitialized {
         element-type: expr;
@@ -883,7 +880,11 @@ enum builtin {
         value: expr;
     },
     equal-to-refl {
+        type: expr;
         value: expr;
+    },
+    unsafe-assume-erased {
+        type: expr;
     },
 }
 

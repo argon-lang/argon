@@ -1691,12 +1691,6 @@ class BlockEmitter extends EmitterBase {
                         binary("===", op);
                         break;
 
-                    case "int-ne":
-                    case "string-ne":
-                    case "bool-ne":
-                        binary("!==", op);
-                        break;
-
                     case "int-lt":
                         binary("<", op);
                         break;
@@ -2719,5 +2713,4 @@ function jsonToExpression(expr: JsonValue): estree.Expression {
             ensureExhaustive(expr);
     }
 }
-
 

@@ -25,12 +25,12 @@ pub trait PrologProverContext: ProverContext
 where
     <Self::Syntax as ProverSyntax>::PredicateExpr: Eq + Hash,
 {
-    fn intrinsic_predicate(
-        &self,
+    fn intrinsic_predicate<'a>(
+        &'a self,
         predicate: &<Self::Syntax as ProverSyntax>::PredicateExpr,
-        model: &mut Self::Model,
+        model: Rc<Self::Model>,
         prover: PrologProver<Self>,
-    ) -> Box<dyn Iterator<Item = PartialProofResult<Self>>>;
+    ) -> Box<dyn Iterator<Item = PartialProofResult<Self>> + 'a>;
 }
 
 pub struct PrologProver<'a, C: PrologProverContext + ?Sized> {
@@ -327,14 +327,11 @@ impl<'a, C: PrologProverContext> PrologProver<'a, C> {
 
             Predicate::False => Box::new(core::iter::empty()),
 
-            Predicate::PredicateExpression(predicate) => {
-                let mut model = (*model).clone();
-                Box::new(self.context.intrinsic_predicate(
-                    predicate,
-                    &mut model,
-                    self.clone().consume_fuel(),
-                ))
-            }
+            Predicate::PredicateExpression(predicate) => self.context.intrinsic_predicate(
+                predicate,
+                model.clone(),
+                self.clone().consume_fuel(),
+            ),
         }
     }
 
