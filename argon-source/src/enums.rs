@@ -91,7 +91,13 @@ impl Debug for SourceEnum {
 impl Unload for SourceEnum {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
-        *mutex_lock(&self.variants) = None;
+        let variants = mutex_lock(&self.variants).take();
+        if let Some(variants) = variants {
+            for variant in variants.iter() {
+                variant.unload();
+            }
+        }
+        self.closure.unload();
     }
 }
 
@@ -211,7 +217,12 @@ impl Debug for SourceEnumVariant {
 impl Unload for SourceEnumVariant {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
-        *mutex_lock(&self.fields) = None;
+        let fields = mutex_lock(&self.fields).take();
+        if let Some(fields) = fields {
+            for field in fields.iter() {
+                field.unload();
+            }
+        }
     }
 }
 

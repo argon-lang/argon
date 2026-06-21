@@ -26,6 +26,7 @@ use argon_util::UniqueIdentifier;
 use argon_util::sync::{Mutex, RwLock, mutex_lock, rwlock_read, rwlock_write};
 use core::fmt::Debug;
 use core::iter;
+use core::mem;
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
@@ -74,6 +75,51 @@ struct TubeDecoder {
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
     closure_parameters: RwLock<HashMap<BigUint, Box<ClosureParameterVariable<DefaultExprContext>>>>,
     block_labels: RwLock<HashMap<BigUint, Box<BlockLabel<DefaultExprContext>>>>,
+}
+
+impl Unload for TubeDecoder {
+    fn unload(&self) {
+        let functions = core::mem::take(&mut *rwlock_write(&self.functions));
+        let records = core::mem::take(&mut *rwlock_write(&self.records));
+        let enums = core::mem::take(&mut *rwlock_write(&self.enums));
+        let enum_variants = core::mem::take(&mut *rwlock_write(&self.enum_variants));
+        let traits = core::mem::take(&mut *rwlock_write(&self.traits));
+        let instances = core::mem::take(&mut *rwlock_write(&self.instances));
+        let methods = core::mem::take(&mut *rwlock_write(&self.methods));
+        let record_fields = core::mem::take(&mut *rwlock_write(&self.record_fields));
+
+        rwlock_write(&self.tube_ids).clear();
+        rwlock_write(&self.module_ids).clear();
+        rwlock_write(&self.local_import_ids).clear();
+        rwlock_write(&self.local_variables).clear();
+        rwlock_write(&self.closure_parameters).clear();
+        rwlock_write(&self.block_labels).clear();
+
+        for value in functions.into_values() {
+            value.unload();
+        }
+        for value in records.into_values() {
+            value.unload();
+        }
+        for value in enums.into_values() {
+            value.unload();
+        }
+        for value in enum_variants.into_values() {
+            value.unload();
+        }
+        for value in traits.into_values() {
+            value.unload();
+        }
+        for value in instances.into_values() {
+            value.unload();
+        }
+        for value in methods.into_values() {
+            value.unload();
+        }
+        for value in record_fields.into_values() {
+            value.unload();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -1785,6 +1831,7 @@ impl Unload for DecodedFunction {
         clear_cached(&self.import);
         clear_cached(&self.signature);
         clear_cached(&self.implementation);
+        self.decoder.unload();
     }
 }
 
@@ -1853,8 +1900,16 @@ impl Unload for DecodedTrait {
     fn unload(&self) {
         clear_cached(&self.import);
         clear_cached(&self.signature);
-        clear_cached(&self.methods);
+        let methods = clear_cached(&self.methods);
         clear_cached(&self.vtable);
+
+        if let Some(methods) = methods {
+            for method in &*methods {
+                method.method.unload();
+            }
+        }
+
+        self.decoder.unload();
     }
 }
 
@@ -1955,6 +2010,7 @@ impl Unload for DecodedMethod {
     fn unload(&self) {
         clear_cached(&self.signature);
         clear_cached(&self.implementation);
+        self.decoder.unload();
     }
 }
 
@@ -2021,8 +2077,16 @@ impl Unload for DecodedInstance {
     fn unload(&self) {
         clear_cached(&self.import);
         clear_cached(&self.signature);
-        clear_cached(&self.methods);
+        let methods = clear_cached(&self.methods);
         clear_cached(&self.vtable);
+
+        if let Some(methods) = methods {
+            for method in &*methods {
+                method.method.unload();
+            }
+        }
+
+        self.decoder.unload();
     }
 }
 
@@ -2107,7 +2171,15 @@ impl Unload for DecodedEnum {
     fn unload(&self) {
         clear_cached(&self.import);
         clear_cached(&self.signature);
-        clear_cached(&self.variants);
+        let variants = clear_cached(&self.variants);
+
+        if let Some(variants) = variants {
+            for variant in &*variants {
+                variant.unload();
+            }
+        }
+
+        self.decoder.unload();
     }
 }
 
@@ -2177,7 +2249,15 @@ impl Debug for DecodedEnumVariant {
 impl Unload for DecodedEnumVariant {
     fn unload(&self) {
         clear_cached(&self.signature);
-        clear_cached(&self.fields);
+        let fields = clear_cached(&self.fields);
+
+        if let Some(fields) = fields {
+            for field in &*fields {
+                field.unload();
+            }
+        }
+
+        self.owner.decoder.unload();
     }
 }
 
@@ -2250,6 +2330,7 @@ impl Debug for DecodedEnumVariantField {
 impl Unload for DecodedEnumVariantField {
     fn unload(&self) {
         clear_cached(&self.field_type);
+        self.owner.owner.decoder.unload();
     }
 }
 
@@ -2304,7 +2385,15 @@ impl Unload for DecodedRecord {
     fn unload(&self) {
         clear_cached(&self.import);
         clear_cached(&self.signature);
-        clear_cached(&self.fields);
+        let fields = clear_cached(&self.fields);
+
+        if let Some(fields) = fields {
+            for field in &*fields {
+                field.unload();
+            }
+        }
+
+        self.decoder.unload();
     }
 }
 
@@ -2373,6 +2462,7 @@ impl Debug for DecodedRecordField {
 impl Unload for DecodedRecordField {
     fn unload(&self) {
         clear_cached(&self.field_type);
+        self.owner.decoder.unload();
     }
 }
 
@@ -2436,8 +2526,8 @@ fn get_or_init_cached<T: Clone, F: FnOnce() -> T>(cache: &Mutex<Option<T>>, init
     value
 }
 
-fn clear_cached<T>(cache: &Mutex<Option<T>>) {
-    *mutex_lock(cache) = None;
+fn clear_cached<T>(cache: &Mutex<Option<T>>) -> Option<T> {
+    mem::take(&mut mutex_lock(cache))
 }
 
 fn access_token_for_import(import: ImportSpecifier) -> AccessToken {

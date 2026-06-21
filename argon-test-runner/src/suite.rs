@@ -5,7 +5,7 @@ use argon_runner::{
 };
 use argon_testcases::{ExpectedResult, TestCase, load_test_case};
 use hashbrown::{HashMap, HashSet};
-use libtest_mimic::{Arguments, Trial};
+use libtest_mimic::{Arguments, Conclusion, Trial};
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -536,11 +536,19 @@ where
     P: CompileTargetPlatform,
     R: CommandRunner + CommandRunnerPlatform<P> + Send + Sync + 'static,
 {
+    run_conclusion(platform, command_runner).exit()
+}
+
+pub fn run_conclusion<P, R>(platform: Arc<P>, command_runner: Arc<R>) -> Conclusion
+where
+    P: CompileTargetPlatform,
+    R: CommandRunner + CommandRunnerPlatform<P> + Send + Sync + 'static,
+{
     let args = Arguments::from_args();
     let test_cases = load_test_cases();
     let mut tests = Vec::new();
 
     build_test_suite(platform, command_runner, &test_cases, &mut tests);
 
-    libtest_mimic::run(&args, tests).exit()
+    libtest_mimic::run(&args, tests)
 }

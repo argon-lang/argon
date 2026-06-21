@@ -9,13 +9,13 @@ use argon_compiler::erased_sig::{ErasedSignature, ImportSpecifier};
 use argon_compiler::scope::{ImplicitGivens, Lookup, OverloadLookup, Overloadable, Scope};
 use argon_compiler::{
     Context, Declaration, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Tube, TubeBuilder, TubeCollection, TubeName,
+    ModuleExportEntry, ModulePath, Tube, TubeBuilder, TubeCollection, TubeName, Unload,
 };
 use argon_expr::{BlockLabel, BlockLabelDeclaration, LoopLabels};
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::CompileError;
-use argon_util::sync::{OnceLock, ThreadSafe};
+use argon_util::sync::{Mutex, ThreadSafe, mutex_lock};
 use core::{iter, mem};
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
@@ -166,7 +166,7 @@ pub struct GlobalScopeBuilder {
     access_token: AccessToken,
     parent: Option<Arc<GlobalScopeBuilder>>,
     imports: Vec<WithLocation<ImportStmt>>,
-    resolved_imports: OnceLock<ResolvedImports>,
+    resolved_imports: Mutex<Option<ResolvedImports>>,
 }
 
 impl GlobalScopeBuilder {
@@ -188,7 +188,7 @@ impl GlobalScopeBuilder {
             access_token,
             parent: None,
             imports,
-            resolved_imports: OnceLock::new(),
+            resolved_imports: Mutex::new(None),
         })
     }
 
@@ -209,24 +209,35 @@ impl GlobalScopeBuilder {
             access_token: self.access_token.clone(),
             parent: Some(self.clone()),
             imports,
-            resolved_imports: OnceLock::new(),
+            resolved_imports: Mutex::new(None),
         })
     }
 
-    fn resolved_imports(&self) -> &ResolvedImports {
-        self.resolved_imports.get_or_init(|| {
-            let mut resolved = self
-                .parent
-                .as_ref()
-                .map(|parent| parent.resolved_imports().clone())
-                .unwrap_or_default();
-
-            for import in &self.imports {
-                self.resolve_import(import, &mut resolved);
+    fn resolved_imports(&self) -> ResolvedImports {
+        {
+            let resolved_imports = mutex_lock(&self.resolved_imports);
+            if let Some(resolved) = resolved_imports.as_ref() {
+                return resolved.clone();
             }
+        }
 
-            resolved
-        })
+        let mut resolved = self
+            .parent
+            .as_ref()
+            .map(|parent| parent.resolved_imports())
+            .unwrap_or_default();
+
+        for import in &self.imports {
+            self.resolve_import(import, &mut resolved);
+        }
+
+        let mut resolved_imports = mutex_lock(&self.resolved_imports);
+        if let Some(resolved) = resolved_imports.as_ref() {
+            return resolved.clone();
+        }
+
+        *resolved_imports = Some(resolved.clone());
+        resolved
     }
 
     fn resolve_import(&self, import: &WithLocation<ImportStmt>, resolved: &mut ResolvedImports) {
@@ -461,7 +472,16 @@ impl GlobalScopeBuilder {
     }
 }
 
-pub trait DeclarationClosure: ThreadSafe {
+impl Unload for GlobalScopeBuilder {
+    fn unload(&self) {
+        *mutex_lock(&self.resolved_imports) = None;
+        if let Some(parent) = &self.parent {
+            parent.unload();
+        }
+    }
+}
+
+pub trait DeclarationClosure: ThreadSafe + Unload {
     fn scope(&self) -> GlobalScope;
     fn access_token(&self) -> AccessToken;
     fn import_specifier(&self, name: Identifier, signature: ErasedSignature) -> ImportSpecifier;
@@ -489,6 +509,12 @@ impl DeclarationClosure for ModuleClosure {
             name,
             signature: Box::new(signature),
         }
+    }
+}
+
+impl Unload for ModuleClosure {
+    fn unload(&self) {
+        self.scope.unload();
     }
 }
 

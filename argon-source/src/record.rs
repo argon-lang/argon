@@ -66,7 +66,13 @@ impl Debug for SourceRecord {
 impl Unload for SourceRecord {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
-        *mutex_lock(&self.fields) = None;
+        let fields = mutex_lock(&self.fields).take();
+        if let Some(fields) = fields {
+            for field in fields.iter() {
+                field.unload();
+            }
+        }
+        self.closure.unload();
     }
 }
 

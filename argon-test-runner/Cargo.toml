@@ -24,6 +24,7 @@ argon-runner = { workspace = true }
 argon-testcases = { workspace = true }
 argon-util = { workspace = true }
 clap = { workspace = true }
+dhat = { version = "0.3.3", optional = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
 hashbrown = { workspace = true }
@@ -32,6 +33,9 @@ subprocess = { workspace = true }
 tempfile = { workspace = true }
 toml_edit = { version = "0.25.11", features = ["parse", "serde"] }
 walkdir = { workspace = true }
+
+[features]
+dhat-heap = ["dep:dhat"]
 
 [lints]
 workspace = true

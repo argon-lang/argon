@@ -67,8 +67,14 @@ impl Debug for SourceTrait {
 impl Unload for SourceTrait {
     fn unload(&self) {
         *mutex_lock(&self.signature) = None;
-        *mutex_lock(&self.methods) = None;
+        let methods = mutex_lock(&self.methods).take();
         *mutex_lock(&self.vtable) = None;
+        if let Some(methods) = methods {
+            for entry in methods.iter() {
+                entry.method.unload();
+            }
+        }
+        self.closure.unload();
     }
 }
 

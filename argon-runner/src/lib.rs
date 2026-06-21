@@ -8,7 +8,7 @@ use crate::backend::metadata::load_platform_metadata;
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use alloc::{string::String, sync::Arc, vec::Vec};
-use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName};
+use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName, Unload};
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
 use argon_util::sync::{ThreadSafe, parallel::*};
@@ -110,9 +110,11 @@ where
         }
 
         let _ = writeln!(error_output, "Compilation succeeded.");
+        tube_collection.tube_collection().unload();
         return true;
     }
 
+    tube_collection.tube_collection().unload();
     let _ = context.runner_reporter().print_error_messages(error_output);
     let _ = delete_output_file(&options.output_file, error_output);
     false
@@ -189,9 +191,11 @@ where
         }
 
         let _ = writeln!(error_output, "Compilation succeeded.");
+        tube_collection.tube_collection().unload();
         return true;
     }
 
+    tube_collection.tube_collection().unload();
     let _ = context.runner_reporter().print_error_messages(error_output);
     let _ = delete_output_file(&options.output_file, error_output);
     false

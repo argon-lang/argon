@@ -86,6 +86,7 @@ impl Unload for SourceFunction {
     fn unload(&self) {
         *self.signature.lock().unwrap() = None;
         *self.implementation.lock().unwrap() = None;
+        self.closure.unload();
     }
 }
 

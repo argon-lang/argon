@@ -284,7 +284,7 @@ impl Hash for Tube {
 
 impl Unload for Tube {
     fn unload(&self) {
-        for module in read_lock(&self.modules).values() {
+        for (_, module) in core::mem::take(&mut *write_lock(&self.modules)) {
             module.unload();
         }
     }
@@ -357,9 +357,9 @@ impl Hash for Module {
 
 impl Unload for Module {
     fn unload(&self) {
-        for group in read_lock(&self.exports).values() {
+        for (_, group) in core::mem::take(&mut *write_lock(&self.exports)) {
             for entry in group {
-                match &entry.binding {
+                match entry.binding {
                     ModuleExportBinding::Function(f) => f.unload(),
                     ModuleExportBinding::Record(r) => r.unload(),
                     ModuleExportBinding::Enum(e) => e.unload(),
