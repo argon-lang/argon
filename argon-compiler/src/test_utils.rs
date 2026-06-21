@@ -2,13 +2,13 @@ use crate::access::AccessToken;
 use crate::platform::PlatformExtern;
 use crate::scope::{ImplicitGivens, Lookup, Scope};
 use crate::{
-    CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum, EnumVariant,
-    EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName, Unload, erased_sig,
+    erased_sig, CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum,
+    EnumVariant, EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName, Unload,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_expr::{BlockLabel, BlockLabelDeclaration, Expr, LoopLabels};
 use argon_parser::ast::Identifier;
-use argon_util::sync::{Mutex, mutex_lock};
+use argon_util::sync::{mutex_lock, Mutex};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::fmt::{Debug, Formatter};
 use hashbrown::HashMap;
@@ -67,6 +67,10 @@ impl ContextObject for TestContext {
     }
 
     fn normalize_fuel(&self) -> Fuel {
+        Fuel::new(5)
+    }
+
+    fn prolog_fuel(&self) -> Fuel {
         Fuel::new(5)
     }
 

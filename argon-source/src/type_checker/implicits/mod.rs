@@ -6,6 +6,7 @@ use hashbrown::HashMap;
 use parse18_runtime::Location;
 
 mod prolog;
+mod z3resolver;
 
 pub struct ImplicitResolverInput<'a> {
     pub context: Context,

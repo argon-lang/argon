@@ -1,11 +1,11 @@
 use super::{
-    ExprNormalizer, TypeCheckExprContext, TypeChecker, build_subst_holes_for_args,
-    default_to_type_check_shifter,
+    build_subst_holes_for_args, default_to_type_check_shifter, ExprNormalizer,
+    TypeCheckExprContext, TypeChecker,
 };
 use alloc::{sync::Arc, vec, vec::Vec};
 #[cfg(test)]
 use argon_compiler::Context;
-use argon_compiler::{Enum, EnumVariant, z3expr::Z3Expr};
+use argon_compiler::{z3expr::Z3Expr, Enum, EnumVariant};
 use argon_expr::{
     Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, NormalizerScanner, Pattern,
     SubstScanner,
@@ -133,7 +133,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                         let enum_variant_term = z3expr.enum_variant_term(&variant);
 
                         conj.push(value_variant.eq(&enum_variant_term));
-                        conj.push(z3expr.is_variant_of(&enum_term, &enum_variant_term));
+                        conj.push(z3expr.variant_enum(&enum_variant_term).eq(&enum_term));
                         conj.extend(sig.parameters.into_iter().enumerate().map(|(i, param)| {
                             let param_term = z3expr.enum_variant_arg(value, i);
 
