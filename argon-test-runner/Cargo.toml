@@ -9,14 +9,13 @@ name = "compiler_tests"
 path = "tests/compiler_tests.rs"
 harness = false
 
-[[test]]
-name = "compiler_tests_dist"
-path = "tests/compiler_tests_dist.rs"
-harness = false
-
 [[bin]]
 name = "compile-testcases"
 path = "src/bin/compile_testcases.rs"
+
+[[bin]]
+name = "compiler-tests-dist"
+path = "src/bin/compiler_tests_dist.rs"
 
 [dependencies]
 argon-io = { workspace = true }
