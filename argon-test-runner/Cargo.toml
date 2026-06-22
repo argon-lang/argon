@@ -23,14 +23,14 @@ argon-runner = { workspace = true }
 argon-testcases = { workspace = true }
 argon-util = { workspace = true }
 clap = { workspace = true }
-dhat = { version = "0.3.3", optional = true }
+dhat = { workspace = true, optional = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
 hashbrown = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }
 tempfile = { workspace = true }
-toml_edit = { version = "0.25.11", features = ["parse", "serde"] }
+toml_edit = { workspace = true }
 walkdir = { workspace = true }
 
 [features]
