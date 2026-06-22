@@ -22,6 +22,7 @@ pub struct Z3Expr<
     expected_type_sort: ExpectedTypeSort,
     variant_enum: FuncDecl,
     field_value: FuncDecl,
+    inhabited: FuncDecl,
     opaque_values: HashMap<Expr<EC>, Dynamic>,
     opaque_expr_ids: HashMap<Expr<EC>, usize>,
     asserted_enums: HashSet<Arc<dyn Enum>>,
@@ -77,6 +78,11 @@ impl<
             &[&argon_value_sort.value, &argon_value_sort.record_field_sort],
             &argon_value_sort.value,
         );
+        let inhabited = FuncDecl::new(
+            "argon_value_inhabited",
+            &[&argon_value_sort.value],
+            &Sort::bool(),
+        );
 
         let result = Self {
             solver: Solver::new(),
@@ -84,6 +90,7 @@ impl<
             expected_type_sort,
             variant_enum,
             field_value,
+            inhabited,
             opaque_values: HashMap::new(),
             opaque_expr_ids: HashMap::new(),
             asserted_enums: HashSet::new(),
@@ -127,12 +134,47 @@ impl<
     }
 
     #[must_use]
+    pub fn inhabited_func(&self) -> &FuncDecl {
+        &self.inhabited
+    }
+
+    #[must_use]
     pub fn variant_enum(&self, variant: &impl Ast) -> Dynamic {
         self.variant_enum.apply(&[variant])
     }
 
     pub fn field_value(&self, object: &impl Ast, field: &impl Ast) -> Dynamic {
         self.field_value.apply(&[object, field])
+    }
+
+    pub fn inhabited(&mut self, expr: &Expr<EC>) -> Bool {
+        match expr {
+            Expr::Builtin(Builtin::NeverType) => Bool::from_bool(false),
+            Expr::ConjunctionType { lhs, rhs } => {
+                let lhs = self.inhabited(lhs);
+                let rhs = self.inhabited(rhs);
+                Bool::and(&[&lhs, &rhs])
+            }
+            Expr::DisjunctionType { lhs, rhs } => {
+                let lhs = self.inhabited(lhs);
+                let rhs = self.inhabited(rhs);
+                Bool::or(&[&lhs, &rhs])
+            }
+            Expr::FunctionType { a, r } => {
+                let premise = self.inhabited(&a.var_type);
+                let consequence = self.inhabited(r);
+                premise.implies(&consequence)
+            }
+            Expr::EqualToType { lhs, rhs, .. } => {
+                let lhs = self.expr_to_z3(lhs);
+                let rhs = self.expr_to_z3(rhs);
+                lhs.eq(&rhs)
+            }
+            _ => {
+                let value = self.expr_to_z3(expr);
+                dynamic_to_bool(self.inhabited.apply(&[&value]))
+            }
+        }
     }
 
     pub fn enum_variant_arg(&self, value: &impl Ast, index: usize) -> Dynamic {
@@ -1274,5 +1316,66 @@ mod tests {
         let second = z3expr.expr_to_z3(&expr);
 
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn inhabited_uses_predicate_for_opaque_types() {
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let expr = Expr::Builtin(Builtin::IntType);
+        let value = z3expr.expr_to_z3(&expr);
+
+        let expected = dynamic_to_bool(z3expr.inhabited_func().apply(&[&value]));
+        let actual = z3expr.inhabited(&expr);
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn inhabited_reduces_structural_type_rules() {
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let lhs = Expr::Builtin(Builtin::IntType);
+        let rhs = Expr::Builtin(Builtin::BoolType);
+        let lhs_inhabited = z3expr.inhabited(&lhs);
+        let rhs_inhabited = z3expr.inhabited(&rhs);
+
+        let conjunction = z3expr.inhabited(&Expr::ConjunctionType {
+            lhs: Box::new(lhs.clone()),
+            rhs: Box::new(rhs.clone()),
+        });
+        assert_eq!(Bool::and(&[&lhs_inhabited, &rhs_inhabited]), conjunction);
+
+        let disjunction = z3expr.inhabited(&Expr::DisjunctionType {
+            lhs: Box::new(lhs.clone()),
+            rhs: Box::new(rhs.clone()),
+        });
+        assert_eq!(Bool::or(&[&lhs_inhabited, &rhs_inhabited]), disjunction);
+
+        let function_type = z3expr.inhabited(&Expr::FunctionType {
+            a: Box::new(argon_expr::ClosureParameterVariable {
+                id: UniqueIdentifier::new(),
+                var_type: lhs.clone(),
+                name: None,
+                is_mutable: false,
+                erasure_mode: argon_expr::ErasureMode::Erased,
+                is_witness: false,
+            }),
+            r: Box::new(rhs.clone()),
+        });
+        assert_eq!(lhs_inhabited.implies(&rhs_inhabited), function_type);
+    }
+
+    #[test]
+    fn equal_to_type_is_inhabited_when_operands_are_equal() {
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let expr = Expr::EqualToType {
+            r#type: Box::new(Expr::int_type()),
+            lhs: Box::new(int_expr(1)),
+            rhs: Box::new(int_expr(1)),
+        };
+        let inhabited = z3expr.inhabited(&expr);
+
+        z3expr.solver().assert(inhabited.not());
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 }

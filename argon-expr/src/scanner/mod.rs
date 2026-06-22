@@ -7,7 +7,7 @@ use crate::{
 mod normalizer;
 mod subst;
 
-pub use normalizer::{Normalizer, NormalizerScanner};
+pub use normalizer::{FullNormalizer, Normalizer, NormalizerScanner};
 pub use subst::SubstScanner;
 
 pub trait ExprScanner {

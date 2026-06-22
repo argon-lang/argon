@@ -4,6 +4,7 @@ use argon_compiler::{Context, ImplicitValue};
 use argon_expr::{Expr, Variable};
 use hashbrown::HashMap;
 use parse18_runtime::Location;
+use crate::type_checker::implicits::z3resolver::Z3ImplicitResolver;
 
 mod prolog;
 mod z3resolver;
@@ -21,12 +22,22 @@ impl<'a> ImplicitResolverInput<'a> {
         self,
         t: &Expr<TypeCheckExprContext>,
     ) -> Option<Expr<TypeCheckExprContext>> {
-        PrologImplicitResolver {
+        let result = PrologImplicitResolver {
             location: self.resolve_location,
             fuel: self.context.prolog_fuel(),
             given_assertions: &self.given_assertions,
         }
-        .try_resolve_implicit(t, self.model)
+        .try_resolve_implicit(t, self.model);
+
+        if result.is_some() {
+            return result;
+        }
+
+        Z3ImplicitResolver {
+            context: self.context,
+            location: self.resolve_location,
+            given_assertions: &self.given_assertions,
+        }.try_resolve_implicit(t, self.model)
     }
 }
 
