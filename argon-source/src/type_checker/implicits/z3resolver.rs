@@ -1,6 +1,6 @@
 use crate::type_checker::implicits::ImplicitResolver;
 use crate::type_checker::{
-    default_to_type_check_shifter, ExprNormalizer, Hole, Model, TypeCheckExprContext,
+    ExprNormalizer, Hole, Model, TypeCheckExprContext, default_to_type_check_shifter,
 };
 use alloc::borrow::Cow;
 use argon_compiler::z3expr::Z3Expr;
@@ -26,10 +26,7 @@ impl Z3ImplicitResolver<'_> {
         model: &mut Model,
     ) {
         let assertion = match assertion {
-            ImplicitValue::OfVar(v) => {
-                let expr = Expr::Variable(v.clone());
-                self.convert_expr(z3expr, expr, model)
-            }
+            ImplicitValue::OfVar(v) => self.convert_expr(z3expr, v.var_type().clone(), model),
             ImplicitValue::OfFunction(f) => {
                 let sig = f
                     .clone()
@@ -121,7 +118,9 @@ impl ImplicitResolver for Z3ImplicitResolver<'_> {
         let goal = self.convert_expr(&mut z3expr, t.clone(), model);
         z3expr.solver().assert(goal.not());
 
-        match z3expr.solver().check() {
+        let sat_result = z3expr.solver().check();
+
+        match sat_result {
             z3::SatResult::Sat | z3::SatResult::Unknown => None,
             z3::SatResult::Unsat => Some(Expr::Builtin(Builtin::UnsafeAssumeErased {
                 r#type: Box::new(t.clone()),

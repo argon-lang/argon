@@ -57,21 +57,18 @@ impl ResolvedImportGroups {
     }
 
     fn overload_groups(&self, groups: &mut Vec<Vec<Overloadable>>) {
-        groups.extend(
-            self.entry_groups()
-                .map(|exports| {
-                    exports
-                        .iter()
-                        .map(|entry| match &entry.binding {
-                            ModuleExportBinding::Function(f) => Overloadable::Function(f.clone()),
-                            ModuleExportBinding::Record(r) => Overloadable::Record(r.clone()),
-                            ModuleExportBinding::Enum(e) => Overloadable::Enum(e.clone()),
-                            ModuleExportBinding::Trait(t) => Overloadable::Trait(t.clone()),
-                            ModuleExportBinding::Instance(i) => Overloadable::Instance(i.clone()),
-                        })
-                        .collect()
-                }),
-        )
+        groups.extend(self.entry_groups().map(|exports| {
+            exports
+                .iter()
+                .map(|entry| match &entry.binding {
+                    ModuleExportBinding::Function(f) => Overloadable::Function(f.clone()),
+                    ModuleExportBinding::Record(r) => Overloadable::Record(r.clone()),
+                    ModuleExportBinding::Enum(e) => Overloadable::Enum(e.clone()),
+                    ModuleExportBinding::Trait(t) => Overloadable::Trait(t.clone()),
+                    ModuleExportBinding::Instance(i) => Overloadable::Instance(i.clone()),
+                })
+                .collect()
+        }))
     }
 }
 
@@ -125,19 +122,19 @@ impl Scope for GlobalScope {
     fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
         let local_groups = self.current_module.export_groups();
 
-        let combined_entries = local_groups.values().flatten()
-            .chain(
-                self.resolved_imports.values()
-                    .flat_map(|resolved_group| resolved_group.entry_groups())
-                    .flatten()
-            );
+        let combined_entries = local_groups.values().flatten().chain(
+            self.resolved_imports
+                .values()
+                .flat_map(|resolved_group| resolved_group.entry_groups())
+                .flatten(),
+        );
 
         for entry in combined_entries {
             match &entry.binding {
                 ModuleExportBinding::Function(f) if f.metadata().is_witness => {
                     givens.register_function(f.clone());
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
     }

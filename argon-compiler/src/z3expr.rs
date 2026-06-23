@@ -1,4 +1,4 @@
-use crate::{Context, Enum, EnumVariant, RecordField};
+use crate::{Context, Enum, EnumVariant, Record, RecordField, RecordFieldOwner};
 use alloc::format;
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -8,8 +8,8 @@ use core::str::FromStr;
 use hashbrown::{HashMap, HashSet};
 use z3::ast::{self, Ast, Bool, Dynamic, Int, Seq, String as Z3String};
 use z3::{
-    DatatypeAccessor, DatatypeBuilder, DatatypeSort, DatatypeVariant, FuncDecl, Params, Solver,
-    Sort,
+    DatatypeAccessor, DatatypeBuilder, DatatypeSort, DatatypeVariant, FuncDecl, Params, Pattern,
+    Solver, Sort,
 };
 
 const EXPECTED_TYPE: &str = "ExpectedType";
@@ -20,63 +20,43 @@ pub struct Z3Expr<
     solver: Solver,
     argon_value_sort: ArgonValueSort,
     expected_type_sort: ExpectedTypeSort,
-    variant_enum: FuncDecl,
-    field_value: FuncDecl,
+    is_variant_of_enum: FuncDecl,
     inhabited: FuncDecl,
     opaque_values: HashMap<Expr<EC>, Dynamic>,
-    opaque_expr_ids: HashMap<Expr<EC>, usize>,
     asserted_enums: HashSet<Arc<dyn Enum>>,
-    enum_ids: HashMap<Pointer<dyn Enum>, usize>,
-    enum_variant_ids: HashMap<Pointer<dyn EnumVariant>, usize>,
-    record_field_ids: HashMap<EC::RecordField, usize>,
-    instance_ids: HashMap<EC::Instance, usize>,
-    record_ids: HashMap<argon_expr::RecordType<EC>, usize>,
-    variable_ids: HashMap<Variable<EC>, usize>,
+    enum_terms: HashMap<Arc<dyn Enum>, Dynamic>,
+    enum_variant_terms: HashMap<Arc<dyn EnumVariant>, Dynamic>,
+    instance_terms: HashMap<EC::Instance, Dynamic>,
+    record_terms: HashMap<EC::Record, Dynamic>,
+    variable_terms: HashMap<Variable<EC>, Dynamic>,
 }
 
-struct Pointer<T: ?Sized>(*const T);
-
-impl<T: ?Sized> Pointer<T> {
-    fn new(ptr: &Arc<T>) -> Self {
-        Self(Arc::as_ptr(ptr))
-    }
+struct ConstructorAxiomArg<'a> {
+    name: &'static str,
+    sort: Sort,
+    accessor: Option<&'a FuncDecl>,
 }
-
-impl<T: ?Sized> core::hash::Hash for Pointer<T> {
-    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
-}
-
-impl<T: ?Sized> PartialEq for Pointer<T> {
-    fn eq(&self, other: &Self) -> bool {
-        core::ptr::eq(self.0, other.0)
-    }
-}
-
-impl<T: ?Sized> Eq for Pointer<T> {}
 
 impl<
-        EC: ExprContext<
-                Enum = Arc<dyn Enum>,
-                EnumVariant = Arc<dyn EnumVariant>,
-                RecordField = Arc<dyn RecordField>,
-            > + ?Sized,
-    > Z3Expr<EC>
+    EC: ExprContext<
+            Enum = Arc<dyn Enum>,
+            EnumVariant = Arc<dyn EnumVariant>,
+            Record = Arc<dyn Record>,
+            RecordField = Arc<dyn RecordField>,
+        > + ?Sized,
+> Z3Expr<EC>
 {
     #[must_use]
     pub fn new(context: Context) -> Self {
         let argon_value_sort = ArgonValueSort::new();
         let expected_type_sort = ExpectedTypeSort::new(&argon_value_sort.value);
-        let variant_enum = FuncDecl::new(
-            "variant_enum",
-            &[&argon_value_sort.enum_variant_sort],
-            &argon_value_sort.enum_sort,
-        );
-        let field_value = FuncDecl::new(
-            "argon_field_value",
-            &[&argon_value_sort.value, &argon_value_sort.record_field_sort],
-            &argon_value_sort.value,
+        let is_variant_of_enum = FuncDecl::new(
+            "is_variant_of_enum",
+            &[
+                &argon_value_sort.enum_sort,
+                &argon_value_sort.enum_variant_sort,
+            ],
+            &Sort::bool(),
         );
         let inhabited = FuncDecl::new(
             "argon_value_inhabited",
@@ -88,23 +68,21 @@ impl<
             solver: Solver::new(),
             argon_value_sort,
             expected_type_sort,
-            variant_enum,
-            field_value,
+            is_variant_of_enum,
             inhabited,
             opaque_values: HashMap::new(),
-            opaque_expr_ids: HashMap::new(),
             asserted_enums: HashSet::new(),
-            enum_ids: HashMap::new(),
-            enum_variant_ids: HashMap::new(),
-            record_field_ids: HashMap::new(),
-            instance_ids: HashMap::new(),
-            record_ids: HashMap::new(),
-            variable_ids: HashMap::new(),
+            enum_terms: HashMap::new(),
+            enum_variant_terms: HashMap::new(),
+            instance_terms: HashMap::new(),
+            record_terms: HashMap::new(),
+            variable_terms: HashMap::new(),
         };
         let mut params = Params::new();
         params.set_u32("rlimit", context.z3_rlimit());
         result.solver.set_params(&params);
         result.assert_argon_value_constructor_disjointness();
+        result.assert_argon_value_constructor_axioms();
         result
     }
 
@@ -124,13 +102,8 @@ impl<
     }
 
     #[must_use]
-    pub fn variant_enum_func(&self) -> &FuncDecl {
-        &self.variant_enum
-    }
-
-    #[must_use]
-    pub fn field_value_func(&self) -> &FuncDecl {
-        &self.field_value
+    pub fn is_variant_of_enum_func(&self) -> &FuncDecl {
+        &self.is_variant_of_enum
     }
 
     #[must_use]
@@ -139,12 +112,8 @@ impl<
     }
 
     #[must_use]
-    pub fn variant_enum(&self, variant: &impl Ast) -> Dynamic {
-        self.variant_enum.apply(&[variant])
-    }
-
-    pub fn field_value(&self, object: &impl Ast, field: &impl Ast) -> Dynamic {
-        self.field_value.apply(&[object, field])
+    pub fn is_variant_of_enum(&self, enum_: &impl Ast, variant: &impl Ast) -> Bool {
+        dynamic_to_bool(self.is_variant_of_enum.apply(&[enum_, variant]))
     }
 
     pub fn inhabited(&mut self, expr: &Expr<EC>) -> Bool {
@@ -189,132 +158,198 @@ impl<
     }
 
     pub fn enum_field(&mut self, value: &impl Ast, field: &Arc<dyn RecordField>) -> Dynamic {
-        let field_term = self.record_field_term(field);
-        self.field_value(value, &field_term)
+        let fields = self
+            .argon_value_sort
+            .value_accessors
+            .enum_variant_literal_fields
+            .apply(&[value])
+            .as_seq()
+            .expect("enum_variant_literal_fields should return a sequence");
+        fields.nth(record_field_index(field) as u64)
     }
 
-    fn enum_id(&mut self, enum_: &Arc<dyn Enum>) -> usize {
-        let ptr = Pointer::new(enum_);
-        if let Some(&id) = self.enum_ids.get(&ptr) {
-            id
-        } else {
-            let id = self.enum_ids.len();
-            self.enum_ids.insert(ptr, id);
-            id
+    fn enum_cached_term(&mut self, enum_: &Arc<dyn Enum>) -> Dynamic {
+        let id = self.enum_terms.len();
+        self.enum_terms
+            .entry(enum_.clone())
+            .or_insert_with(|| {
+                Dynamic::new_const(format!("argon_enum_{id}"), &self.argon_value_sort.enum_sort)
+            })
+            .clone()
+    }
+
+    fn enum_variant_cached_term(&mut self, variant: &Arc<dyn EnumVariant>) -> Dynamic {
+        let id = self.enum_variant_terms.len();
+        self.enum_variant_terms
+            .entry(variant.clone())
+            .or_insert_with(|| {
+                Dynamic::new_const(
+                    format!("argon_enum_variant_{id}"),
+                    &self.argon_value_sort.enum_variant_sort,
+                )
+            })
+            .clone()
+    }
+
+    fn instance_term(&mut self, instance: &EC::Instance) -> Dynamic {
+        let id = self.instance_terms.len();
+        self.instance_terms
+            .entry(instance.clone())
+            .or_insert_with(|| {
+                Dynamic::new_const(
+                    format!("argon_instance_{id}"),
+                    &self.argon_value_sort.instance_sort,
+                )
+            })
+            .clone()
+    }
+
+    fn record_term(&mut self, record: &EC::Record) -> Dynamic {
+        let id = self.record_terms.len();
+        self.record_terms
+            .entry(record.clone())
+            .or_insert_with(|| {
+                Dynamic::new_const(
+                    format!("argon_record_{id}"),
+                    &self.argon_value_sort.record_sort,
+                )
+            })
+            .clone()
+    }
+
+    fn variable_term(&mut self, variable: &Variable<EC>) -> Dynamic {
+        let id = self.variable_terms.len();
+        let mut is_new = false;
+
+        let c = self
+            .variable_terms
+            .entry(variable.clone())
+            .or_insert_with(|| {
+                is_new = true;
+                Dynamic::new_const(format!("argon_var_{id}"), &self.argon_value_sort.value)
+            })
+            .clone();
+
+        if is_new {
+            self.assert_variable_type(&c, variable.var_type());
         }
-    }
 
-    fn enum_variant_id(&mut self, variant: &Arc<dyn EnumVariant>) -> usize {
-        let ptr = Pointer::new(variant);
-        if let Some(&id) = self.enum_variant_ids.get(&ptr) {
-            id
-        } else {
-            let id = self.enum_variant_ids.len();
-            self.enum_variant_ids.insert(ptr, id);
-            id
-        }
-    }
-
-    fn enum_variant_id_count(&self) -> usize {
-        self.enum_variant_ids.len()
-    }
-
-    fn record_field_id(&mut self, field: &EC::RecordField) -> usize {
-        if let Some(&id) = self.record_field_ids.get(field) {
-            id
-        } else {
-            let id = self.record_field_ids.len();
-            self.record_field_ids.insert(field.clone(), id);
-            id
-        }
-    }
-
-    fn instance_id(&mut self, instance: &EC::Instance) -> usize {
-        if let Some(&id) = self.instance_ids.get(instance) {
-            id
-        } else {
-            let id = self.instance_ids.len();
-            self.instance_ids.insert(instance.clone(), id);
-            id
-        }
-    }
-
-    fn record_id(&mut self, record: &argon_expr::RecordType<EC>) -> usize {
-        if let Some(&id) = self.record_ids.get(record) {
-            id
-        } else {
-            let id = self.record_ids.len();
-            self.record_ids.insert(record.clone(), id);
-            id
-        }
-    }
-
-    fn variable_id(&mut self, variable: &Variable<EC>) -> usize {
-        if let Some(&id) = self.variable_ids.get(variable) {
-            id
-        } else {
-            let id = self.variable_ids.len();
-            self.variable_ids.insert(variable.clone(), id);
-            id
-        }
+        c
     }
 
     pub fn enum_term(&mut self, enum_: &Arc<dyn Enum>) -> Dynamic {
-        let sort = self.argon_value_sort.enum_sort.clone();
-        let id = self.enum_id(enum_);
-        Dynamic::new_const(format!("argon_enum_{id}"), &sort)
+        let term = self.enum_cached_term(enum_);
+        self.assert_exactly_one_variant_of_enum(enum_.clone());
+        term
     }
 
     pub fn enum_variant_term(&mut self, variant: &Arc<dyn EnumVariant>) -> Dynamic {
-        let sort = self.argon_value_sort.enum_variant_sort.clone();
-        let id = self.enum_variant_id(variant);
-        Dynamic::new_const(format!("argon_enum_variant_{id}"), &sort)
+        self.enum_variant_cached_term(variant)
     }
 
-    pub fn record_field_term(&mut self, field: &EC::RecordField) -> Dynamic {
-        let sort = self.argon_value_sort.record_field_sort.clone();
-        let id = self.record_field_id(field);
-        Dynamic::new_const(format!("argon_record_field_{id}"), &sort)
+    fn assert_variable_type(&mut self, c: &Dynamic, t: &Expr<EC>) {
+        match t {
+            Expr::Builtin(Builtin::IntType) => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort.value_testers.int_literal.apply(&[c]),
+                ));
+            }
+            Expr::Builtin(Builtin::StringType) => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort
+                        .value_testers
+                        .string_literal
+                        .apply(&[c]),
+                ));
+            }
+            Expr::Builtin(Builtin::BoolType) => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort.value_testers.bool_literal.apply(&[c]),
+                ));
+            }
+            Expr::RecordType(record_type) => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort.value_testers.record_literal.apply(&[c]),
+                ));
+                
+                let record_assertion =
+                    self.argon_value_sort.value_accessors.record_literal_record.apply(&[c])
+                        .eq(&self.record_term(&record_type.record));
+                
+                self.solver.assert(record_assertion);
+            }
+            Expr::EnumType(enum_type) => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort.value_testers.enum_variant_literal.apply(&[c]),
+                ));
+                
+                let enum_assertion =
+                    self.argon_value_sort.value_accessors.enum_variant_literal_enum.apply(&[c])
+                        .eq(&self.enum_term(&enum_type.enum_));
+                
+                self.solver.assert(enum_assertion);
+            }
+            Expr::TraitType(_) => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort.value_testers.new_instance.apply(&[c]),
+                ));
+            }
+            Expr::Tuple { items } => {
+                self.solver.assert(dynamic_to_bool(
+                    self.argon_value_sort.value_testers.tuple.apply(&[c]),
+                ));
+
+                let items_term = self
+                    .argon_value_sort
+                    .value_accessors
+                    .tuple_items
+                    .apply(&[c])
+                    .as_seq()
+                    .expect("tuple_items should return a sequence");
+
+                for (i, item) in items.iter().enumerate() {
+                    let item_term = items_term.nth(i as u64);
+                    self.assert_variable_type(&item_term, item);
+                }
+            }
+            _ => {}
+        }
     }
 
-    fn opaque_expr_term(&mut self, prefix: &str, expr: &Expr<EC>, sort: &Sort) -> Dynamic {
-        let id = self.opaque_expr_id(expr);
-        Dynamic::new_const(format!("argon_{prefix}_{id}"), sort)
-    }
-
-    pub fn assert_exactly_one_variant_of_enum(&mut self, enum_: Arc<dyn Enum>) {
+    fn assert_exactly_one_variant_of_enum(&mut self, enum_: Arc<dyn Enum>) {
         if !self.asserted_enums.insert(enum_.clone()) {
             return;
         }
 
+        let enum_assertion_id = self.asserted_enums.len() - 1;
         let enum_term = self.enum_term(&enum_);
         let variants = enum_.variants();
 
-        if variants.is_empty() {
-            let variant_id = self.enum_variant_id_count();
-            let variant = Dynamic::new_const(
-                format!("argon_enum_variant_forall_{variant_id}"),
-                &self.argon_value_sort.enum_variant_sort,
-            );
-            let body = self.variant_enum(&variant).eq(&enum_term).not();
-            self.solver
-                .assert(ast::forall_const(&[&variant], &[], &body));
-            return;
-        }
-
-        let variant_memberships = variants
+        let variant = Dynamic::new_const(
+            format!("argon_enum_variant_forall_{enum_assertion_id}"),
+            &self.argon_value_sort.enum_variant_sort,
+        );
+        let membership = self.is_variant_of_enum(&enum_term, &variant);
+        let declared_variant_matches = variants
             .iter()
-            .map(|variant| {
-                let variant_term = self.enum_variant_term(variant);
-                self.variant_enum(&variant_term).eq(&enum_term)
+            .map(|declared_variant| {
+                let declared_variant = self.enum_variant_term(declared_variant);
+                variant.eq(&declared_variant)
             })
             .collect::<Vec<_>>();
-        let weighted_memberships = variant_memberships
-            .iter()
-            .map(|membership| (membership, 1))
-            .collect::<Vec<_>>();
+        let declared_variant_match_refs = declared_variant_matches.iter().collect::<Vec<_>>();
+        let declared_variant_match = Bool::or(&declared_variant_match_refs);
+        let body = membership.eq(&declared_variant_match);
+        let pattern = Pattern::new(&[&membership]);
 
-        self.solver.assert(Bool::pb_eq(&weighted_memberships, 1));
+        self.solver
+            .assert(ast::forall_const(&[&variant], &[&pattern], &body));
+
+        for declared_variant in variants.iter() {
+            let declared_variant = self.enum_variant_term(declared_variant);
+            self.solver
+                .assert(self.is_variant_of_enum(&enum_term, &declared_variant));
+        }
     }
 
     fn assert_argon_value_constructor_disjointness(&self) {
@@ -330,6 +365,278 @@ impl<
             &[],
             &Bool::pb_le(&weighted_testers, 1),
         ));
+
+        let lhs = Dynamic::new_const(
+            "argon_value_constructor_equality_lhs",
+            &self.argon_value_sort.value,
+        );
+        let rhs = Dynamic::new_const(
+            "argon_value_constructor_equality_rhs",
+            &self.argon_value_sort.value,
+        );
+        let lhs_testers = self.argon_value_sort.value_tester_terms(&lhs);
+        let rhs_testers = self.argon_value_sort.value_tester_terms(&rhs);
+        let same_constructor_results = Bool::and(
+            &lhs_testers
+                .iter()
+                .zip(&rhs_testers)
+                .map(|(lhs_tester, rhs_tester)| lhs_tester.eq(rhs_tester))
+                .collect::<Vec<_>>(),
+        );
+        let assertion = lhs.eq(&rhs).implies(&same_constructor_results);
+
+        self.solver
+            .assert(ast::forall_const(&[&lhs, &rhs], &[], &assertion));
+    }
+
+    fn assert_argon_value_constructor_axioms(&self) {
+        let sort = &self.argon_value_sort;
+
+        self.assert_value_constructor_axiom(
+            "bool_literal",
+            &sort.value_constructors.bool_literal,
+            &sort.value_testers.bool_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::bool(),
+                accessor: Some(&sort.value_accessors.bool_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "int_literal",
+            &sort.value_constructors.int_literal,
+            &sort.value_testers.int_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::int(),
+                accessor: Some(&sort.value_accessors.int_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "string_literal",
+            &sort.value_constructors.string_literal,
+            &sort.value_testers.string_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::string(),
+                accessor: Some(&sort.value_accessors.string_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "record_literal",
+            &sort.value_constructors.record_literal,
+            &sort.value_testers.record_literal,
+            &[
+                ConstructorAxiomArg {
+                    name: "record",
+                    sort: sort.record_sort.clone(),
+                    accessor: Some(&sort.value_accessors.record_literal_record),
+                },
+                ConstructorAxiomArg {
+                    name: "fields",
+                    sort: sort.value_seq.clone(),
+                    accessor: Some(&sort.value_accessors.record_literal_fields),
+                },
+            ],
+        );
+        self.assert_value_constructor_axiom(
+            "enum_variant_literal",
+            &sort.value_constructors.enum_variant_literal,
+            &sort.value_testers.enum_variant_literal,
+            &[
+                ConstructorAxiomArg {
+                    name: "enum",
+                    sort: sort.enum_sort.clone(),
+                    accessor: Some(&sort.value_accessors.enum_variant_literal_enum),
+                },
+                ConstructorAxiomArg {
+                    name: "variant",
+                    sort: sort.enum_variant_sort.clone(),
+                    accessor: Some(&sort.value_accessors.enum_variant_literal_variant),
+                },
+                ConstructorAxiomArg {
+                    name: "arguments",
+                    sort: sort.value_seq.clone(),
+                    accessor: Some(&sort.value_accessors.enum_variant_literal_arguments),
+                },
+                ConstructorAxiomArg {
+                    name: "fields",
+                    sort: sort.value_seq.clone(),
+                    accessor: Some(&sort.value_accessors.enum_variant_literal_fields),
+                },
+            ],
+        );
+        self.assert_value_constructor_axiom(
+            "new_instance",
+            &sort.value_constructors.new_instance,
+            &sort.value_testers.new_instance,
+            &[
+                ConstructorAxiomArg {
+                    name: "instance",
+                    sort: sort.instance_sort.clone(),
+                    accessor: Some(&sort.value_accessors.new_instance_instance),
+                },
+                ConstructorAxiomArg {
+                    name: "arguments",
+                    sort: sort.value_seq.clone(),
+                    accessor: Some(&sort.value_accessors.new_instance_arguments),
+                },
+            ],
+        );
+        self.assert_value_constructor_axiom(
+            "tuple",
+            &sort.value_constructors.tuple,
+            &sort.value_testers.tuple,
+            &[ConstructorAxiomArg {
+                name: "items",
+                sort: sort.value_seq.clone(),
+                accessor: Some(&sort.value_accessors.tuple_items),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "type",
+            &sort.value_constructors.r#type,
+            &sort.value_testers.r#type,
+            &[ConstructorAxiomArg {
+                name: "level",
+                sort: sort.value.clone(),
+                accessor: Some(&sort.value_accessors.type_level),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "big_type",
+            &sort.value_constructors.big_type,
+            &sort.value_testers.big_type,
+            &[ConstructorAxiomArg {
+                name: "level",
+                sort: Sort::int(),
+                accessor: Some(&sort.value_accessors.big_type_level),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "boxed",
+            &sort.value_constructors.boxed,
+            &sort.value_testers.boxed,
+            &[
+                ConstructorAxiomArg {
+                    name: "type",
+                    sort: sort.value.clone(),
+                    accessor: Some(&sort.value_accessors.boxed_type),
+                },
+                ConstructorAxiomArg {
+                    name: "value",
+                    sort: sort.value.clone(),
+                    accessor: Some(&sort.value_accessors.boxed_value),
+                },
+            ],
+        );
+    }
+
+    fn assert_value_constructor_axiom(
+        &self,
+        name: &str,
+        constructor: &FuncDecl,
+        tester: &FuncDecl,
+        args: &[ConstructorAxiomArg<'_>],
+    ) {
+        let values = args
+            .iter()
+            .map(|arg| {
+                Dynamic::new_const(format!("argon_value_{name}_axiom_{}", arg.name), &arg.sort)
+            })
+            .collect::<Vec<_>>();
+        let value_refs = values
+            .iter()
+            .map(|value| value as &dyn Ast)
+            .collect::<Vec<_>>();
+        let constructed = constructor.apply(&value_refs);
+
+        let tester_assertion = dynamic_to_bool(tester.apply(&[&constructed]));
+
+        let mut assertions = Vec::new();
+        assertions.push(tester_assertion);
+        assertions.extend(args.iter().zip(&values).filter_map(|(arg, value)| {
+            arg.accessor
+                .map(|accessor| accessor.apply(&[&constructed]).eq(value))
+        }));
+
+        let assertion_refs = assertions.iter().collect::<Vec<_>>();
+        let assertion = Bool::and(&assertion_refs);
+
+        if value_refs.is_empty() {
+            self.solver.assert(assertion);
+        } else {
+            let pattern = Pattern::new(&[&constructed]);
+            self.solver
+                .assert(ast::forall_const(&value_refs, &[&pattern], &assertion));
+        }
+
+        let inverse_value = Dynamic::new_const(
+            format!("argon_value_{name}_inverse_axiom_value"),
+            &self.argon_value_sort.value,
+        );
+        if let Some(accessed_values) = args
+            .iter()
+            .map(|arg| {
+                arg.accessor
+                    .map(|accessor| accessor.apply(&[&inverse_value]))
+            })
+            .collect::<Option<Vec<_>>>()
+        {
+            let accessed_value_refs = accessed_values
+                .iter()
+                .map(|value| value as &dyn Ast)
+                .collect::<Vec<_>>();
+            let reconstructed = constructor.apply(&accessed_value_refs);
+            let tester_assertion = dynamic_to_bool(tester.apply(&[&inverse_value]));
+            let inverse_assertion = tester_assertion.implies(&inverse_value.eq(&reconstructed));
+            let pattern = Pattern::new(&[&tester_assertion]);
+
+            self.solver.assert(ast::forall_const(
+                &[&inverse_value],
+                &[&pattern],
+                &inverse_assertion,
+            ));
+        }
+
+        if value_refs.is_empty() {
+            let values_other = args
+                .iter()
+                .map(|arg| {
+                    Dynamic::new_const(
+                        format!("argon_value_other_{name}_axiom_{}", arg.name),
+                        &arg.sort,
+                    )
+                })
+                .collect::<Vec<_>>();
+            let value_refs_other = values_other
+                .iter()
+                .map(|value| value as &dyn Ast)
+                .collect::<Vec<_>>();
+            let constructed_other = constructor.apply(&value_refs_other);
+
+            let args_equal = Bool::and(
+                &values
+                    .iter()
+                    .zip(&values_other)
+                    .map(|(value, value_other)| value.eq(value_other))
+                    .collect::<Vec<_>>(),
+            );
+
+            let injective_assertion = constructed.eq(constructed_other).implies(args_equal);
+
+            let both_value_refs = value_refs
+                .iter()
+                .chain(value_refs_other.iter())
+                .copied()
+                .collect::<Vec<_>>();
+
+            self.solver.assert(ast::forall_const(
+                &both_value_refs,
+                &[],
+                &injective_assertion,
+            ));
+        }
     }
 
     #[must_use]
@@ -350,9 +657,6 @@ impl<
 
     fn expr_to_z3_value(&mut self, expr: &Expr<EC>) -> Option<Dynamic> {
         match expr {
-            Expr::Error => {
-                Some(self.construct_value(&self.argon_value_sort.value_constructors.error, &[]))
-            }
             Expr::And(a, b) => {
                 let a = self.expr_to_z3(a);
                 let b = self.expr_to_z3(b);
@@ -475,40 +779,31 @@ impl<
                 Ok(value) => Some(self.wrap_string_literal(&value)),
                 Err(_) => None,
             },
-            Expr::Closure { .. } => {
-                let sort = self.argon_value_sort.closure_sort.clone();
-                let closure = self.opaque_expr_term("closure", expr, &sort);
-                Some(self.construct_value(
-                    &self.argon_value_sort.value_constructors.closure,
-                    &[&closure],
-                ))
-            }
             Expr::EnumVariantLiteral {
                 enum_type,
-                variant,
+                variant: enum_variant,
                 arguments,
                 fields,
             } => {
                 let enum_ = self.enum_term(&enum_type.enum_);
-                let variant = self.enum_variant_term(variant);
+                let variant = self.enum_variant_term(enum_variant);
                 let arguments = self.value_seq(arguments);
+                let field_values =
+                    self.field_value_seq(enum_variant.clone().fields().as_ref(), fields);
                 let value = self.construct_value(
                     &self
                         .argon_value_sort
                         .value_constructors
                         .enum_variant_literal,
-                    &[&enum_, &variant, &arguments],
+                    &[&enum_, &variant, &arguments, &field_values],
                 );
-                self.assert_field_values(&value, fields);
                 Some(value)
             }
             Expr::NewInstance {
                 instance,
                 arguments,
             } => {
-                let id = self.instance_id(instance);
-                let sort = self.argon_value_sort.instance_sort.clone();
-                let instance_term = Dynamic::new_const(format!("argon_instance_{id}"), &sort);
+                let instance_term = self.instance_term(instance);
                 let arguments = self.value_seq(arguments);
                 Some(self.construct_value(
                     &self.argon_value_sort.value_constructors.new_instance,
@@ -532,14 +827,13 @@ impl<
                 record_type,
                 fields,
             } => {
-                let id = self.record_id(record_type);
-                let sort = self.argon_value_sort.record_sort.clone();
-                let record_term = Dynamic::new_const(format!("argon_record_{id}"), &sort);
+                let record_term = self.record_term(&record_type.record);
+                let field_values =
+                    self.field_value_seq(record_type.record.clone().fields().as_ref(), fields);
                 let value = self.construct_value(
                     &self.argon_value_sort.value_constructors.record_literal,
-                    &[&record_term],
+                    &[&record_term, &field_values],
                 );
-                self.assert_field_values(&value, fields);
                 Some(value)
             }
             Expr::Tuple { items } => {
@@ -567,13 +861,7 @@ impl<
                     &[&level],
                 ))
             }
-            Expr::Variable(variable) => {
-                let id = self.variable_id(variable);
-                Some(Dynamic::new_const(
-                    format!("argon_var_{id}"),
-                    &self.argon_value_sort.value,
-                ))
-            }
+            Expr::Variable(variable) => Some(self.variable_term(variable)),
             Expr::Box { t, value } => {
                 let t = self.expr_to_z3(t);
                 let value = self.expr_to_z3(value);
@@ -592,6 +880,26 @@ impl<
             .map(|value| {
                 let value = self.expr_to_z3(value);
                 Seq::unit(&value)
+            })
+            .collect::<Vec<_>>();
+        concat_seq(&self.argon_value_sort.value, &units)
+    }
+
+    fn field_value_seq(
+        &mut self,
+        field_order: &[Arc<dyn RecordField>],
+        values: &[RecordFieldLiteral<EC>],
+    ) -> Seq {
+        let units = field_order
+            .iter()
+            .filter_map(|field| {
+                values
+                    .iter()
+                    .find(|value| &value.field == field)
+                    .map(|value| {
+                        let value = self.expr_to_z3(&value.value);
+                        Seq::unit(&value)
+                    })
             })
             .collect::<Vec<_>>();
         concat_seq(&self.argon_value_sort.value, &units)
@@ -645,34 +953,14 @@ impl<
         )
     }
 
-    fn assert_field_values(&mut self, object: &Dynamic, fields: &[RecordFieldLiteral<EC>]) {
-        for field in fields {
-            let field_name = self.record_field_term(&field.field);
-            let actual_value = self.field_value(object, &field_name);
-            let expected_value = self.expr_to_z3(&field.value);
-            self.solver.assert(actual_value.eq(expected_value));
-        }
-    }
-
     fn opaque_expr_value(&mut self, expr: &Expr<EC>) -> Dynamic {
-        if let Some(value) = self.opaque_values.get(expr) {
-            return value.clone();
-        }
-
-        let id = self.opaque_expr_id(expr);
-        let value = Dynamic::new_const(format!("argon_opaque_{id}"), &self.argon_value_sort.value);
-        self.opaque_values.insert(expr.clone(), value.clone());
-        value
-    }
-
-    fn opaque_expr_id(&mut self, expr: &Expr<EC>) -> usize {
-        if let Some(&id) = self.opaque_expr_ids.get(expr) {
-            id
-        } else {
-            let id = self.opaque_expr_ids.len();
-            self.opaque_expr_ids.insert(expr.clone(), id);
-            id
-        }
+        let id = self.opaque_values.len();
+        self.opaque_values
+            .entry(expr.clone())
+            .or_insert_with(|| {
+                Dynamic::new_const(format!("argon_opaque_{id}"), &self.argon_value_sort.value)
+            })
+            .clone()
     }
 
     fn construct_value(&self, constructor: &FuncDecl, args: &[&dyn Ast]) -> Dynamic {
@@ -686,20 +974,16 @@ pub struct ArgonValueSort {
     pub value_constructors: ArgonValueConstructors,
     pub value_testers: ArgonValueTesters,
     pub value_accessors: ArgonValueAccessors,
-    pub closure_sort: Sort,
     pub record_sort: Sort,
     pub enum_sort: Sort,
     pub enum_variant_sort: Sort,
     pub instance_sort: Sort,
-    pub record_field_sort: Sort,
 }
 
 pub struct ArgonValueConstructors {
-    pub error: FuncDecl,
     pub bool_literal: FuncDecl,
     pub int_literal: FuncDecl,
     pub string_literal: FuncDecl,
-    pub closure: FuncDecl,
     pub record_literal: FuncDecl,
     pub enum_variant_literal: FuncDecl,
     pub new_instance: FuncDecl,
@@ -710,11 +994,9 @@ pub struct ArgonValueConstructors {
 }
 
 pub struct ArgonValueTesters {
-    pub error: FuncDecl,
     pub bool_literal: FuncDecl,
     pub int_literal: FuncDecl,
     pub string_literal: FuncDecl,
-    pub closure: FuncDecl,
     pub record_literal: FuncDecl,
     pub enum_variant_literal: FuncDecl,
     pub new_instance: FuncDecl,
@@ -728,11 +1010,12 @@ pub struct ArgonValueAccessors {
     pub bool_literal_value: FuncDecl,
     pub int_literal_value: FuncDecl,
     pub string_literal_value: FuncDecl,
-    pub closure_closure: FuncDecl,
     pub record_literal_record: FuncDecl,
+    pub record_literal_fields: FuncDecl,
     pub enum_variant_literal_enum: FuncDecl,
     pub enum_variant_literal_variant: FuncDecl,
     pub enum_variant_literal_arguments: FuncDecl,
+    pub enum_variant_literal_fields: FuncDecl,
     pub new_instance_instance: FuncDecl,
     pub new_instance_arguments: FuncDecl,
     pub tuple_items: FuncDecl,
@@ -768,33 +1051,23 @@ impl ArgonValueSort {
     pub fn new() -> Self {
         let value = Sort::uninterpreted("ArgonValue".into());
         let value_seq = Sort::seq(&value);
-        let closure_sort = Sort::uninterpreted("ArgonClosure".into());
         let record_sort = Sort::uninterpreted("ArgonRecord".into());
         let enum_sort = Sort::uninterpreted("ArgonEnum".into());
         let enum_variant_sort = Sort::uninterpreted("ArgonEnumVariant".into());
         let instance_sort = Sort::uninterpreted("ArgonInstance".into());
-        let record_field_sort = Sort::uninterpreted("ArgonRecordField".into());
-        let field_array_sort = Sort::array(&record_field_sort, &value);
 
         let value_constructors = ArgonValueConstructors {
-            error: FuncDecl::new("argon_value_error", &[], &value),
             bool_literal: FuncDecl::new("argon_value_bool_literal", &[&Sort::bool()], &value),
             int_literal: FuncDecl::new("argon_value_int_literal", &[&Sort::int()], &value),
             string_literal: FuncDecl::new("argon_value_string_literal", &[&Sort::string()], &value),
-            closure: FuncDecl::new("argon_value_closure", &[&closure_sort], &value),
             record_literal: FuncDecl::new(
                 "argon_value_record_literal",
-                &[&record_sort, &field_array_sort],
+                &[&record_sort, &value_seq],
                 &value,
             ),
             enum_variant_literal: FuncDecl::new(
                 "argon_value_enum_variant_literal",
-                &[
-                    &enum_sort,
-                    &enum_variant_sort,
-                    &value_seq,
-                    &field_array_sort,
-                ],
+                &[&enum_sort, &enum_variant_sort, &value_seq, &value_seq],
                 &value,
             ),
             new_instance: FuncDecl::new(
@@ -809,11 +1082,9 @@ impl ArgonValueSort {
         };
 
         let value_testers = ArgonValueTesters {
-            error: tester("argon_value_is_error", &value),
             bool_literal: tester("argon_value_is_bool_literal", &value),
             int_literal: tester("argon_value_is_int_literal", &value),
             string_literal: tester("argon_value_is_string_literal", &value),
-            closure: tester("argon_value_is_closure", &value),
             record_literal: tester("argon_value_is_record_literal", &value),
             enum_variant_literal: tester("argon_value_is_enum_variant_literal", &value),
             new_instance: tester("argon_value_is_new_instance", &value),
@@ -831,11 +1102,15 @@ impl ArgonValueSort {
                 &value,
                 &Sort::string(),
             ),
-            closure_closure: accessor("argon_value_closure_closure", &value, &closure_sort),
             record_literal_record: accessor(
                 "argon_value_record_literal_record",
                 &value,
                 &record_sort,
+            ),
+            record_literal_fields: accessor(
+                "argon_value_record_literal_fields",
+                &value,
+                &value_seq,
             ),
             enum_variant_literal_enum: accessor(
                 "argon_value_enum_variant_literal_enum",
@@ -849,6 +1124,11 @@ impl ArgonValueSort {
             ),
             enum_variant_literal_arguments: accessor(
                 "argon_value_enum_variant_literal_arguments",
+                &value,
+                &value_seq,
+            ),
+            enum_variant_literal_fields: accessor(
+                "argon_value_enum_variant_literal_fields",
                 &value,
                 &value_seq,
             ),
@@ -875,22 +1155,18 @@ impl ArgonValueSort {
             value_constructors,
             value_testers,
             value_accessors,
-            closure_sort,
             record_sort,
             enum_sort,
             enum_variant_sort,
             instance_sort,
-            record_field_sort,
         }
     }
 
     fn value_tester_terms(&self, value: &impl Ast) -> Vec<Bool> {
         [
-            &self.value_testers.error,
             &self.value_testers.bool_literal,
             &self.value_testers.int_literal,
             &self.value_testers.string_literal,
-            &self.value_testers.closure,
             &self.value_testers.record_literal,
             &self.value_testers.enum_variant_literal,
             &self.value_testers.new_instance,
@@ -980,6 +1256,17 @@ fn dynamic_to_bool(value: Dynamic) -> Bool {
     }
 }
 
+fn record_field_index(field: &Arc<dyn RecordField>) -> usize {
+    let fields = match field.owning_record() {
+        RecordFieldOwner::Record(record) => record.fields(),
+        RecordFieldOwner::EnumVariant(variant) => variant.fields(),
+    };
+    fields
+        .iter()
+        .position(|candidate| candidate == field)
+        .expect("record field should be present in its owner field list")
+}
+
 impl Default for ArgonValueSort {
     fn default() -> Self {
         Self::new()
@@ -991,8 +1278,8 @@ mod tests {
     use super::*;
     use crate::test_utils::TestContext;
     use crate::{
-        test_utils::{TestEnum, TestEnumVariant},
         DefaultExprContext,
+        test_utils::{TestEnum, TestEnumVariant},
     };
     use alloc::{sync::Arc, vec};
     use argon_expr::Builtin;
@@ -1037,6 +1324,96 @@ mod tests {
         z3expr.bool_literal_value(&value)
     }
 
+    fn dynamic_consts(args: &[(&str, Sort)]) -> Vec<Dynamic> {
+        args.iter()
+            .map(|(name, sort)| Dynamic::new_const(*name, sort))
+            .collect()
+    }
+
+    fn dynamic_refs(values: &[Dynamic]) -> Vec<&dyn Ast> {
+        values.iter().map(|value| value as &dyn Ast).collect()
+    }
+
+    fn assert_constructor_tester_axiom(
+        constructor: &FuncDecl,
+        tester: &FuncDecl,
+        args: &[(&str, Sort)],
+    ) {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let values = dynamic_consts(args);
+        let refs = dynamic_refs(&values);
+        let constructed = constructor.apply(&refs);
+        let tested = dynamic_to_bool(tester.apply(&[&constructed]));
+
+        z3expr.solver().assert(tested.not());
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
+    }
+
+    fn assert_constructor_accessor_axiom(
+        constructor: &FuncDecl,
+        accessor: &FuncDecl,
+        args: &[(&str, Sort)],
+        accessor_arg_index: usize,
+    ) {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let values = dynamic_consts(args);
+        let refs = dynamic_refs(&values);
+        let constructed = constructor.apply(&refs);
+        let accessed = accessor.apply(&[&constructed]);
+
+        z3expr
+            .solver()
+            .assert(accessed.eq(&values[accessor_arg_index]).not());
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
+    }
+
+    fn assert_constructor_is_injective(
+        constructor: &FuncDecl,
+        args: &[(&str, Sort)],
+        unequal_arg_index: usize,
+    ) {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let lhs_values = dynamic_consts(args);
+        let rhs_values = args
+            .iter()
+            .map(|(name, sort)| Dynamic::new_const(format!("{name}_rhs"), sort))
+            .collect::<Vec<_>>();
+        let lhs_refs = dynamic_refs(&lhs_values);
+        let rhs_refs = dynamic_refs(&rhs_values);
+        let lhs = constructor.apply(&lhs_refs);
+        let rhs = constructor.apply(&rhs_refs);
+
+        z3expr.solver().assert(lhs.eq(&rhs));
+        z3expr.solver().assert(
+            lhs_values[unequal_arg_index]
+                .eq(&rhs_values[unequal_arg_index])
+                .not(),
+        );
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
+    }
+
+    fn assert_constructors_are_unequal(
+        lhs_constructor: &FuncDecl,
+        lhs_args: &[(&str, Sort)],
+        rhs_constructor: &FuncDecl,
+        rhs_args: &[(&str, Sort)],
+    ) {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let lhs_values = dynamic_consts(lhs_args);
+        let rhs_values = dynamic_consts(rhs_args);
+        let lhs_refs = dynamic_refs(&lhs_values);
+        let rhs_refs = dynamic_refs(&rhs_values);
+        let lhs = lhs_constructor.apply(&lhs_refs);
+        let rhs = rhs_constructor.apply(&rhs_refs);
+
+        z3expr.solver().assert(lhs.eq(&rhs));
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
+    }
+
     #[test]
     fn composite_constructors_use_seq_sorts() {
         let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
@@ -1048,7 +1425,7 @@ mod tests {
             sort.value_constructors.new_instance.domain(1)
         );
         assert_eq!(
-            Some(SortKind::Array),
+            Some(SortKind::Seq),
             sort.value_constructors.record_literal.domain(1)
         );
         assert_eq!(
@@ -1056,7 +1433,7 @@ mod tests {
             sort.value_constructors.enum_variant_literal.domain(2)
         );
         assert_eq!(
-            Some(SortKind::Array),
+            Some(SortKind::Seq),
             sort.value_constructors.enum_variant_literal.domain(3)
         );
     }
@@ -1230,17 +1607,15 @@ mod tests {
         let enum_dyn = enum_.clone() as Arc<dyn Enum>;
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
-        z3expr.assert_exactly_one_variant_of_enum(enum_dyn);
-
         let enum_term = z3expr.enum_term(&(enum_.clone() as Arc<dyn Enum>));
         let variant_a_term = z3expr.enum_variant_term(&variant_a);
         let variant_b_term = z3expr.enum_variant_term(&variant_b);
         z3expr
             .solver()
-            .assert(z3expr.variant_enum(&variant_a_term).eq(&enum_term).not());
+            .assert(z3expr.is_variant_of_enum(&enum_term, &variant_a_term).not());
         z3expr
             .solver()
-            .assert(z3expr.variant_enum(&variant_b_term).eq(&enum_term).not());
+            .assert(z3expr.is_variant_of_enum(&enum_term, &variant_b_term).not());
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
@@ -1251,14 +1626,12 @@ mod tests {
         let enum_dyn = enum_.clone() as Arc<dyn Enum>;
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
-        z3expr.assert_exactly_one_variant_of_enum(enum_dyn);
-
         let enum_term = z3expr.enum_term(&(enum_ as Arc<dyn Enum>));
         let variant =
             Dynamic::new_const("some_variant", &z3expr.argon_value_sort().enum_variant_sort);
         z3expr
             .solver()
-            .assert(z3expr.variant_enum(&variant).eq(&enum_term));
+            .assert(z3expr.is_variant_of_enum(&enum_term, &variant));
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
@@ -1305,6 +1678,343 @@ mod tests {
         );
         let actual_not = z3expr.expr_to_z3(&Expr::Not(Box::new(a_expr)));
         assert_eq!(expected_not, actual_not);
+    }
+
+    #[test]
+    fn constructors_imply_their_tester() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.bool_literal,
+            &sort.value_testers.bool_literal,
+            &[("value", Sort::bool())],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.int_literal,
+            &sort.value_testers.int_literal,
+            &[("value", Sort::int())],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.string_literal,
+            &sort.value_testers.string_literal,
+            &[("value", Sort::string())],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.record_literal,
+            &sort.value_testers.record_literal,
+            &[
+                ("record", sort.record_sort.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.enum_variant_literal,
+            &sort.value_testers.enum_variant_literal,
+            &[
+                ("enum", sort.enum_sort.clone()),
+                ("variant", sort.enum_variant_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.new_instance,
+            &sort.value_testers.new_instance,
+            &[
+                ("instance", sort.instance_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+            ],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.tuple,
+            &sort.value_testers.tuple,
+            &[("items", sort.value_seq.clone())],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.r#type,
+            &sort.value_testers.r#type,
+            &[("level", sort.value.clone())],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.big_type,
+            &sort.value_testers.big_type,
+            &[("level", Sort::int())],
+        );
+        assert_constructor_tester_axiom(
+            &sort.value_constructors.boxed,
+            &sort.value_testers.boxed,
+            &[("type", sort.value.clone()), ("value", sort.value.clone())],
+        );
+    }
+
+    #[test]
+    fn constructor_accessors_return_constructor_arguments() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.bool_literal,
+            &sort.value_accessors.bool_literal_value,
+            &[("value", Sort::bool())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.int_literal,
+            &sort.value_accessors.int_literal_value,
+            &[("value", Sort::int())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.string_literal,
+            &sort.value_accessors.string_literal_value,
+            &[("value", Sort::string())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.record_literal,
+            &sort.value_accessors.record_literal_record,
+            &[
+                ("record", sort.record_sort.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.record_literal,
+            &sort.value_accessors.record_literal_fields,
+            &[
+                ("record", sort.record_sort.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            1,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.enum_variant_literal,
+            &sort.value_accessors.enum_variant_literal_enum,
+            &[
+                ("enum", sort.enum_sort.clone()),
+                ("variant", sort.enum_variant_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.enum_variant_literal,
+            &sort.value_accessors.enum_variant_literal_variant,
+            &[
+                ("enum", sort.enum_sort.clone()),
+                ("variant", sort.enum_variant_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            1,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.enum_variant_literal,
+            &sort.value_accessors.enum_variant_literal_arguments,
+            &[
+                ("enum", sort.enum_sort.clone()),
+                ("variant", sort.enum_variant_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            2,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.enum_variant_literal,
+            &sort.value_accessors.enum_variant_literal_fields,
+            &[
+                ("enum", sort.enum_sort.clone()),
+                ("variant", sort.enum_variant_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            3,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.new_instance,
+            &sort.value_accessors.new_instance_instance,
+            &[
+                ("instance", sort.instance_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+            ],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.new_instance,
+            &sort.value_accessors.new_instance_arguments,
+            &[
+                ("instance", sort.instance_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+            ],
+            1,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.tuple,
+            &sort.value_accessors.tuple_items,
+            &[("items", sort.value_seq.clone())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.r#type,
+            &sort.value_accessors.type_level,
+            &[("level", sort.value.clone())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.big_type,
+            &sort.value_accessors.big_type_level,
+            &[("level", Sort::int())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.boxed,
+            &sort.value_accessors.boxed_type,
+            &[("type", sort.value.clone()), ("value", sort.value.clone())],
+            0,
+        );
+        assert_constructor_accessor_axiom(
+            &sort.value_constructors.boxed,
+            &sort.value_accessors.boxed_value,
+            &[("type", sort.value.clone()), ("value", sort.value.clone())],
+            1,
+        );
+    }
+
+    #[test]
+    fn tester_reconstructs_int_literal_from_accessor() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+        let value = Dynamic::new_const("value", &sort.value);
+        let zero = sort
+            .value_constructors
+            .int_literal
+            .apply(&[&Int::from_i64(0)]);
+        let is_int = dynamic_to_bool(sort.value_testers.int_literal.apply(&[&value]));
+        let value_int = z3expr.int_literal_value(&value);
+        let zero_int = z3expr.int_literal_value(&zero);
+
+        z3expr.solver().assert(is_int);
+        z3expr.solver().assert(value_int.eq(&zero_int));
+        z3expr.solver().assert(value.eq(&zero).not());
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
+    }
+
+    #[test]
+    fn same_constructor_equality_requires_equal_arguments() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+
+        assert_constructor_is_injective(
+            &sort.value_constructors.int_literal,
+            &[("value", Sort::int())],
+            0,
+        );
+        assert_constructor_is_injective(
+            &sort.value_constructors.boxed,
+            &[("type", sort.value.clone()), ("value", sort.value.clone())],
+            1,
+        );
+    }
+
+    #[test]
+    fn different_constructor_values_are_not_equal() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+
+        assert_constructors_are_unequal(
+            &sort.value_constructors.bool_literal,
+            &[("value", Sort::bool())],
+            &sort.value_constructors.int_literal,
+            &[("value", Sort::int())],
+        );
+        assert_constructors_are_unequal(
+            &sort.value_constructors.record_literal,
+            &[
+                ("record", sort.record_sort.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+            &sort.value_constructors.enum_variant_literal,
+            &[
+                ("enum", sort.enum_sort.clone()),
+                ("variant", sort.enum_variant_sort.clone()),
+                ("arguments", sort.value_seq.clone()),
+                ("fields", sort.value_seq.clone()),
+            ],
+        );
+    }
+
+    #[test]
+    fn record_literal_equality_compares_field_sequence() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+        let record = Dynamic::new_const("record", &sort.record_sort);
+        let lhs_fields = Seq::unit(
+            &sort
+                .value_constructors
+                .int_literal
+                .apply(&[&Int::from_i64(1)]),
+        );
+        let rhs_fields = Seq::unit(
+            &sort
+                .value_constructors
+                .int_literal
+                .apply(&[&Int::from_i64(2)]),
+        );
+        let lhs = sort
+            .value_constructors
+            .record_literal
+            .apply(&[&record, &lhs_fields]);
+        let rhs = sort
+            .value_constructors
+            .record_literal
+            .apply(&[&record, &rhs_fields]);
+
+        z3expr.solver().assert(lhs.eq(&rhs));
+        z3expr.solver().assert(lhs_fields.eq(&rhs_fields).not());
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
+    }
+
+    #[test]
+    fn enum_variant_literal_equality_compares_field_sequence() {
+        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let sort = z3expr.argon_value_sort();
+        let enum_ = Dynamic::new_const("enum", &sort.enum_sort);
+        let variant = Dynamic::new_const("variant", &sort.enum_variant_sort);
+        let arguments = Seq::empty(&sort.value);
+        let lhs_fields = Seq::unit(
+            &sort
+                .value_constructors
+                .int_literal
+                .apply(&[&Int::from_i64(1)]),
+        );
+        let rhs_fields = Seq::unit(
+            &sort
+                .value_constructors
+                .int_literal
+                .apply(&[&Int::from_i64(2)]),
+        );
+        let lhs = sort.value_constructors.enum_variant_literal.apply(&[
+            &enum_,
+            &variant,
+            &arguments,
+            &lhs_fields,
+        ]);
+        let rhs = sort.value_constructors.enum_variant_literal.apply(&[
+            &enum_,
+            &variant,
+            &arguments,
+            &rhs_fields,
+        ]);
+
+        z3expr.solver().assert(lhs.eq(&rhs));
+        z3expr.solver().assert(lhs_fields.eq(&rhs_fields).not());
+
+        assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
     #[test]

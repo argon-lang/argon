@@ -1,10 +1,10 @@
 use crate::type_checker::implicits::prolog::PrologImplicitResolver;
+use crate::type_checker::implicits::z3resolver::Z3ImplicitResolver;
 use crate::type_checker::{Model, TypeCheckExprContext};
 use argon_compiler::{Context, ImplicitValue};
 use argon_expr::{Expr, Variable};
 use hashbrown::HashMap;
 use parse18_runtime::Location;
-use crate::type_checker::implicits::z3resolver::Z3ImplicitResolver;
 
 mod prolog;
 mod z3resolver;
@@ -37,7 +37,8 @@ impl<'a> ImplicitResolverInput<'a> {
             context: self.context,
             location: self.resolve_location,
             given_assertions: &self.given_assertions,
-        }.try_resolve_implicit(t, self.model)
+        }
+        .try_resolve_implicit(t, self.model)
     }
 }
 
