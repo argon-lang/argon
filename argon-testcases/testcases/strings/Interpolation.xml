@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Interpolation</Name>
+
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let name = "Bob"
+            puts "Hello #{name}"
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>
+        Hello Bob
+    </ExpectedOutput>
+
+</ArgonTest>

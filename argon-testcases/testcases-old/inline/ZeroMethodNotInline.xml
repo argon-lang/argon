@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>Zero method not inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        class Zero <: Object
+            public new()
+            end
+
+            public def self.zero: Int = 0
+        end
+
+        proc main(): () do
+            let z = Zero.new()
+            assert z.zero == 0
+            puts "Zero is 0"
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>AR000D</ExpectedError>
+
+</ArgonTest>

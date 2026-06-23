@@ -1,0 +1,72 @@
+<ArgonTest>
+
+    <Name>Option</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+        import ./Option/*
+
+        proc printOpt (opt: Option String): () =
+            puts (opt.getOrElse(_ => 'Empty!'))
+
+        proc main(): () do
+            printOpt (Some(String).new 'Hello World!!!')
+            printOpt (None(String).new())
+        end
+
+
+    ]]></InputSource>
+
+    <InputSource name="Option.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        public sealed trait Option(T: type) <: Object
+
+            public abstract def _.map(U: type)(f1: T -> U): Option U
+            public abstract def _.getOrElse(f2: () -> T): T
+
+        end
+
+        public class Some(T1: type) <: Option T1
+
+            field value: T1
+
+            public new(value: T1)
+                field value = value
+            end
+
+            public override def _.map(U: type)(f3: T1 -> U): Option U =
+                Some(U).new(f3 value)
+
+            public override def _.getOrElse(f4: () -> T1): T1 =
+                value
+
+        end
+
+        public class None(T2: type) <: Option T2
+
+            public new()
+            end
+
+            public override def _.map(U: type)(f5: T2 -> U): Option U =
+                None(U).new()
+
+            public override def _.getOrElse(f6: () -> T2): T2 =
+                f6()
+
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello World!!!
+        Empty!
+    </ExpectedOutput>
+
+</ArgonTest>

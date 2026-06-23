@@ -1,0 +1,38 @@
+<ArgonTest>
+
+    <Name>Ensures return value function fail</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        sealed trait IsEven (n: Int) <: Object
+        end
+
+        class ZeroIsEven <: IsEven 0
+            public def new()
+            end
+        end
+
+        def getEvenValue: Int
+            ensures IsEven @
+        do
+            0
+        end
+
+        proc printEven(n: Int) (requires erased even: IsEven n): () =
+            puts (n.to_s())
+
+        proc main(): () do
+            let n = getEvenValue
+            printEven n
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>AR000D</ExpectedError>
+
+</ArgonTest>

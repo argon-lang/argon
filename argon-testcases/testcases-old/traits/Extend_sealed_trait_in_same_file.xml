@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Extend sealed trait in same file</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        sealed trait TraitA <: Object
+        end
+        
+        trait TraitB <: TraitA
+        end
+        
+        proc main(): () = ()
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

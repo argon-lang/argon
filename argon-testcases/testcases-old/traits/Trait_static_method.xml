@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Trait static method</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        trait MyTrait <: Object
+        static
+            public proc self.say_hello(): () do
+                puts 'Hello World'
+            end
+        end
+        
+        proc main(): () do
+            MyTrait.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

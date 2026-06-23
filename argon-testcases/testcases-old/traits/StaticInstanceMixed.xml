@@ -1,0 +1,45 @@
+<ArgonTest>
+
+    <Name>Static/Instance Mixed</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        trait MyTrait <: Object
+
+        static
+
+            public proc self.say_hello(): () do
+                puts 'Hello'
+            end
+
+        instance
+
+            public proc self.say_world(): () do
+                puts 'World'
+            end
+
+        end
+
+        class MyClass <: MyTrait
+            public new()
+            end
+        end
+
+        proc main(): () do
+            MyTrait.say_hello()
+            MyClass.new().say_world()
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+        World
+    </ExpectedOutput>
+
+</ArgonTest>

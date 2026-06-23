@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Trait private static method</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        trait MyTrait <: Object
+        static
+            private proc self.say_hello(): () do
+                puts 'Hello World'
+            end
+        end
+
+        proc main(): () do
+            MyTrait.say_hello()
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>LookupFailed</ExpectedError>
+
+</ArgonTest>
