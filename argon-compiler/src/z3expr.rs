@@ -139,6 +139,9 @@ impl<
                 let rhs = self.expr_to_z3(rhs);
                 lhs.eq(&rhs)
             }
+            Expr::BoxedType(t) => {
+                self.inhabited(t)
+            }
             _ => {
                 let value = self.expr_to_z3(expr);
                 dynamic_to_bool(self.inhabited.apply(&[&value]))

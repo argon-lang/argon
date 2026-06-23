@@ -487,7 +487,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn treat_as_token(&self, expr: &Expr<TypeCheckExprContext>) -> bool {
         match expr {
-            Expr::EnumType(_)
+            Expr::Builtin(Builtin::IntType)
+            | Expr::Builtin(Builtin::BoolType)
+            | Expr::Builtin(Builtin::StringType)
+            | Expr::Builtin(Builtin::NeverType)
+            | Expr::EnumType(_)
             | Expr::FunctionType { .. }
             | Expr::InstanceType(_)
             | Expr::RecordType(_)
