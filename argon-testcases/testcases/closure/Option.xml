@@ -1,0 +1,63 @@
+<ArgonTest>
+
+    <Name>Option</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+        import ::Option::*
+
+        proc printOpt (opt: Option String): () =
+            puts (opt.getOrElse(|_| "Empty!"))
+
+        proc main(): () do
+            printOpt (Some "Hello World!!!")
+            printOpt None
+        end
+
+
+    ]]></InputSource>
+
+    <InputSource name="Option.argon"><![CDATA[
+
+        module Option
+
+        import Argon.Core::*
+
+        public trait Option(token T: type)
+
+            public def _.map(token U: type)(f1: fn T -> U): Option U = abstract
+            public def _.getOrElse(f2: fn () -> T): T = abstract
+
+        end
+
+        public instance Some '(token T1: type) (value: T1): Option T1
+
+            public override def _.map(token U: type)(f3: fn T1 -> U): Option U =
+                Some(f3 value)
+
+            public override def _.getOrElse(f4: fn () -> T1): T1 =
+                value
+
+        end
+
+        public instance None '(token T2: type): Option T2
+
+            public override def _.map(token U: type)(f5: fn T2 -> U): Option U =
+                None
+
+            public override def _.getOrElse(f6: fn () -> T2): T2 =
+                f6()
+
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello World!!!
+        Empty!
+    </ExpectedOutput>
+
+</ArgonTest>

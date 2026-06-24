@@ -2284,6 +2284,19 @@ class BlockEmitter extends EmitterBase {
                 assign(insn.dest, this.buildTokenValue(insn.token));
                 break;
 
+            case "load-instance-field":
+                assign(insn.dest, {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.getReg(insn.instanceObject),
+                    property: {
+                        type: "Identifier",
+                        name: `args_${insn.parameterIndex}`,
+                    },
+                });
+                break;
+
             case "move":
                 assign(insn.dest, this.getReg(insn.src));
                 break;

@@ -677,6 +677,13 @@ enum instruction {
         dest: register-id;
         token: token;
     },
+    
+    load-instance-field {
+        dest: register-id;
+        instance-object: register-id;
+        instance-type: token;
+        parameter-index: nat;
+    },
 
     move {
         dest: register-id;

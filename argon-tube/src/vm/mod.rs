@@ -970,7 +970,7 @@ struct FunctionSignatureBuilder<'a> {
     parameters: Vec<Box<vf::SignatureParameter>>,
     arg_consumers: Vec<ArgConsumer>,
 
-    instance_type_params: HashMap<Variable<DefaultExprContext>, vf::Token>,
+    instance_type_params: HashMap<Variable<DefaultExprContext>, VariableRealization>,
     instance_param: Option<Variable<DefaultExprContext>>,
     type_param_mapping: HashMap<Variable<DefaultExprContext>, vf::Token>,
     param_var_mapping: HashMap<Variable<DefaultExprContext>, MappedParamVar>,
@@ -993,7 +993,16 @@ impl<'a> FunctionSignatureBuilder<'a> {
     }
 
     fn token_emitter<'b>(&'b mut self) -> TokenEmitter<'b> {
-        let mut token_params = self.instance_type_params.clone();
+        let mut token_params = HashMap::new();
+        token_params.extend(
+            self.instance_type_params
+                .iter()
+                .filter_map(|(v, realization)| match realization {
+                    VariableRealization::Tok(t) => Some((v.clone(), t.clone())),
+                    _ => None,
+                })
+        );
+
         token_params.extend(
             self.type_param_mapping
                 .iter()
@@ -1078,16 +1087,60 @@ impl<'a> FunctionSignatureBuilder<'a> {
         let signature = owner.signature();
         let owner = owner.into_expression_owner();
 
+        let mut token_params = Vec::new();
+        let mut concrete_param_vars = Vec::new();
+
         for (index, param) in signature.parameters.iter().enumerate() {
-            if param.erasure_mode == ErasureMode::Token {
-                self.instance_type_params.insert(
-                    Variable::Parameter(Box::new(
-                        param.clone().to_parameter_var(owner.clone(), index),
-                    )),
-                    vf::Token::ParentTokenParameter {
+            match param.erasure_mode {
+                ErasureMode::Token => {
+                    let token = vf::Token::ParentTokenParameter {
                         index: BigUint::from(self.instance_type_params.len()),
+                    };
+
+                    token_params.push(Box::new(token.clone()));
+
+                    self.instance_type_params.insert(
+                        Variable::Parameter(Box::new(
+                            param.clone().to_parameter_var(owner.clone(), index),
+                        )),
+                        VariableRealization::Tok(token),
+                    );
+                }
+
+                ErasureMode::Concrete => {
+                    concrete_param_vars.push(
+                        Variable::Parameter(Box::new(
+                            param.clone().to_parameter_var(owner.clone(), index),
+                        )),
+                    );
+                }
+                ErasureMode::Erased => {
+                }
+            }
+        }
+
+        if !concrete_param_vars.is_empty() {
+            let instance_type = match owner {
+                ExpressionOwner::Instance(i) => {
+                    let id = self.encoder.get_instance_id(i.clone());
+                    vf::Token::InstanceType {
+                        instance_id: BigUint::from(id),
+                        args: token_params,
+                    }
+                }
+                _ => {
+                    todo!("Report invalid concrete parameter owner")
+                }
+            };
+
+            for (i, v) in concrete_param_vars.into_iter().enumerate() {
+                self.instance_type_params.insert(v, VariableRealization::InstanceField {
+                    instance_type: instance_type.clone(),
+                    instance: vf::RegisterId {
+                        id: BigUint::ZERO,
                     },
-                );
+                    parameter_index: i,
+                });
             }
         }
 
@@ -1098,16 +1151,6 @@ impl<'a> FunctionSignatureBuilder<'a> {
         self,
         return_type: &Expr<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
-        let mut token_emitter = TokenEmitter {
-            encoder: self.encoder,
-            token_params: self
-                .instance_type_params
-                .iter()
-                .chain(self.type_param_mapping.iter())
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-        };
-
         let reg_offset = if self.instance_param.is_some() {
             BigUint::from(1u32)
         } else {
@@ -1116,11 +1159,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
         let mut known_vars = HashMap::new();
 
-        known_vars.extend(
-            self.instance_type_params
-                .into_iter()
-                .map(|(v, t)| (v, VariableRealization::Tok(t))),
-        );
+        known_vars.extend(self.instance_type_params);
 
         known_vars.extend(self.instance_param.as_ref().map(|inst| {
             (
@@ -1152,6 +1191,17 @@ impl<'a> FunctionSignatureBuilder<'a> {
                     (param, realization)
                 }),
         );
+
+        let mut token_emitter = TokenEmitter {
+            encoder: self.encoder,
+            token_params: known_vars
+                .iter()
+                .filter_map(|(v, realization)| match realization {
+                    VariableRealization::Tok(t) => Some((v.clone(), t.clone())),
+                    _ => None,
+                })
+                .collect(),
+        };
 
         Ok(FunctionSignatureWithMapping {
             sig: vf::FunctionSignature {
@@ -2276,6 +2326,22 @@ impl<'a> ExprEmitter<'a> {
 
                         rb.into_result(self)?
                     }
+                    VariableRealization::InstanceField { instance, instance_type, parameter_index } => {
+                        let instance_object = Box::new(instance.clone());
+                        let instance_type = Box::new(instance_type.clone());
+                        let parameter_index = BigUint::from(*parameter_index);
+
+                        let rb = output.output_register(self, e)?;
+
+                        self.emit(vf::Instruction::LoadInstanceField {
+                            dest: Box::new(rb.register().clone()),
+                            instance_object,
+                            instance_type,
+                            parameter_index,
+                        });
+
+                        rb.into_result(self)?
+                    }
                 }
             }
 
@@ -2309,7 +2375,7 @@ impl<'a> ExprEmitter<'a> {
                     VariableRealization::RegRefCell(reg) => {
                         self.expr(value, ExprOutputKnown::RefCell(reg.clone()))?;
                     }
-                    VariableRealization::Tok(_) => {
+                    VariableRealization::Tok(_) | VariableRealization::InstanceField { .. } => {
                         todo!("return a proper error")
                     }
                 }
@@ -2469,6 +2535,11 @@ enum VariableRealization {
     Reg(vf::RegisterId),
     RegRefCell(vf::RegisterId),
     Tok(vf::Token),
+    InstanceField {
+        instance: vf::RegisterId,
+        instance_type: vf::Token,
+        parameter_index: usize,
+    }
 }
 
 struct FunctionArguments {
