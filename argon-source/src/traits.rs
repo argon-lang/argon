@@ -1,29 +1,28 @@
 use crate::method::{MethodClosure, SourceMethod};
-use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
+use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
-use argon_compiler::vtable::{VTable, build_vtable};
+use argon_compiler::vtable::{build_vtable, VTable};
 use argon_compiler::{
     Context, DefaultExprContext, MethodEntry, MethodOwner, Trait, TypeDeclaration, Unload,
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
-use argon_util::MultiSlice;
-use argon_util::sync::{Mutex, mutex_lock};
+use argon_util::{MultiSlice, UnloadCell};
 use core::fmt::Debug;
 
 pub struct SourceTrait {
     context: Context,
     decl: Box<ast::TraitDeclarationStmt>,
     closure: Box<dyn DeclarationClosure>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
-    vtable: Mutex<Option<Arc<VTable>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl SourceTrait {
@@ -43,9 +42,9 @@ impl SourceTrait {
                 context,
                 decl,
                 closure,
-                signature: Mutex::new(None),
-                methods: Mutex::new(None),
-                vtable: Mutex::new(None),
+                signature: UnloadCell::new(),
+                methods: UnloadCell::new(),
+                vtable: UnloadCell::new(),
             }),
         }
     }
@@ -66,14 +65,9 @@ impl Debug for SourceTrait {
 
 impl Unload for SourceTrait {
     fn unload(&self) {
-        *mutex_lock(&self.signature) = None;
-        let methods = mutex_lock(&self.methods).take();
-        *mutex_lock(&self.vtable) = None;
-        if let Some(methods) = methods {
-            for entry in methods.iter() {
-                entry.method.unload();
-            }
-        }
+        self.signature.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.closure.unload();
     }
 }
@@ -86,80 +80,67 @@ impl Trait for SourceTrait {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = mutex_lock(&self.signature);
-        if let Some(ref sig) = *sig_store {
-            return sig.clone();
-        }
+        self.signature.initialize(|| {
+            let scope = self.closure.scope();
+            let access_token = self.access_token();
+            let owner_ref: Arc<dyn Trait> = self.clone();
+            let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Trait(owner_ref);
+            let return_type =
+                SignatureParser::get_type_sig_return_type(&self.decl.name, &self.decl.return_type);
 
-        let scope = self.closure.scope();
-        let access_token = self.access_token();
-        let owner_ref: Arc<dyn Trait> = self.clone();
-        let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Trait(owner_ref);
-        let return_type =
-            SignatureParser::get_type_sig_return_type(&self.decl.name, &self.decl.return_type);
-
-        let sig = SignatureParser {
-            context: self.context.clone(),
-            scope: &scope,
-            access_token,
-            owner,
-        }
-        .parse(
-            MultiSlice::from(self.decl.parameters.as_slice()),
-            &return_type,
-        );
-
-        let result = Arc::new(sig);
-        *sig_store = Some(result.clone());
-        result
+            Arc::new(
+                SignatureParser {
+                    context: self.context.clone(),
+                    scope: &scope,
+                    access_token,
+                    owner,
+                }
+                .parse(
+                    MultiSlice::from(self.decl.parameters.as_slice()),
+                    &return_type,
+                ),
+            )
+        })
     }
 
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
-        let mut methods_store = mutex_lock(&self.methods);
-        if let Some(ref methods) = *methods_store {
-            return methods.clone();
-        }
-
-        let methods = self
-            .decl
-            .body
-            .iter()
-            .filter_map(|stmt| match &stmt.value {
-                ast::TraitBodyStmt::MethodDeclaration(method) => {
-                    let closure = TraitMethodClosure {
-                        trait_: self.clone(),
-                    };
-                    let method_res =
-                        SourceMethod::from_ast(self.context.clone(), closure, (**method).clone());
-                    Some(MethodEntry {
-                        access: method_res.access,
-                        method: method_res.result,
+        self.methods.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::TraitBodyStmt::MethodDeclaration(method) => {
+                            let closure = TraitMethodClosure {
+                                trait_: self.clone(),
+                            };
+                            let method_res = SourceMethod::from_ast(
+                                self.context.clone(),
+                                closure,
+                                (**method).clone(),
+                            );
+                            Some(MethodEntry {
+                                access: method_res.access,
+                                method: method_res.result,
+                            })
+                        }
+                        ast::TraitBodyStmt::FunctionDeclaration(_) => None,
                     })
-                }
-                ast::TraitBodyStmt::FunctionDeclaration(_) => None,
-            })
-            .collect::<Vec<_>>();
-
-        let result = Arc::new(methods);
-        *methods_store = Some(result.clone());
-        result
+                    .collect::<Vec<_>>(),
+            )
+        })
     }
 
     fn vtable(self: Arc<Self>) -> Arc<VTable> {
-        let mut vtable_store = mutex_lock(&self.vtable);
-        if let Some(ref vtable) = *vtable_store {
-            return vtable.clone();
-        }
-
-        let trait_ref: Arc<dyn Trait> = self.clone();
-        let result = Arc::new(build_vtable(
-            self.context.clone(),
-            MethodOwner::Trait(trait_ref),
-            self.access_token(),
-            Some(self.decl.name.location.clone()),
-        ));
-        *vtable_store = Some(result.clone());
-        result
+        self.vtable.initialize(|| {
+            let trait_ref: Arc<dyn Trait> = self.clone();
+            Arc::new(build_vtable(
+                self.context.clone(),
+                MethodOwner::Trait(trait_ref),
+                self.access_token(),
+                Some(self.decl.name.location.clone()),
+            ))
+        })
     }
 }
 

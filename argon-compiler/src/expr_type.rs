@@ -3,7 +3,10 @@ use crate::{DefaultExprContext, EmptyHole, FunctionSignature, SubstFunctionSigna
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
-use argon_expr::{Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, MethodInstanceType, Pattern, SubstScanner, Variable};
+use argon_expr::{
+    Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, MethodInstanceType,
+    Pattern, SubstScanner, Variable,
+};
 
 pub trait ExprTypeContext: DefaultExprAssociatedTypes {
     fn get_hole_type(hole: &Self::Hole) -> Expr<Self>;
@@ -121,7 +124,9 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
 
         Expr::Variable(variable) => variable.var_type().clone(),
 
-        Expr::RecordFieldLoad { record_type, field, .. } => {
+        Expr::RecordFieldLoad {
+            record_type, field, ..
+        } => {
             let mut subst = SubstScanner::new();
             subst.add_function_parameter_substitutions(
                 ExpressionOwner::Record(record_type.record.clone()),
@@ -174,8 +179,7 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
             get_expr_type(&trait_type)
         }
 
-        Expr::RecordLiteral { record_type, .. } =>
-            Expr::RecordType(record_type.clone()),
+        Expr::RecordLiteral { record_type, .. } => Expr::RecordType(record_type.clone()),
 
         Expr::FunctionResultValue => todo!(),
     }

@@ -1,7 +1,7 @@
 use crate::{BlockLabel, Pattern};
 use alloc::{boxed::Box, vec, vec::Vec};
 use argon_parser::ast::Identifier;
-use argon_util::UniqueIdentifier;
+use argon_util::{UniqueIdentifier, Unload};
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
 use derivative::Derivative;
@@ -188,6 +188,10 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         t: Box<Expr<EC>>,
         value: Box<Expr<EC>>,
     },
+}
+
+impl<EC: ExprContext + ?Sized> Unload for Expr<EC> {
+    fn unload(&self) {}
 }
 
 impl<EC: ExprContext + ?Sized> Expr<EC> {

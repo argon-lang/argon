@@ -1,11 +1,11 @@
 use crate::enums::SourceEnumVariant;
-use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
+use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
+use crate::type_checker::{type_check_type_expr, TypeCheckOptions};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
@@ -14,16 +14,15 @@ use argon_compiler::{
 };
 use argon_expr::{ErasureMode, Expr, ExpressionOwner};
 use argon_parser::ast;
-use argon_util::MultiSlice;
-use argon_util::sync::{Mutex, mutex_lock};
+use argon_util::{MultiSlice, UnloadCell};
 use core::fmt::Debug;
 
 pub struct SourceRecord {
     context: Context,
     decl: Box<ast::RecordDeclarationStmt>,
     closure: Box<dyn DeclarationClosure>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    fields: Mutex<Option<Arc<Vec<Arc<dyn RecordField>>>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
 }
 
 impl SourceRecord {
@@ -43,8 +42,8 @@ impl SourceRecord {
                 context,
                 decl,
                 closure,
-                signature: Mutex::new(None),
-                fields: Mutex::new(None),
+                signature: UnloadCell::new(),
+                fields: UnloadCell::new(),
             }),
         }
     }
@@ -65,13 +64,8 @@ impl Debug for SourceRecord {
 
 impl Unload for SourceRecord {
     fn unload(&self) {
-        *mutex_lock(&self.signature) = None;
-        let fields = mutex_lock(&self.fields).take();
-        if let Some(fields) = fields {
-            for field in fields.iter() {
-                field.unload();
-            }
-        }
+        self.signature.unload();
+        self.fields.unload();
         self.closure.unload();
     }
 }
@@ -84,58 +78,48 @@ impl Record for SourceRecord {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = mutex_lock(&self.signature);
-        if let Some(ref sig) = *sig_store {
-            return sig.clone();
-        }
+        self.signature.initialize(|| {
+            let scope = self.closure.scope();
+            let access_token = self.access_token();
+            let owner_ref: Arc<dyn Record> = self.clone();
+            let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Record(owner_ref);
+            let return_type =
+                SignatureParser::get_type_sig_return_type(&self.decl.name, &self.decl.return_type);
 
-        let scope = self.closure.scope();
-        let access_token = self.access_token();
-        let owner_ref: Arc<dyn Record> = self.clone();
-        let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Record(owner_ref);
-        let return_type =
-            SignatureParser::get_type_sig_return_type(&self.decl.name, &self.decl.return_type);
-
-        let sig = SignatureParser {
-            context: self.context.clone(),
-            scope: &scope,
-            access_token,
-            owner,
-        }
-        .parse(
-            MultiSlice::from(self.decl.parameters.as_slice()),
-            &return_type,
-        );
-
-        let result = Arc::new(sig);
-        *sig_store = Some(result.clone());
-        result
+            Arc::new(
+                SignatureParser {
+                    context: self.context.clone(),
+                    scope: &scope,
+                    access_token,
+                    owner,
+                }
+                .parse(
+                    MultiSlice::from(self.decl.parameters.as_slice()),
+                    &return_type,
+                ),
+            )
+        })
     }
 
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
-        let mut fields_store = mutex_lock(&self.fields);
-        if let Some(ref fields) = *fields_store {
-            return fields.clone();
-        }
-
-        let fields: Vec<Arc<dyn RecordField>> = self
-            .decl
-            .body
-            .iter()
-            .filter_map(|stmt| match &stmt.value {
-                ast::RecordBodyStmt::RecordField(field) => Some(Arc::new(SourceRecordField::new(
-                    SourceRecordFieldOwner::SourceRecord(self.clone()),
-                    (**field).clone(),
-                ))
-                    as Arc<dyn RecordField>),
-                ast::RecordBodyStmt::FunctionDeclaration(_)
-                | ast::RecordBodyStmt::MethodDeclaration(_) => None,
-            })
-            .collect();
-
-        let result = Arc::new(fields);
-        *fields_store = Some(result.clone());
-        result
+        self.fields.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::RecordBodyStmt::RecordField(field) => {
+                            Some(Arc::new(SourceRecordField::new(
+                                SourceRecordFieldOwner::SourceRecord(self.clone()),
+                                (**field).clone(),
+                            )) as Arc<dyn RecordField>)
+                        }
+                        ast::RecordBodyStmt::FunctionDeclaration(_)
+                        | ast::RecordBodyStmt::MethodDeclaration(_) => None,
+                    })
+                    .collect(),
+            )
+        })
     }
 }
 
@@ -200,7 +184,7 @@ pub struct SourceRecordField {
     pub owner: SourceRecordFieldOwner,
     pub field: ast::RecordField,
     pub metadata: RecordFieldMetadata,
-    pub field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
+    pub field_type: UnloadCell<Arc<Expr<DefaultExprContext>>>,
 }
 
 impl SourceRecordField {
@@ -214,7 +198,7 @@ impl SourceRecordField {
             owner,
             field,
             metadata,
-            field_type: Mutex::new(None),
+            field_type: UnloadCell::new(),
         }
     }
 }
@@ -227,7 +211,7 @@ impl Debug for SourceRecordField {
 
 impl Unload for SourceRecordField {
     fn unload(&self) {
-        *mutex_lock(&self.field_type) = None;
+        self.field_type.unload();
     }
 }
 
@@ -243,27 +227,20 @@ impl RecordField for SourceRecordField {
     fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
         let access_token = self.owner.access_token();
 
-        let mut field_type_store = mutex_lock(&self.field_type);
-        if let Some(ref field_type) = *field_type_store {
-            return field_type.clone();
-        }
+        self.field_type.initialize(|| {
+            let signature = self.owner.signature();
+            let scope = self.owner.closure().scope();
+            let scope = ParameterScope::new(
+                scope,
+                self.owner.to_expression_owner(),
+                &signature.parameters,
+            );
 
-        let signature = self.owner.signature();
-        let scope = self.owner.closure().scope();
-        let scope = ParameterScope::new(
-            scope,
-            self.owner.to_expression_owner(),
-            &signature.parameters,
-        );
-
-        let field_type = type_check_type_expr(
-            self.owner.context().clone(),
-            TypeCheckOptions::new(&access_token, &scope, ErasureMode::Concrete),
-            &self.field.field_type,
-        );
-
-        let result = Arc::new(field_type);
-        *field_type_store = Some(result.clone());
-        result
+            Arc::new(type_check_type_expr(
+                self.owner.context().clone(),
+                TypeCheckOptions::new(&access_token, &scope, ErasureMode::Concrete),
+                &self.field.field_type,
+            ))
+        })
     }
 }

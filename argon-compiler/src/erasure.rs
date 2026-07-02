@@ -3,7 +3,7 @@ use crate::scanner::PurityScanner;
 use crate::shifter::DefaultToExprTypeContextShifter;
 use crate::{Context, FunctionSignature};
 use argon_expr::{
-    Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer, default_scan,
+    default_scan, Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer,
 };
 use argon_util::CompileError;
 use parse18_runtime::Location;

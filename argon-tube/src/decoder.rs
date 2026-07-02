@@ -1,10 +1,12 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{
-    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
+    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
 };
 use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
+    access::{AccessModifier, AccessToken},
+    vtable::{build_vtable, VTable},
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
     EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr, Function,
     FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature,
@@ -13,8 +15,6 @@ use argon_compiler::{
     RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
     TubeCollectionBuilder, TubeMetadata, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
     Unload,
-    access::{AccessModifier, AccessToken},
-    vtable::{VTable, build_vtable},
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
@@ -22,11 +22,10 @@ use argon_expr::{
     RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
-use argon_util::UniqueIdentifier;
-use argon_util::sync::{Mutex, RwLock, mutex_lock, rwlock_read, rwlock_write};
+use argon_util::sync::{rwlock_read, rwlock_write, RwLock};
+use argon_util::{UniqueIdentifier, UnloadCell};
 use core::fmt::Debug;
 use core::iter;
-use core::mem;
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
@@ -1795,9 +1794,9 @@ struct DecodedFunction {
     decoder: Arc<TubeDecoder>,
     definition: tf::FunctionDefinition,
     metadata: FunctionMetadata,
-    import: Mutex<Option<ImportSpecifier>>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    implementation: Mutex<Option<Option<Arc<FunctionImplementation>>>>,
+    import: UnloadCell<ImportSpecifier>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    implementation: UnloadCell<Option<Arc<FunctionImplementation>>>,
 }
 
 impl DecodedFunction {
@@ -1813,9 +1812,9 @@ impl DecodedFunction {
             decoder,
             definition,
             metadata,
-            import: Mutex::new(None),
-            signature: Mutex::new(None),
-            implementation: Mutex::new(None),
+            import: UnloadCell::new(),
+            signature: UnloadCell::new(),
+            implementation: UnloadCell::new(),
         }
     }
 }
@@ -1828,9 +1827,9 @@ impl Debug for DecodedFunction {
 
 impl Unload for DecodedFunction {
     fn unload(&self) {
-        clear_cached(&self.import);
-        clear_cached(&self.signature);
-        clear_cached(&self.implementation);
+        self.import.unload();
+        self.signature.unload();
+        self.implementation.unload();
         self.decoder.unload();
     }
 }
@@ -1871,10 +1870,10 @@ impl Function for DecodedFunction {
 struct DecodedTrait {
     decoder: Arc<TubeDecoder>,
     definition: tf::TraitDefinition,
-    import: Mutex<Option<ImportSpecifier>>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
-    vtable: Mutex<Option<Arc<VTable>>>,
+    import: UnloadCell<ImportSpecifier>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl DecodedTrait {
@@ -1882,10 +1881,10 @@ impl DecodedTrait {
         Self {
             decoder,
             definition,
-            import: Mutex::new(None),
-            signature: Mutex::new(None),
-            methods: Mutex::new(None),
-            vtable: Mutex::new(None),
+            import: UnloadCell::new(),
+            signature: UnloadCell::new(),
+            methods: UnloadCell::new(),
+            vtable: UnloadCell::new(),
         }
     }
 }
@@ -1898,17 +1897,10 @@ impl Debug for DecodedTrait {
 
 impl Unload for DecodedTrait {
     fn unload(&self) {
-        clear_cached(&self.import);
-        clear_cached(&self.signature);
-        let methods = clear_cached(&self.methods);
-        clear_cached(&self.vtable);
-
-        if let Some(methods) = methods {
-            for method in &*methods {
-                method.method.unload();
-            }
-        }
-
+        self.import.unload();
+        self.signature.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.decoder.unload();
     }
 }
@@ -1965,8 +1957,8 @@ struct DecodedMethod {
     owner: MethodOwner,
     entry: tf::MethodEntry,
     metadata: MethodMetadata,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    implementation: Mutex<Option<Option<Arc<FunctionImplementation>>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    implementation: UnloadCell<Option<Arc<FunctionImplementation>>>,
 }
 
 impl DecodedMethod {
@@ -1994,8 +1986,8 @@ impl DecodedMethod {
             owner,
             entry,
             metadata,
-            signature: Mutex::new(None),
-            implementation: Mutex::new(None),
+            signature: UnloadCell::new(),
+            implementation: UnloadCell::new(),
         }
     }
 }
@@ -2008,8 +2000,8 @@ impl Debug for DecodedMethod {
 
 impl Unload for DecodedMethod {
     fn unload(&self) {
-        clear_cached(&self.signature);
-        clear_cached(&self.implementation);
+        self.signature.unload();
+        self.implementation.unload();
         self.decoder.unload();
     }
 }
@@ -2048,10 +2040,10 @@ impl Method for DecodedMethod {
 struct DecodedInstance {
     decoder: Arc<TubeDecoder>,
     definition: tf::InstanceDefinition,
-    import: Mutex<Option<ImportSpecifier>>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    methods: Mutex<Option<Arc<Vec<MethodEntry>>>>,
-    vtable: Mutex<Option<Arc<VTable>>>,
+    import: UnloadCell<ImportSpecifier>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl DecodedInstance {
@@ -2059,10 +2051,10 @@ impl DecodedInstance {
         Self {
             decoder,
             definition,
-            import: Mutex::new(None),
-            signature: Mutex::new(None),
-            methods: Mutex::new(None),
-            vtable: Mutex::new(None),
+            import: UnloadCell::new(),
+            signature: UnloadCell::new(),
+            methods: UnloadCell::new(),
+            vtable: UnloadCell::new(),
         }
     }
 }
@@ -2075,17 +2067,10 @@ impl Debug for DecodedInstance {
 
 impl Unload for DecodedInstance {
     fn unload(&self) {
-        clear_cached(&self.import);
-        clear_cached(&self.signature);
-        let methods = clear_cached(&self.methods);
-        clear_cached(&self.vtable);
-
-        if let Some(methods) = methods {
-            for method in &*methods {
-                method.method.unload();
-            }
-        }
-
+        self.import.unload();
+        self.signature.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.decoder.unload();
     }
 }
@@ -2144,9 +2129,9 @@ impl Instance for DecodedInstance {
 struct DecodedEnum {
     decoder: Arc<TubeDecoder>,
     definition: tf::EnumDefinition,
-    import: Mutex<Option<ImportSpecifier>>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    variants: Mutex<Option<Arc<Vec<Arc<dyn EnumVariant>>>>>,
+    import: UnloadCell<ImportSpecifier>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    variants: UnloadCell<Arc<Vec<Arc<dyn EnumVariant>>>>,
 }
 
 impl DecodedEnum {
@@ -2154,9 +2139,9 @@ impl DecodedEnum {
         Self {
             decoder,
             definition,
-            import: Mutex::new(None),
-            signature: Mutex::new(None),
-            variants: Mutex::new(None),
+            import: UnloadCell::new(),
+            signature: UnloadCell::new(),
+            variants: UnloadCell::new(),
         }
     }
 }
@@ -2169,16 +2154,9 @@ impl Debug for DecodedEnum {
 
 impl Unload for DecodedEnum {
     fn unload(&self) {
-        clear_cached(&self.import);
-        clear_cached(&self.signature);
-        let variants = clear_cached(&self.variants);
-
-        if let Some(variants) = variants {
-            for variant in &*variants {
-                variant.unload();
-            }
-        }
-
+        self.import.unload();
+        self.signature.unload();
+        self.variants.unload();
         self.decoder.unload();
     }
 }
@@ -2220,8 +2198,8 @@ struct DecodedEnumVariant {
     owner: Arc<DecodedEnum>,
     definition: tf::EnumVariantDefinition,
     metadata: EnumVariantMetadata,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    fields: Mutex<Option<Arc<Vec<Arc<dyn RecordField>>>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
 }
 
 impl DecodedEnumVariant {
@@ -2234,8 +2212,8 @@ impl DecodedEnumVariant {
             owner,
             definition,
             metadata,
-            signature: Mutex::new(None),
-            fields: Mutex::new(None),
+            signature: UnloadCell::new(),
+            fields: UnloadCell::new(),
         }
     }
 }
@@ -2248,15 +2226,8 @@ impl Debug for DecodedEnumVariant {
 
 impl Unload for DecodedEnumVariant {
     fn unload(&self) {
-        clear_cached(&self.signature);
-        let fields = clear_cached(&self.fields);
-
-        if let Some(fields) = fields {
-            for field in &*fields {
-                field.unload();
-            }
-        }
-
+        self.signature.unload();
+        self.fields.unload();
         self.owner.decoder.unload();
     }
 }
@@ -2302,7 +2273,7 @@ struct DecodedEnumVariantField {
     owner: Arc<DecodedEnumVariant>,
     definition: tf::RecordFieldDefinition,
     metadata: RecordFieldMetadata,
-    field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
+    field_type: UnloadCell<Arc<Expr<DefaultExprContext>>>,
 }
 
 impl DecodedEnumVariantField {
@@ -2316,7 +2287,7 @@ impl DecodedEnumVariantField {
             owner,
             definition,
             metadata,
-            field_type: Mutex::new(None),
+            field_type: UnloadCell::new(),
         }
     }
 }
@@ -2329,7 +2300,7 @@ impl Debug for DecodedEnumVariantField {
 
 impl Unload for DecodedEnumVariantField {
     fn unload(&self) {
-        clear_cached(&self.field_type);
+        self.field_type.unload();
         self.owner.owner.decoder.unload();
     }
 }
@@ -2358,9 +2329,9 @@ impl RecordField for DecodedEnumVariantField {
 struct DecodedRecord {
     decoder: Arc<TubeDecoder>,
     definition: tf::RecordDefinition,
-    import: Mutex<Option<ImportSpecifier>>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    fields: Mutex<Option<Arc<Vec<Arc<dyn RecordField>>>>>,
+    import: UnloadCell<ImportSpecifier>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
 }
 
 impl DecodedRecord {
@@ -2368,9 +2339,9 @@ impl DecodedRecord {
         Self {
             decoder,
             definition,
-            import: Mutex::new(None),
-            signature: Mutex::new(None),
-            fields: Mutex::new(None),
+            import: UnloadCell::new(),
+            signature: UnloadCell::new(),
+            fields: UnloadCell::new(),
         }
     }
 }
@@ -2383,16 +2354,9 @@ impl Debug for DecodedRecord {
 
 impl Unload for DecodedRecord {
     fn unload(&self) {
-        clear_cached(&self.import);
-        clear_cached(&self.signature);
-        let fields = clear_cached(&self.fields);
-
-        if let Some(fields) = fields {
-            for field in &*fields {
-                field.unload();
-            }
-        }
-
+        self.import.unload();
+        self.signature.unload();
+        self.fields.unload();
         self.decoder.unload();
     }
 }
@@ -2434,7 +2398,7 @@ struct DecodedRecordField {
     owner: Arc<DecodedRecord>,
     definition: tf::RecordFieldDefinition,
     metadata: RecordFieldMetadata,
-    field_type: Mutex<Option<Arc<Expr<DefaultExprContext>>>>,
+    field_type: UnloadCell<Arc<Expr<DefaultExprContext>>>,
 }
 
 impl DecodedRecordField {
@@ -2448,7 +2412,7 @@ impl DecodedRecordField {
             owner,
             definition,
             metadata,
-            field_type: Mutex::new(None),
+            field_type: UnloadCell::new(),
         }
     }
 }
@@ -2461,7 +2425,7 @@ impl Debug for DecodedRecordField {
 
 impl Unload for DecodedRecordField {
     fn unload(&self) {
-        clear_cached(&self.field_type);
+        self.field_type.unload();
         self.owner.decoder.unload();
     }
 }
@@ -2515,19 +2479,8 @@ fn insert_unique<T>(map: &mut HashMap<BigUint, T>, key: BigUint, value: T, kind:
     }
 }
 
-fn get_or_init_cached<T: Clone, F: FnOnce() -> T>(cache: &Mutex<Option<T>>, init: F) -> T {
-    let mut cache = mutex_lock(cache);
-    if let Some(value) = cache.as_ref() {
-        return value.clone();
-    }
-
-    let value = init();
-    *cache = Some(value.clone());
-    value
-}
-
-fn clear_cached<T>(cache: &Mutex<Option<T>>) -> Option<T> {
-    mem::take(&mut mutex_lock(cache))
+fn get_or_init_cached<T: Clone, F: FnOnce() -> T>(cache: &UnloadCell<T>, init: F) -> T {
+    cache.initialize(init)
 }
 
 fn access_token_for_import(import: ImportSpecifier) -> AccessToken {

@@ -26,15 +26,15 @@ impl<EC: DefaultExprAssociatedTypes + ?Sized> Default for DefaultToExprTypeConte
 
 pub trait DefaultExprAssociatedTypes:
     ExprContext<
-        Function = Arc<dyn Function>,
-        Method = Arc<dyn Method>,
-        Record = Arc<dyn Record>,
-        RecordField = Arc<dyn RecordField>,
-        Enum = Arc<dyn Enum>,
-        EnumVariant = Arc<dyn EnumVariant>,
-        Trait = Arc<dyn Trait>,
-        Instance = Arc<dyn Instance>,
-    >
+    Function = Arc<dyn Function>,
+    Method = Arc<dyn Method>,
+    Record = Arc<dyn Record>,
+    RecordField = Arc<dyn RecordField>,
+    Enum = Arc<dyn Enum>,
+    EnumVariant = Arc<dyn EnumVariant>,
+    Trait = Arc<dyn Trait>,
+    Instance = Arc<dyn Instance>,
+>
 {
 }
 

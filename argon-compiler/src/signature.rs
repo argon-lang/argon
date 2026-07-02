@@ -6,6 +6,7 @@ use argon_expr::{
     MethodInstanceType, ParameterVariable, SubstScanner, Variable,
 };
 use argon_parser::ast::{FunctionParameterListType, Identifier};
+use argon_util::Unload;
 use derivative::Derivative;
 
 #[derive(Derivative)]
@@ -76,6 +77,10 @@ impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
             }
         }
     }
+}
+
+impl<EC: ExprContext + ?Sized> Unload for FunctionSignature<EC> {
+    fn unload(&self) {}
 }
 
 pub trait SubstFunctionSignature<'a, EC: ExprContext + ?Sized> {

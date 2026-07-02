@@ -4,7 +4,7 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 use argon_expr::{Builtin, ErasureMode, Expr, NormalizerScanner};
 use argon_parser::ast::Identifier;
-use argon_util::UniqueIdentifier;
+use argon_util::{UniqueIdentifier, Unload};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ErasedSignature {
@@ -37,6 +37,10 @@ pub enum ImportSpecifier {
         parent: Box<ImportSpecifier>,
         id: UniqueIdentifier,
     },
+}
+
+impl Unload for ImportSpecifier {
+    fn unload(&self) {}
 }
 
 pub fn erase_signature(

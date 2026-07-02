@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
-use parse18_runtime::{Location, LocationFile, write_location_file};
+use parse18_runtime::{write_location_file, Location, LocationFile};
 use std::path::PathBuf;
 
 pub trait ErrorReporter<E> {
@@ -172,7 +172,11 @@ impl CompileError {
     }
 
     pub fn invalid_overload(loc: Location, message: &str) -> Self {
-        Self::new(ErrorCode::InvalidOverload, format!("Invalid overload: {message}"), Some(loc))
+        Self::new(
+            ErrorCode::InvalidOverload,
+            format!("Invalid overload: {message}"),
+            Some(loc),
+        )
     }
 
     pub fn ambiguous_overload(loc: Location) -> Self {

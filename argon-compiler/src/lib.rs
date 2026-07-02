@@ -28,8 +28,9 @@ pub use argon_parser::ast::{
     UnaryOperatorIdentifier,
 };
 use argon_util::sync::{
-    RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe, rwlock_read, rwlock_write,
+    rwlock_read, rwlock_write, RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe,
 };
+pub use argon_util::Unload;
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
@@ -408,10 +409,6 @@ pub enum ModuleExportBinding {
     Instance(Arc<dyn Instance>),
 }
 
-pub trait Unload {
-    fn unload(&self);
-}
-
 pub trait Function: Debug + Unload + ThreadSafe {
     fn metadata(&self) -> &FunctionMetadata;
 
@@ -430,6 +427,10 @@ pub struct FunctionMetadata {
 pub enum FunctionImplementation {
     Expr(Expr<DefaultExprContext>),
     Extern(PlatformExtern),
+}
+
+impl Unload for FunctionImplementation {
+    fn unload(&self) {}
 }
 
 pub trait Method: Debug + Unload + ThreadSafe {
@@ -501,6 +502,12 @@ pub struct MethodInstanceParameter {
 pub struct MethodEntry {
     pub access: access::AccessModifier,
     pub method: Arc<dyn Method>,
+}
+
+impl Unload for MethodEntry {
+    fn unload(&self) {
+        self.method.unload();
+    }
 }
 
 pub trait Record: Debug + Unload + ThreadSafe {

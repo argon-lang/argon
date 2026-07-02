@@ -107,7 +107,7 @@ impl<EC: ExprContext + ?Sized, S: Normalizer<EC = EC>> NormalizerScanner<S> {
                         argument,
                     } => {
                         match *function {
-                            Expr::Closure { v, return_type, mut body } => {
+                            Expr::Closure { v, mut body, .. } => {
                                 let mut subst = SubstScanner::new();
                                 subst.add_substitution(Variable::ClosureParameter(v), Cow::Owned(*argument));
                                 subst.scan(&mut *body);

@@ -38,13 +38,13 @@ struct ConstructorAxiomArg<'a> {
 }
 
 impl<
-    EC: ExprContext<
-            Enum = Arc<dyn Enum>,
-            EnumVariant = Arc<dyn EnumVariant>,
-            Record = Arc<dyn Record>,
-            RecordField = Arc<dyn RecordField>,
-        > + ?Sized,
-> Z3Expr<EC>
+        EC: ExprContext<
+                Enum = Arc<dyn Enum>,
+                EnumVariant = Arc<dyn EnumVariant>,
+                Record = Arc<dyn Record>,
+                RecordField = Arc<dyn RecordField>,
+            > + ?Sized,
+    > Z3Expr<EC>
 {
     #[must_use]
     pub fn new(context: Context) -> Self {
@@ -139,9 +139,7 @@ impl<
                 let rhs = self.expr_to_z3(rhs);
                 lhs.eq(&rhs)
             }
-            Expr::BoxedType(t) => {
-                self.inhabited(t)
-            }
+            Expr::BoxedType(t) => self.inhabited(t),
             _ => {
                 let value = self.expr_to_z3(expr);
                 dynamic_to_bool(self.inhabited.apply(&[&value]))
@@ -272,24 +270,36 @@ impl<
             }
             Expr::RecordType(record_type) => {
                 self.solver.assert(dynamic_to_bool(
-                    self.argon_value_sort.value_testers.record_literal.apply(&[c]),
+                    self.argon_value_sort
+                        .value_testers
+                        .record_literal
+                        .apply(&[c]),
                 ));
-                
-                let record_assertion =
-                    self.argon_value_sort.value_accessors.record_literal_record.apply(&[c])
-                        .eq(&self.record_term(&record_type.record));
-                
+
+                let record_assertion = self
+                    .argon_value_sort
+                    .value_accessors
+                    .record_literal_record
+                    .apply(&[c])
+                    .eq(&self.record_term(&record_type.record));
+
                 self.solver.assert(record_assertion);
             }
             Expr::EnumType(enum_type) => {
                 self.solver.assert(dynamic_to_bool(
-                    self.argon_value_sort.value_testers.enum_variant_literal.apply(&[c]),
+                    self.argon_value_sort
+                        .value_testers
+                        .enum_variant_literal
+                        .apply(&[c]),
                 ));
-                
-                let enum_assertion =
-                    self.argon_value_sort.value_accessors.enum_variant_literal_enum.apply(&[c])
-                        .eq(&self.enum_term(&enum_type.enum_));
-                
+
+                let enum_assertion = self
+                    .argon_value_sort
+                    .value_accessors
+                    .enum_variant_literal_enum
+                    .apply(&[c])
+                    .eq(&self.enum_term(&enum_type.enum_));
+
                 self.solver.assert(enum_assertion);
             }
             Expr::TraitType(_) => {
@@ -1281,8 +1291,8 @@ mod tests {
     use super::*;
     use crate::test_utils::TestContext;
     use crate::{
-        DefaultExprContext,
         test_utils::{TestEnum, TestEnumVariant},
+        DefaultExprContext,
     };
     use alloc::{sync::Arc, vec};
     use argon_expr::Builtin;
@@ -1607,7 +1617,6 @@ mod tests {
         let variant_a = Arc::new(TestEnumVariant::new("A")) as Arc<dyn EnumVariant>;
         let variant_b = Arc::new(TestEnumVariant::new("B")) as Arc<dyn EnumVariant>;
         let enum_ = Arc::new(TestEnum::new(vec![variant_a.clone(), variant_b.clone()]));
-        let enum_dyn = enum_.clone() as Arc<dyn Enum>;
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
         let enum_term = z3expr.enum_term(&(enum_.clone() as Arc<dyn Enum>));
@@ -1626,7 +1635,6 @@ mod tests {
     #[test]
     fn empty_enum_assertion_makes_membership_false() {
         let enum_ = Arc::new(TestEnum::new(vec![]));
-        let enum_dyn = enum_.clone() as Arc<dyn Enum>;
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
         let enum_term = z3expr.enum_term(&(enum_ as Arc<dyn Enum>));

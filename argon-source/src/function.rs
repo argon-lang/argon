@@ -1,12 +1,12 @@
 use crate::modifiers::{
-    ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser,
+    ModifierParser, ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS,
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::{TypeCheckOptions, type_check_expr};
+use crate::type_checker::{type_check_expr, TypeCheckOptions};
 use alloc::{boxed::Box, sync::Arc};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
@@ -15,8 +15,7 @@ use argon_compiler::{
 };
 use argon_expr::{ErasureMode, ExpressionOwner};
 use argon_parser::ast;
-use argon_util::sync::{Mutex, mutex_lock};
-use argon_util::{CompileError, MultiSlice};
+use argon_util::{CompileError, MultiSlice, UnloadCell};
 use core::fmt::Debug;
 
 pub struct SourceFunction {
@@ -24,8 +23,8 @@ pub struct SourceFunction {
     decl: Box<ast::FunctionDeclarationStmt>,
     closure: Box<dyn DeclarationClosure>,
     metadata: FunctionMetadata,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    implementation: Mutex<Option<Arc<FunctionImplementation>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    implementation: UnloadCell<Arc<FunctionImplementation>>,
 }
 
 impl SourceFunction {
@@ -65,8 +64,8 @@ impl SourceFunction {
                 decl,
                 closure,
                 metadata,
-                signature: Mutex::new(None),
-                implementation: Mutex::new(None),
+                signature: UnloadCell::new(),
+                implementation: UnloadCell::new(),
             }),
         }
     }
@@ -84,8 +83,8 @@ impl Debug for SourceFunction {
 
 impl Unload for SourceFunction {
     fn unload(&self) {
-        *self.signature.lock().unwrap() = None;
-        *self.implementation.lock().unwrap() = None;
+        self.signature.unload();
+        self.implementation.unload();
         self.closure.unload();
     }
 }
@@ -102,69 +101,57 @@ impl Function for SourceFunction {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = mutex_lock(&self.signature);
-        if let Some(ref sig) = *sig_store {
-            return sig.clone();
-        }
+        self.signature.initialize(|| {
+            let scope = self.closure.scope();
+            let access_token = self.access_token();
 
-        let scope = self.closure.scope();
-        let access_token = self.access_token();
+            let owner_ref: Arc<dyn Function> = self.clone();
+            let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Function(owner_ref);
 
-        let owner_ref: Arc<dyn Function> = self.clone();
-        let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Function(owner_ref);
-
-        let sig = SignatureParser {
-            context: self.context.clone(),
-            scope: &scope,
-            access_token,
-            owner,
-        }
-        .parse(
-            MultiSlice::from(self.decl.parameters.as_slice()),
-            &self.decl.return_type,
-        );
-
-        let result = Arc::new(sig);
-        *sig_store = Some(result.clone());
-        result
+            Arc::new(
+                SignatureParser {
+                    context: self.context.clone(),
+                    scope: &scope,
+                    access_token,
+                    owner,
+                }
+                .parse(
+                    MultiSlice::from(self.decl.parameters.as_slice()),
+                    &self.decl.return_type,
+                ),
+            )
+        })
     }
 
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
-        let mut implementation_store = mutex_lock(&self.implementation);
-        if let Some(ref implementation) = *implementation_store {
-            return Some(implementation.clone());
-        }
+        Some(self.implementation.initialize(|| {
+            Arc::new(match &self.decl.body {
+                ast::FunctionBody::ExprBody(body) => {
+                    let access_token = self.access_token();
 
-        let implementation = match &self.decl.body {
-            ast::FunctionBody::ExprBody(body) => {
-                let access_token = self.access_token();
+                    let signature = self.clone().signature();
+                    let scope = self.closure.scope();
+                    let scope = ParameterScope::new(
+                        scope,
+                        ExpressionOwner::<DefaultExprContext>::Function(self.clone()),
+                        &signature.parameters,
+                    );
 
-                let signature = self.clone().signature();
-                let scope = self.closure.scope();
-                let scope = ParameterScope::new(
-                    scope,
-                    ExpressionOwner::<DefaultExprContext>::Function(self.clone()),
-                    &signature.parameters,
-                );
+                    let expr = type_check_expr(
+                        self.context.clone(),
+                        TypeCheckOptions::new(&access_token, &scope, self.metadata.erasure_mode)
+                            .with_effect_info(self.metadata.effect_info),
+                        body.as_ref(),
+                        &signature.return_type,
+                    );
 
-                let expr = type_check_expr(
-                    self.context.clone(),
-                    TypeCheckOptions::new(&access_token, &scope, self.metadata.erasure_mode)
-                        .with_effect_info(self.metadata.effect_info),
-                    body.as_ref(),
-                    &signature.return_type,
-                );
-
-                FunctionImplementation::Expr(expr)
-            }
-            ast::FunctionBody::ExternBody(name) => {
-                let externs = self.context.extern_function(name);
-                FunctionImplementation::Extern(externs)
-            }
-        };
-
-        let result = Arc::new(implementation);
-        *implementation_store = Some(result.clone());
-        Some(result)
+                    FunctionImplementation::Expr(expr)
+                }
+                ast::FunctionBody::ExternBody(name) => {
+                    let externs = self.context.extern_function(name);
+                    FunctionImplementation::Extern(externs)
+                }
+            })
+        }))
     }
 }

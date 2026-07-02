@@ -1,11 +1,11 @@
-use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
+use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
 use alloc::borrow::Cow;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
@@ -15,8 +15,7 @@ use argon_compiler::{
 use argon_expr::{EnumType, Expr, ExpressionOwner, SubstScanner, Variable};
 use argon_parser::ast;
 use argon_parser::ast::FunctionParameterListType;
-use argon_util::MultiSlice;
-use argon_util::sync::{Mutex, mutex_lock};
+use argon_util::{MultiSlice, UnloadCell};
 use core::fmt::Debug;
 use num_bigint::BigUint;
 use parse18_runtime::WithLocation;
@@ -25,8 +24,8 @@ pub struct SourceEnum {
     pub context: Context,
     decl: Box<ast::EnumDeclarationStmt>,
     pub closure: Box<dyn DeclarationClosure>,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    variants: Mutex<Option<Arc<Vec<Arc<dyn EnumVariant>>>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    variants: UnloadCell<Arc<Vec<Arc<dyn EnumVariant>>>>,
 }
 
 impl SourceEnum {
@@ -46,8 +45,8 @@ impl SourceEnum {
                 context,
                 decl,
                 closure,
-                signature: Mutex::new(None),
-                variants: Mutex::new(None),
+                signature: UnloadCell::new(),
+                variants: UnloadCell::new(),
             }),
         }
     }
@@ -90,13 +89,8 @@ impl Debug for SourceEnum {
 
 impl Unload for SourceEnum {
     fn unload(&self) {
-        *mutex_lock(&self.signature) = None;
-        let variants = mutex_lock(&self.variants).take();
-        if let Some(variants) = variants {
-            for variant in variants.iter() {
-                variant.unload();
-            }
-        }
+        self.signature.unload();
+        self.variants.unload();
         self.closure.unload();
     }
 }
@@ -109,56 +103,44 @@ impl Enum for SourceEnum {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = mutex_lock(&self.signature);
-        if let Some(ref sig) = *sig_store {
-            return sig.clone();
-        }
+        self.signature.initialize(|| {
+            let scope = self.closure.scope();
+            let access_token = self.access_token();
+            let owner_ref: Arc<dyn Enum> = self.clone();
+            let owner = ExpressionOwner::Enum(owner_ref);
+            let return_type = self.return_type_specifier();
 
-        let scope = self.closure.scope();
-        let access_token = self.access_token();
-        let owner_ref: Arc<dyn Enum> = self.clone();
-        let owner = ExpressionOwner::Enum(owner_ref);
-        let return_type = self.return_type_specifier();
-
-        let sig = SignatureParser {
-            context: self.context.clone(),
-            scope: &scope,
-            access_token,
-            owner,
-        }
-        .parse(
-            MultiSlice::from(self.decl.parameters.as_slice()),
-            &return_type,
-        );
-
-        let result = Arc::new(sig);
-        *sig_store = Some(result.clone());
-        result
+            Arc::new(
+                SignatureParser {
+                    context: self.context.clone(),
+                    scope: &scope,
+                    access_token,
+                    owner,
+                }
+                .parse(
+                    MultiSlice::from(self.decl.parameters.as_slice()),
+                    &return_type,
+                ),
+            )
+        })
     }
 
     fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>> {
-        let mut variants_store = mutex_lock(&self.variants);
-        if let Some(ref variants) = *variants_store {
-            return variants.clone();
-        }
-
-        let variants = self
-            .decl
-            .body
-            .iter()
-            .filter_map(|stmt| match &stmt.value {
-                ast::EnumBodyStmt::EnumVariant(variant) => Some(SourceEnumVariant::from_ast(
-                    self.clone(),
-                    (**variant).clone(),
-                )),
-                ast::EnumBodyStmt::FunctionDeclaration(_)
-                | ast::EnumBodyStmt::MethodDeclaration(_) => None,
-            })
-            .collect::<Vec<_>>();
-
-        let result = Arc::new(variants);
-        *variants_store = Some(result.clone());
-        result
+        self.variants.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::EnumBodyStmt::EnumVariant(variant) => Some(
+                            SourceEnumVariant::from_ast(self.clone(), (**variant).clone()),
+                        ),
+                        ast::EnumBodyStmt::FunctionDeclaration(_)
+                        | ast::EnumBodyStmt::MethodDeclaration(_) => None,
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
     }
 }
 
@@ -166,8 +148,8 @@ pub struct SourceEnumVariant {
     pub owner: Arc<SourceEnum>,
     decl: ast::EnumVariant,
     metadata: EnumVariantMetadata,
-    signature: Mutex<Option<Arc<FunctionSignature<DefaultExprContext>>>>,
-    fields: Mutex<Option<Arc<Vec<Arc<dyn RecordField>>>>>,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
 }
 
 impl SourceEnumVariant {
@@ -202,8 +184,8 @@ impl SourceEnumVariant {
             owner,
             decl,
             metadata,
-            signature: Mutex::new(None),
-            fields: Mutex::new(None),
+            signature: UnloadCell::new(),
+            fields: UnloadCell::new(),
         })
     }
 }
@@ -216,13 +198,8 @@ impl Debug for SourceEnumVariant {
 
 impl Unload for SourceEnumVariant {
     fn unload(&self) {
-        *mutex_lock(&self.signature) = None;
-        let fields = mutex_lock(&self.fields).take();
-        if let Some(fields) = fields {
-            for field in fields.iter() {
-                field.unload();
-            }
-        }
+        self.signature.unload();
+        self.fields.unload();
     }
 }
 
@@ -236,144 +213,137 @@ impl EnumVariant for SourceEnumVariant {
     }
 
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
-        let mut sig_store = mutex_lock(&self.signature);
-        if let Some(ref sig) = *sig_store {
-            return sig.clone();
-        }
-
-        let name;
-        let params;
-        let return_type;
-        match &self.decl {
-            ast::EnumVariant::Constructor {
-                name: name2,
-                parameters,
-                return_type: return_type2,
-                ..
-            } => {
-                name = name2;
-                params = parameters.as_slice();
-                return_type = return_type2;
-            }
-            ast::EnumVariant::Record(record) => {
-                name = &record.name;
-                params = record.parameters.as_slice();
-                return_type = &record.return_type;
-            }
-        }
-
-        let scope = self.owner.closure.scope();
-        let access_token = self.owner.access_token();
-        let param_owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
-
-        let sig = match return_type {
-            Some(return_type) => {
-                let rt = SignatureParser::expr_to_return_type(return_type);
-
-                let sig_parser = SignatureParser {
-                    context: self.owner.context.clone(),
-                    scope: &scope,
-                    access_token,
-                    owner: param_owner,
-                };
-
-                sig_parser.parse(MultiSlice::from(params), &rt)
+        self.signature.initialize(|| {
+            let name;
+            let params;
+            let return_type;
+            match &self.decl {
+                ast::EnumVariant::Constructor {
+                    name: name2,
+                    parameters,
+                    return_type: return_type2,
+                    ..
+                } => {
+                    name = name2;
+                    params = parameters.as_slice();
+                    return_type = return_type2;
+                }
+                ast::EnumVariant::Record(record) => {
+                    name = &record.name;
+                    params = record.parameters.as_slice();
+                    return_type = &record.return_type;
+                }
             }
 
-            None => {
-                let fake_rt = SignatureParser::get_type_sig_return_type(name, return_type);
+            let scope = self.owner.closure.scope();
+            let access_token = self.owner.access_token();
+            let param_owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
 
-                let parent_sig = self.owner.clone().signature();
+            Arc::new(match return_type {
+                Some(return_type) => {
+                    let rt = SignatureParser::expr_to_return_type(return_type);
 
-                let mut parameters = Vec::new();
+                    let sig_parser = SignatureParser {
+                        context: self.owner.context.clone(),
+                        scope: &scope,
+                        access_token,
+                        owner: param_owner,
+                    };
 
-                let parent_owner = ExpressionOwner::<DefaultExprContext>::Enum(self.owner.clone());
-                let owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
-                let mut subst = SubstScanner::new();
-                for (i, mut param) in parent_sig.parameters.iter().cloned().enumerate() {
-                    let orig_param_var = param.clone().to_parameter_var(parent_owner.clone(), i);
-
-                    match &mut param.list_type {
-                        FunctionParameterListType::NormalList => {
-                            param.list_type =
-                                FunctionParameterListType::InferrableList(BigUint::ZERO);
-                        }
-                        FunctionParameterListType::InferrableList(n) => {
-                            *n += 1u32;
-                        }
-                        FunctionParameterListType::RequiresList => {}
-                    }
-                    param.scan_mut(&mut subst);
-
-                    let param_var = param.clone().to_parameter_var(owner.clone(), i);
-
-                    subst.add_substitution(
-                        Variable::Parameter(Box::new(orig_param_var)),
-                        Cow::Owned(Expr::Variable(Variable::Parameter(Box::new(param_var)))),
-                    );
-
-                    parameters.push(param);
+                    sig_parser.parse(MultiSlice::from(params), &rt)
                 }
 
-                let return_type = Expr::<DefaultExprContext>::EnumType(EnumType {
-                    enum_: self.owner.clone(),
-                    arguments: SignatureParser::get_parameter_variables(&param_owner, &parameters)
+                None => {
+                    let fake_rt = SignatureParser::get_type_sig_return_type(name, return_type);
+
+                    let parent_sig = self.owner.clone().signature();
+
+                    let mut parameters = Vec::new();
+
+                    let parent_owner =
+                        ExpressionOwner::<DefaultExprContext>::Enum(self.owner.clone());
+                    let owner = ExpressionOwner::<DefaultExprContext>::EnumVariant(self.clone());
+                    let mut subst = SubstScanner::new();
+                    for (i, mut param) in parent_sig.parameters.iter().cloned().enumerate() {
+                        let orig_param_var =
+                            param.clone().to_parameter_var(parent_owner.clone(), i);
+
+                        match &mut param.list_type {
+                            FunctionParameterListType::NormalList => {
+                                param.list_type =
+                                    FunctionParameterListType::InferrableList(BigUint::ZERO);
+                            }
+                            FunctionParameterListType::InferrableList(n) => {
+                                *n += 1u32;
+                            }
+                            FunctionParameterListType::RequiresList => {}
+                        }
+                        param.scan_mut(&mut subst);
+
+                        let param_var = param.clone().to_parameter_var(owner.clone(), i);
+
+                        subst.add_substitution(
+                            Variable::Parameter(Box::new(orig_param_var)),
+                            Cow::Owned(Expr::Variable(Variable::Parameter(Box::new(param_var)))),
+                        );
+
+                        parameters.push(param);
+                    }
+
+                    let return_type = Expr::<DefaultExprContext>::EnumType(EnumType {
+                        enum_: self.owner.clone(),
+                        arguments: SignatureParser::get_parameter_variables(
+                            &param_owner,
+                            &parameters,
+                        )
                         .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
                         .collect(),
-                });
+                    });
 
-                let scope = ParameterScope::new(scope, owner, &parameters);
+                    let scope = ParameterScope::new(scope, owner, &parameters);
 
-                let sig_parser = SignatureParser {
-                    context: self.owner.context.clone(),
-                    scope: &scope,
-                    access_token,
-                    owner: param_owner.clone(),
-                };
+                    let sig_parser = SignatureParser {
+                        context: self.owner.context.clone(),
+                        scope: &scope,
+                        access_token,
+                        owner: param_owner.clone(),
+                    };
 
-                let mut variant_sig = sig_parser.parse(MultiSlice::from(params), &fake_rt);
-                parameters.append(&mut variant_sig.parameters);
+                    let mut variant_sig = sig_parser.parse(MultiSlice::from(params), &fake_rt);
+                    parameters.append(&mut variant_sig.parameters);
 
-                FunctionSignature {
-                    parameters,
-                    return_type,
-                    ensures_clauses: Vec::new(),
+                    FunctionSignature {
+                        parameters,
+                        return_type,
+                        ensures_clauses: Vec::new(),
+                    }
                 }
-            }
-        };
-
-        let result = Arc::new(sig);
-        *sig_store = Some(result.clone());
-        result
+            })
+        })
     }
 
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
-        let mut fields_store = mutex_lock(&self.fields);
-        if let Some(ref fields) = *fields_store {
-            return fields.clone();
-        }
+        self.fields.initialize(|| {
+            let body = match &self.decl {
+                ast::EnumVariant::Constructor { .. } => MultiSlice::new(),
+                ast::EnumVariant::Record(record) => MultiSlice::from(record.body.as_slice()),
+            };
 
-        let body = match &self.decl {
-            ast::EnumVariant::Constructor { .. } => MultiSlice::new(),
-            ast::EnumVariant::Record(record) => MultiSlice::from(record.body.as_slice()),
-        };
+            let mut fields: Vec<Arc<dyn RecordField>> = Vec::new();
+            for stmt in &body {
+                match &stmt.value {
+                    ast::RecordBodyStmt::RecordField(field) => {
+                        fields.push(Arc::new(SourceRecordField::new(
+                            SourceRecordFieldOwner::EnumVariant(self.clone()),
+                            (**field).clone(),
+                        )));
+                    }
 
-        let mut fields: Vec<Arc<dyn RecordField>> = Vec::new();
-        for stmt in &body {
-            match &stmt.value {
-                ast::RecordBodyStmt::RecordField(field) => {
-                    fields.push(Arc::new(SourceRecordField::new(
-                        SourceRecordFieldOwner::EnumVariant(self.clone()),
-                        (**field).clone(),
-                    )));
+                    _ => todo!(),
                 }
-
-                _ => todo!(),
             }
-        }
 
-        let result = Arc::new(fields);
-        *fields_store = Some(result.clone());
-        result
+            Arc::new(fields)
+        })
     }
 }

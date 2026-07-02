@@ -14,14 +14,51 @@ use argon_compiler::{
 use argon_expr::{BlockLabel, BlockLabelDeclaration, LoopLabels};
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
-use argon_util::CompileError;
-use argon_util::sync::{Mutex, ThreadSafe, mutex_lock};
+use argon_util::sync::ThreadSafe;
+use argon_util::{CompileError, UnloadCell};
 use core::{iter, mem};
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use parse18_runtime::{Location, WithLocation};
 
-type ResolvedImports = HashMap<Identifier, ResolvedImportGroups>;
+#[derive(Clone, Default)]
+struct ResolvedImports(HashMap<Identifier, ResolvedImportGroups>);
+
+impl ResolvedImports {
+    fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    fn get(&self, name: &Identifier) -> Option<&ResolvedImportGroups> {
+        self.0.get(name)
+    }
+
+    fn values(&self) -> hashbrown::hash_map::Values<'_, Identifier, ResolvedImportGroups> {
+        self.0.values()
+    }
+
+    fn extend(
+        &mut self,
+        name: &Identifier,
+        group: ResolvedImportGroup,
+        exports: impl IntoIterator<Item = ModuleExportEntry>,
+    ) {
+        self.0.entry_ref(name).or_default().extend(group, exports);
+    }
+}
+
+impl Unload for ResolvedImports {
+    fn unload(&self) {}
+}
+
+impl IntoIterator for ResolvedImports {
+    type Item = (Identifier, ResolvedImportGroups);
+    type IntoIter = hashbrown::hash_map::IntoIter<Identifier, ResolvedImportGroups>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
 
 #[derive(Clone, Copy)]
 enum ResolvedImportGroup {
@@ -163,7 +200,7 @@ pub struct GlobalScopeBuilder {
     access_token: AccessToken,
     parent: Option<Arc<GlobalScopeBuilder>>,
     imports: Vec<WithLocation<ImportStmt>>,
-    resolved_imports: Mutex<Option<ResolvedImports>>,
+    resolved_imports: UnloadCell<ResolvedImports>,
 }
 
 impl GlobalScopeBuilder {
@@ -185,7 +222,7 @@ impl GlobalScopeBuilder {
             access_token,
             parent: None,
             imports,
-            resolved_imports: Mutex::new(None),
+            resolved_imports: UnloadCell::new(),
         })
     }
 
@@ -206,35 +243,24 @@ impl GlobalScopeBuilder {
             access_token: self.access_token.clone(),
             parent: Some(self.clone()),
             imports,
-            resolved_imports: Mutex::new(None),
+            resolved_imports: UnloadCell::new(),
         })
     }
 
     fn resolved_imports(&self) -> ResolvedImports {
-        {
-            let resolved_imports = mutex_lock(&self.resolved_imports);
-            if let Some(resolved) = resolved_imports.as_ref() {
-                return resolved.clone();
+        self.resolved_imports.initialize(|| {
+            let mut resolved = self
+                .parent
+                .as_ref()
+                .map(|parent| parent.resolved_imports())
+                .unwrap_or_default();
+
+            for import in &self.imports {
+                self.resolve_import(import, &mut resolved);
             }
-        }
 
-        let mut resolved = self
-            .parent
-            .as_ref()
-            .map(|parent| parent.resolved_imports())
-            .unwrap_or_default();
-
-        for import in &self.imports {
-            self.resolve_import(import, &mut resolved);
-        }
-
-        let mut resolved_imports = mutex_lock(&self.resolved_imports);
-        if let Some(resolved) = resolved_imports.as_ref() {
-            return resolved.clone();
-        }
-
-        *resolved_imports = Some(resolved.clone());
-        resolved
+            resolved
+        })
     }
 
     fn resolve_import(&self, import: &WithLocation<ImportStmt>, resolved: &mut ResolvedImports) {
@@ -393,10 +419,7 @@ impl GlobalScopeBuilder {
         }
 
         let group = self.resolved_import_group(&tube, module_path);
-        resolved
-            .entry_ref(viewed_name)
-            .or_default()
-            .extend(group, visible_exports);
+        resolved.extend(viewed_name, group, visible_exports);
     }
 
     fn import_wildcard(
@@ -427,10 +450,7 @@ impl GlobalScopeBuilder {
             }
 
             let group = self.resolved_import_group(&tube, module_path);
-            resolved
-                .entry_ref(name)
-                .or_default()
-                .extend(group, visible_exports);
+            resolved.extend(name, group, visible_exports);
         }
     }
 
@@ -471,7 +491,7 @@ impl GlobalScopeBuilder {
 
 impl Unload for GlobalScopeBuilder {
     fn unload(&self) {
-        *mutex_lock(&self.resolved_imports) = None;
+        self.resolved_imports.unload();
         if let Some(parent) = &self.parent {
             parent.unload();
         }

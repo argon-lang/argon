@@ -4,11 +4,13 @@ mod error;
 pub mod sync;
 
 mod multi_slice;
+mod unload_cell;
 
 use alloc::sync::Arc;
 use core::hash::Hash;
 pub use error::*;
 pub use multi_slice::*;
+pub use unload_cell::{Unload, UnloadCell};
 
 #[derive(Debug, Clone)]
 pub struct UniqueIdentifier(Arc<()>);

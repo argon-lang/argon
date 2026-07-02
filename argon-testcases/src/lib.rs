@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn decodes_libraries_and_multiple_execution_errors() {
         let xml = fs::read_to_string(
-            "testcases-old/access/function/Access_public_function_different_tube.xml",
+            "testcases/access/function/Access_public_function_different_tube.xml",
         )
         .unwrap();
         let test_case = TestCase::from_xml(&xml).unwrap();
@@ -209,7 +209,7 @@ mod tests {
             vec!["Argon.Core", "Argon.TestReference"]
         );
 
-        let xml = fs::read_to_string("testcases-old/exceptions/finally_method_error.xml").unwrap();
+        let xml = fs::read_to_string("testcases/exceptions/finally_method_error.xml").unwrap();
         let test_case = TestCase::from_xml(&xml).unwrap();
 
         assert_eq!(

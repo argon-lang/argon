@@ -10,12 +10,16 @@ use alloc::vec::Vec;
 use argon_expr::{Expr, ExpressionOwner, InstanceType, SubstScanner, TraitType};
 use argon_expr::{ExprScannerMut, Unify, Variable};
 use argon_parser::Location;
-use argon_util::CompileError;
+use argon_util::{CompileError, Unload};
 use hashbrown::{HashMap, HashSet};
 
 #[derive(Clone)]
 pub struct VTable {
     entries: HashMap<VTableSlot, VTableSlotValue>,
+}
+
+impl Unload for VTable {
+    fn unload(&self) {}
 }
 
 impl VTable {

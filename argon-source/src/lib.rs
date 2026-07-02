@@ -3,7 +3,7 @@ use crate::module::{process_source_file, register_module_reexports};
 use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
 use argon_io::InputDirectory;
-use argon_util::sync::{ThreadSafe, parallel::*};
+use argon_util::sync::{parallel::*, ThreadSafe};
 use hashbrown::HashMap;
 
 mod enums;
@@ -69,15 +69,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{SourceCodeTubeOptions, define_source_tube};
+    use super::{define_source_tube, SourceCodeTubeOptions};
     use alloc::{string::String, string::ToString, vec, vec::Vec};
-    use argon_compiler::access::AccessModifier;
     use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
-        CompileErrorReporter, Context, ContextObject, FunctionImplementation, MethodOwner,
-        MethodSlot, ModuleExportBinding, ModulePath, TubeCollectionBuilder, TubeName,
+        CompileErrorReporter, Context, ContextObject
+        , ModulePath, TubeCollectionBuilder, TubeName,
     };
-    use argon_expr::{Expr, Variable};
     use argon_io::{InputDirectory, InputFile};
     use argon_parser::ast::Identifier;
     use argon_util::sync::Mutex;
@@ -132,6 +130,10 @@ mod tests {
         }
 
         fn normalize_fuel(&self) -> Fuel {
+            Fuel::new(5)
+        }
+
+        fn prolog_fuel(&self) -> Fuel {
             Fuel::new(5)
         }
 
