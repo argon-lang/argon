@@ -17,12 +17,12 @@ cargo zigbuild --bin argonc --release --target x86_64-pc-windows-gnullvm
 cargo zigbuild --bin argonc --release --target i686-pc-windows-gnullvm
 cargo zigbuild --bin argonc --release --target aarch64-pc-windows-gnullvm
 cargo zigbuild --bin argonc_launcher_windows --profile small --target aarch64-pc-windows-gnullvm
-npm ci --prefix backend/api/js
-npm run build --prefix backend/api/js
-npm ci --prefix backend/backends/js
-npm run build --prefix backend/backends/js
-npm ci --prefix backend/util/js-copy-deploy
-npm run build --prefix backend/util/js-copy-deploy
+npm ci --prefix backend/js/api
+npm run build --prefix backend/js/api
+npm ci --prefix backend/js/backend
+npm run build --prefix backend/js/backend
+npm ci --prefix backend/js/util/copy-deploy
+npm run build --prefix backend/js/util/copy-deploy
 
 
 
@@ -42,7 +42,7 @@ cp -p target/i686-unknown-linux-gnu/release/argonc dist/arch/i686-unknown-linux-
 cp -p target/aarch64-unknown-linux-gnu/release/argonc dist/arch/aarch64-unknown-linux-gnu/
 cp -p target/x86_64-pc-windows-gnullvm/release/argonc.exe dist/arch/x86_64-pc-windows-gnullvm/
 cp -p target/i686-pc-windows-gnullvm/release/argonc.exe dist/arch/i686-pc-windows-gnullvm/
-node backend/util/js-copy-deploy/lib/main.js backend/backends/js dist/backend/js
+node backend/js/util/copy-deploy/lib/main.js backend/js/backend dist/backend/js
 
 # Launchers
 cp scripts/argonc dist/bin/argonc

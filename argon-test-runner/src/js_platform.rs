@@ -136,7 +136,7 @@ impl CompileTargetPlatform for JSPlatform {
             let runtime_dir = test_context
                 .test_suite_context
                 .backend_dir
-                .join("runtime/js");
+                .join("js/runtime");
             let runtime_module_dir = output_dir.join("node_modules/@argon-lang/runtime");
             std::fs::create_dir_all(&runtime_module_dir).unwrap();
 

@@ -178,7 +178,7 @@ impl DirectCommandRunner {
     fn js_backend_bin(&self) -> PathBuf {
         self.workspace_paths
             .root()
-            .join("backend/backends/js/lib/main.js")
+            .join("backend/js/backend/lib/main.js")
     }
 }
 

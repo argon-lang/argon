@@ -12,27 +12,33 @@ fn main() {
         .unwrap()
         .to_owned();
 
-    let api_dir = workspace_dir.join("backend/api/js");
-    let backend_dir = workspace_dir.join("backend/backends/js");
+    let api_dir = workspace_dir.join("backend/js/api");
+    let backend_dir = workspace_dir.join("backend/js/backend");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
     watch_js_package(&api_dir);
     watch_js_package(&backend_dir);
     println!(
         "cargo::rerun-if-changed={}",
-        workspace_dir.join("backend/vm/vm.nidl").display(),
+        workspace_dir.join("backend/nobleidl/vm/vm.nidl").display(),
     );
     println!(
         "cargo::rerun-if-changed={}",
         workspace_dir
-            .join("backend/api/nobleidl/metadata.nidl")
+            .join("backend/nobleidl/api/metadata.nidl")
+            .display(),
+    );
+    println!(
+        "cargo::rerun-if-changed={}",
+        workspace_dir
+            .join("backend/nobleidl/js/js-platform-metadata.nidl")
             .display(),
     );
 
     npm_install_if_needed(&api_dir, &out_dir, "api-js");
     npm_run_build(&api_dir);
 
-    npm_install_if_needed(&backend_dir, &out_dir, "backends-js");
+    npm_install_if_needed(&backend_dir, &out_dir, "backend-js");
     npm_run_build(&backend_dir);
 }
 

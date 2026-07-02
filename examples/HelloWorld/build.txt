@@ -3,4 +3,4 @@ mkdir examples/HelloWorld/bin
 mkdir examples/HelloWorld/bin/js
 RUST_BACKTRACE=1 cargo run --bin argonc compile --tube-name HelloWorld --input examples/HelloWorld/src/ -r libraries/Argon.Core/bin/Argon.Core.artube -o examples/HelloWorld/bin/HelloWorld.artube
 RUST_BACKTRACE=1 cargo run --bin argonc genir --input examples/HelloWorld/bin/HelloWorld.artube -r libraries/Argon.Core/bin/Argon.Core.artube --platform js -o examples/HelloWorld/bin/HelloWorld.js.arvm
-node backend/backends/js/lib/main.js codegen js -i examples/HelloWorld/bin/HelloWorld.js.arvm -o examples/HelloWorld/bin/js/
+node backend/js/backend/lib/main.js codegen js -i examples/HelloWorld/bin/HelloWorld.js.arvm -o examples/HelloWorld/bin/js/

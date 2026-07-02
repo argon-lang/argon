@@ -7,7 +7,7 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "codegen": "cpy --flat ../../vm/vm.nidl src/ && cpy --flat ../nobleidl/metadata.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "codegen": "cpy --flat ../../nobleidl/api/metadata.nidl ../../nobleidl/js/js-platform-metadata.nidl ../../nobleidl/vm/vm.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
     "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/"
   },
   "exports": {
