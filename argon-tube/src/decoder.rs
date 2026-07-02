@@ -1329,14 +1329,14 @@ impl TubeDecoder {
                 field_id,
                 record_value,
             } => Expr::RecordFieldLoad {
-                record_type: Box::new(Expr::RecordType(RecordType {
+                record_type: Box::new(RecordType {
                     record: self.record(record.id),
                     arguments: record
                         .args
                         .into_iter()
                         .map(|arg| self.decode_expr(*arg))
                         .collect(),
-                })),
+                }),
                 field: self.record_field(field_id),
                 record_value: Box::new(self.decode_expr(*record_value)),
             },
@@ -1346,14 +1346,14 @@ impl TubeDecoder {
                 record_value,
                 field_value,
             } => Expr::RecordFieldStore {
-                record_type: Box::new(Expr::RecordType(RecordType {
+                record_type: Box::new(RecordType {
                     record: self.record(record.id),
                     arguments: record
                         .args
                         .into_iter()
                         .map(|arg| self.decode_expr(*arg))
                         .collect(),
-                })),
+                }),
                 field: self.record_field(field_id),
                 record_value: Box::new(self.decode_expr(*record_value)),
                 new_value: Box::new(self.decode_expr(*field_value)),

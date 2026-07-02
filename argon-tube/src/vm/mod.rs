@@ -1296,12 +1296,20 @@ trait TokenEmitterCommon {
                 record_id: BigUint::from(
                     self.vm_encoder().get_record_id(record_type.record.clone()),
                 ),
-                args: self.token_exprs(&record_type.arguments)?,
+                args: self.emit_token_arguments(
+                    ExpressionOwner::Record(record_type.record.clone()),
+                    &record_type.record.clone().signature(),
+                    &record_type.arguments,
+                )?,
             }),
 
             Expr::EnumType(enum_type) => Ok(vf::Token::Enum {
                 enum_id: BigUint::from(self.vm_encoder().get_enum_id(enum_type.enum_.clone())),
-                args: self.token_exprs(&enum_type.arguments)?,
+                args: self.emit_token_arguments(
+                    ExpressionOwner::Enum(enum_type.enum_.clone()),
+                    &enum_type.enum_.clone().signature(),
+                    &enum_type.arguments,
+                )?,
             }),
 
             Expr::NewInstance {
@@ -1309,12 +1317,20 @@ trait TokenEmitterCommon {
                 arguments,
             } => Ok(vf::Token::InstanceValue {
                 instance_id: BigUint::from(self.vm_encoder().get_instance_id(instance.clone())),
-                args: self.token_exprs(arguments)?,
+                args: self.emit_token_arguments(
+                    ExpressionOwner::Instance(instance.clone()),
+                    &instance.clone().signature(),
+                    arguments,
+                )?,
             }),
 
             Expr::TraitType(trait_type) => Ok(vf::Token::Trait {
                 trait_id: BigUint::from(self.vm_encoder().get_trait_id(trait_type.trait_.clone())),
-                args: self.token_exprs(&trait_type.arguments)?,
+                args: self.emit_token_arguments(
+                    ExpressionOwner::Trait(trait_type.trait_.clone()),
+                    &trait_type.trait_.clone().signature(),
+                    &trait_type.arguments,
+                )?,
             }),
 
             Expr::Tuple { items } => Ok(vf::Token::Tuple {
@@ -1359,6 +1375,32 @@ trait TokenEmitterCommon {
             },
             _ => return Ok(None),
         }))
+    }
+
+
+
+    fn emit_token_arguments(
+        &mut self,
+        owner: ExpressionOwner<DefaultExprContext>,
+        sig: &FunctionSignature<DefaultExprContext>,
+        args: &[Expr<DefaultExprContext>],
+    ) -> Result<Vec<Box<vf::Token>>, InternalCompilerError> {
+        let sig_with_mapping = self.vm_encoder().emit_function_signature(&owner, sig)?;
+
+        let mut tokens = Vec::new();
+        for (consumer, arg) in sig_with_mapping.arg_consumers.iter().zip(args) {
+            match consumer {
+                ArgConsumer::Erased => {}
+                ArgConsumer::Token => {
+                    tokens.push(Box::new(self.token_expr(arg)?));
+                }
+                ArgConsumer::Arg => {
+                    panic!("Emitting concrete argument in token context")
+                }
+            }
+        }
+
+        Ok(tokens)
     }
 }
 

@@ -1049,10 +1049,6 @@ impl TubeEncoder {
                 field,
                 record_value,
             } => {
-                let Expr::RecordType(record_type) = &**record_type else {
-                    panic!("record field load has non-record type {:?}", record_type);
-                };
-
                 tf::Expr::RecordFieldLoad {
                     record: Box::new(tf::RecordType {
                         id: BigUint::from(self.get_record_id(record_type.record.clone())),
@@ -1072,10 +1068,6 @@ impl TubeEncoder {
                 record_value,
                 new_value,
             } => {
-                let Expr::RecordType(record_type) = &**record_type else {
-                    panic!("record field store has non-record type {:?}", record_type);
-                };
-
                 tf::Expr::RecordFieldStore {
                     record: Box::new(tf::RecordType {
                         id: BigUint::from(self.get_record_id(record_type.record.clone())),

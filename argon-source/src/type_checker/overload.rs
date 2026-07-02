@@ -30,13 +30,13 @@ pub(super) enum Overloadable<'a> {
     },
     ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
     RecordField {
-        record_type: Expr<TypeCheckExprContext>,
+        record_type: RecordType<TypeCheckExprContext>,
         field: Arc<dyn RecordField>,
         field_type: Expr<TypeCheckExprContext>,
         record_value: Expr<TypeCheckExprContext>,
     },
     RecordFieldStore {
-        record_type: Expr<TypeCheckExprContext>,
+        record_type: RecordType<TypeCheckExprContext>,
         field: Arc<dyn RecordField>,
         field_type: Expr<TypeCheckExprContext>,
         record_value: Expr<TypeCheckExprContext>,
@@ -188,10 +188,25 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                 }
             }
 
+            let mut message = if self.rejected_overloads.is_empty() {
+                "no overloads found".to_owned()
+            }
+            else if self.rejected_overloads.len() == 1 {
+                "1 overload found".to_owned()
+            }
+            else {
+                format!("{} overloads found", self.rejected_overloads.len())
+            };
+
+            for (overload, reason) in &self.rejected_overloads {
+                use std::fmt::Write;
+                write!(message, "\n{overload:?} rejected because {reason:?}").unwrap();
+            }
+
             self.type_checker
                 .context
                 .reporter()
-                .report_error(CompileError::invalid_overload(self.call_location.clone()));
+                .report_error(CompileError::invalid_overload(self.call_location.clone(), &message));
 
             return ResolvedOverload {
                 overload: None,
@@ -581,6 +596,7 @@ impl PartialOrd for OverloadArityRank {
     }
 }
 
+#[derive(Debug)]
 enum OverloadRejectionReason {
     ParameterListTypeMismatch,
     ParameterTypeMismatch { parameter_index: usize },
@@ -624,7 +640,7 @@ impl<'a> SelectedOverload<'a> {
                     checker
                         .context
                         .reporter()
-                        .report_error(CompileError::invalid_overload(self.call_location.clone()));
+                        .report_error(CompileError::invalid_overload(self.call_location.clone(), "unknown field"));
                 }
 
                 let enum_type = match &self.return_type {

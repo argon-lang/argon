@@ -2350,91 +2350,99 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
 
         let mut instance = self.infer_call(instance).infer_fully();
-
-        {
-            let mut norm = NormalizerScanner::new(
-                self.context.normalize_fuel(),
-                ExprNormalizer { model: self.model },
-            );
-            norm.normalize(&mut instance.inferred_type);
-        }
-
-        let instance_type_as_method_owner = match &instance.inferred_type {
-            Expr::TraitType(tt) => Some(MethodOwner::Trait(tt.trait_.clone())),
-            Expr::InstanceType(it) => Some(MethodOwner::Instance(it.instance.clone())),
-            _ => None,
-        };
-
-        match &instance.inferred_type {
-            Expr::RecordType(record_type) => {
-                let r = &record_type.record;
-                let args = &record_type.arguments;
-                overload_groups.extend(
-                    r.clone()
-                        .fields()
-                        .iter()
-                        .find(|field| field.metadata().name == *member)
-                        .map(|field| {
-                            let mut field_type = default_to_type_check_shifter()
-                                .shift((*field.clone().field_type()).clone());
-
-                            let mut subst = SubstScanner::new();
-                            let record_sig = (*r.clone().signature())
-                                .clone()
-                                .shift(&mut default_to_type_check_shifter());
-
-                            subst.add_function_parameter_substitutions(
-                                ExpressionOwner::Record(r.clone()),
-                                &record_sig,
-                                args,
-                            );
-                            subst.scan(&mut field_type);
-
-                            let overload = if assigned_value.is_some() {
-                                Overloadable::RecordFieldStore {
-                                    record_type: instance.inferred_type.clone(),
-                                    field: field.clone(),
-                                    field_type,
-                                    record_value: instance.checked_expr.clone(),
-                                }
-                            } else {
-                                Overloadable::RecordField {
-                                    record_type: instance.inferred_type.clone(),
-                                    field: field.clone(),
-                                    field_type,
-                                    record_value: instance.checked_expr.clone(),
-                                }
-                            };
-
-                            vec![overload]
-                        }),
+        loop {
+            {
+                let mut norm = NormalizerScanner::new(
+                    self.context.normalize_fuel(),
+                    ExprNormalizer { model: self.model },
                 );
+                norm.normalize(&mut instance.inferred_type);
             }
-            Expr::TraitType(trait_type) => {
-                let methods = trait_type.trait_.clone().methods();
 
-                let method_overloads = methods
-                    .iter()
-                    .filter(|entry| {
-                        entry.method.metadata().name == adjusted_member_name
-                            && self.access.allows_access(
+            match instance.inferred_type {
+                Expr::BoxedType(t) => {
+                    instance.inferred_type = (*t).clone();
+                    instance.checked_expr = Expr::Unbox {
+                        t,
+                        value: Box::new(instance.checked_expr),
+                    };
+                    continue;
+                }
+
+                Expr::RecordType(ref record_type) => {
+                    let r = &record_type.record;
+                    let args = &record_type.arguments;
+                    overload_groups.extend(
+                        r.clone()
+                            .fields()
+                            .iter()
+                            .find(|field| field.metadata().name == *member)
+                            .map(|field| {
+                                let mut field_type = default_to_type_check_shifter()
+                                    .shift((*field.clone().field_type()).clone());
+
+                                let mut subst = SubstScanner::new();
+                                let record_sig = (*r.clone().signature())
+                                    .clone()
+                                    .shift(&mut default_to_type_check_shifter());
+
+                                subst.add_function_parameter_substitutions(
+                                    ExpressionOwner::Record(r.clone()),
+                                    &record_sig,
+                                    args,
+                                );
+                                subst.scan(&mut field_type);
+
+                                let overload = if assigned_value.is_some() {
+                                    Overloadable::RecordFieldStore {
+                                        record_type: record_type.clone(),
+                                        field: field.clone(),
+                                        field_type,
+                                        record_value: instance.checked_expr.clone(),
+                                    }
+                                } else {
+                                    Overloadable::RecordField {
+                                        record_type: record_type.clone(),
+                                        field: field.clone(),
+                                        field_type,
+                                        record_value: instance.checked_expr.clone(),
+                                    }
+                                };
+
+                                vec![overload]
+                            }),
+                    );
+                }
+                Expr::TraitType(ref trait_type) => {
+                    let instance_type_as_method_owner = Some(MethodOwner::Trait(trait_type.trait_.clone()));
+
+                    let methods = trait_type.trait_.clone().methods();
+
+                    let method_overloads = methods
+                        .iter()
+                        .filter(|entry| {
+                            entry.method.metadata().name == adjusted_member_name
+                                && self.access.allows_access(
                                 &Declaration::Method(entry.method.clone()),
                                 instance_type_as_method_owner.as_ref(),
                                 entry.access,
                             )
-                    })
-                    .map(|entry| Overloadable::InstanceMethod {
-                        method: entry.method.clone(),
-                        trait_type: trait_type.clone(),
-                        obj: instance.checked_expr.clone(),
-                    })
-                    .collect::<Vec<_>>();
+                        })
+                        .map(|entry| Overloadable::InstanceMethod {
+                            method: entry.method.clone(),
+                            trait_type: trait_type.clone(),
+                            obj: instance.checked_expr.clone(),
+                        })
+                        .collect::<Vec<_>>();
 
-                if !method_overloads.is_empty() {
-                    overload_groups.push(method_overloads);
+                    if !method_overloads.is_empty() {
+                        overload_groups.push(method_overloads);
+                    }
                 }
+                _ => {}
             }
-            _ => {}
+
+            break;
         }
 
         // Extension methods

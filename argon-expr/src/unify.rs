@@ -331,7 +331,8 @@ pub trait Unify {
                 },
             ) => {
                 a_field == b_field
-                    && self.unify(*a_record_type, *b_record_type)
+                    && a_record_type.record == b_record_type.record
+                    && self.unify_all(a_record_type.arguments, b_record_type.arguments)
                     && self.unify(*a_record_value, *b_record_value)
             }
             (
@@ -349,7 +350,8 @@ pub trait Unify {
                 },
             ) => {
                 a_field == b_field
-                    && self.unify(*a_record_type, *b_record_type)
+                    && a_record_type.record == b_record_type.record
+                    && self.unify_all(a_record_type.arguments, b_record_type.arguments)
                     && self.unify(*a_record_value, *b_record_value)
                     && self.unify(*a_new_value, *b_new_value)
             }

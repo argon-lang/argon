@@ -336,7 +336,7 @@ enum Rule {
     EnclosedArgListParen,
     EnclosedArgListQuote,
     EnclosedArgListExtraQuotes,
-    RecordLiteralFieldsWithBlockEnd,
+    RecordExpr,
     RecordLiteralFields,
     RecordLiteralField,
     UnaryExpr,
@@ -789,14 +789,6 @@ impl GrammarFactory for ParserFactory {
                     rule(
                         [
                             nonterm(PostfixExpr(paren_allowed)).with_location(),
-                            term(SymOpenCurly).discard(),
-                            nonterm(RecordLiteralFieldsWithBlockEnd),
-                        ],
-                        "expr_record_literal",
-                    ),
-                    rule(
-                        [
-                            nonterm(PostfixExpr(paren_allowed)).with_location(),
                             term(SymOpenBracket).discard(),
                             nonterm(Expression).with_location(),
                             term(SymCloseBracket).discard(),
@@ -909,10 +901,20 @@ impl GrammarFactory for ParserFactory {
                     ),
                 ],
             ),
-            RecordLiteralFieldsWithBlockEnd => ruleset(
-                "WithLocation<VecDeque<WithLocation<RecordFieldLiteral>>>",
+
+            RecordExpr => ruleset(
+                "Expr",
                 [
-                    rule([ nonterm(RecordLiteralFields).with_location(), term(SymCloseCurly).discard() ], "identity"),
+                    rule([ nonterm(CurryCallExpr(ParenAllowedState::Allowed)).with_location() ], "with_location_value"),
+                    rule(
+                        [
+                            nonterm(CurryCallExpr(ParenAllowedState::Allowed)).with_location(),
+                            term(SymOpenCurly).discard(),
+                            nonterm(RecordLiteralFields).with_location(),
+                            term(SymCloseCurly).discard(),
+                        ],
+                        "expr_record_literal",
+                    ),
                 ],
             ),
             RecordLiteralFields => ruleset(
@@ -942,7 +944,7 @@ impl GrammarFactory for ParserFactory {
             UnaryExpr => ruleset(
                 "Expr",
                 [
-                    rule([ nonterm(CurryCallExpr(ParenAllowedState::Allowed)) ], "identity"),
+                    rule([ nonterm(RecordExpr) ], "identity"),
                     rule([ nonterm(TypeExpr) ], "identity"),
                     unary_operator_expr_rule(OpBitNot, "BitNot"),
                     unary_operator_expr_rule(OpLogicalNot, "LogicalNot"),
@@ -958,6 +960,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwBigType).discard(), term(SymOpenBracket).discard(), term(IntToken), term(SymCloseBracket).discard() ], "expr_big_type_token"),
                 ],
             ),
+
             MultiplicativeExpr => ruleset(
                 "Expr",
                 [

@@ -1,4 +1,5 @@
-use crate::{Expr, ExprContext, ExprScannerMut, default_scan_mut};
+use alloc::borrow::Cow;
+use crate::{Expr, ExprContext, ExprScannerMut, default_scan_mut, SubstScanner, Variable};
 use alloc::vec::Vec;
 use argon_util::Fuel;
 use std::mem;
@@ -97,6 +98,28 @@ impl<EC: ExprContext + ?Sized, S: Normalizer<EC = EC>> NormalizerScanner<S> {
                             }
                             _ => {
                                 expr = Expr::Not(Box::new(value));
+                            }
+                        }
+                    }
+
+                    Expr::FunctionObjectCall {
+                        function,
+                        argument,
+                    } => {
+                        match *function {
+                            Expr::Closure { v, return_type, mut body } => {
+                                let mut subst = SubstScanner::new();
+                                subst.add_substitution(Variable::ClosureParameter(v), Cow::Owned(*argument));
+                                subst.scan(&mut *body);
+                                expr = *body;
+                                continue 'updated_no_growth;
+                            }
+
+                            _ => {
+                                expr = Expr::FunctionObjectCall {
+                                    function,
+                                    argument,
+                                };
                             }
                         }
                     }

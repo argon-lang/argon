@@ -149,12 +149,12 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         ex: Box<Expr<EC>>,
     },
     RecordFieldLoad {
-        record_type: Box<Expr<EC>>,
+        record_type: Box<RecordType<EC>>,
         field: EC::RecordField,
         record_value: Box<Expr<EC>>,
     },
     RecordFieldStore {
-        record_type: Box<Expr<EC>>,
+        record_type: Box<RecordType<EC>>,
         field: EC::RecordField,
         record_value: Box<Expr<EC>>,
         new_value: Box<Expr<EC>>,

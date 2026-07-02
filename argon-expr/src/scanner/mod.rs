@@ -145,13 +145,17 @@ where
             record_type,
             record_value,
             ..
-        } => scanner.scan(record_type) && scanner.scan(record_value),
+        } => default_scan_record_type(scanner, record_type) && scanner.scan(record_value),
         Expr::RecordFieldStore {
             record_type,
             record_value,
             new_value,
             ..
-        } => scanner.scan(record_type) && scanner.scan(record_value) && scanner.scan(new_value),
+        } => {
+            default_scan_record_type(scanner, record_type)
+                && scanner.scan(record_value)
+                && scanner.scan(new_value)
+        }
         Expr::RecordLiteral {
             record_type,
             fields,
@@ -456,14 +460,17 @@ where
             record_type,
             record_value,
             ..
-        } => scanner.scan(record_type.as_mut()) && scanner.scan(record_value.as_mut()),
+        } => {
+            default_scan_record_type_mut(scanner, record_type.as_mut())
+                && scanner.scan(record_value.as_mut())
+        }
         Expr::RecordFieldStore {
             record_type,
             record_value,
             new_value,
             ..
         } => {
-            scanner.scan(record_type.as_mut())
+            default_scan_record_type_mut(scanner, record_type.as_mut())
                 && scanner.scan(record_value.as_mut())
                 && scanner.scan(new_value.as_mut())
         }

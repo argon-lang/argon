@@ -171,8 +171,8 @@ impl CompileError {
         )
     }
 
-    pub fn invalid_overload(loc: Location) -> Self {
-        Self::new(ErrorCode::InvalidOverload, "Invalid overload", Some(loc))
+    pub fn invalid_overload(loc: Location, message: &str) -> Self {
+        Self::new(ErrorCode::InvalidOverload, format!("Invalid overload: {message}"), Some(loc))
     }
 
     pub fn ambiguous_overload(loc: Location) -> Self {

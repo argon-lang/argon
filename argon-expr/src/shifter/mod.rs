@@ -194,7 +194,7 @@ where
             field,
             record_value,
         } => Expr::RecordFieldLoad {
-            record_type: Box::new(shifter.shift(*record_type)),
+            record_type: Box::new(default_shift_record_type(shifter, *record_type)),
             field,
             record_value: Box::new(shifter.shift(*record_value)),
         },
@@ -204,7 +204,7 @@ where
             record_value,
             new_value,
         } => Expr::RecordFieldStore {
-            record_type: Box::new(shifter.shift(*record_type)),
+            record_type: Box::new(default_shift_record_type(shifter, *record_type)),
             field,
             record_value: Box::new(shifter.shift(*record_value)),
             new_value: Box::new(shifter.shift(*new_value)),
