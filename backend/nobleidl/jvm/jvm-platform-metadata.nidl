@@ -1,0 +1,44 @@
+package argon.jvmbackendmetadata;
+
+import nobleidl.core;
+
+@esexpr:(derive-codec)
+record jvm-platform-tube-metadata {
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    module-name: optional-field[string];
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    module-metadata: optional-field[list[module-metadata]];
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    additional-classes: optional-field[list[classfile]];
+}
+
+
+
+@esexpr:(derive-codec)
+record module-metadata {
+    module-path: argon.vm.module-path;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    package-name: optional-field[string];
+}
+
+@esexpr:(derive-codec)
+extern type classfile;
+
+@esexpr:(derive-codec)
+extern type estree-function-declaration;
+
+@esexpr:(derive-codec)
+enum jvm-extern {
+    jvm-function {
+        class: string;
+        descriptor: string;
+    },
+}
+
