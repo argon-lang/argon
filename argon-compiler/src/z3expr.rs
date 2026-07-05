@@ -758,12 +758,19 @@ impl<
                     let value = lhs.ge(&rhs);
                     Some(self.wrap_bool_literal(&value))
                 }
-                Builtin::StringConcat { lhs, rhs } => {
-                    let lhs = self.expr_to_z3(lhs);
-                    let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.string_literal_value(&lhs);
-                    let rhs = self.string_literal_value(&rhs);
-                    let value = Z3String::concat(&[lhs, rhs]);
+                Builtin::StringConcat { values } => {
+                    let values = values
+                        .iter()
+                        .map(|value| {
+                            let value = self.expr_to_z3(value);
+                            self.string_literal_value(&value)
+                        })
+                        .collect::<Vec<_>>();
+                    let value = match values.as_slice() {
+                        [] => Z3String::from_str("").expect("empty string must be a valid Z3 string"),
+                        [value] => value.clone(),
+                        values => Z3String::concat(values),
+                    };
                     Some(self.wrap_string_literal(&value))
                 }
                 Builtin::StringEq { lhs, rhs } => {
@@ -1560,12 +1567,12 @@ mod tests {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
         let concat = z3expr.expr_to_z3(&Expr::Builtin(Builtin::StringConcat {
-            lhs: Box::new(string_expr("ab")),
-            rhs: Box::new(string_expr("cd")),
+            values: vec![string_expr("ab"), string_expr("cd"), string_expr("ef")],
         }));
         let lhs = string_expr_value(&mut z3expr, "ab");
-        let rhs = string_expr_value(&mut z3expr, "cd");
-        let expected_concat = Z3String::concat(&[lhs, rhs]);
+        let mid = string_expr_value(&mut z3expr, "cd");
+        let rhs = string_expr_value(&mut z3expr, "ef");
+        let expected_concat = Z3String::concat(&[lhs, mid, rhs]);
         assert_eq!(z3expr.wrap_string_literal(&expected_concat), concat);
 
         let string_eq = z3expr.expr_to_z3(&Expr::Builtin(Builtin::StringEq {

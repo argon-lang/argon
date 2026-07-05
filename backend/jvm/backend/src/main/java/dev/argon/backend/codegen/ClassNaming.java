@@ -5,6 +5,8 @@ import dev.argon.vm.Identifier;
 import dev.argon.vm.ImportSpecifier;
 import dev.argon.vm.ModulePath;
 import dev.argon.vm.TubeName;
+import dev.argon.vm.ErasedSignature;
+import dev.argon.vm.ErasedSignatureType;
 
 import java.lang.constant.ClassDesc;
 
@@ -68,8 +70,15 @@ class ClassNaming {
 	}
 
 	static ClassDesc moduleGlobalFunctionsClassName(ProgramModel program, ModulePath modulePath) {
+		return moduleGlobalFunctionsClassName(
+			program,
+			new ProgramModel.ModuleInfo(UnsignedBigInteger.ZERO, modulePath)
+		);
+	}
+
+	static ClassDesc moduleGlobalFunctionsClassName(ProgramModel program, ProgramModel.ModuleInfo moduleInfo) {
 		return ClassDesc.of(
-			tubeModulePackageName(program, modulePath, UnsignedBigInteger.ZERO),
+			tubeModulePackageName(program, moduleInfo.path(), moduleInfo.tubeId()),
 			"Globals"
 		);
 	}
@@ -83,6 +92,73 @@ class ClassNaming {
 
 	static String fieldName(Identifier identifier) {
 		return identifierToName(identifier);
+	}
+
+	static String variantName(Identifier identifier) {
+		return identifierToName(identifier);
+	}
+
+	static String methodName(Identifier identifier, ErasedSignature signature) {
+		return identifierToName(identifier) + erasedSignatureSuffix(signature);
+	}
+
+	private static String erasedSignatureSuffix(ErasedSignature signature) {
+		var builder = new StringBuilder();
+		builder.append("$a");
+		for(var parameter : signature.params()) {
+			appendErasedSignatureType(builder, parameter);
+		}
+		builder.append("$r");
+		appendErasedSignatureType(builder, signature.result());
+		return builder.toString();
+	}
+
+	private static void appendErasedSignatureType(StringBuilder builder, ErasedSignatureType type) {
+		switch(type) {
+			case ErasedSignatureType.Int _ -> builder.append("$bint$a$e");
+			case ErasedSignatureType.Bool _ -> builder.append("$bbool$a$e");
+			case ErasedSignatureType.String _ -> builder.append("$bstring$a$e");
+			case ErasedSignatureType.Never _ -> builder.append("$bnever$a$e");
+			case ErasedSignatureType.Array array -> {
+				builder.append("$barray$a");
+				appendErasedSignatureType(builder, array.elementType());
+				builder.append("$e");
+			}
+			case ErasedSignatureType.Function function -> {
+				builder.append("$f");
+				appendErasedSignatureType(builder, function.input());
+				builder.append("$r");
+				appendErasedSignatureType(builder, function.output());
+				builder.append("$e");
+			}
+			case ErasedSignatureType.Record record -> {
+				builder
+					.append("$r")
+					.append(importSpecifierSignatureName(record.recordImport()))
+					.append("$a");
+				for(var arg : record.args()) {
+					appendErasedSignatureType(builder, arg);
+				}
+				builder.append("$e");
+			}
+			case ErasedSignatureType.Tuple tuple -> {
+				builder.append("$t");
+				for(var element : tuple.elements()) {
+					appendErasedSignatureType(builder, element);
+				}
+				builder.append("$e");
+			}
+			case ErasedSignatureType.Erased _ -> builder.append("$_");
+		}
+	}
+
+	private static String importSpecifierSignatureName(ImportSpecifier importSpecifier) {
+		return switch(importSpecifier) {
+			case ImportSpecifier.Global global ->
+				identifierToName(global.name()) + erasedSignatureSuffix(global.sig());
+			case ImportSpecifier.Local local ->
+				importSpecifierSignatureName(local.parent()) + "$k" + local.index();
+		};
 	}
 
 	private static void appendTubeModuleName(StringBuilder builder, ProgramModel program, UnsignedBigInteger tubeId) {

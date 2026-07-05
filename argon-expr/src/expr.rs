@@ -299,8 +299,7 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         rhs: Box<Expr<EC>>,
     },
     StringConcat {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        values: Vec<Expr<EC>>,
     },
     StringEq {
         lhs: Box<Expr<EC>>,

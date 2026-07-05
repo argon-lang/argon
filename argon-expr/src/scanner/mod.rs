@@ -215,9 +215,9 @@ where
         | Builtin::IntLe { lhs, rhs }
         | Builtin::IntGt { lhs, rhs }
         | Builtin::IntGe { lhs, rhs }
-        | Builtin::StringConcat { lhs, rhs }
         | Builtin::StringEq { lhs, rhs }
         | Builtin::BoolEq { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        Builtin::StringConcat { values } => values.iter().all(|value| scanner.scan(value)),
         Builtin::ArrayCreateUnsafeUninitialized {
             element_type,
             length,
@@ -533,9 +533,9 @@ where
         | Builtin::IntLe { lhs, rhs }
         | Builtin::IntGt { lhs, rhs }
         | Builtin::IntGe { lhs, rhs }
-        | Builtin::StringConcat { lhs, rhs }
         | Builtin::StringEq { lhs, rhs }
         | Builtin::BoolEq { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
+        Builtin::StringConcat { values } => values.iter_mut().all(|value| scanner.scan(value)),
         Builtin::ArrayCreateUnsafeUninitialized {
             element_type,
             length,

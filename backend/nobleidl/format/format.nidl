@@ -855,7 +855,10 @@ enum builtin {
     int-gt { lhs: expr; rhs: expr; },
     int-ge { lhs: expr; rhs: expr; },
     
-    string-concat { lhs: expr; rhs: expr; },
+    string-concat {
+        @esexpr:(vararg)
+        values: list[expr];
+    },
     string-eq { lhs: expr; rhs: expr; },
 
     bool-eq { lhs: expr; rhs: expr; },

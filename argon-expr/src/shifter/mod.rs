@@ -352,9 +352,11 @@ where
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::StringConcat { lhs, rhs } => Builtin::StringConcat {
-            lhs: Box::new(shifter.shift(*lhs)),
-            rhs: Box::new(shifter.shift(*rhs)),
+        Builtin::StringConcat { values } => Builtin::StringConcat {
+            values: values
+                .into_iter()
+                .map(|value| shifter.shift(value))
+                .collect(),
         },
         Builtin::StringEq { lhs, rhs } => Builtin::StringEq {
             lhs: Box::new(shifter.shift(*lhs)),

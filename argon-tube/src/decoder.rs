@@ -1485,9 +1485,11 @@ impl TubeDecoder {
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::StringConcat { lhs, rhs } => Builtin::StringConcat {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+            tf::Builtin::StringConcat { values } => Builtin::StringConcat {
+                values: values
+                    .into_iter()
+                    .map(|value| self.decode_expr(*value))
+                    .collect(),
             },
             tf::Builtin::StringEq { lhs, rhs } => Builtin::StringEq {
                 lhs: Box::new(self.decode_expr(*lhs)),

@@ -1681,9 +1681,30 @@ class BlockEmitter extends EmitterBase {
                         binary(">>", op);
                         break;
 
-                    case "string-concat":
-                        binary("+", op);
+                    case "string-concat": {
+                        const args = op.args.map(arg => this.getReg(arg));
+                        let expr: estree.Expression = {
+                            type: "Literal",
+                            value: "",
+                        };
+
+                        for(const arg of args) {
+                            if(expr.type === "Literal" && expr.value === "") {
+                                expr = arg;
+                            }
+                            else {
+                                expr = {
+                                    type: "BinaryExpression",
+                                    left: expr,
+                                    operator: "+",
+                                    right: arg,
+                                };
+                            }
+                        }
+
+                        assign(op.dest, expr);
                         break;
+                    }
 
                     case "int-eq":
                     case "string-eq":
@@ -2726,4 +2747,3 @@ function jsonToExpression(expr: JsonValue): estree.Expression {
             ensureExhaustive(expr);
     }
 }
-

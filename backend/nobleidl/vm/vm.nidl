@@ -30,6 +30,7 @@ enum tube-file-entry {
     function-reference {
         function-id: nat;
         import: import-specifier;
+        signature: function-signature;
     },
 
     @esexpr:(inline-value)
@@ -40,6 +41,7 @@ enum tube-file-entry {
     record-reference {
         record-id: nat;
         import: import-specifier;
+        signature: function-signature;
     },
 
     @esexpr:(inline-value)
@@ -81,13 +83,15 @@ enum tube-file-entry {
     trait-reference {
         trait-id: nat;
         import: import-specifier;
+        signature: function-signature;
     },
 
     trait-method-reference {
         method-id: nat;
         trait-id: nat;
         name: identifier;
-        signature: erased-signature;
+        erased-signature: erased-signature;
+        signature: function-signature;
     },
 
     @esexpr:(inline-value)
@@ -98,13 +102,15 @@ enum tube-file-entry {
     instance-reference {
         instance-id: nat;
         import: import-specifier;
+        signature: function-signature;
     },
 
     instance-method-reference {
         method-id: nat;
         instance-id: nat;
         name: identifier;
-        signature: erased-signature;
+        erased-signature: erased-signature;
+        signature: function-signature;
     },
 }
 
@@ -841,7 +847,11 @@ enum builtin-op {
     int-gt { dest: register-id; lhs: register-id; rhs: register-id; },
     int-ge { dest: register-id; lhs: register-id; rhs: register-id; },
 
-    string-concat { dest: register-id; lhs: register-id; rhs: register-id; },
+    string-concat {
+        dest: register-id;
+        @esexpr:(vararg)
+        args: list[register-id];
+    },
     string-eq { dest: register-id; lhs: register-id; rhs: register-id; },
 
     bool-not { dest: register-id; value: register-id; },

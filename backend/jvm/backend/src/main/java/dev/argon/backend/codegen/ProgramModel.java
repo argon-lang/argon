@@ -5,6 +5,8 @@ import dev.argon.esexpr.UnsignedBigInteger;
 import dev.argon.jvmbackendmetadata.JvmPlatformTubeMetadata;
 import dev.argon.vm.*;
 
+import java.lang.constant.ClassDesc;
+import java.lang.constant.MethodTypeDesc;
 import java.util.List;
 import java.util.Optional;
 
@@ -73,12 +75,16 @@ interface ProgramModel {
 	}
 
 	record FunctionInfo(
-		ImportSpecifier importSpecifier
+		ClassDesc definingClass,
+		String name,
+		FunctionSignature signature,
+		MethodTypeDesc descriptor
 	) {
 	}
 
 	record RecordInfo(
-		ImportSpecifier importSpecifier
+		ImportSpecifier importSpecifier,
+		FunctionSignature signature
 	) {
 	}
 
@@ -105,20 +111,23 @@ interface ProgramModel {
 	}
 
 	record TraitInfo(
-		ImportSpecifier importSpecifier
+		ImportSpecifier importSpecifier,
+		FunctionSignature signature
 	) {
 	}
 
 	record MethodInfo(
 		ImportSpecifier parentImportSpecifier,
 		Identifier name,
-		ErasedSignature signature,
+		ErasedSignature erasedSignature,
+		FunctionSignature signature,
 		Optional<dev.argon.vm.MethodDefinition> definition
 	) {
 	}
 
 	record InstanceInfo(
-		ImportSpecifier importSpecifier
+		ImportSpecifier importSpecifier,
+		FunctionSignature signature
 	) {
 	}
 }

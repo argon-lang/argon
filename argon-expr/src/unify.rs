@@ -638,16 +638,6 @@ pub trait Unify {
                 },
             )
             | (
-                Builtin::StringConcat {
-                    lhs: a_lhs,
-                    rhs: a_rhs,
-                },
-                Builtin::StringConcat {
-                    lhs: b_lhs,
-                    rhs: b_rhs,
-                },
-            )
-            | (
                 Builtin::StringEq {
                     lhs: a_lhs,
                     rhs: a_rhs,
@@ -667,6 +657,16 @@ pub trait Unify {
                     rhs: b_rhs,
                 },
             ) => self.unify(*a_lhs, *b_lhs) && self.unify(*a_rhs, *b_rhs),
+            (
+                Builtin::StringConcat { values: a_values },
+                Builtin::StringConcat { values: b_values },
+            ) => {
+                a_values.len() == b_values.len()
+                    && a_values
+                        .into_iter()
+                        .zip(b_values)
+                        .all(|(a, b)| self.unify(a, b))
+            }
             (
                 Builtin::ArrayCreateUnsafeUninitialized {
                     element_type: a_element_type,

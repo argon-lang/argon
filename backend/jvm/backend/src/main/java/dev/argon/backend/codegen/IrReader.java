@@ -12,6 +12,9 @@ import dev.argon.vm.*;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.constant.ClassDesc;
+import java.lang.constant.ConstantDescs;
+import java.lang.constant.MethodTypeDesc;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -371,13 +374,21 @@ final class IrReader {
 
 		@Override
 		public ProgramModel.FunctionInfo getFunctionInfo(UnsignedBigInteger id) {
-			return new ProgramModel.FunctionInfo(functionImportSpecifier(require(functionMap, id, "Invalid function id")));
-		}
+			var entry = require(functionMap, id, "Invalid function id");
+			var importSpecifier = functionImportSpecifier(entry);
+				return new ProgramModel.FunctionInfo(
+					ClassNaming.moduleGlobalFunctionsClassName(this, getModuleInfo(getModuleId(importSpecifier))),
+					ClassNaming.functionName(importSpecifier),
+					functionSignature(entry),
+					functionDescriptor(entry)
+				);
+			}
 
-		@Override
-		public ProgramModel.RecordInfo getRecordInfo(UnsignedBigInteger id) {
-			return new ProgramModel.RecordInfo(recordImportSpecifier(require(recordMap, id, "Invalid record id")));
-		}
+			@Override
+			public ProgramModel.RecordInfo getRecordInfo(UnsignedBigInteger id) {
+				var entry = require(recordMap, id, "Invalid record id");
+				return new ProgramModel.RecordInfo(recordImportSpecifier(entry), recordSignature(entry));
+			}
 
 		@Override
 		public ProgramModel.RecordFieldInfo getRecordFieldInfo(UnsignedBigInteger id) {
@@ -411,7 +422,8 @@ final class IrReader {
 
 		@Override
 		public ProgramModel.TraitInfo getTraitInfo(UnsignedBigInteger id) {
-			return new ProgramModel.TraitInfo(traitImportSpecifier(require(traitMap, id, "Invalid trait id")));
+			var entry = require(traitMap, id, "Invalid trait id");
+			return new ProgramModel.TraitInfo(traitImportSpecifier(entry), traitSignature(entry));
 		}
 
 		@Override
@@ -421,29 +433,32 @@ final class IrReader {
 					var methodRef = methodEntry.entry();
 					var traitInfo = getTraitInfo(methodRef.traitId());
 					yield new ProgramModel.MethodInfo(
-						traitInfo.importSpecifier(),
-						methodRef.name(),
-						methodRef.signature(),
-						Optional.empty()
-					);
-				}
+							traitInfo.importSpecifier(),
+							methodRef.name(),
+							methodRef.erasedSignature(),
+							methodRef.signature(),
+							Optional.empty()
+						);
+					}
 
 				case MethodEntry.Instance methodEntry -> {
 					var methodRef = methodEntry.entry();
 					var instanceInfo = getInstanceInfo(methodRef.instanceId());
 					yield new ProgramModel.MethodInfo(
-						instanceInfo.importSpecifier(),
-						methodRef.name(),
-						methodRef.signature(),
-						Optional.empty()
-					);
-				}
+							instanceInfo.importSpecifier(),
+							methodRef.name(),
+							methodRef.erasedSignature(),
+							methodRef.signature(),
+							Optional.empty()
+						);
+					}
 			};
 		}
 
 		@Override
 		public ProgramModel.InstanceInfo getInstanceInfo(UnsignedBigInteger id) {
-			return new ProgramModel.InstanceInfo(instanceImportSpecifier(require(instanceMap, id, "Invalid instance id")));
+			var entry = require(instanceMap, id, "Invalid instance id");
+			return new ProgramModel.InstanceInfo(instanceImportSpecifier(entry), instanceSignature(entry));
 		}
 
 		private static <T> T require(Map<UnsignedBigInteger, T> map, UnsignedBigInteger id, String message) {
@@ -462,10 +477,78 @@ final class IrReader {
 			};
 		}
 
+		private MethodTypeDesc functionDescriptor(FunctionEntry entry) {
+			return functionSignatureDescriptor(functionSignature(entry));
+		}
+
+		private FunctionSignature functionSignature(FunctionEntry entry) {
+			return switch(entry) {
+				case FunctionEntry.Definition definition -> definition.entry().definition().signature();
+				case FunctionEntry.Reference reference -> reference.entry().signature();
+			};
+		}
+
+		private MethodTypeDesc functionSignatureDescriptor(FunctionSignature signature) {
+			var parameterTypes = new ArrayList<ClassDesc>();
+			for(var parameter : signature.tokenParameters()) {
+				parameterTypes.add(tokenClassDesc(parameter.kind()));
+			}
+			for(var parameter : signature.parameters()) {
+				parameterTypes.add(tokenClassDesc(parameter.paramType()));
+			}
+
+			return MethodTypeDesc.of(ClassDesc.of("dev.argon.runtime.Trampoline"), parameterTypes);
+		}
+
+		private ClassDesc tokenClassDesc(Token token) {
+			return switch(token) {
+				case Token.Boxed _ -> ConstantDescs.CD_Object;
+				case Token.Builtin(var bt) -> switch(bt) {
+					case BuiltinType.Array(var elementType) -> tokenClassDesc(elementType).arrayType();
+					case BuiltinType.Bool() -> ConstantDescs.CD_boolean;
+					case BuiltinType.Conjunction _ -> throw new RuntimeException("Conjunction not implemented");
+					case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
+					case BuiltinType.Int() -> ClassDesc.of("java.math.BigInteger");
+					case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
+					case BuiltinType.String() -> ConstantDescs.CD_String;
+				};
+				case Token.Enum enumToken ->
+					ClassNaming.typeDefinitionClassDescriptor(this, getEnumInfo(enumToken.enumId()).importSpecifier());
+				case Token.Function _ -> ClassDesc.of("dev.argon.runtime.Function");
+				case Token.FunctionErased _ -> ClassDesc.of("dev.argon.runtime.FunctionErased");
+				case Token.FunctionToken _ -> ClassDesc.of("dev.argon.runtime.FunctionToken");
+				case Token.InstanceType instanceType ->
+					ClassNaming.typeDefinitionClassDescriptor(this, getInstanceInfo(instanceType.instanceId()).importSpecifier());
+				case Token.InstanceValue _ -> throw new UnsupportedOperationException("InstanceValue cannot be used as a type");
+				case Token.ParentTokenParameter _, Token.TokenParameter _ -> ConstantDescs.CD_Object;
+				case Token.Record record ->
+					ClassNaming.typeDefinitionClassDescriptor(this, getRecordInfo(record.recordId()).importSpecifier());
+				case Token.RefCell _ -> ClassDesc.of("dev.argon.runtime.RefCell");
+				case Token.Trait trait ->
+					ClassNaming.typeDefinitionClassDescriptor(this, getTraitInfo(trait.traitId()).importSpecifier());
+				case Token.Tuple tuple -> {
+					if(tuple.elements().size() > 10) {
+						yield ClassDesc.of("dev.argon.runtime.TupleXL");
+					}
+					else {
+						yield ClassDesc.of("dev.argon.runtime.Tuple" + tuple.elements().size());
+					}
+				}
+				case Token.TypeInfo() -> ClassDesc.of("dev.argon.runtime.TypeInfo");
+			};
+		}
+
 		private static ImportSpecifier recordImportSpecifier(RecordEntry entry) {
 			return switch(entry) {
 				case RecordEntry.Definition definition -> definition.entry().definition()._import();
 				case RecordEntry.Reference reference -> reference.entry()._import();
+			};
+		}
+
+		private static FunctionSignature recordSignature(RecordEntry entry) {
+			return switch(entry) {
+				case RecordEntry.Definition definition -> definition.entry().definition().signature();
+				case RecordEntry.Reference reference -> reference.entry().signature();
 			};
 		}
 
@@ -483,10 +566,24 @@ final class IrReader {
 			};
 		}
 
+		private static FunctionSignature traitSignature(TraitEntry entry) {
+			return switch(entry) {
+				case TraitEntry.Definition definition -> definition.entry().definition().signature();
+				case TraitEntry.Reference reference -> reference.entry().signature();
+			};
+		}
+
 		private static ImportSpecifier instanceImportSpecifier(InstanceEntry entry) {
 			return switch(entry) {
 				case InstanceEntry.Definition definition -> definition.entry().definition()._import();
 				case InstanceEntry.Reference reference -> reference.entry()._import();
+			};
+		}
+
+		private static FunctionSignature instanceSignature(InstanceEntry entry) {
+			return switch(entry) {
+				case InstanceEntry.Definition definition -> definition.entry().definition().signature();
+				case InstanceEntry.Reference reference -> reference.entry().signature();
 			};
 		}
 	}

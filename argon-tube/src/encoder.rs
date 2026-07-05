@@ -1252,9 +1252,11 @@ impl TubeEncoder {
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::StringConcat { lhs, rhs } => tf::Builtin::StringConcat {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+            Builtin::StringConcat { values } => tf::Builtin::StringConcat {
+                values: values
+                    .iter()
+                    .map(|value| self.emit_expr(value).map(Box::new))
+                    .collect::<Result<_, _>>()?,
             },
             Builtin::StringEq { lhs, rhs } => tf::Builtin::StringEq {
                 lhs: Box::new(self.emit_expr(lhs)?),

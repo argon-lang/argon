@@ -283,9 +283,14 @@ impl VmEncoder {
                     let import = self.encode_import_specifier(&import_specifier)?;
 
                     if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        let signature = self.emit_function_signature(
+                            &ExpressionOwner::Function(function.clone()),
+                            &function.clone().signature(),
+                        )?;
                         break 'entry vf::TubeFileEntry::FunctionReference {
                             function_id,
                             import: Box::new(import),
+                            signature: Box::new(signature.sig),
                         };
                     }
 
@@ -322,9 +327,14 @@ impl VmEncoder {
                     let import = self.encode_import_specifier(&import_specifier)?;
 
                     if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        let signature = self.emit_function_signature(
+                            &ExpressionOwner::Record(record.clone()),
+                            &record.clone().signature(),
+                        )?;
                         break 'entry vf::TubeFileEntry::RecordReference {
                             record_id,
                             import: Box::new(import),
+                            signature: Box::new(signature.sig),
                         };
                     }
 
@@ -493,7 +503,7 @@ impl VmEncoder {
                         ),
                     )?;
 
-                    match method.owner() {
+                    match method.clone().owner() {
                         MethodOwner::Trait(trait_) => {
                             let trait_id = BigUint::from(self.get_trait_id(trait_));
 
@@ -501,7 +511,11 @@ impl VmEncoder {
                                 method_id,
                                 trait_id,
                                 name: Box::new(name),
-                                signature: Box::new(signature),
+                                erased_signature: Box::new(signature),
+                                signature: Box::new(
+                                    self.emit_method_signature(method.clone(), method.clone().signature().as_ref())?
+                                        .sig,
+                                ),
                             }
                         }
 
@@ -512,7 +526,11 @@ impl VmEncoder {
                                 method_id,
                                 instance_id,
                                 name: Box::new(name),
-                                signature: Box::new(signature),
+                                erased_signature: Box::new(signature),
+                                signature: Box::new(
+                                    self.emit_method_signature(method.clone(), method.clone().signature().as_ref())?
+                                        .sig,
+                                ),
                             }
                         }
                     }
@@ -524,9 +542,14 @@ impl VmEncoder {
                     let import = self.encode_import_specifier(&import_specifier)?;
 
                     if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        let signature = self.emit_function_signature(
+                            &ExpressionOwner::Trait(trait_.clone()),
+                            &trait_.clone().signature(),
+                        )?;
                         break 'entry vf::TubeFileEntry::TraitReference {
                             trait_id,
                             import: Box::new(import),
+                            signature: Box::new(signature.sig),
                         };
                     }
 
@@ -562,9 +585,14 @@ impl VmEncoder {
                     let import = self.encode_import_specifier(&import_specifier)?;
 
                     if import_specifier_tube(&import_specifier) != self.tube.name() {
+                        let signature = self.emit_function_signature(
+                            &ExpressionOwner::Instance(instance.clone()),
+                            &instance.clone().signature(),
+                        )?;
                         break 'entry vf::TubeFileEntry::InstanceReference {
                             instance_id,
                             import: Box::new(import),
+                            signature: Box::new(signature.sig),
                         };
                     }
 
@@ -584,12 +612,12 @@ impl VmEncoder {
                         .emit_vtable(MethodOwner::Instance(instance.clone()), methods.as_ref())?;
 
                     vf::TubeFileEntry::InstanceDefinition {
-                        definition: Box::new(vf::InstanceDefinition {
-                            instance_id,
-                            import: Box::new(import),
-                            signature: Box::new(signature.sig),
-                            vtable: Box::new(vtable),
-                            methods: method_definitions,
+	                        definition: Box::new(vf::InstanceDefinition {
+	                            instance_id,
+	                            import: Box::new(import),
+	                            signature: Box::new(signature.sig),
+	                            vtable: Box::new(vtable),
+	                            methods: method_definitions,
                         }),
                     }
                 }
@@ -1821,7 +1849,26 @@ impl<'a> ExprEmitter<'a> {
                     Builtin::IntLe { lhs, rhs } => binary_op!(IntLe, lhs, rhs),
                     Builtin::IntGt { lhs, rhs } => binary_op!(IntGt, lhs, rhs),
                     Builtin::IntGe { lhs, rhs } => binary_op!(IntGe, lhs, rhs),
-                    Builtin::StringConcat { lhs, rhs } => binary_op!(StringConcat, lhs, rhs),
+                    Builtin::StringConcat { values } => match values.as_slice() {
+                        [] => self.expr(&Expr::StringLiteral(Box::from("")), output)?,
+                        [value] => self.expr(value, output)?,
+                        values => {
+                            let rb = output.output_register(self, e)?;
+                            let args = values
+                                .iter()
+                                .map(|value| self.expr(value, AnyRegister).map(Box::new))
+                                .collect::<EmitResult<Vec<_>>>()?;
+
+                            self.emit(vf::Instruction::Builtin {
+                                op: Box::new(vf::BuiltinOp::StringConcat {
+                                    dest: Box::new(rb.register().clone()),
+                                    args,
+                                }),
+                            });
+
+                            rb.into_result(self)?
+                        }
+                    },
                     Builtin::StringEq { lhs, rhs } => binary_op!(StringEq, lhs, rhs),
                     Builtin::BoolEq { lhs, rhs } => binary_op!(BoolEq, lhs, rhs),
                     Builtin::ArrayCreateUnsafeUninitialized {
@@ -1902,11 +1949,18 @@ impl<'a> ExprEmitter<'a> {
             } => {
                 let rb = output.output_register(self, e)?;
 
-                let mut vm_fields = Vec::with_capacity(fields.len());
+                let mut field_values = HashMap::with_capacity(fields.len());
                 for field in fields {
-                    let field_id =
-                        BigUint::from(self.encoder.get_record_field_id(field.field.clone()));
                     let value = self.expr(&field.value, AnyRegister)?;
+                    field_values.insert(field.field.clone(), value);
+                }
+
+                let mut vm_fields = Vec::with_capacity(fields.len());
+                for field in variant.clone().fields().iter() {
+                    let field_id = BigUint::from(self.encoder.get_record_field_id(field.clone()));
+                    let value = field_values
+                        .remove(field)
+                        .expect("Enum variant literal is missing a field after type checking");
                     vm_fields.push(Box::new(vf::RecordFieldLiteral {
                         field_id,
                         value: Box::new(value),
@@ -2236,18 +2290,24 @@ impl<'a> ExprEmitter<'a> {
                 output.output_unit_result(self)?
             }
 
-            // RecordLiteral
             Expr::RecordLiteral {
                 record_type,
                 fields,
             } => {
                 let rb = output.output_register(self, e)?;
 
-                let mut vm_fields = Vec::with_capacity(fields.len());
+                let mut field_values = HashMap::with_capacity(fields.len());
                 for field in fields {
-                    let field_id =
-                        BigUint::from(self.encoder.get_record_field_id(field.field.clone()));
                     let value = self.expr(&field.value, AnyRegister)?;
+                    field_values.insert(field.field.clone(), value);
+                }
+
+                let mut vm_fields = Vec::with_capacity(fields.len());
+                for field in record_type.record.clone().fields().iter() {
+                    let field_id = BigUint::from(self.encoder.get_record_field_id(field.clone()));
+                    let value = field_values
+                        .remove(field)
+                        .expect("Record literal is missing a field after type checking");
                     vm_fields.push(Box::new(vf::RecordFieldLiteral {
                         field_id,
                         value: Box::new(value),

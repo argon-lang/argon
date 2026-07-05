@@ -1000,15 +1000,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             }
                         })
                         .collect::<Vec<_>>();
-                    parts
-                        .into_iter()
-                        .reduce(|lhs, rhs| {
-                            Expr::Builtin(Builtin::StringConcat {
-                                lhs: Box::new(lhs),
-                                rhs: Box::new(rhs),
-                            })
-                        })
-                        .unwrap_or_else(|| Expr::StringLiteral(Box::from("")))
+                    Expr::Builtin(Builtin::StringConcat { values: parts })
                 };
 
                 TypeInferResult::Complete(InferredType {
@@ -1924,10 +1916,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             "int_gt" => int_to_bool_binary_builtin!(IntGt),
             "int_ge" => int_to_bool_binary_builtin!(IntGe),
 
-            "string_concat" => fixed_builtin!(
-                StringConcat,
-                [Expr::string_type(), Expr::string_type()] => Expr::string_type(),
-                { lhs, rhs }
+            "string_concat" => self.infer_variadic_builtin(
+                location,
+                builtin_name,
+                args,
+                Expr::string_type(),
+                Expr::string_type(),
+                |values| Builtin::StringConcat { values },
             ),
             "string_eq" => same_type_bool_binary_builtin!(StringEq, Expr::string_type()),
             "bool_eq" => same_type_bool_binary_builtin!(BoolEq, Expr::bool_type()),
@@ -1995,6 +1990,26 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         TypeInferResult::Complete(InferredType {
             checked_expr: Expr::Builtin(create_builtin(checked_args)),
             inferred_type: create_inferred_type(),
+        })
+    }
+
+    fn infer_variadic_builtin<'e>(
+        &mut self,
+        _location: &Location,
+        _builtin_name: &str,
+        args: VecDeque<ArgumentInfo<'e>>,
+        expected_arg_type: Expr<TypeCheckExprContext>,
+        inferred_type: Expr<TypeCheckExprContext>,
+        create_builtin: impl FnOnce(Vec<Expr<TypeCheckExprContext>>) -> Builtin<TypeCheckExprContext>,
+    ) -> TypeInferResult<'e> {
+        let checked_args = args
+            .iter()
+            .map(|arg| self.check(arg.arg, &expected_arg_type))
+            .collect();
+
+        TypeInferResult::Complete(InferredType {
+            checked_expr: Expr::Builtin(create_builtin(checked_args)),
+            inferred_type,
         })
     }
 
