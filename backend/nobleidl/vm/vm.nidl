@@ -52,6 +52,7 @@ enum tube-file-entry {
     enum-reference {
         enum-id: nat;
         import: import-specifier;
+        signature: function-signature;
     },
 
     enum-variant-reference {
@@ -59,6 +60,7 @@ enum tube-file-entry {
 
         enum-id: nat;
         name: identifier;
+        signature: function-signature;
     },
 
     record-field-reference {
@@ -66,6 +68,7 @@ enum tube-file-entry {
 
         record-id: nat;
         name: identifier;
+        field-type: token;
     },
 
     enum-variant-record-field-reference {
@@ -73,6 +76,7 @@ enum tube-file-entry {
 
         variant-id: nat;
         name: identifier;
+        field-type: token;
     },
 
     @esexpr:(inline-value)
@@ -345,6 +349,7 @@ record record-definition {
 
 @esexpr:(derive-codec)
 record record-field-definition {
+    field-id: nat;
     name: identifier;
     field-type: token;
 
@@ -368,6 +373,7 @@ record enum-definition {
 
 @esexpr:(derive-codec)
 record enum-variant-definition {
+    variant-id: nat;
     name: identifier;
 
     @esexpr:(keyword)
@@ -394,6 +400,7 @@ record trait-definition {
 
 @esexpr:(derive-codec)
 record method-definition {
+    method-id: nat;
     name: identifier;
     erased-signature: erased-signature;
 

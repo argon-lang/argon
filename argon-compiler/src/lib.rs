@@ -457,7 +457,6 @@ pub enum MethodOwner {
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
-
 impl MethodOwner {
     pub fn import_specifier(self) -> ImportSpecifier {
         match self {
@@ -465,9 +464,6 @@ impl MethodOwner {
             MethodOwner::Instance(i) => i.import_specifier(),
         }
     }
-}
-
-impl MethodOwner {
     pub fn into_expression_owner(self) -> ExpressionOwner<DefaultExprContext> {
         match self {
             MethodOwner::Trait(trait_) => ExpressionOwner::Trait(trait_),
@@ -550,7 +546,7 @@ pub trait Enum: Debug + Unload + ThreadSafe {
 }
 
 pub trait EnumVariant: Debug + Unload + ThreadSafe {
-    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum>;
+    fn owning_enum(&self) -> Arc<dyn Enum>;
     fn metadata(&self) -> &EnumVariantMetadata;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>>;
@@ -615,17 +611,29 @@ const DECL_HASH_ENUM_VARIANT: u8 = 7;
 pub enum TypeDeclaration {
     Record(Arc<dyn Record>),
     Enum(Arc<dyn Enum>),
+    EnumVariant(Arc<dyn EnumVariant>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
 
 impl TypeDeclaration {
-    pub fn import_specifier(self) -> ImportSpecifier {
+    pub fn signature(self) -> Arc<FunctionSignature<DefaultExprContext>> {
         match self {
-            Self::Record(r) => r.import_specifier(),
-            Self::Enum(e) => e.import_specifier(),
-            Self::Trait(t) => t.import_specifier(),
-            Self::Instance(i) => i.import_specifier(),
+            Self::Record(r) => r.signature(),
+            Self::Enum(e) => e.signature(),
+            Self::EnumVariant(v) => v.signature(),
+            Self::Trait(t) => t.signature(),
+            Self::Instance(i) => i.signature(),
+        }
+    }
+
+    pub fn into_expression_owner(self) -> ExpressionOwner<DefaultExprContext> {
+        match self {
+            Self::Record(r) => ExpressionOwner::Record(r),
+            Self::Enum(e) => ExpressionOwner::Enum(e),
+            Self::EnumVariant(v) => ExpressionOwner::EnumVariant(v),
+            Self::Trait(t) => ExpressionOwner::Trait(t),
+            Self::Instance(i) => ExpressionOwner::Instance(i),
         }
     }
 }
@@ -658,6 +666,10 @@ impl Hash for TypeDeclaration {
             TypeDeclaration::Enum(e) => {
                 DECL_HASH_ENUM.hash(state);
                 e.hash(state);
+            }
+            TypeDeclaration::EnumVariant(v) => {
+                DECL_HASH_ENUM_VARIANT.hash(state);
+                v.hash(state);
             }
             TypeDeclaration::Trait(t) => {
                 DECL_HASH_TRAIT.hash(state);

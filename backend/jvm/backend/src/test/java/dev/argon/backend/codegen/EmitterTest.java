@@ -1,6 +1,8 @@
 package dev.argon.backend.codegen;
 
 import com.google.common.collect.ImmutableMap;
+import dev.argon.backend.ir.ClassNaming;
+import dev.argon.backend.ir.ClassNamingProxy;
 import dev.argon.esexpr.UnsignedBigInteger;
 import dev.argon.jvmbackendmetadata.Classfile;
 import dev.argon.jvmbackendmetadata.JvmPlatformTubeMetadata;
@@ -20,11 +22,7 @@ import java.lang.classfile.instruction.FieldInstruction;
 import java.lang.classfile.instruction.InvokeDynamicInstruction;
 import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.classfile.instruction.TypeCheckInstruction;
-import java.lang.constant.ClassDesc;
-import java.lang.constant.ConstantDescs;
-import java.lang.constant.DirectMethodHandleDesc;
-import java.lang.constant.MethodHandleDesc;
-import java.lang.constant.MethodTypeDesc;
+import java.lang.constant.*;
 import java.lang.reflect.AccessFlag;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -36,13 +34,19 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.*;
 
 final class EmitterTest {
+	private static final JvmPlatformTubeMetadata EMPTY_PLATFORM_METADATA = new JvmPlatformTubeMetadata(
+		Optional.empty(),
+		Optional.empty(),
+		Optional.empty()
+	);
+
 	@TempDir
 	private Path tempDir;
 
 	private static ProgramModel.FunctionInfo functionInfo(String packageName, FunctionDefinition function) {
 		return new ProgramModel.FunctionInfo(
 			ClassDesc.of(packageName, "Globals"),
-			ClassNaming.functionName(function._import()),
+			ClassNamingProxy.functionName(function._import()),
 			function.signature(),
 			functionDescriptor(function.signature())
 		);
@@ -114,13 +118,53 @@ final class EmitterTest {
 			Optional.of(classfiles)
 		);
 
-		var entries = emitEntries(new TestProgramModel(platformMetadata, List.of()));
+		var entries = emitEntries(new TestProgramModel(
+			platformMetadata,
+			List.of(new ProgramModel.ModuleModel(
+				new ModulePath(List.of("Test", "Pkg")),
+				List.of(),
+				UnsignedBigInteger.ZERO
+			))
+		));
 
 		assertTrue(entries.containsKey("test/pkg/Foo.class"));
 		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals("test.module", module.moduleName().name().stringValue());
 		assertEquals(Set.of("test.pkg"), exportedPackages(module));
+	}
+
+	@Test
+	void emitGeneratedModuleInfoRequiresReferencedTubes() throws Exception {
+		var platformMetadata = new JvmPlatformTubeMetadata(
+			Optional.of("test.module"),
+			Optional.empty(),
+			Optional.empty()
+		);
+		var referencedTube = new TubeName("Ref", List.of("Tube"));
+
+		var entries = emitEntries(new TestProgramModel(
+			platformMetadata,
+			List.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(UnsignedBigInteger.ONE, new ProgramModel.TubeInfo(
+				referencedTube,
+				EMPTY_PLATFORM_METADATA,
+				ModuleDesc.of("ref.tube.module")
+			)),
+			Map.of()
+		));
+
+		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
+		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
+		assertEquals(Set.of("java.base", "ref.tube.module"), requiredModules(module));
 	}
 
 	@Test
@@ -154,12 +198,61 @@ final class EmitterTest {
 			Optional.of(classfiles)
 		);
 
-		var entries = emitEntries(new TestProgramModel(platformMetadata, List.of()));
+		var entries = emitEntries(new TestProgramModel(
+			platformMetadata,
+			List.of(new ProgramModel.ModuleModel(
+				new ModulePath(List.of("Added", "Pkg")),
+				List.of(),
+				UnsignedBigInteger.ZERO
+			))
+		));
 
 		assertTrue(entries.containsKey("existing/pkg/Existing.class"));
 		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals(Set.of("existing.pkg", "added.pkg"), exportedPackages(module));
+	}
+
+	@Test
+	void emitClassFilesAddsMissingRequiresToExistingModuleInfo() throws Exception {
+		var classfiles = compileClassfiles(
+			source(
+				"module-info.java",
+				"""
+				module test.module {
+					requires java.logging;
+				}
+				"""
+			)
+		);
+
+		var platformMetadata = new JvmPlatformTubeMetadata(
+			Optional.of("test.module"),
+			Optional.empty(),
+			Optional.of(classfiles)
+		);
+		var entries = emitEntries(new TestProgramModel(
+			platformMetadata,
+			List.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(),
+			Map.of(UnsignedBigInteger.ONE, new ProgramModel.TubeInfo(
+				new TubeName("Added", List.of("Tube")),
+				EMPTY_PLATFORM_METADATA,
+				ModuleDesc.of("added.module")
+			)),
+			Map.of()
+		));
+
+		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
+		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
+		assertEquals(Set.of("java.base", "java.logging", "added.module"), requiredModules(module));
 	}
 
 	@Test
@@ -184,11 +277,13 @@ final class EmitterTest {
 			),
 			List.of(
 				new RecordFieldDefinition(
+					UnsignedBigInteger.ZERO,
 					new Identifier.Named("name"),
 					new Token.Builtin(new BuiltinType.String()),
 					false
 				),
 				new RecordFieldDefinition(
+					UnsignedBigInteger.ONE,
 					new Identifier.Named("active"),
 					new Token.Builtin(new BuiltinType.Bool()),
 					true
@@ -199,7 +294,8 @@ final class EmitterTest {
 			modulePath,
 			List.of(new ProgramModel.ModuleExportEntry.RecordDefinition(
 				new TubeFileEntry.RecordDefinition(recordDefinition)
-			))
+			)),
+			UnsignedBigInteger.ZERO
 		));
 
 		var entries = emitEntries(new TestProgramModel(platformMetadata, modules));
@@ -237,7 +333,7 @@ final class EmitterTest {
 			.filter(method -> method.methodName().equalsString("<init>"))
 			.findAny()
 			.orElseThrow();
-		assertEquals("(Ljava/lang/Object;Ljava/lang/String;Z)V", constructor.methodType().stringValue());
+		assertEquals("(Ltest/records/Person$Builder;)V", constructor.methodType().stringValue());
 	}
 
 	@Test
@@ -287,7 +383,8 @@ final class EmitterTest {
 			List.of(
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(identity)),
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(caller))
-			)
+			),
+			UnsignedBigInteger.ZERO
 		));
 		var functions = Map.of(
 			UnsignedBigInteger.ZERO,
@@ -368,7 +465,8 @@ final class EmitterTest {
 			List.of(
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(identity)),
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(caller))
-			)
+			),
+			UnsignedBigInteger.ZERO
 		));
 		var functions = Map.of(
 			UnsignedBigInteger.ZERO,
@@ -671,7 +769,8 @@ final class EmitterTest {
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(tokenFunction)),
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(erased)),
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(caller))
-			)
+			),
+			UnsignedBigInteger.ZERO
 		));
 		var functions = Map.of(
 			UnsignedBigInteger.ZERO,
@@ -916,8 +1015,8 @@ final class EmitterTest {
 				recordType
 			),
 			List.of(
-				new RecordFieldDefinition(new Identifier.Named("flag"), boolType, true),
-				new RecordFieldDefinition(new Identifier.Named("count"), intType, true)
+				new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("flag"), boolType, true),
+				new RecordFieldDefinition(UnsignedBigInteger.ONE, new Identifier.Named("count"), intType, true)
 			)
 		);
 		var caller = functionDefinition(
@@ -956,33 +1055,15 @@ final class EmitterTest {
 			List.of(
 				new ProgramModel.ModuleExportEntry.RecordDefinition(new TubeFileEntry.RecordDefinition(record)),
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(caller))
-			)
-		));
-		var records = Map.of(
-			UnsignedBigInteger.ZERO,
-			new ProgramModel.RecordInfo(recordImport, record.signature())
-		);
-		var recordFields = Map.of(
-			UnsignedBigInteger.ZERO,
-			new ProgramModel.RecordFieldInfo(
-				ProgramModel.RecordFieldInfo.OwnerType.RECORD,
-				UnsignedBigInteger.ZERO,
-				new Identifier.Named("flag")
 			),
-			UnsignedBigInteger.ONE,
-			new ProgramModel.RecordFieldInfo(
-				ProgramModel.RecordFieldInfo.OwnerType.RECORD,
-				UnsignedBigInteger.ZERO,
-				new Identifier.Named("count")
-			)
-		);
-
+			UnsignedBigInteger.ZERO
+		));
 		var entries = emitEntries(new TestProgramModel(
 			platformMetadata,
 			modules,
+			Map.of(UnsignedBigInteger.ZERO, functionInfo("test.functions", caller)),
 			Map.of(),
-			records,
-			recordFields
+			Map.of()
 		));
 
 		assertNotNull(entries.get("test/functions/Pair.class"));
@@ -998,10 +1079,28 @@ final class EmitterTest {
 			.map(InvokeInstruction.class::cast)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
-				invoke.opcode() == Opcode.INVOKESPECIAL &&
+			invoke.opcode() == Opcode.INVOKESTATIC &&
 				invoke.owner().asInternalName().equals("test/functions/Pair") &&
-				invoke.name().equalsString("<init>") &&
-				invoke.type().equalsString("(Ljava/lang/Object;ZLjava/math/BigInteger;)V")
+				invoke.name().equalsString("builder") &&
+				invoke.type().equalsString("(Ljava/lang/Object;)Ltest/functions/Pair$Builder;")
+		));
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+			invoke.opcode() == Opcode.INVOKEVIRTUAL &&
+				invoke.owner().asInternalName().equals("test/functions/Pair$Builder") &&
+				invoke.name().equalsString("set_flag") &&
+				invoke.type().equalsString("(Z)Ltest/functions/Pair$Builder;")
+		));
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+			invoke.opcode() == Opcode.INVOKEVIRTUAL &&
+				invoke.owner().asInternalName().equals("test/functions/Pair$Builder") &&
+				invoke.name().equalsString("set_count") &&
+				invoke.type().equalsString("(Ljava/math/BigInteger;)Ltest/functions/Pair$Builder;")
+		));
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+			invoke.opcode() == Opcode.INVOKEVIRTUAL &&
+				invoke.owner().asInternalName().equals("test/functions/Pair$Builder") &&
+				invoke.name().equalsString("build") &&
+				invoke.type().equalsString("()Ltest/functions/Pair;")
 		));
 
 		var fieldInstructions = callerMethod.code().orElseThrow()
@@ -1049,18 +1148,20 @@ final class EmitterTest {
 				enumType
 			),
 			List.of(new EnumVariantDefinition(
+				UnsignedBigInteger.ZERO,
 				new Identifier.Named("Some"),
 				new FunctionSignature(
 					List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 					List.of(new SignatureParameter(Optional.empty(), intType)),
 					enumType
 				),
-				List.of(new RecordFieldDefinition(new Identifier.Named("active"), boolType, false))
+				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, false))
 			))
 		);
 		var modules = List.of(new ProgramModel.ModuleModel(
 			modulePath,
-			List.of(new ProgramModel.ModuleExportEntry.EnumDefinition(new TubeFileEntry.EnumDefinition(enumDef)))
+			List.of(new ProgramModel.ModuleExportEntry.EnumDefinition(new TubeFileEntry.EnumDefinition(enumDef))),
+			UnsignedBigInteger.ZERO
 		));
 
 		var entries = emitEntries(new TestProgramModel(platformMetadata, modules));
@@ -1118,7 +1219,7 @@ final class EmitterTest {
 			.findAny()
 			.orElseThrow();
 		assertEquals(
-			"(Ljava/lang/Object;Ljava/lang/Object;Ljava/math/BigInteger;Z)V",
+			"(Ltest/functions/Choice$Some$Builder;)V",
 			constructor.methodType().stringValue()
 		);
 	}
@@ -1151,13 +1252,14 @@ final class EmitterTest {
 				enumType
 			),
 			List.of(new EnumVariantDefinition(
+				UnsignedBigInteger.ZERO,
 				new Identifier.Named("Some"),
 				new FunctionSignature(
 					List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 					List.of(new SignatureParameter(Optional.empty(), intType)),
 					enumType
 				),
-				List.of(new RecordFieldDefinition(new Identifier.Named("active"), boolType, false))
+				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, false))
 			))
 		);
 		var countRegister = new RegisterId(UnsignedBigInteger.ZERO);
@@ -1217,34 +1319,21 @@ final class EmitterTest {
 			List.of(
 				new ProgramModel.ModuleExportEntry.EnumDefinition(new TubeFileEntry.EnumDefinition(enumDef)),
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(caller))
-			)
+			),
+			UnsignedBigInteger.ZERO
 		));
 		var functions = Map.of(
 			UnsignedBigInteger.ZERO,
 			functionInfo("test.functions", caller)
 		);
-		var recordFields = Map.of(
-			UnsignedBigInteger.ZERO,
-			new ProgramModel.RecordFieldInfo(
-				ProgramModel.RecordFieldInfo.OwnerType.ENUM_VARIANT,
-				UnsignedBigInteger.ZERO,
-				new Identifier.Named("active")
-			)
-		);
-		var enums = Map.of(UnsignedBigInteger.ZERO, new ProgramModel.EnumInfo(enumImport));
-		var enumVariants = Map.of(
-			UnsignedBigInteger.ZERO,
-			new ProgramModel.EnumVariantInfo(UnsignedBigInteger.ZERO, new Identifier.Named("Some"))
-		);
-
 		var entries = emitEntries(new TestProgramModel(
 			platformMetadata,
 			modules,
 			functions,
 			Map.of(),
-			recordFields,
-			enums,
-			enumVariants,
+			Map.of(),
+			Map.of(),
+			Map.of(),
 			Map.of(),
 			Map.of(),
 			Map.of()
@@ -1276,10 +1365,22 @@ final class EmitterTest {
 			.map(InvokeInstruction.class::cast)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
-				invoke.opcode() == Opcode.INVOKESPECIAL &&
+			invoke.opcode() == Opcode.INVOKESTATIC &&
 				invoke.owner().asInternalName().equals("test/functions/Choice$Some") &&
-				invoke.name().equalsString("<init>") &&
-				invoke.type().equalsString("(Ljava/lang/Object;Ljava/lang/Object;Ljava/math/BigInteger;Z)V")
+				invoke.name().equalsString("builder") &&
+				invoke.type().equalsString("(Ljava/lang/Object;Ljava/lang/Object;Ljava/math/BigInteger;)Ltest/functions/Choice$Some$Builder;")
+		));
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+			invoke.opcode() == Opcode.INVOKEVIRTUAL &&
+				invoke.owner().asInternalName().equals("test/functions/Choice$Some$Builder") &&
+				invoke.name().equalsString("set_active") &&
+				invoke.type().equalsString("(Z)Ltest/functions/Choice$Some$Builder;")
+		));
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+			invoke.opcode() == Opcode.INVOKEVIRTUAL &&
+				invoke.owner().asInternalName().equals("test/functions/Choice$Some$Builder") &&
+				invoke.name().equalsString("build") &&
+				invoke.type().equalsString("()Ltest/functions/Choice$Some;")
 		));
 
 		var fieldInstructions = callerMethod.code().orElseThrow()
@@ -1336,6 +1437,7 @@ final class EmitterTest {
 			new Vtable(List.of()),
 			List.of(
 				new MethodDefinition(
+					UnsignedBigInteger.ZERO,
 					new Identifier.Named("compare"),
 					compareSignature,
 					true,
@@ -1347,6 +1449,7 @@ final class EmitterTest {
 					Optional.empty()
 				),
 				new MethodDefinition(
+					UnsignedBigInteger.ONE,
 					new Identifier.Named("answer"),
 					answerSignature,
 					false,
@@ -1377,7 +1480,8 @@ final class EmitterTest {
 			modulePath,
 			List.of(new ProgramModel.ModuleExportEntry.TraitDefinition(
 				new TubeFileEntry.TraitDefinition(traitDefinition)
-			))
+			)),
+			UnsignedBigInteger.ZERO
 		));
 
 		var entries = emitEntries(new TestProgramModel(platformMetadata, modules));
@@ -1407,7 +1511,7 @@ final class EmitterTest {
 
 		var compare = classModel.methods().stream()
 			.filter(method -> method.methodName().equalsString(
-				ClassNaming.methodName(new Identifier.Named("compare"), compareSignature)
+				ClassNamingProxy.methodName(new Identifier.Named("compare"), compareSignature)
 			))
 			.findAny()
 			.orElseThrow();
@@ -1420,7 +1524,7 @@ final class EmitterTest {
 
 		var answer = classModel.methods().stream()
 			.filter(method -> method.methodName().equalsString(
-				ClassNaming.methodName(new Identifier.Named("answer"), answerSignature)
+				ClassNamingProxy.methodName(new Identifier.Named("answer"), answerSignature)
 			))
 			.findAny()
 			.orElseThrow();
@@ -1483,6 +1587,7 @@ final class EmitterTest {
 			),
 			new Vtable(List.of()),
 			List.of(new MethodDefinition(
+				UnsignedBigInteger.ZERO,
 				new Identifier.Named("show"),
 				methodSignature,
 				false,
@@ -1586,35 +1691,61 @@ final class EmitterTest {
 				new ProgramModel.ModuleExportEntry.FunctionDefinition(
 					new TubeFileEntry.FunctionDefinition(caller)
 				)
-			)
+			),
+			UnsignedBigInteger.ZERO
 		));
 
 		var traits = Map.of(
 			UnsignedBigInteger.ZERO,
-			new ProgramModel.TraitInfo(traitImport, new FunctionSignature(
-				List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
-				List.of(),
-				traitType
-			)),
+			new ProgramModel.TraitInfo(
+				traitImport,
+				new FunctionSignature(
+					List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
+					List.of(),
+					traitType
+				),
+				ClassDesc.of("test.instances", "Show")
+			),
 			UnsignedBigInteger.ONE,
-			new ProgramModel.TraitInfo(coreExceptionTraitImport, new FunctionSignature(
-				List.of(),
-				List.of(),
-				new Token.Trait(UnsignedBigInteger.ONE, List.of())
-			))
+			new ProgramModel.TraitInfo(
+				coreExceptionTraitImport,
+				new FunctionSignature(
+					List.of(),
+					List.of(),
+					new Token.Trait(UnsignedBigInteger.ONE, List.of())
+				),
+				ClassDesc.of("argon.core.exception", "Exception")
+			)
 		);
 		var instances = Map.of(
 			UnsignedBigInteger.ZERO,
-			new ProgramModel.InstanceInfo(instanceImport, instanceDefinition.signature())
+			new ProgramModel.InstanceInfo(
+				instanceImport,
+				instanceDefinition.signature(),
+				ClassDesc.of("test.instances", "ShowInt"),
+				MethodTypeDesc.of(
+					ConstantDescs.CD_void,
+					ClassDesc.of("java.lang.Object"),
+					ClassDesc.of("java.math.BigInteger")
+				)
+			),
+			UnsignedBigInteger.ONE,
+			new ProgramModel.InstanceInfo(
+				exceptionInstanceDefinition._import(),
+				exceptionInstanceDefinition.signature(),
+				ClassDesc.of("test.instances", "MyException"),
+				MethodTypeDesc.of(ConstantDescs.CD_void)
+			)
 		);
 		var methods = Map.of(
 			UnsignedBigInteger.ZERO,
 			new ProgramModel.MethodInfo(
-				traitImport,
 				new Identifier.Named("show"),
 				methodSignature,
 				instanceDefinition.methods().getFirst().signature(),
-				Optional.empty()
+				ClassDesc.of("test.instances", "Show"),
+				ClassNamingProxy.methodName(new Identifier.Named("show"), methodSignature),
+				functionDescriptor(instanceDefinition.methods().getFirst().signature())
 			)
 		);
 		var entries = emitEntries(new TestProgramModel(
@@ -1639,14 +1770,19 @@ final class EmitterTest {
 							Optional.of("argon.core.exception")
 						))),
 						Optional.empty()
-					)
+					),
+					ModuleDesc.of(ClassNamingProxy.defaultTubeModuleName(new TubeName("Argon", List.of("Core"))))
 				)
 			),
 			Map.of(
 				UnsignedBigInteger.ONE,
 				new ProgramModel.ModuleInfo(
 					UnsignedBigInteger.ONE,
-					new ModulePath(List.of("Exception"))
+					new ModulePath(List.of("Exception")),
+					PackageDesc.of(ClassNamingProxy.defaultModulePackageName(
+						new TubeName("Argon", List.of("Core")),
+						new ModulePath(List.of("Exception"))
+					))
 				)
 			)
 		));
@@ -1691,7 +1827,7 @@ final class EmitterTest {
 
 		var show = classModel.methods().stream()
 			.filter(method -> method.methodName().equalsString(
-				ClassNaming.methodName(new Identifier.Named("show"), methodSignature)
+				ClassNamingProxy.methodName(new Identifier.Named("show"), methodSignature)
 			))
 			.findAny()
 			.orElseThrow();
@@ -1722,7 +1858,7 @@ final class EmitterTest {
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKEINTERFACE &&
 				invoke.owner().asInternalName().equals("test/instances/Show") &&
-				invoke.name().equalsString(ClassNaming.methodName(new Identifier.Named("show"), methodSignature)) &&
+				invoke.name().equalsString(ClassNamingProxy.methodName(new Identifier.Named("show"), methodSignature)) &&
 				invoke.type().equalsString("(Ldev/argon/runtime/FunctionToken;)Ldev/argon/runtime/Trampoline;")
 		));
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -1830,7 +1966,8 @@ final class EmitterTest {
 		);
 		var modules = List.of(new ProgramModel.ModuleModel(
 			modulePath,
-			List.of(new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(function)))
+			List.of(new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(function))),
+			UnsignedBigInteger.ZERO
 		));
 		var entries = emitEntries(new TestProgramModel(platformMetadata, modules));
 		var globalsClass = entries.get("test/functions/Globals.class");
@@ -1850,6 +1987,15 @@ final class EmitterTest {
 		}
 
 		return packages;
+	}
+
+	private Set<String> requiredModules(java.lang.classfile.attribute.ModuleAttribute module) {
+		var modules = new HashSet<String>();
+		for(var requireInfo : module.requires()) {
+			modules.add(requireInfo.requires().asSymbol().name());
+		}
+
+		return modules;
 	}
 
 	private List<Classfile> compileClassfiles(SourceFile... sources) throws IOException {
@@ -1998,7 +2144,16 @@ final class EmitterTest {
 
 		@Override
 		public TubeMetadata metadata() {
-			throw new UnsupportedOperationException();
+			var referencedTubes = tubeInfos.entrySet().stream()
+				.filter(entry -> entry.getKey().toBigInteger().signum() > 0)
+				.sorted(Comparator.comparing(entry -> entry.getKey().toBigInteger()))
+				.map(entry -> new TubeReference(entry.getValue().tubeName(), Optional.empty()))
+				.toList();
+			var moduleEntries = modules.stream()
+				.map(module -> new dev.argon.vm.Module(module.path()))
+				.toList();
+
+			return new TubeMetadata(TUBE_NAME, referencedTubes, Optional.empty(), moduleEntries);
 		}
 
 		@Override
@@ -2014,7 +2169,11 @@ final class EmitterTest {
 			}
 
 			assertEquals(UnsignedBigInteger.ZERO, id);
-			return new TubeInfo(TUBE_NAME, platformMetadata);
+			return new TubeInfo(
+				TUBE_NAME,
+				platformMetadata,
+				ModuleDesc.of(platformMetadata.moduleName().orElseGet(() -> ClassNamingProxy.defaultTubeModuleName(TUBE_NAME)))
+			);
 		}
 
 		@Override
@@ -2025,87 +2184,327 @@ final class EmitterTest {
 			}
 
 			assertEquals(UnsignedBigInteger.ZERO, id);
-			return new ModuleInfo(UnsignedBigInteger.ZERO, modules.getFirst().path());
-		}
+				return new ModuleInfo(
+					UnsignedBigInteger.ZERO,
+					modules.getFirst().path(),
+					PackageDesc.of(ClassNamingProxy.tubeModulePackageName(this, modules.getFirst().path(), UnsignedBigInteger.ZERO))
+				);
+			}
 
 		@Override
 		public FunctionInfo getFunctionInfo(UnsignedBigInteger id) {
 			var function = functions.get(id);
-			if(function == null) {
-				throw new UnsupportedOperationException();
+			if(function != null) {
+				return function;
 			}
 
-			return function;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					if(export instanceof ProgramModel.ModuleExportEntry.FunctionDefinition(var entry)) {
+						var definition = entry.definition();
+						if(definition.functionId().equals(id)) {
+							return new FunctionInfo(
+								ClassNaming.moduleGlobalFunctionsClassName(getModuleInfo(module.moduleId())),
+								ClassNamingProxy.functionName(definition._import()),
+								definition.signature(),
+								functionDescriptor(definition.signature())
+							);
+						}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		public RecordInfo getRecordInfo(UnsignedBigInteger id) {
 			var record = records.get(id);
-			if(record == null) {
-				throw new UnsupportedOperationException();
+			if(record != null) {
+				return record;
 			}
 
-			return record;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					if(export instanceof ProgramModel.ModuleExportEntry.RecordDefinition(var entry)) {
+						var definition = entry.definition();
+						if(definition.recordId().equals(id)) {
+							var classDesc = typeDefinitionClassDesc(getModuleInfo(module.moduleId()).packageName(), definition._import());
+							var builderClassDesc = classDesc.nested("Builder");
+							return new RecordInfo(
+								definition._import(),
+								definition.signature(),
+								classDesc,
+								new RecordBuilderInfo(
+									builderClassDesc,
+									"builder",
+									MethodTypeDesc.of(builderClassDesc, tokenParameterDescs(definition.signature())),
+									"build",
+									MethodTypeDesc.of(classDesc)
+								)
+							);
+						}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		public RecordFieldInfo getRecordFieldInfo(UnsignedBigInteger id) {
 			var recordField = recordFields.get(id);
-			if(recordField == null) {
-				throw new UnsupportedOperationException();
+			if(recordField != null) {
+				return recordField;
 			}
 
-			return recordField;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					switch(export) {
+						case ProgramModel.ModuleExportEntry.RecordDefinition(var entry) -> {
+							var definition = entry.definition();
+							for(var field : definition.fields()) {
+								if(field.fieldId().equals(id)) {
+									return recordFieldInfo(
+										RecordFieldInfo.OwnerType.RECORD,
+										definition.recordId(),
+										getRecordInfo(definition.recordId()).builderInfo().builderClassDesc(),
+										field
+									);
+								}
+							}
+						}
+						case ProgramModel.ModuleExportEntry.EnumDefinition(var entry) -> {
+							for(var variant : entry.definition().variants()) {
+								for(var field : variant.fields()) {
+									if(field.fieldId().equals(id)) {
+										return recordFieldInfo(
+											RecordFieldInfo.OwnerType.ENUM_VARIANT,
+											variant.variantId(),
+											getEnumVariantInfo(variant.variantId()).builder().builderClassDesc(),
+											field
+										);
+									}
+								}
+							}
+						}
+						default -> {}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		public EnumInfo getEnumInfo(UnsignedBigInteger id) {
 			var enumInfo = enums.get(id);
-			if(enumInfo == null) {
-				throw new UnsupportedOperationException();
+			if(enumInfo != null) {
+				return enumInfo;
 			}
 
-			return enumInfo;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					if(export instanceof ProgramModel.ModuleExportEntry.EnumDefinition(var entry)) {
+						var definition = entry.definition();
+						if(definition.enumId().equals(id)) {
+							return new EnumInfo(
+								definition._import(),
+								typeDefinitionClassDesc(getModuleInfo(module.moduleId()).packageName(), definition._import())
+							);
+						}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		public EnumVariantInfo getEnumVariantInfo(UnsignedBigInteger id) {
 			var enumVariant = enumVariants.get(id);
-			if(enumVariant == null) {
-				throw new UnsupportedOperationException();
+			if(enumVariant != null) {
+				return enumVariant;
 			}
 
-			return enumVariant;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					if(export instanceof ProgramModel.ModuleExportEntry.EnumDefinition(var entry)) {
+						var definition = entry.definition();
+						var enumInfo = getEnumInfo(definition.enumId());
+						for(var variant : definition.variants()) {
+							if(variant.variantId().equals(id)) {
+								var variantName = identifierName(variant.name());
+								var variantClassDesc = enumInfo.enumClassDesc().nested(variantName);
+								var builderClassDesc = variantClassDesc.nested("Builder");
+								var parameterDescs = new ArrayList<ClassDesc>();
+								parameterDescs.addAll(Arrays.asList(tokenParameterDescs(definition.signature())));
+								parameterDescs.addAll(Arrays.asList(tokenParameterDescs(variant.signature())));
+								for(var parameter : variant.signature().parameters()) {
+									parameterDescs.add(tokenAsClassDesc(parameter.paramType()));
+								}
+
+								return new EnumVariantInfo(
+									definition.enumId(),
+									variant.name(),
+									variantName,
+									variantClassDesc,
+									new RecordBuilderInfo(
+										builderClassDesc,
+										"builder",
+										MethodTypeDesc.of(builderClassDesc, parameterDescs),
+										"build",
+										MethodTypeDesc.of(variantClassDesc)
+									)
+								);
+							}
+						}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
+		}
+
+		private static RecordFieldInfo recordFieldInfo(
+			RecordFieldInfo.OwnerType ownerType,
+			UnsignedBigInteger ownerId,
+			ClassDesc builderClassDesc,
+			RecordFieldDefinition field
+		) {
+			var fieldName = identifierName(field.name());
+			var fieldType = tokenAsClassDesc(field.fieldType());
+			return new RecordFieldInfo(
+				ownerType,
+				ownerId,
+				field.name(),
+				fieldName,
+				fieldType,
+				"set_" + fieldName,
+				MethodTypeDesc.of(builderClassDesc, fieldType)
+			);
+		}
+
+		private static ClassDesc typeDefinitionClassDesc(PackageDesc packageName, ImportSpecifier importSpecifier) {
+			return switch(importSpecifier) {
+				case ImportSpecifier.Global global -> ClassDesc.of(packageName.name(), identifierName(global.name()));
+				case ImportSpecifier.Local local -> typeDefinitionClassDesc(packageName, local.parent()).nested("Nested" + local.index());
+			};
+		}
+
+		private static String identifierName(Identifier identifier) {
+			return ClassNamingProxy.fieldName(identifier);
+		}
+
+		private static ClassDesc[] tokenParameterDescs(FunctionSignature signature) {
+			return signature.tokenParameters().stream()
+				.map(parameter -> tokenAsClassDesc(parameter.kind()))
+				.toArray(ClassDesc[]::new);
 		}
 
 		@Override
 		public TraitInfo getTraitInfo(UnsignedBigInteger id) {
 			var trait = traits.get(id);
-			if(trait == null) {
-				throw new UnsupportedOperationException();
+			if(trait != null) {
+				return trait;
 			}
 
-			return trait;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					if(export instanceof ProgramModel.ModuleExportEntry.TraitDefinition(var entry)) {
+						var definition = entry.definition();
+						if(definition.traitId().equals(id)) {
+							return new TraitInfo(
+								definition._import(),
+								definition.signature(),
+								typeDefinitionClassDesc(getModuleInfo(module.moduleId()).packageName(), definition._import())
+							);
+						}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		public MethodInfo getMethodInfo(UnsignedBigInteger id) {
 			var method = methods.get(id);
-			if(method == null) {
-				throw new UnsupportedOperationException();
+			if(method != null) {
+				return method;
 			}
 
-			return method;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					switch(export) {
+						case ProgramModel.ModuleExportEntry.TraitDefinition(var entry) -> {
+							var traitInfo = getTraitInfo(entry.definition().traitId());
+							for(var definition : entry.definition().methods()) {
+								if(definition.methodId().equals(id)) {
+									return new MethodInfo(
+										definition.name(),
+										definition.erasedSignature(),
+										definition.signature(),
+										traitInfo.traitDesc(),
+										ClassNamingProxy.methodName(definition.name(), definition.erasedSignature()),
+										functionDescriptor(definition.signature())
+									);
+								}
+							}
+						}
+						case ProgramModel.ModuleExportEntry.InstanceDefinition(var entry) -> {
+							var instanceInfo = getInstanceInfo(entry.definition().instanceId());
+							for(var definition : entry.definition().methods()) {
+								if(definition.methodId().equals(id)) {
+									return new MethodInfo(
+										definition.name(),
+										definition.erasedSignature(),
+										definition.signature(),
+										instanceInfo.instanceClassDesc(),
+										ClassNamingProxy.methodName(definition.name(), definition.erasedSignature()),
+										functionDescriptor(definition.signature())
+									);
+								}
+							}
+						}
+						default -> {}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 
 		@Override
 		public InstanceInfo getInstanceInfo(UnsignedBigInteger id) {
 			var instance = instances.get(id);
-			if(instance == null) {
-				throw new UnsupportedOperationException();
+			if(instance != null) {
+				return instance;
 			}
 
-			return instance;
+			for(var module : modules) {
+				for(var export : module.exports()) {
+					if(export instanceof ProgramModel.ModuleExportEntry.InstanceDefinition(var entry)) {
+						var definition = entry.definition();
+						if(definition.instanceId().equals(id)) {
+							var parameterDescs = new ArrayList<ClassDesc>();
+							parameterDescs.addAll(Arrays.asList(tokenParameterDescs(definition.signature())));
+							for(var parameter : definition.signature().parameters()) {
+								parameterDescs.add(tokenAsClassDesc(parameter.paramType()));
+							}
+
+							return new InstanceInfo(
+								definition._import(),
+								definition.signature(),
+								typeDefinitionClassDesc(getModuleInfo(module.moduleId()).packageName(), definition._import()),
+								MethodTypeDesc.of(ConstantDescs.CD_void, parameterDescs)
+							);
+						}
+					}
+				}
+			}
+
+			throw new UnsupportedOperationException();
 		}
 	}
 }

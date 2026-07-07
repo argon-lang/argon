@@ -143,7 +143,7 @@ impl Unload for TestEnumVariant {
 }
 
 impl EnumVariant for TestEnumVariant {
-    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum> {
+    fn owning_enum(&self) -> Arc<dyn Enum> {
         panic!("test variant owning_enum should not be called")
     }
 

@@ -443,6 +443,7 @@ record record-definition {
 
 @esexpr:(derive-codec)
 record record-field-definition {
+    field-id: nat;
     name: identifier;
     field-type: expr;
 
@@ -465,6 +466,7 @@ record enum-definition {
 
 @esexpr:(derive-codec)
 record enum-variant-definition {
+    variant-id: nat;
     name: identifier;
 
     @esexpr:(keyword)
@@ -488,13 +490,13 @@ record trait-definition {
 
 @esexpr:(derive-codec)
 record method-entry {
-    id: nat;
     access: access-modifier;
     method: method-definition;
 }
 
 @esexpr:(derive-codec)
 record method-definition {
+    method-id: nat;
     name: identifier;
     erased-signature: erased-signature;
 
@@ -1028,6 +1030,9 @@ enum expression-owner {
         index: nat;
     },
     method {
+        index: nat;
+    },
+    field {
         index: nat;
     },
 }

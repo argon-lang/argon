@@ -35,6 +35,7 @@ pub enum ExpressionOwner<EC: ExprContext + ?Sized> {
     EnumVariant(EC::EnumVariant),
     Method(EC::Method),
     Instance(EC::Instance),
+    Field(EC::RecordField),
 }
 
 impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
@@ -47,6 +48,7 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
             ExpressionOwner::EnumVariant(v) => ExpressionOwner::EnumVariant(v.clone()),
             ExpressionOwner::Method(m) => ExpressionOwner::Method(m.clone()),
             ExpressionOwner::Instance(i) => ExpressionOwner::Instance(i.clone()),
+            ExpressionOwner::Field(f) => ExpressionOwner::Field(f.clone()),
         }
     }
 }

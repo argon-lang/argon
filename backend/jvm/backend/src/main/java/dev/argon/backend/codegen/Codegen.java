@@ -2,6 +2,7 @@ package dev.argon.backend.codegen;
 
 import dev.argon.backend.io.InputFile;
 import dev.argon.backend.io.OutputFile;
+import dev.argon.backend.ir.IrReader;
 import dev.argon.esexpr.DecodeException;
 import dev.argon.esexpr.SyntaxException;
 

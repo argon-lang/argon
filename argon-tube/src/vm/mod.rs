@@ -8,12 +8,7 @@ use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpe
 use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::scanner::{CaptureScanner, FreeVariableScanner};
 use argon_compiler::vtable::VTableTarget;
-use argon_compiler::{
-    BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
-    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
-    MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
-    RecordField, RecordFieldOwner, Trait, Tube, TubeName, UnaryOperatorIdentifier,
-};
+use argon_compiler::{BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum, EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method, MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Trait, Tube, TubeName, TypeDeclaration, UnaryOperatorIdentifier};
 use argon_expr::{
     BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
     NormalizerScanner, TraitType, Variable,
@@ -340,10 +335,11 @@ impl VmEncoder {
 
                     let signature = record.clone().signature();
                     let owner = ExpressionOwner::Record(record.clone());
-                    let mut builder = FunctionSignatureBuilder::new(self);
+                    let mut builder = FunctionSignatureBuilder::new();
 
                     for (index, param) in signature.parameters.iter().enumerate() {
                         builder.add_parameter(
+                            self,
                             Variable::Parameter(Box::new(
                                 param.clone().to_parameter_var(owner.clone(), index),
                             )),
@@ -356,12 +352,12 @@ impl VmEncoder {
                         .fields()
                         .iter()
                         .map(|field| {
+                            let field_id = self.get_record_field_id(field.clone());
                             let metadata = field.metadata();
-                            let field_type = builder
-                                .token_emitter()
-                                .token_expr(&field.clone().field_type())?;
+                            let field_type = self.emit_field_type(field.clone())?;
 
                             Ok(Box::new(vf::RecordFieldDefinition {
+                                field_id: BigUint::from(field_id),
                                 name: Box::new(encode_identifier(&metadata.name)),
                                 field_type: Box::new(field_type),
                                 mutable: metadata.is_mutable,
@@ -369,7 +365,7 @@ impl VmEncoder {
                         })
                         .collect::<Result<Vec<_>, InternalCompilerError>>()?;
 
-                    let signature = builder.finish(&signature.return_type)?;
+                    let signature = builder.finish(self, &signature.return_type)?;
 
                     vf::TubeFileEntry::RecordDefinition {
                         definition: Box::new(vf::RecordDefinition {
@@ -381,27 +377,36 @@ impl VmEncoder {
                     }
                 }
 
-                EntryEmitter::RecordField(record_field) => match record_field.owning_record() {
-                    RecordFieldOwner::Record(r) => {
-                        let record_field_id =
-                            BigUint::from(self.get_record_field_id(record_field.clone()));
-                        let record_id = BigUint::from(self.get_record_id(r.clone()));
-
-                        vf::TubeFileEntry::RecordFieldReference {
-                            name: Box::new(encode_identifier(&record_field.metadata().name)),
-                            record_id,
-                            record_field_id,
-                        }
+                EntryEmitter::RecordField(record_field) => {
+                    if import_specifier_tube(&record_field.owning_record().import_specifier()) == self.tube.name() {
+                        return Ok(None);
                     }
-                    RecordFieldOwner::EnumVariant(variant) => {
-                        let record_field_id =
-                            BigUint::from(self.get_record_field_id(record_field.clone()));
-                        let variant_id = BigUint::from(self.get_enum_variant_id(variant.clone()));
 
-                        vf::TubeFileEntry::EnumVariantRecordFieldReference {
-                            name: Box::new(encode_identifier(&record_field.metadata().name)),
-                            variant_id,
-                            record_field_id,
+                    let record_field_id = BigUint::from(self.get_record_field_id(record_field.clone()));
+                    let field_type = Box::new(self.emit_field_type(record_field.clone())?);
+
+                    match record_field.owning_record() {
+                        RecordFieldOwner::Record(r) => {
+                            let record_id = BigUint::from(self.get_record_id(r.clone()));
+
+                            vf::TubeFileEntry::RecordFieldReference {
+                                name: Box::new(encode_identifier(&record_field.metadata().name)),
+                                record_id,
+                                record_field_id,
+                                field_type,
+                            }
+                        }
+                        RecordFieldOwner::EnumVariant(variant) => {
+                            let record_field_id =
+                                BigUint::from(self.get_record_field_id(record_field.clone()));
+                            let variant_id = BigUint::from(self.get_enum_variant_id(variant.clone()));
+
+                            vf::TubeFileEntry::EnumVariantRecordFieldReference {
+                                name: Box::new(encode_identifier(&record_field.metadata().name)),
+                                variant_id,
+                                record_field_id,
+                                field_type,
+                            }
                         }
                     }
                 },
@@ -411,10 +416,17 @@ impl VmEncoder {
                     let import_specifier = enum_.clone().import_specifier();
                     let import = self.encode_import_specifier(&import_specifier)?;
 
+
+                    let signature = self.emit_function_signature(
+                        &ExpressionOwner::Enum(enum_.clone()),
+                        &enum_.clone().signature(),
+                    )?;
+
                     if import_specifier_tube(&import_specifier) != self.tube.name() {
                         break 'entry vf::TubeFileEntry::EnumReference {
                             enum_id,
                             import: Box::new(import),
+                            signature: Box::new(signature.sig),
                         };
                     }
 
@@ -427,16 +439,17 @@ impl VmEncoder {
                         .variants()
                         .iter()
                         .map(|variant| {
-                            self.get_enum_variant_id(variant.clone());
+                            let variant_id = self.get_enum_variant_id(variant.clone());
                             let variant_fields = variant.clone().fields();
                             for field in variant_fields.iter() {
                                 self.get_record_field_id(field.clone());
                             }
 
                             let variant_signature = variant.clone().signature();
-                            let mut builder = FunctionSignatureBuilder::new(self);
+                            let mut builder = FunctionSignatureBuilder::new();
                             for (index, param) in variant_signature.parameters.iter().enumerate() {
                                 builder.add_parameter(
+                                    self,
                                     Variable::Parameter(Box::new(param.clone().to_parameter_var(
                                         ExpressionOwner::EnumVariant(variant.clone()),
                                         index,
@@ -448,12 +461,14 @@ impl VmEncoder {
                             let fields = variant_fields
                                 .iter()
                                 .map(|field| {
+                                    let field_id = self.get_record_field_id(field.clone());
                                     let metadata = field.metadata();
                                     let field_type = builder
-                                        .token_emitter()
+                                        .token_emitter(self)
                                         .token_expr(&field.clone().field_type())?;
 
                                     Ok(Box::new(vf::RecordFieldDefinition {
+                                        field_id: BigUint::from(field_id),
                                         name: Box::new(encode_identifier(&metadata.name)),
                                         field_type: Box::new(field_type),
                                         mutable: metadata.is_mutable,
@@ -462,9 +477,10 @@ impl VmEncoder {
                                 .collect::<Result<Vec<_>, InternalCompilerError>>()?;
 
                             let variant_signature =
-                                builder.finish(&variant_signature.return_type)?;
+                                builder.finish(self, &variant_signature.return_type)?;
 
                             Ok(Box::new(vf::EnumVariantDefinition {
+                                variant_id: BigUint::from(variant_id),
                                 name: Box::new(encode_identifier(&variant.metadata().name)),
                                 signature: Box::new(variant_signature.sig),
                                 fields,
@@ -483,17 +499,32 @@ impl VmEncoder {
                 }
 
                 EntryEmitter::EnumVariant(variant) => {
+                    let owning_enum = variant.owning_enum();
+                    if import_specifier_tube(&owning_enum.clone().import_specifier()) == self.tube.name() {
+                        return Ok(None);
+                    }
+
                     let variant_id = BigUint::from(self.ids.enum_variant_ids.get(variant.clone()));
-                    let enum_id = BigUint::from(self.get_enum_id(variant.clone().owning_enum()));
+                    let enum_id = BigUint::from(self.get_enum_id(owning_enum));
+
+                    let signature = self.emit_function_signature(
+                        &ExpressionOwner::EnumVariant(variant.clone()),
+                        &variant.clone().signature(),
+                    )?;
 
                     vf::TubeFileEntry::EnumVariantReference {
                         variant_id,
                         enum_id,
                         name: Box::new(encode_identifier(&variant.metadata().name)),
+                        signature: Box::new(signature.sig),
                     }
                 }
 
                 EntryEmitter::Method(method) => {
+                    if import_specifier_tube(&method.clone().owner().import_specifier()) == self.tube.name() {
+                        return Ok(None);
+                    }
+
                     let method_id = BigUint::from(self.ids.method_ids.get(method.clone()));
                     let name = encode_identifier(&method.metadata().name);
                     let signature = self.encode_erased_signature(
@@ -513,8 +544,7 @@ impl VmEncoder {
                                 name: Box::new(name),
                                 erased_signature: Box::new(signature),
                                 signature: Box::new(
-                                    self.emit_method_signature(method.clone(), method.clone().signature().as_ref())?
-                                        .sig,
+                                    self.emit_method_signature(method.clone())?.sig,
                                 ),
                             }
                         }
@@ -528,8 +558,7 @@ impl VmEncoder {
                                 name: Box::new(name),
                                 erased_signature: Box::new(signature),
                                 signature: Box::new(
-                                    self.emit_method_signature(method.clone(), method.clone().signature().as_ref())?
-                                        .sig,
+                                    self.emit_method_signature(method.clone())?.sig,
                                 ),
                             }
                         }
@@ -766,10 +795,11 @@ impl VmEncoder {
         owner: &ExpressionOwner<argon_compiler::DefaultExprContext>,
         sig: &FunctionSignature<argon_compiler::DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
-        let mut builder = FunctionSignatureBuilder::new(self);
+        let mut builder = FunctionSignatureBuilder::new();
 
         for (index, param) in sig.parameters.iter().enumerate() {
             builder.add_parameter(
+                self,
                 Variable::Parameter(Box::new(
                     param.clone().to_parameter_var(owner.clone(), index),
                 )),
@@ -777,7 +807,7 @@ impl VmEncoder {
             )?;
         }
 
-        builder.finish(&sig.return_type)
+        builder.finish(self, &sig.return_type)
     }
 
     fn emit_function_implementation(
@@ -812,7 +842,7 @@ impl VmEncoder {
             &argon_compiler::erased_sig::erase_signature(self.context.clone(), sig.as_ref()),
         )?;
 
-        let mut signature = self.emit_method_signature(method.clone(), sig.as_ref())?;
+        let mut signature = self.emit_method_signature(method.clone())?;
         let implementation = method
             .clone()
             .implementation()
@@ -828,6 +858,7 @@ impl VmEncoder {
             .map(Box::new);
 
         Ok(vf::MethodDefinition {
+            method_id: BigUint::from(self.ids.method_ids.get(method.clone())),
             name: Box::new(encode_identifier(&metadata.name)),
             erased_signature: Box::new(erased_sig),
             r#abstract: metadata.is_abstract,
@@ -857,10 +888,10 @@ impl VmEncoder {
             .map(|(slot, slot_value)| {
                 let slot_method = slot.method().clone();
                 let slot_method_id = BigUint::from(self.get_method_id(slot_method.clone()));
-                let mut builder = FunctionSignatureBuilder::new(self);
-                builder.add_method_owner_parameters(slot_method.clone().owner())?;
+                let mut builder = FunctionSignatureBuilder::new();
+                builder.add_owner_parameters(self, TypeDeclaration::from(slot_method.clone().owner()))?;
                 let receiver_type = method_receiver_type(slot_method.clone());
-                let slot_instance_type = builder.token_emitter().token_expr(&receiver_type)?;
+                let slot_instance_type = builder.token_emitter(self).token_expr(&receiver_type)?;
 
                 let target = match slot_value.target() {
                     VTableTarget::Abstract => vf::VtableTarget::Abstract {},
@@ -889,18 +920,20 @@ impl VmEncoder {
     fn emit_method_signature(
         &mut self,
         method: Arc<dyn Method>,
-        sig: &FunctionSignature<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let owner = ExpressionOwner::Method(method.clone());
-        let mut builder = FunctionSignatureBuilder::new(self);
+        let mut builder = FunctionSignatureBuilder::new();
 
-        builder.add_method_owner_parameters(method.clone().owner())?;
+        builder.add_owner_parameters(self, TypeDeclaration::from(method.clone().owner()))?;
         let receiver_type = method_receiver_type(method.clone());
         let receiver_name = method.metadata().instance_parameter.name.clone();
         builder.add_instance_parameter(owner.clone(), receiver_type, receiver_name)?;
 
+        let sig = method.clone().signature();
+
         for (index, param) in sig.parameters.iter().enumerate() {
             builder.add_parameter(
+                self,
                 Variable::Parameter(Box::new(
                     param.clone().to_parameter_var(owner.clone(), index),
                 )),
@@ -908,7 +941,18 @@ impl VmEncoder {
             )?;
         }
 
-        builder.finish(&sig.return_type)
+        builder.finish(self, &sig.return_type)
+    }
+
+    fn emit_field_type(
+        &mut self,
+        field: Arc<dyn RecordField>,
+    ) -> Result<vf::Token, InternalCompilerError> {
+        let mut builder = FunctionSignatureBuilder::new();
+
+        builder.add_owner_parameters(self, TypeDeclaration::from(field.owning_record()))?;
+
+        builder.token_emitter(self).token_expr(&field.field_type())
     }
 
     fn emit_function_body(
@@ -991,9 +1035,7 @@ enum ArgConsumer {
     Arg,
 }
 
-struct FunctionSignatureBuilder<'a> {
-    encoder: &'a mut VmEncoder,
-
+struct FunctionSignatureBuilder {
     token_parameters: Vec<Box<vf::SignatureTokenParameter>>,
     parameters: Vec<Box<vf::SignatureParameter>>,
     arg_consumers: Vec<ArgConsumer>,
@@ -1004,11 +1046,9 @@ struct FunctionSignatureBuilder<'a> {
     param_var_mapping: HashMap<Variable<DefaultExprContext>, MappedParamVar>,
 }
 
-impl<'a> FunctionSignatureBuilder<'a> {
-    fn new(encoder: &'a mut VmEncoder) -> Self {
+impl FunctionSignatureBuilder {
+    fn new() -> Self {
         Self {
-            encoder,
-
             token_parameters: Vec::new(),
             parameters: Vec::new(),
             arg_consumers: Vec::new(),
@@ -1020,7 +1060,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
         }
     }
 
-    fn token_emitter<'b>(&'b mut self) -> TokenEmitter<'b> {
+    fn token_emitter<'b>(&mut self, encoder: &'b mut VmEncoder) -> TokenEmitter<'b> {
         let mut token_params = HashMap::new();
         token_params.extend(
             self.instance_type_params
@@ -1038,13 +1078,14 @@ impl<'a> FunctionSignatureBuilder<'a> {
         );
 
         TokenEmitter {
-            encoder: self.encoder,
+            encoder,
             token_params,
         }
     }
 
     fn add_parameter(
         &mut self,
+        encoder: &mut VmEncoder,
         param: Variable<DefaultExprContext>,
         captured_ref: bool,
     ) -> Result<(), InternalCompilerError> {
@@ -1053,7 +1094,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
                 self.arg_consumers.push(ArgConsumer::Erased);
             }
             ErasureMode::Token => {
-                let token_kind = self.token_emitter().token_expr(param.var_type())?;
+                let token_kind = self.token_emitter(encoder).token_expr(param.var_type())?;
                 let tp = vf::SignatureTokenParameter {
                     name: param.name().map(encode_identifier).map(Box::new),
                     kind: Box::new(token_kind),
@@ -1070,7 +1111,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
                 self.arg_consumers.push(ArgConsumer::Token);
             }
             ErasureMode::Concrete => {
-                let t = self.token_emitter().token_expr(param.var_type())?;
+                let t = self.token_emitter(encoder).token_expr(param.var_type())?;
                 let sig_param = vf::SignatureParameter {
                     name: param.name().map(encode_identifier).map(Box::new),
                     param_type: Box::new(t),
@@ -1108,11 +1149,12 @@ impl<'a> FunctionSignatureBuilder<'a> {
         Ok(())
     }
 
-    fn add_method_owner_parameters(
+    fn add_owner_parameters(
         &mut self,
-        owner: MethodOwner,
+        encoder: &mut VmEncoder,
+        owner: TypeDeclaration,
     ) -> Result<(), InternalCompilerError> {
-        let signature = owner.signature();
+        let signature = owner.clone().signature();
         let owner = owner.into_expression_owner();
 
         let mut token_params = Vec::new();
@@ -1150,7 +1192,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
         if !concrete_param_vars.is_empty() {
             let instance_type = match owner {
                 ExpressionOwner::Instance(i) => {
-                    let id = self.encoder.get_instance_id(i.clone());
+                    let id = encoder.get_instance_id(i.clone());
                     vf::Token::InstanceType {
                         instance_id: BigUint::from(id),
                         args: token_params,
@@ -1177,6 +1219,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
 
     fn finish(
         self,
+        encoder: &mut VmEncoder,
         return_type: &Expr<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let reg_offset = if self.instance_param.is_some() {
@@ -1221,7 +1264,7 @@ impl<'a> FunctionSignatureBuilder<'a> {
         );
 
         let mut token_emitter = TokenEmitter {
-            encoder: self.encoder,
+            encoder,
             token_params: known_vars
                 .iter()
                 .filter_map(|(v, realization)| match realization {
@@ -1665,8 +1708,8 @@ impl<'a> ExprEmitter<'a> {
 
                 let (token_args, args, sig) = self.capture_variables(
                     &free_vars,
-                    |sb| sb.add_parameter(Variable::ClosureParameter(v.clone()), false),
-                    |sb| sb.finish(return_type),
+                    |emitter, sb| sb.add_parameter(emitter.encoder, Variable::ClosureParameter(v.clone()), false),
+                    |emitter, sb| sb.finish(emitter.encoder, return_type),
                 )?;
 
                 self.encoder
@@ -2583,9 +2626,10 @@ impl<'a> ExprEmitter<'a> {
     fn capture_variables(
         &mut self,
         captured_vars: &HashSet<Variable<DefaultExprContext>>,
-        build_rest: impl FnOnce(&mut FunctionSignatureBuilder<'_>) -> Result<(), InternalCompilerError>,
+        build_rest: impl FnOnce(&mut Self, &mut FunctionSignatureBuilder) -> Result<(), InternalCompilerError>,
         finish: impl FnOnce(
-            FunctionSignatureBuilder<'_>,
+            &mut Self,
+            FunctionSignatureBuilder,
         ) -> Result<FunctionSignatureWithMapping, InternalCompilerError>,
     ) -> Result<
         (
@@ -2595,14 +2639,14 @@ impl<'a> ExprEmitter<'a> {
         ),
         InternalCompilerError,
     > {
-        let mut sb = FunctionSignatureBuilder::new(self.encoder);
+        let mut sb = FunctionSignatureBuilder::new();
 
         for v in captured_vars {
-            sb.add_parameter(v.clone(), v.is_mutable())?;
+            sb.add_parameter(self.encoder, v.clone(), v.is_mutable())?;
         }
 
-        build_rest(&mut sb)?;
-        let sig = finish(sb)?;
+        build_rest(self, &mut sb)?;
+        let sig = finish(self, sb)?;
 
         let mut args = Vec::new();
         let mut token_args = Vec::new();

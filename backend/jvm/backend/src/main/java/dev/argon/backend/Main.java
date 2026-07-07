@@ -1,5 +1,6 @@
 package dev.argon.backend;
 
+import dev.argon.backend.codegen.Codegen;
 import dev.argon.backend.externs.ExternMetadataScanner;
 import dev.argon.backend.io.InputFile;
 import dev.argon.backend.io.OutputFile;
@@ -99,12 +100,13 @@ public final class Main {
 		return fileName != null && fileName.toString().endsWith(".class");
 	}
 
-	private static int runCodegen(JvmCodegenCommand command) {
-		throw new UnsupportedOperationException(
-			"JVM code generation is not implemented yet: "
-				+ "--input=" + command.input
-				+ ", --output=" + command.output
-		);
+	private static int runCodegen(JvmCodegenCommand command) throws Exception {
+		Codegen.codegen(new Codegen.JVMCodegenOptions(
+			InputFile.fromPath(command.input),
+			OutputFile.fromPath(command.output)
+		));
+
+		return 0;
 	}
 
 	@Command(
@@ -200,11 +202,11 @@ public final class Main {
 		@Option(names = { "-i", "--input" }, required = true, description = "Input Argon VM IR file")
 		private Path input;
 
-		@Option(names = { "-o", "--output" }, required = true, description = "Output directory")
+		@Option(names = { "-o", "--output" }, required = true, description = "Output JAR file")
 		private Path output;
 
 		@Override
-		public Integer call() {
+		public Integer call() throws Exception {
 			return runCodegen(this);
 		}
 	}

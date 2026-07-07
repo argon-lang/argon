@@ -593,6 +593,7 @@ where
         ExpressionOwner::EnumVariant(enum_variant) => ExpressionOwner::EnumVariant(enum_variant),
         ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
         ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
+        ExpressionOwner::Field(field) => ExpressionOwner::Field(field),
     }
 }
 

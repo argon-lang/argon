@@ -7,10 +7,11 @@ import dev.argon.vm.*;
 
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
+import java.lang.constant.ModuleDesc;
+import java.lang.constant.PackageDesc;
 import java.util.List;
-import java.util.Optional;
 
-interface ProgramModel {
+public interface ProgramModel {
 	TubeHeader header();
 	TubeMetadata metadata();
 	DecodedMetadata decodedMetadata();
@@ -39,7 +40,8 @@ interface ProgramModel {
 
 	record ModuleModel(
 		ModulePath path,
-		List<ModuleExportEntry> exports
+		List<ModuleExportEntry> exports,
+		UnsignedBigInteger moduleId
 	) {
 	}
 
@@ -64,13 +66,15 @@ interface ProgramModel {
 
 	record TubeInfo(
 		TubeName tubeName,
-		JvmPlatformTubeMetadata platformMetadata
+		JvmPlatformTubeMetadata platformMetadata,
+		ModuleDesc moduleName
 	) {
 	}
 
 	record ModuleInfo(
 		UnsignedBigInteger tubeId,
-		ModulePath path
+		ModulePath path,
+		PackageDesc packageName
 	) {
 	}
 
@@ -84,14 +88,28 @@ interface ProgramModel {
 
 	record RecordInfo(
 		ImportSpecifier importSpecifier,
-		FunctionSignature signature
+		FunctionSignature signature,
+		ClassDesc recordClassDesc,
+		RecordBuilderInfo builderInfo
 	) {
 	}
+
+	record RecordBuilderInfo(
+		ClassDesc builderClassDesc,
+		String builderMethodName,
+		MethodTypeDesc builderFactoryMethodDesc,
+		String buildMethodName,
+		MethodTypeDesc buildMethodDesc
+	) {}
 
 	record RecordFieldInfo(
 		OwnerType ownerType,
 		UnsignedBigInteger recordId,
-		Identifier name
+		Identifier name,
+		String fieldName,
+		ClassDesc fieldType,
+		String builderMethodName,
+		MethodTypeDesc builderMethodDesc
 	) {
 		public enum OwnerType {
 			RECORD,
@@ -100,34 +118,42 @@ interface ProgramModel {
 	}
 
 	record EnumInfo(
-		ImportSpecifier importSpecifier
+		ImportSpecifier importSpecifier,
+		ClassDesc enumClassDesc
 	) {
 	}
 
 	record EnumVariantInfo(
 		UnsignedBigInteger enumId,
-		Identifier name
+		Identifier name,
+		String nestedClassName,
+		ClassDesc variantClassDesc,
+		RecordBuilderInfo builder
 	) {
 	}
 
 	record TraitInfo(
 		ImportSpecifier importSpecifier,
-		FunctionSignature signature
+		FunctionSignature signature,
+		ClassDesc traitDesc
 	) {
 	}
 
 	record MethodInfo(
-		ImportSpecifier parentImportSpecifier,
 		Identifier name,
 		ErasedSignature erasedSignature,
 		FunctionSignature signature,
-		Optional<dev.argon.vm.MethodDefinition> definition
+		ClassDesc definingClass,
+		String methodName,
+		MethodTypeDesc descriptor
 	) {
 	}
 
 	record InstanceInfo(
 		ImportSpecifier importSpecifier,
-		FunctionSignature signature
+		FunctionSignature signature,
+		ClassDesc instanceClassDesc,
+		MethodTypeDesc instanceConstructorDesc
 	) {
 	}
 }

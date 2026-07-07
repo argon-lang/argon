@@ -135,6 +135,15 @@ class IrReader {
                 this.recordMap.set(entry.definition.recordId, entry);
                 importSpec = entry.definition.import;
                 exportEntry = entry;
+                for(const field of entry.definition.fields) {
+                    this.recordFieldMap.set(field.fieldId, {
+                        $type: "record-field-reference",
+                        recordId: entry.definition.recordId,
+                        recordFieldId: field.fieldId,
+                        name: field.name,
+                        fieldType: field.fieldType,
+                    });
+                }
                 break;
 
             case "record-reference":
@@ -145,6 +154,24 @@ class IrReader {
                 this.enumMap.set(entry.definition.enumId, entry);
                 importSpec = entry.definition.import;
                 exportEntry = entry;
+                for(const variant of entry.definition.variants) {
+                    this.enumVariantMap.set(variant.variantId, {
+                        $type: "enum-variant-reference",
+                        enumId: entry.definition.enumId,
+                        variantId: variant.variantId,
+                        name: variant.name,
+                        signature: variant.signature,
+                    });
+                    for(const field of variant.fields) {
+                        this.recordFieldMap.set(field.fieldId, {
+                            $type: "enum-variant-record-field-reference",
+                            variantId: entry.definition.enumId,
+                            recordFieldId: field.fieldId,
+                            name: field.name,
+                            fieldType: field.fieldType,
+                        });
+                    }
+                }
                 break;
 
             case "enum-reference":
@@ -167,6 +194,16 @@ class IrReader {
                 this.traitMap.set(entry.definition.traitId, entry);
                 importSpec = entry.definition.import;
                 exportEntry = entry;
+                for(const method of entry.definition.methods) {
+                    this.methodMap.set(method.methodId, {
+                        $type: "trait-method-reference",
+                        traitId: entry.definition.traitId,
+                        methodId: method.methodId,
+                        name: method.name,
+                        erasedSignature: method.erasedSignature,
+                        signature: method.signature,
+                    });
+                }
                 break;
 
             case "trait-reference":
@@ -182,6 +219,16 @@ class IrReader {
                 this.instanceMap.set(entry.definition.instanceId, entry);
                 importSpec = entry.definition.import;
                 exportEntry = entry;
+                for(const method of entry.definition.methods) {
+                    this.methodMap.set(method.methodId, {
+                        $type: "instance-method-reference",
+                        instanceId: entry.definition.instanceId,
+                        methodId: method.methodId,
+                        name: method.name,
+                        erasedSignature: method.erasedSignature,
+                        signature: method.signature,
+                    });
+                }
                 break;
 
             case "instance-reference":
@@ -490,7 +537,7 @@ class ProgramModelImpl implements ProgramModel {
                 return {
                     parentImportSpecifier: traitInfo.importSpecifier,
                     name: entry.name,
-                    signature: entry.signature,
+                    signature: entry.erasedSignature,
                 };
             }
 
@@ -501,7 +548,7 @@ class ProgramModelImpl implements ProgramModel {
                 return {
                     parentImportSpecifier: instanceInfo.importSpecifier,
                     name: entry.name,
-                    signature: entry.signature,
+                    signature: entry.erasedSignature,
                 };
             }
         }

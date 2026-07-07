@@ -204,7 +204,7 @@ impl Unload for SourceEnumVariant {
 }
 
 impl EnumVariant for SourceEnumVariant {
-    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum> {
+    fn owning_enum(&self) -> Arc<dyn Enum> {
         self.owner.clone()
     }
 

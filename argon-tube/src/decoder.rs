@@ -248,6 +248,17 @@ impl TubeDecoder {
                 );
             }
             tf::TubeFileEntry::RecordDefinition { definition } => {
+                for field in &definition.fields {
+                    insert_unique(
+                        &mut self.record_field_references,
+                        field.field_id.clone(),
+                        (
+                            definition.record_id.clone(),
+                            (*field.name).clone()
+                        ),
+                        "field entry",
+                    );
+                }
                 insert_unique(
                     &mut self.record_entries,
                     definition.record_id.clone(),
@@ -264,6 +275,28 @@ impl TubeDecoder {
                 );
             }
             tf::TubeFileEntry::EnumDefinition { definition } => {
+                for variant in &definition.variants {
+                    insert_unique(
+                        &mut self.enum_variant_references,
+                        variant.variant_id.clone(),
+                        (
+                            definition.enum_id.clone(),
+                            (*variant.name).clone()
+                        ),
+                        "enum variant reference",
+                    );
+                    for field in &variant.fields {
+                        insert_unique(
+                            &mut self.enum_variant_record_field_references,
+                            field.field_id.clone(),
+                            (
+                                variant.variant_id.clone(),
+                                (*field.name).clone()
+                            ),
+                            "field entry",
+                        );
+                    }
+                }
                 insert_unique(
                     &mut self.enum_entries,
                     definition.enum_id.clone(),
@@ -320,7 +353,7 @@ impl TubeDecoder {
                 for method in &definition.methods {
                     insert_unique(
                         &mut self.method_entries,
-                        method.id.clone(),
+                        method.method.method_id.clone(),
                         MethodEntryDefinition::Trait {
                             trait_id: definition.trait_id.clone(),
                             entry: (**method).clone(),
@@ -361,7 +394,7 @@ impl TubeDecoder {
                 for method in &definition.methods {
                     insert_unique(
                         &mut self.method_entries,
-                        method.id.clone(),
+                        method.method.method_id.clone(),
                         MethodEntryDefinition::Instance {
                             instance_id: definition.instance_id.clone(),
                             entry: (**method).clone(),
@@ -1736,6 +1769,9 @@ impl TubeDecoder {
             tf::ExpressionOwner::Method { index } => {
                 argon_expr::ExpressionOwner::Method(self.method(index))
             }
+            tf::ExpressionOwner::Field { index } => {
+                argon_expr::ExpressionOwner::Field(self.record_field(index))
+            }
         }
     }
 
@@ -1932,7 +1968,7 @@ impl Trait for DecodedTrait {
                     .iter()
                     .map(|entry| MethodEntry {
                         access: decode_access_modifier((*entry.access).clone()),
-                        method: self.decoder.method(entry.id.clone()),
+                        method: self.decoder.method(entry.method.method_id.clone()),
                     })
                     .collect(),
             )
@@ -2106,7 +2142,7 @@ impl Instance for DecodedInstance {
                     .iter()
                     .map(|entry| MethodEntry {
                         access: decode_access_modifier((*entry.access).clone()),
-                        method: self.decoder.method(entry.id.clone()),
+                        method: self.decoder.method(entry.method.method_id.clone()),
                     })
                     .collect(),
             )
@@ -2235,7 +2271,7 @@ impl Unload for DecodedEnumVariant {
 }
 
 impl EnumVariant for DecodedEnumVariant {
-    fn owning_enum(self: Arc<Self>) -> Arc<dyn Enum> {
+    fn owning_enum(&self) -> Arc<dyn Enum> {
         self.owner.clone()
     }
 

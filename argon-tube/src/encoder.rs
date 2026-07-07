@@ -339,9 +339,10 @@ impl TubeEncoder {
                         .fields()
                         .iter()
                         .map(|field| {
-                            self.get_record_field_id(field.clone());
+                            let field_id = self.get_record_field_id(field.clone());
                             let metadata = field.metadata();
                             Ok(Box::new(tf::RecordFieldDefinition {
+                                field_id: BigUint::from(field_id),
                                 name: Box::new(encode_identifier(&metadata.name)?),
                                 field_type: Box::new(self.emit_expr(&field.clone().field_type())?),
                                 mutable: metadata.is_mutable,
@@ -360,29 +361,35 @@ impl TubeEncoder {
                 }
             }
 
-            EntryEmitter::RecordField(field) => match field.owning_record() {
-                RecordFieldOwner::Record(record) => {
-                    let record_field_id =
-                        BigUint::from(self.ids.record_field_ids.get(field.clone()));
-                    let record_id = BigUint::from(self.get_record_id(record));
-                    let name = encode_identifier(&field.metadata().name)?;
-
-                    tf::TubeFileEntry::RecordFieldReference {
-                        record_field_id,
-                        record_id,
-                        name: Box::new(name),
-                    }
+            EntryEmitter::RecordField(field) => {
+                if import_specifier_tube(&field.owning_record().import_specifier()) == self.tube.name() {
+                    return Ok(None);
                 }
-                RecordFieldOwner::EnumVariant(variant) => {
-                    let record_field_id =
-                        BigUint::from(self.ids.record_field_ids.get(field.clone()));
-                    let variant_id = BigUint::from(self.get_enum_variant_id(variant));
-                    let name = encode_identifier(&field.metadata().name)?;
 
-                    tf::TubeFileEntry::EnumVariantRecordFieldReference {
-                        record_field_id,
-                        variant_id,
-                        name: Box::new(name),
+                match field.owning_record() {
+                    RecordFieldOwner::Record(record) => {
+                        let record_field_id =
+                            BigUint::from(self.ids.record_field_ids.get(field.clone()));
+                        let record_id = BigUint::from(self.get_record_id(record));
+                        let name = encode_identifier(&field.metadata().name)?;
+
+                        tf::TubeFileEntry::RecordFieldReference {
+                            record_field_id,
+                            record_id,
+                            name: Box::new(name),
+                        }
+                    }
+                    RecordFieldOwner::EnumVariant(variant) => {
+                        let record_field_id =
+                            BigUint::from(self.ids.record_field_ids.get(field.clone()));
+                        let variant_id = BigUint::from(self.get_enum_variant_id(variant));
+                        let name = encode_identifier(&field.metadata().name)?;
+
+                        tf::TubeFileEntry::EnumVariantRecordFieldReference {
+                            record_field_id,
+                            variant_id,
+                            name: Box::new(name),
+                        }
                     }
                 }
             },
@@ -402,15 +409,16 @@ impl TubeEncoder {
                         .variants()
                         .iter()
                         .map(|variant| {
-                            self.get_enum_variant_id(variant.clone());
+                            let variant_id = self.get_enum_variant_id(variant.clone());
                             let fields = variant
                                 .clone()
                                 .fields()
                                 .iter()
                                 .map(|field| {
-                                    self.get_record_field_id(field.clone());
+                                    let field_id = self.get_record_field_id(field.clone());
                                     let metadata = field.metadata();
                                     Ok(Box::new(tf::RecordFieldDefinition {
+                                        field_id: BigUint::from(field_id),
                                         name: Box::new(encode_identifier(&metadata.name)?),
                                         field_type: Box::new(
                                             self.emit_expr(&field.clone().field_type())?,
@@ -421,6 +429,7 @@ impl TubeEncoder {
                                 .collect::<Result<Vec<_>, InternalCompilerError>>()?;
 
                             Ok(Box::new(tf::EnumVariantDefinition {
+                                variant_id: BigUint::from(variant_id),
                                 name: Box::new(encode_identifier(&variant.metadata().name)?),
                                 signature: Box::new(
                                     self.emit_function_signature(&variant.clone().signature())?,
@@ -441,8 +450,14 @@ impl TubeEncoder {
                 }
             }
             EntryEmitter::EnumVariant(variant) => {
+                let variant_enum = variant.owning_enum();
+
+                if import_specifier_tube(&variant_enum.clone().import_specifier()) == self.tube.name() {
+                    return Ok(None);
+                }
+
                 let variant_id = BigUint::from(self.ids.enum_variant_ids.get(variant.clone()));
-                let enum_id = BigUint::from(self.get_enum_id(variant.clone().owning_enum()));
+                let enum_id = BigUint::from(self.get_enum_id(variant_enum));
                 let name = encode_identifier(&variant.metadata().name)?;
 
                 tf::TubeFileEntry::EnumVariantReference {
@@ -526,6 +541,11 @@ impl TubeEncoder {
                     self.context.clone(),
                     method.clone().signature().as_ref(),
                 ))?;
+
+
+                if import_specifier_tube(&method.clone().owner().import_specifier()) == self.tube.name() {
+                    return Ok(None);
+                }
 
                 match method.clone().owner() {
                     MethodOwner::Trait(trait_) => tf::TubeFileEntry::TraitMethodReference {
@@ -807,9 +827,9 @@ impl TubeEncoder {
             .map(Box::new);
 
         Ok(tf::MethodEntry {
-            id: BigUint::from(method_id),
             access: Box::new(encode_access_modifier(method_entry.access)),
             method: Box::new(tf::MethodDefinition {
+                method_id: BigUint::from(method_id),
                 name: Box::new(encode_identifier(&metadata.name)?),
                 erased_signature: Box::new(self.encode_erased_signature(&erased_sig)?),
                 inline: metadata.is_inline,
@@ -1443,6 +1463,9 @@ impl TubeEncoder {
             },
             ExpressionOwner::Instance(instance) => tf::ExpressionOwner::Instance {
                 index: self.get_instance_id(instance.clone()).into(),
+            },
+            ExpressionOwner::Field(field) => tf::ExpressionOwner::Field {
+                index: self.get_record_field_id(field.clone()).into(),
             },
         })
     }

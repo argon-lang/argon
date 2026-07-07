@@ -1,5 +1,7 @@
 package dev.argon.backend.codegen;
 
+import dev.argon.backend.ir.ClassNaming;
+import dev.argon.backend.ir.TokenTypes;
 import dev.argon.esexpr.DecodeException;
 import dev.argon.esexpr.UnsignedBigInteger;
 import dev.argon.jvmbackendmetadata.JvmExtern;
@@ -7,13 +9,7 @@ import dev.argon.vm.*;
 import dev.argon.vm.Instruction;
 
 import java.io.IOException;
-import java.lang.classfile.Attributes;
-import java.lang.classfile.ClassFile;
-import java.lang.classfile.ClassModel;
-import java.lang.classfile.ClassTransform;
-import java.lang.classfile.CodeBuilder;
-import java.lang.classfile.Label;
-import java.lang.classfile.TypeKind;
+import java.lang.classfile.*;
 import java.lang.classfile.attribute.InnerClassesAttribute;
 import java.lang.classfile.attribute.InnerClassInfo;
 import java.lang.classfile.attribute.ModuleAttribute;
@@ -28,6 +24,7 @@ import java.lang.constant.ModuleDesc;
 import java.lang.constant.PackageDesc;
 import java.util.*;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -98,11 +95,12 @@ final class Emitter {
 
 	private void emitClassFiles() throws IOException {
 		var requiredExports = requiredExports();
+		var requiredRequires = requiredRequires();
 
 		for(var classfile : program.decodedMetadata().platformMetadata().additionalClasses().orElse(List.of())) {
 			var classModel = classfile.model();
 			if(classModel.isModuleInfo()) {
-				writeEntry(MODULE_INFO_ENTRY, moduleInfoBytesWithExports(classModel, requiredExports));
+				writeEntry(MODULE_INFO_ENTRY, moduleInfoBytesWithExportsAndRequires(classModel, requiredExports, requiredRequires));
 				emittedModuleInfo = true;
 			}
 			else {
@@ -113,12 +111,17 @@ final class Emitter {
 
 	private void emitModuleInfo() throws IOException {
 		if(!emittedModuleInfo) {
+			var tubeInfo = program.getTubeInfo(UnsignedBigInteger.ZERO);
+
 			var moduleAttribute = ModuleAttribute.of(
-				ModuleDesc.of(ClassNaming.currentTubeModuleName(program)),
+				tubeInfo.moduleName(),
 				builder -> {
 					builder.requires(ModuleDesc.of("java.base"), ClassFile.ACC_MANDATED, null);
+					for(var moduleName : requiredRequires()) {
+						builder.requires(moduleName, 0, null);
+					}
 					for(var packageName : requiredExports()) {
-						builder.exports(PackageDesc.of(packageName), 0);
+						builder.exports(packageName, 0);
 					}
 				}
 			);
@@ -130,27 +133,35 @@ final class Emitter {
 		}
 	}
 
-	private Set<String> requiredExports() {
-		var exports = new TreeSet<String>();
+	private Set<PackageDesc> requiredExports() {
+		var exports = new HashSet<PackageDesc>();
 
 		for(var module : program.modules()) {
-			exports.add(ClassNaming.currentTubeModulePackageName(program, module.path()));
+			var moduleInfo = program.getModuleInfo(module.moduleId());
+			exports.add(moduleInfo.packageName());
 		}
-
-		program.decodedMetadata().platformMetadata().moduleMetadata()
-			.ifPresent(moduleMetadata ->
-				moduleMetadata.stream()
-					.flatMap(metadata -> metadata.packageName().stream())
-					.forEach(exports::add)
-			);
 
 		return exports;
 	}
 
-	private byte[] moduleInfoBytesWithExports(ClassModel moduleInfo, Set<String> requiredExports) {
+	private Set<ModuleDesc> requiredRequires() {
+		var requires = new HashSet<ModuleDesc>();
+
+		for(int i = 0; i < program.metadata().referencedTubes().size(); ++i) {
+			requires.add(program.getTubeInfo(UnsignedBigInteger.valueOf(i + 1)).moduleName());
+		}
+
+		return requires;
+	}
+
+	private byte[] moduleInfoBytesWithExportsAndRequires(
+		ClassModel moduleInfo,
+		Set<PackageDesc> requiredExports,
+		Set<ModuleDesc> requiredRequires
+	) {
 		var moduleAttribute = moduleInfo.findAttribute(Attributes.module())
 			.orElseThrow(() -> new IllegalArgumentException("module-info classfile is missing its Module attribute"));
-		var augmentedModuleAttribute = moduleAttributeWithExports(moduleAttribute, requiredExports);
+		var augmentedModuleAttribute = moduleAttributeWithExportsAndRequires(moduleAttribute, requiredExports, requiredRequires);
 
 		var transform = ClassTransform
 			.dropping(element -> element instanceof ModuleAttribute)
@@ -159,10 +170,19 @@ final class Emitter {
 		return CLASS_FILE.transformClass(moduleInfo, transform);
 	}
 
-	private ModuleAttribute moduleAttributeWithExports(ModuleAttribute moduleAttribute, Set<String> requiredExports) {
-		var existingExports = new HashSet<String>();
+	private ModuleAttribute moduleAttributeWithExportsAndRequires(
+		ModuleAttribute moduleAttribute,
+		Set<PackageDesc> requiredExports,
+		Set<ModuleDesc> requiredRequires
+	) {
+		var existingRequires = new HashSet<ModuleDesc>();
+		for(var requireInfo : moduleAttribute.requires()) {
+			existingRequires.add(requireInfo.requires().asSymbol());
+		}
+
+		var existingExports = new HashSet<PackageDesc>();
 		for(var exportInfo : moduleAttribute.exports()) {
-			existingExports.add(exportInfo.exportedPackage().asSymbol().name());
+			existingExports.add(exportInfo.exportedPackage().asSymbol());
 		}
 
 		return ModuleAttribute.of(
@@ -172,15 +192,20 @@ final class Emitter {
 				moduleAttribute.moduleVersion()
 					.ifPresent(version -> builder.moduleVersion(version.stringValue()));
 
-				for(var requireInfo : moduleAttribute.requires()) {
-					builder.requires(requireInfo);
-				}
-				for(var exportInfo : moduleAttribute.exports()) {
-					builder.exports(exportInfo);
-				}
+					for(var requireInfo : moduleAttribute.requires()) {
+						builder.requires(requireInfo);
+					}
+					for(var moduleName : requiredRequires) {
+						if(!existingRequires.contains(moduleName)) {
+							builder.requires(moduleName, 0, null);
+						}
+					}
+					for(var exportInfo : moduleAttribute.exports()) {
+						builder.exports(exportInfo);
+					}
 				for(var packageName : requiredExports) {
 					if(!existingExports.contains(packageName)) {
-						builder.exports(PackageDesc.of(packageName), 0);
+						builder.exports(packageName, 0);
 					}
 				}
 				for(var openInfo : moduleAttribute.opens()) {
@@ -233,12 +258,13 @@ final class Emitter {
 		}
 
 		if(!functions.isEmpty()) {
-			emitGlobalFunctions(functions);
+			var moduleInfo = program.getModuleInfo(module.moduleId());
+			emitGlobalFunctions(moduleInfo, functions);
 		}
 	}
 
-	private void emitGlobalFunctions(List<TubeFileEntry.FunctionDefinition> functions) throws IOException {
-		var classDesc = ClassNaming.moduleGlobalFunctionsClassName(program, modulePathForFunctions(functions));
+	private void emitGlobalFunctions(ProgramModel.ModuleInfo module, List<TubeFileEntry.FunctionDefinition> functions) throws IOException {
+		var classDesc = ClassNaming.moduleGlobalFunctionsClassName(module);
 		var bytes = CLASS_FILE.build(classDesc, classBuilder -> {
 			classBuilder
 				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
@@ -256,9 +282,11 @@ final class Emitter {
 
 			for(var entry : functions) {
 				var function = entry.definition();
+				var functionInfo = program.getFunctionInfo(function.functionId());
+
 				classBuilder.withMethodBody(
-					ClassNaming.functionName(function._import()),
-					functionMethodType(function),
+					functionInfo.name(),
+					functionInfo.descriptor(),
 					ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
 					codeBuilder -> emitGlobalFunctionBody(codeBuilder, function)
 				);
@@ -266,16 +294,6 @@ final class Emitter {
 		});
 
 		writeEntry(classEntryName(classDesc), bytes);
-	}
-
-	private ModulePath modulePathForFunctions(List<TubeFileEntry.FunctionDefinition> functions) {
-		if(functions.isEmpty()) {
-			throw new IllegalArgumentException("No functions to emit");
-		}
-
-		var firstImport = functions.getFirst().definition()._import();
-		var moduleId = getModuleId(firstImport);
-		return program.getModuleInfo(moduleId).path();
 	}
 
 	private void emitGlobalFunctionBody(CodeBuilder cb, FunctionDefinition function) {
@@ -439,24 +457,6 @@ final class Emitter {
 		return methodName;
 	}
 
-	private MethodTypeDesc functionMethodType(FunctionDefinition function) {
-		return MethodTypeDesc.of(
-			ClassDesc.of("dev.argon.runtime.Trampoline"),
-			functionParameterTypes(function)
-		);
-	}
-
-	private MethodTypeDesc functionSignatureMethodType(FunctionSignature signature) {
-		var parameterTypes = new ArrayList<ClassDesc>();
-
-		parameterTypes.addAll(tokenParameterDescs(signature));
-		for(var parameter : signature.parameters()) {
-			parameterTypes.add(tokenAsClassDesc(parameter.paramType()));
-		}
-
-		return MethodTypeDesc.of(ClassDesc.of("dev.argon.runtime.Trampoline"), parameterTypes);
-	}
-
 	private List<ClassDesc> functionParameterTypes(FunctionDefinition function) {
 		var parameterTypes = new ArrayList<ClassDesc>();
 
@@ -483,66 +483,79 @@ final class Emitter {
 
 	private void emitRecord(TubeFileEntry.RecordDefinition rec) throws IOException {
 		var definition = rec.definition();
-		var classDesc = ClassNaming.typeDefinitionClassDescriptor(program, definition._import());
-		var tokenParameterCount = definition.signature().tokenParameters().size();
-		var fields = definition.fields();
-		var fieldDescs = fields.stream()
-			.map(field -> tokenAsClassDesc(field.fieldType()))
-			.toList();
-		var tokenParameterDescs = tokenParameterDescs(definition.signature());
-		var constructorDescs = new ArrayList<ClassDesc>(tokenParameterDescs);
-		constructorDescs.addAll(fieldDescs);
+		var recordInfo = program.getRecordInfo(definition.recordId());
 
-		var bytes = CLASS_FILE.build(classDesc, classBuilder -> {
+		var tokenParameterDescs = tokenParameterDescs(definition.signature());
+		var fields = definition.fields();
+
+		var bytes = CLASS_FILE.build(recordInfo.recordClassDesc(), classBuilder -> {
 			classBuilder
 				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
 				.withSuperclass(ConstantDescs.CD_Object);
 
-			for(int i = 0; i < tokenParameterCount; ++i) {
-				classBuilder.withField(recordTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+			for(int i = 0; i < tokenParameterDescs.size(); ++i) {
+				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
 			}
 
-			for(int i = 0; i < fields.size(); ++i) {
-				var field = fields.get(i);
+			for(var field : fields) {
+				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
 				var flags = ClassFile.ACC_PUBLIC;
 				if(!field.mutable()) {
 					flags |= ClassFile.ACC_FINAL;
 				}
 
-				classBuilder.withField(
-					ClassNaming.fieldName(field.name()),
-					fieldDescs.get(i),
-					flags
-				);
+				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), flags);
 			}
 
 			classBuilder.withMethodBody(
+				recordInfo.builderInfo().builderMethodName(),
+				recordInfo.builderInfo().builderFactoryMethodDesc(),
+				ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
+				codeBuilder -> {
+					codeBuilder
+						.new_(recordInfo.builderInfo().builderClassDesc())
+						.dup();
+
+					for(int i = 0; i < tokenParameterDescs.size(); ++i) {
+						var tokenParameterDesc = tokenParameterDescs.get(i);
+						codeBuilder.loadLocal(TypeKind.from(tokenParameterDesc).asLoadable(), codeBuilder.parameterSlot(i));
+					}
+
+					codeBuilder
+						.invokespecial(
+							recordInfo.builderInfo().builderClassDesc(),
+							ConstantDescs.INIT_NAME,
+							recordInfo.builderInfo().builderFactoryMethodDesc().changeReturnType(ConstantDescs.CD_void)
+						)
+						.areturn();
+				}
+			);
+
+			classBuilder.withMethodBody(
 				ConstantDescs.INIT_NAME,
-				MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs),
+				MethodTypeDesc.of(ConstantDescs.CD_void, recordInfo.builderInfo().builderClassDesc()),
 				ClassFile.ACC_PUBLIC,
 				codeBuilder -> {
 					codeBuilder
 						.aload(0)
 						.invokespecial(ConstantDescs.CD_Object, ConstantDescs.INIT_NAME, ConstantDescs.MTD_void);
 
-					var localSlot = 1;
-					for(int i = 0; i < tokenParameterCount; ++i) {
+					for(int i = 0; i < tokenParameterDescs.size(); ++i) {
 						var tokenParameterDesc = tokenParameterDescs.get(i);
 						codeBuilder
 							.aload(0)
-							.loadLocal(TypeKind.from(tokenParameterDesc).asLoadable(), localSlot)
-							.putfield(classDesc, recordTokenParameterFieldName(i), tokenParameterDesc);
-						localSlot += TypeKind.from(tokenParameterDesc).asLoadable().slotSize();
+							.aload(1)
+							.getfield(recordInfo.builderInfo().builderClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc)
+							.putfield(recordInfo.recordClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc);
 					}
 
-					for(int i = 0; i < fields.size(); ++i) {
-						var fieldDesc = fieldDescs.get(i);
-						var fieldKind = TypeKind.from(fieldDesc).asLoadable();
+					for(var field : fields) {
+						var fieldInfo = program.getRecordFieldInfo(field.fieldId());
 						codeBuilder
 							.aload(0)
-							.loadLocal(fieldKind, localSlot)
-							.putfield(classDesc, ClassNaming.fieldName(fields.get(i).name()), fieldDesc);
-						localSlot += fieldKind.slotSize();
+							.aload(1)
+							.getfield(recordInfo.builderInfo().builderClassDesc(), fieldInfo.fieldName(), fieldInfo.fieldType())
+							.putfield(recordInfo.recordClassDesc(), fieldInfo.fieldName(), fieldInfo.fieldType());
 					}
 
 					codeBuilder.return_();
@@ -550,35 +563,121 @@ final class Emitter {
 			);
 		});
 
-		writeEntry(classEntryName(classDesc), bytes);
+		writeEntry(classEntryName(recordInfo.recordClassDesc()), bytes);
+		emitRecordBuilder(recordInfo, tokenParameterDescs, fields);
+	}
+
+	private void emitRecordBuilder(
+		ProgramModel.RecordInfo recordInfo,
+		List<ClassDesc> tokenParameterDescs,
+		List<RecordFieldDefinition> fields
+	) throws IOException {
+		var builderInfo = recordInfo.builderInfo();
+		var bytes = CLASS_FILE.build(builderInfo.builderClassDesc(), classBuilder -> {
+			classBuilder
+				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withSuperclass(ConstantDescs.CD_Object);
+
+			for(int i = 0; i < tokenParameterDescs.size(); ++i) {
+				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+			}
+
+			for(var field : fields) {
+				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
+				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), ClassFile.ACC_PUBLIC);
+			}
+
+			classBuilder.withMethodBody(
+				ConstantDescs.INIT_NAME,
+				builderInfo.builderFactoryMethodDesc().changeReturnType(ConstantDescs.CD_void),
+				ClassFile.ACC_PUBLIC,
+				codeBuilder -> {
+					codeBuilder
+						.aload(0)
+						.invokespecial(ConstantDescs.CD_Object, ConstantDescs.INIT_NAME, ConstantDescs.MTD_void);
+
+					var localSlot = 1;
+					for(int i = 0; i < tokenParameterDescs.size(); ++i) {
+						var tokenParameterDesc = tokenParameterDescs.get(i);
+						var tokenParameterKind = TypeKind.from(tokenParameterDesc).asLoadable();
+						codeBuilder
+							.aload(0)
+							.loadLocal(tokenParameterKind, localSlot)
+							.putfield(builderInfo.builderClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc);
+						localSlot += tokenParameterKind.slotSize();
+					}
+
+					codeBuilder.return_();
+				}
+			);
+
+			for(var field : fields) {
+				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
+				classBuilder.withMethodBody(
+					fieldInfo.builderMethodName(),
+					fieldInfo.builderMethodDesc(),
+					ClassFile.ACC_PUBLIC,
+					codeBuilder -> codeBuilder
+						.aload(0)
+						.loadLocal(TypeKind.from(fieldInfo.fieldType()).asLoadable(), codeBuilder.parameterSlot(0))
+						.putfield(builderInfo.builderClassDesc(), fieldInfo.fieldName(), fieldInfo.fieldType())
+						.aload(0)
+						.areturn()
+				);
+			}
+
+			classBuilder.withMethodBody(
+				builderInfo.buildMethodName(),
+				builderInfo.buildMethodDesc(),
+				ClassFile.ACC_PUBLIC,
+				codeBuilder -> codeBuilder
+					.new_(recordInfo.recordClassDesc())
+					.dup()
+					.aload(0)
+					.invokespecial(
+						recordInfo.recordClassDesc(),
+						ConstantDescs.INIT_NAME,
+						MethodTypeDesc.of(ConstantDescs.CD_void, builderInfo.builderClassDesc())
+					)
+					.areturn()
+			);
+		});
+
+		writeEntry(classEntryName(builderInfo.builderClassDesc()), bytes);
 	}
 
 	private void emitEnum(TubeFileEntry.EnumDefinition enumDef) throws IOException {
 		var definition = enumDef.definition();
-		var classDesc = ClassNaming.typeDefinitionClassDescriptor(program, definition._import());
-		var tokenParameterCount = definition.signature().tokenParameters().size();
-		var tokenParameterDescs = tokenParameterDescs(definition.signature());
+		var enumInfo = program.getEnumInfo(enumDef.definition().enumId());
+		var signature = definition.signature();
+
+		var tokenParameterCount = signature.tokenParameters().size();
+		var tokenParameterDescs = tokenParameterDescs(signature);
+
 		var variantDescs = definition.variants().stream()
-			.map(variant -> enumVariantClassDesc(classDesc, variant))
+			.map(variant -> program.getEnumVariantInfo(variant.variantId()).variantClassDesc())
 			.toList();
 
-		var baseBytes = CLASS_FILE.build(classDesc, classBuilder -> {
+		var baseBytes = CLASS_FILE.build(enumInfo.enumClassDesc(), classBuilder -> {
 			classBuilder
 				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SUPER)
 				.withSuperclass(ConstantDescs.CD_Object)
 				.with(PermittedSubclassesAttribute.ofSymbols(variantDescs))
 				.with(InnerClassesAttribute.of(definition.variants().stream()
-					.map(variant -> InnerClassInfo.of(
-						enumVariantClassDesc(classDesc, variant),
-						Optional.of(classDesc),
-						Optional.of(ClassNaming.fieldName(variant.name())),
-						ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
-					))
+					.map(variant -> {
+						var variantInfo = program.getEnumVariantInfo(variant.variantId());
+						return InnerClassInfo.of(
+							variantInfo.variantClassDesc(),
+							Optional.of(enumInfo.enumClassDesc()),
+							Optional.of(variantInfo.nestedClassName()),
+							ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
+						);
+					})
 					.toList()
 				));
 
-			for(int i = 0; i < tokenParameterCount; ++i) {
-				classBuilder.withField(recordTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+			for(int i = 0; i < signature.tokenParameters().size(); ++i) {
+				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
 			}
 
 			classBuilder.withMethodBody(
@@ -596,7 +695,7 @@ final class Emitter {
 						codeBuilder
 							.aload(0)
 							.loadLocal(TypeKind.from(tokenParameterDesc).asLoadable(), localSlot)
-							.putfield(classDesc, recordTokenParameterFieldName(i), tokenParameterDesc);
+							.putfield(enumInfo.enumClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc);
 						localSlot += TypeKind.from(tokenParameterDesc).asLoadable().slotSize();
 					}
 
@@ -604,86 +703,116 @@ final class Emitter {
 				}
 			);
 		});
-		writeEntry(classEntryName(classDesc), baseBytes);
+		writeEntry(classEntryName(enumInfo.enumClassDesc()), baseBytes);
 
 		for(var variant : definition.variants()) {
-			emitEnumVariant(classDesc, tokenParameterDescs, variant);
+			emitEnumVariant(enumInfo, tokenParameterDescs, variant);
 		}
 	}
 
-	private void emitEnumVariant(ClassDesc enumClassDesc, List<ClassDesc> enumTokenParameterDescs, EnumVariantDefinition variant) throws IOException {
-		var variantDesc = enumVariantClassDesc(enumClassDesc, variant);
-		var argDescs = enumVariantArgDescs(variant);
-		var fieldDescs = variant.fields().stream()
-			.map(field -> tokenAsClassDesc(field.fieldType()))
-			.toList();
-		var constructorDescs = new ArrayList<ClassDesc>(enumTokenParameterDescs);
-		constructorDescs.addAll(argDescs);
-		constructorDescs.addAll(fieldDescs);
+	private void emitEnumVariant(ProgramModel.EnumInfo enumInfo, List<ClassDesc> enumTokenParameterDescs, EnumVariantDefinition variant) throws IOException {
+		var variantInfo = program.getEnumVariantInfo(variant.variantId());
 
-		var bytes = CLASS_FILE.build(variantDesc, classBuilder -> {
+		var argDescs = new ArrayList<ClassDesc>();
+		argDescs.addAll(tokenParameterDescs(variant.signature()));
+		for(var parameter : variant.signature().parameters()) {
+			argDescs.add(tokenAsClassDesc(parameter.paramType()));
+		}
+
+		var bytes = CLASS_FILE.build(variantInfo.variantClassDesc(), classBuilder -> {
 			classBuilder
 				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
-				.withSuperclass(enumClassDesc)
-				.with(InnerClassesAttribute.of(InnerClassInfo.of(
-					variantDesc,
-					Optional.of(enumClassDesc),
-					Optional.of(ClassNaming.fieldName(variant.name())),
-					ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
-				)));
+				.withSuperclass(enumInfo.enumClassDesc())
+				.with(InnerClassesAttribute.of(
+					InnerClassInfo.of(
+						variantInfo.variantClassDesc(),
+						Optional.of(enumInfo.enumClassDesc()),
+						Optional.of(variantInfo.nestedClassName()),
+						ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
+					),
+					InnerClassInfo.of(
+						variantInfo.builder().builderClassDesc(),
+						Optional.of(variantInfo.variantClassDesc()),
+						Optional.of("Builder"),
+						ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
+					)
+				));
 
 			for(int i = 0; i < argDescs.size(); ++i) {
-				classBuilder.withField(":pv" + i, argDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+				classBuilder.withField(ClassNaming.instanceParameterFieldName(i), argDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
 			}
 
 			for(int i = 0; i < variant.fields().size(); ++i) {
 				var field = variant.fields().get(i);
+				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
 				var flags = ClassFile.ACC_PUBLIC;
 				if(!field.mutable()) {
 					flags |= ClassFile.ACC_FINAL;
 				}
-				classBuilder.withField(ClassNaming.fieldName(field.name()), fieldDescs.get(i), flags);
+				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), flags);
 			}
 
 			classBuilder.withMethodBody(
-				ConstantDescs.INIT_NAME,
-				MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs),
-				ClassFile.ACC_PUBLIC,
-					codeBuilder -> {
-						codeBuilder
-							.aload(0);
+				variantInfo.builder().builderMethodName(),
+				variantInfo.builder().builderFactoryMethodDesc(),
+				ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
+				codeBuilder -> {
+					codeBuilder
+						.new_(variantInfo.builder().builderClassDesc())
+						.dup();
 
-						var localSlot = 1;
-						for(int i = 0; i < enumTokenParameterDescs.size(); ++i) {
-							var tokenParameterDesc = enumTokenParameterDescs.get(i);
-							codeBuilder.loadLocal(TypeKind.from(tokenParameterDesc).asLoadable(), localSlot);
-							localSlot += TypeKind.from(tokenParameterDesc).asLoadable().slotSize();
-						}
-						codeBuilder.invokespecial(
-							enumClassDesc,
+					for(int i = 0; i < variantInfo.builder().builderFactoryMethodDesc().parameterCount(); ++i) {
+						var parameterType = variantInfo.builder().builderFactoryMethodDesc().parameterType(i);
+						codeBuilder.loadLocal(TypeKind.from(parameterType).asLoadable(), codeBuilder.parameterSlot(i));
+					}
+
+					codeBuilder
+						.invokespecial(
+							variantInfo.builder().builderClassDesc(),
 							ConstantDescs.INIT_NAME,
-							MethodTypeDesc.of(ConstantDescs.CD_void, enumTokenParameterDescs.toArray(ClassDesc[]::new))
-						);
+							variantInfo.builder().builderFactoryMethodDesc().changeReturnType(ConstantDescs.CD_void)
+						)
+						.areturn();
+				}
+			);
 
-						for(int i = 0; i < argDescs.size(); ++i) {
+			classBuilder.withMethodBody(
+				ConstantDescs.INIT_NAME,
+				MethodTypeDesc.of(ConstantDescs.CD_void, variantInfo.builder().builderClassDesc()),
+				ClassFile.ACC_PUBLIC,
+				codeBuilder -> {
+					codeBuilder
+						.aload(0);
+
+					for(int i = 0; i < enumTokenParameterDescs.size(); ++i) {
+						var tokenParameterDesc = enumTokenParameterDescs.get(i);
+						codeBuilder
+							.aload(1)
+							.getfield(variantInfo.builder().builderClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc);
+					}
+					codeBuilder.invokespecial(
+						enumInfo.enumClassDesc(),
+						ConstantDescs.INIT_NAME,
+						MethodTypeDesc.of(ConstantDescs.CD_void, enumTokenParameterDescs.toArray(ClassDesc[]::new))
+					);
+
+					for(int i = 0; i < argDescs.size(); ++i) {
 						var argDesc = argDescs.get(i);
-						var argKind = TypeKind.from(argDesc).asLoadable();
 						codeBuilder
 							.aload(0)
-							.loadLocal(argKind, localSlot)
-							.putfield(variantDesc, ":pv" + i, argDesc);
-						localSlot += argKind.slotSize();
+							.aload(1)
+							.getfield(variantInfo.builder().builderClassDesc(), ClassNaming.instanceParameterFieldName(i), argDesc)
+							.putfield(variantInfo.variantClassDesc(), ClassNaming.instanceParameterFieldName(i), argDesc);
 					}
 
 					for(int i = 0; i < variant.fields().size(); ++i) {
 						var field = variant.fields().get(i);
-						var fieldDesc = fieldDescs.get(i);
-						var fieldKind = TypeKind.from(fieldDesc).asLoadable();
+						var fieldInfo = program.getRecordFieldInfo(field.fieldId());
 						codeBuilder
 							.aload(0)
-							.loadLocal(fieldKind, localSlot)
-							.putfield(variantDesc, ClassNaming.fieldName(field.name()), fieldDesc);
-						localSlot += fieldKind.slotSize();
+							.aload(1)
+							.getfield(variantInfo.builder().builderClassDesc(), fieldInfo.fieldName(), fieldInfo.fieldType())
+							.putfield(variantInfo.variantClassDesc(), fieldInfo.fieldName(), fieldInfo.fieldType());
 					}
 
 					codeBuilder.return_();
@@ -691,15 +820,117 @@ final class Emitter {
 			);
 		});
 
-		writeEntry(classEntryName(variantDesc), bytes);
+		writeEntry(classEntryName(variantInfo.variantClassDesc()), bytes);
+		emitEnumVariantBuilder(enumInfo, enumTokenParameterDescs, variantInfo, argDescs, variant.fields());
 	}
 
-	private ClassDesc enumVariantClassDesc(ClassDesc enumClassDesc, EnumVariantDefinition variant) {
-		return enumClassDesc.nested(ClassNaming.variantName(variant.name()));
-	}
+	private void emitEnumVariantBuilder(
+		ProgramModel.EnumInfo enumInfo,
+		List<ClassDesc> enumTokenParameterDescs,
+		ProgramModel.EnumVariantInfo variantInfo,
+		List<ClassDesc> argDescs,
+		List<RecordFieldDefinition> fields
+	) throws IOException {
+		var builderInfo = variantInfo.builder();
+		var bytes = CLASS_FILE.build(builderInfo.builderClassDesc(), classBuilder -> {
+			classBuilder
+				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withSuperclass(ConstantDescs.CD_Object)
+				.with(InnerClassesAttribute.of(
+					InnerClassInfo.of(
+						variantInfo.variantClassDesc(),
+						Optional.of(enumInfo.enumClassDesc()),
+						Optional.of(variantInfo.nestedClassName()),
+						ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
+					),
+					InnerClassInfo.of(
+						builderInfo.builderClassDesc(),
+						Optional.of(variantInfo.variantClassDesc()),
+						Optional.of("Builder"),
+						ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL
+					)
+				));
 
-	private ClassDesc enumVariantClassDesc(ClassDesc enumClassDesc, Identifier variantName) {
-		return enumClassDesc.nested(ClassNaming.variantName(variantName));
+			for(int i = 0; i < enumTokenParameterDescs.size(); ++i) {
+				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), enumTokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+			}
+
+			for(int i = 0; i < argDescs.size(); ++i) {
+				classBuilder.withField(ClassNaming.instanceParameterFieldName(i), argDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+			}
+
+			for(var field : fields) {
+				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
+				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), ClassFile.ACC_PUBLIC);
+			}
+
+			classBuilder.withMethodBody(
+				ConstantDescs.INIT_NAME,
+				builderInfo.builderFactoryMethodDesc().changeReturnType(ConstantDescs.CD_void),
+				ClassFile.ACC_PUBLIC,
+				codeBuilder -> {
+					codeBuilder
+						.aload(0)
+						.invokespecial(ConstantDescs.CD_Object, ConstantDescs.INIT_NAME, ConstantDescs.MTD_void);
+
+					var localSlot = 1;
+					for(int i = 0; i < enumTokenParameterDescs.size(); ++i) {
+						var tokenParameterDesc = enumTokenParameterDescs.get(i);
+						var tokenParameterKind = TypeKind.from(tokenParameterDesc).asLoadable();
+						codeBuilder
+							.aload(0)
+							.loadLocal(tokenParameterKind, localSlot)
+							.putfield(builderInfo.builderClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc);
+						localSlot += tokenParameterKind.slotSize();
+					}
+
+					for(int i = 0; i < argDescs.size(); ++i) {
+						var argDesc = argDescs.get(i);
+						var argKind = TypeKind.from(argDesc).asLoadable();
+						codeBuilder
+							.aload(0)
+							.loadLocal(argKind, localSlot)
+							.putfield(builderInfo.builderClassDesc(), ClassNaming.instanceParameterFieldName(i), argDesc);
+						localSlot += argKind.slotSize();
+					}
+
+					codeBuilder.return_();
+				}
+			);
+
+			for(var field : fields) {
+				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
+				classBuilder.withMethodBody(
+					fieldInfo.builderMethodName(),
+					fieldInfo.builderMethodDesc(),
+					ClassFile.ACC_PUBLIC,
+					codeBuilder -> codeBuilder
+						.aload(0)
+						.loadLocal(TypeKind.from(fieldInfo.fieldType()).asLoadable(), codeBuilder.parameterSlot(0))
+						.putfield(builderInfo.builderClassDesc(), fieldInfo.fieldName(), fieldInfo.fieldType())
+						.aload(0)
+						.areturn()
+				);
+			}
+
+			classBuilder.withMethodBody(
+				builderInfo.buildMethodName(),
+				builderInfo.buildMethodDesc(),
+				ClassFile.ACC_PUBLIC,
+				codeBuilder -> codeBuilder
+					.new_(variantInfo.variantClassDesc())
+					.dup()
+					.aload(0)
+					.invokespecial(
+						variantInfo.variantClassDesc(),
+						ConstantDescs.INIT_NAME,
+						MethodTypeDesc.of(ConstantDescs.CD_void, builderInfo.builderClassDesc())
+					)
+					.areturn()
+			);
+		});
+
+		writeEntry(classEntryName(builderInfo.builderClassDesc()), bytes);
 	}
 
 	private RecordDefinition recordDefinition(UnsignedBigInteger recordId) {
@@ -770,25 +1001,11 @@ final class Emitter {
 		throw new IllegalArgumentException("Could not find instance definition: " + instanceId);
 	}
 
-	private List<ClassDesc> enumVariantArgDescs(EnumVariantDefinition variant) {
-		var argDescs = new ArrayList<ClassDesc>();
-		argDescs.addAll(tokenParameterDescs(variant.signature()));
-		for(var parameter : variant.signature().parameters()) {
-			argDescs.add(tokenAsClassDesc(parameter.paramType()));
-		}
-
-		return argDescs;
-	}
-
-	private String recordTokenParameterFieldName(int index) {
-		return ":pt" + index;
-	}
-
 	private void emitTrait(TubeFileEntry.TraitDefinition traitDef) throws IOException {
 		var definition = traitDef.definition();
-		var classDesc = ClassNaming.typeDefinitionClassDescriptor(program, definition._import());
+		var traitInfo = program.getTraitInfo(definition.traitId());
 
-		var bytes = CLASS_FILE.build(classDesc, classBuilder -> {
+		var bytes = CLASS_FILE.build(traitInfo.traitDesc(), classBuilder -> {
 			classBuilder
 				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT)
 				.withSuperclass(ConstantDescs.CD_Object);
@@ -796,7 +1013,7 @@ final class Emitter {
 			var tokenParameterDescs = tokenParameterDescs(definition.signature());
 			for(int i = 0; i < definition.signature().tokenParameters().size(); ++i) {
 				classBuilder.withMethod(
-					recordTokenParameterFieldName(i),
+					ClassNaming.typeTokenParameterFieldName(i),
 					MethodTypeDesc.of(tokenParameterDescs.get(i)),
 					ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT,
 					methodBuilder -> {
@@ -805,82 +1022,60 @@ final class Emitter {
 			}
 
 			for(var method : definition.methods()) {
-				var methodName = ClassNaming.methodName(method.name(), method.erasedSignature());
-				var methodType = functionSignatureMethodType(method.signature());
-
-				if(method._abstract()) {
-					classBuilder.withMethod(
-						methodName,
-						methodType,
-						ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT,
-						methodBuilder -> {
-						}
-					);
-				}
-				else {
-					var implementation = method.implementation()
-						.orElseThrow(() -> new RuntimeException("Trait method implementation is missing"));
-					classBuilder.withMethodBody(
-						methodName,
-						methodType,
-						ClassFile.ACC_PUBLIC,
-						codeBuilder -> emitFunctionImplementationBody(
-							codeBuilder,
-							method.signature(),
-							implementation,
-							Optional.of(classDesc),
-							index -> codeBuilder
-								.aload(codeBuilder.receiverSlot())
-								.invokeinterface(
-									classDesc,
-									recordTokenParameterFieldName(index),
-									MethodTypeDesc.of(tokenParameterDescs.get(index))
-								)
+				emitMethod(
+					classBuilder,
+					method,
+					cb -> index -> cb
+						.aload(cb.receiverSlot())
+						.invokeinterface(
+							traitInfo.traitDesc(),
+							ClassNaming.typeTokenParameterFieldName(index),
+							MethodTypeDesc.of(tokenParameterDescs.get(index))
 						)
-					);
-				}
+				);
 			}
 		});
 
-		writeEntry(classEntryName(classDesc), bytes);
+		writeEntry(classEntryName(traitInfo.traitDesc()), bytes);
 	}
 
 	private void emitInstance(TubeFileEntry.InstanceDefinition instanceDef) throws IOException {
 		var definition = instanceDef.definition();
-		var classDesc = ClassNaming.typeDefinitionClassDescriptor(program, definition._import());
-		var traitDesc = switch(definition.signature().returnType()) {
-			case Token.Trait trait -> tokenAsClassDesc(trait);
-			default -> throw new IllegalArgumentException("Instance definition return type is not a trait");
-		};
-		var superclassDesc = switch(definition.signature().returnType()) {
-			case Token.Trait trait when isCoreExceptionTrait(trait) -> ClassDesc.of("dev.argon.runtime.ArgonException");
-			default -> ConstantDescs.CD_Object;
-		};
+		var instanceInfo = program.getInstanceInfo(definition.instanceId());
+
+		if(!(definition.signature().returnType() instanceof Token.Trait traitToken)) {
+			throw new IllegalArgumentException("Instance definition return type is not a trait");
+		}
+
+		var traitInfo = program.getTraitInfo(traitToken.traitId());
+
+		var superclassDesc = isCoreExceptionTrait(traitToken)
+			? ClassDesc.of("dev.argon.runtime.ArgonException")
+			: ConstantDescs.CD_Object;
+
 		var tokenParameterCount = definition.signature().tokenParameters().size();
 		var tokenParameterDescs = tokenParameterDescs(definition.signature());
 		var parameterDescs = definition.signature().parameters().stream()
 			.map(parameter -> tokenAsClassDesc(parameter.paramType()))
 			.toList();
-		var constructorDescs = new ArrayList<ClassDesc>(tokenParameterDescs);
-		constructorDescs.addAll(parameterDescs);
 
-		var bytes = CLASS_FILE.build(classDesc, classBuilder -> {
+		var bytes = CLASS_FILE.build(instanceInfo.instanceClassDesc(), classBuilder -> {
 			classBuilder
 				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
 				.withSuperclass(superclassDesc)
-				.withInterfaceSymbols(traitDesc);
+				.withInterfaceSymbols(traitInfo.traitDesc());
 
 			for(int i = 0; i < tokenParameterCount; ++i) {
-				classBuilder.withField(recordTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
 			}
 
 			for(int i = 0; i < parameterDescs.size(); ++i) {
-				classBuilder.withField(instanceParameterFieldName(i), parameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
+				classBuilder.withField(ClassNaming.instanceParameterFieldName(i), parameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
 			}
 
 			classBuilder.withMethodBody(
 				ConstantDescs.INIT_NAME,
-				MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs),
+				instanceInfo.instanceConstructorDesc(),
 				ClassFile.ACC_PUBLIC,
 				codeBuilder -> {
 					codeBuilder
@@ -893,7 +1088,7 @@ final class Emitter {
 						codeBuilder
 							.aload(0)
 							.loadLocal(TypeKind.from(tokenParameterDesc).asLoadable(), localSlot)
-							.putfield(classDesc, recordTokenParameterFieldName(i), tokenParameterDesc);
+							.putfield(instanceInfo.instanceClassDesc(), ClassNaming.typeTokenParameterFieldName(i), tokenParameterDesc);
 						localSlot += TypeKind.from(tokenParameterDesc).asLoadable().slotSize();
 					}
 
@@ -903,7 +1098,7 @@ final class Emitter {
 						codeBuilder
 							.aload(0)
 							.loadLocal(parameterKind, localSlot)
-							.putfield(classDesc, instanceParameterFieldName(i), parameterDesc);
+							.putfield(instanceInfo.instanceClassDesc(), ClassNaming.instanceParameterFieldName(i), parameterDesc);
 						localSlot += parameterKind.slotSize();
 					}
 
@@ -912,39 +1107,54 @@ final class Emitter {
 			);
 
 			for(var method : definition.methods()) {
-				if(method._abstract()) {
-					throw new RuntimeException("Instance method cannot be abstract");
-				}
-
-				var implementation = method.implementation()
-					.orElseThrow(() -> new RuntimeException("Instance method implementation is missing"));
-
-				classBuilder.withMethodBody(
-					ClassNaming.methodName(method.name(), method.erasedSignature()),
-					functionSignatureMethodType(method.signature()),
-					ClassFile.ACC_PUBLIC,
-					codeBuilder -> emitFunctionImplementationBody(
-						codeBuilder,
-						method.signature(),
-						implementation,
-						Optional.of(classDesc),
-						index -> codeBuilder
-							.aload(codeBuilder.receiverSlot())
-							.getfield(
-								classDesc,
-								recordTokenParameterFieldName(index),
-								tokenParameterDescs.get(index)
-							)
-					)
+				emitMethod(
+					classBuilder,
+					method,
+					cb -> index -> cb
+						.aload(cb.receiverSlot())
+						.getfield(
+							instanceInfo.instanceClassDesc(),
+							ClassNaming.typeTokenParameterFieldName(index),
+							tokenParameterDescs.get(index)
+						)
 				);
 			}
 		});
 
-		writeEntry(classEntryName(classDesc), bytes);
+		writeEntry(classEntryName(instanceInfo.instanceClassDesc()), bytes);
 	}
 
-	private String instanceParameterFieldName(int index) {
-		return ":pv" + index;
+	private void emitMethod(
+		ClassBuilder classBuilder,
+		MethodDefinition method,
+	    Function<CodeBuilder, BlockEmitter.ParentTokenParameterLoader> parentTokenParameterLoaderProvider
+	) {
+		var methodInfo = program.getMethodInfo(method.methodId());
+
+		if(method._abstract()) {
+			classBuilder.withMethod(
+				methodInfo.methodName(),
+				methodInfo.descriptor(),
+				ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT,
+				methodBuilder -> {}
+			);
+		}
+		else {
+			var implementation = method.implementation()
+				.orElseThrow(() -> new RuntimeException("Trait method implementation is missing"));
+			classBuilder.withMethodBody(
+				methodInfo.methodName(),
+				methodInfo.descriptor(),
+				ClassFile.ACC_PUBLIC,
+				cb -> emitFunctionImplementationBody(
+					cb,
+					method.signature(),
+					implementation,
+					Optional.of(methodInfo.definingClass()),
+					parentTokenParameterLoaderProvider.apply(cb)
+				)
+			);
+		}
 	}
 
 	private boolean isCoreExceptionTrait(Token.Trait trait) {
@@ -965,52 +1175,7 @@ final class Emitter {
 	}
 
 	private ClassDesc tokenAsClassDesc(Token token) {
-		return switch(token) {
-			case Token.Boxed _ -> ConstantDescs.CD_Object;
-			case Token.Builtin(var bt) -> switch(bt) {
-				case BuiltinType.Array(var elementType) -> tokenAsClassDesc(elementType).arrayType();
-				case BuiltinType.Bool() -> ConstantDescs.CD_boolean;
-				case BuiltinType.Conjunction _ -> throw new RuntimeException("Conjunction not implemented");
-				case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
-				case BuiltinType.Int() -> ClassDesc.of("java.math.BigInteger");
-				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
-				case BuiltinType.String() -> ConstantDescs.CD_String;
-			};
-			case Token.Enum enumToken -> {
-				var enumInfo = program.getEnumInfo(enumToken.enumId());
-				yield ClassNaming.typeDefinitionClassDescriptor(program, enumInfo.importSpecifier());
-			}
-			case Token.Function _ -> ClassDesc.of("dev.argon.runtime.Function");
-			case Token.FunctionErased _ -> ClassDesc.of("dev.argon.runtime.FunctionErased");
-			case Token.FunctionToken _ -> ClassDesc.of("dev.argon.runtime.FunctionToken");
-			case Token.InstanceType instanceType -> {
-				var instanceInfo = program.getInstanceInfo(instanceType.instanceId());
-				yield ClassNaming.typeDefinitionClassDescriptor(program, instanceInfo.importSpecifier());
-			}
-			case Token.InstanceValue _ -> {
-				throw new UnsupportedOperationException("InstanceValue cannot be used as a type");
-			}
-			case Token.ParentTokenParameter _ -> ConstantDescs.CD_Object;
-			case Token.Record record -> {
-				var recordInfo = program.getRecordInfo(record.recordId());
-				yield ClassNaming.typeDefinitionClassDescriptor(program, recordInfo.importSpecifier());
-			}
-			case Token.RefCell _ -> ClassDesc.of("dev.argon.runtime.RefCell");
-			case Token.TokenParameter _ -> ConstantDescs.CD_Object;
-			case Token.Trait trait -> {
-				var traitInfo = program.getTraitInfo(trait.traitId());
-				yield ClassNaming.typeDefinitionClassDescriptor(program, traitInfo.importSpecifier());
-			}
-			case Token.Tuple tuple -> {
-				if(tuple.elements().size() > 10) {
-					yield ClassDesc.of("dev.argon.runtime.TupleXL");
-				}
-				else {
-					yield ClassDesc.of("dev.argon.runtime.Tuple" + tuple.elements().size());
-				}
-			}
-			case Token.TypeInfo() -> ClassDesc.of("dev.argon.runtime.TypeInfo");
-		};
+		return TokenTypes.tokenAsClassDesc(program, token);
 	}
 
 	private String classEntryName(ClassDesc classDesc) {
@@ -1176,31 +1341,17 @@ final class Emitter {
 					boxValue(registerKind(box.value()));
 					storeRegister(box.dest());
 				}
-				
+
 				case Instruction.Builtin builtin -> emitBuiltin(builtin.op());
 
 				case Instruction.EnumVariantLiteral enumVariantLiteral -> {
-					var enumDesc = tokenAsClassDesc(enumVariantLiteral.enumType());
-					var variantName = program.getEnumVariantInfo(enumVariantLiteral.variantId()).name();
-					var variantDesc = enumVariantClassDesc(enumDesc, variantName);
+					var variantInfo = program.getEnumVariantInfo(enumVariantLiteral.variantId());
 					var enumToken = switch(enumVariantLiteral.enumType()) {
 						case Token.Enum e -> e;
 						default -> throw new IllegalArgumentException("Enum variant literal type is not an enum");
 					};
 					var enumTokenArgs = enumToken.args();
-					var variantDefinition = enumVariantDefinition(enumVariantLiteral.variantId());
-					var constructorDescs = new ArrayList<ClassDesc>(tokenParameterDescs(enumDefinition(enumToken.enumId()).signature()));
-					constructorDescs.addAll(tokenParameterDescs(variantDefinition.signature()));
-					for(var arg : enumVariantLiteral.args()) {
-						constructorDescs.add(registerType(arg));
-					}
-					for(var field : enumVariantLiteral.fields()) {
-						constructorDescs.add(registerType(field.value()));
-					}
 
-					cb
-						.new_(variantDesc)
-						.dup();
 					for(var tokenArg : enumTokenArgs) {
 						emitTokenValue(tokenArg);
 					}
@@ -1210,13 +1361,24 @@ final class Emitter {
 					for(var arg : enumVariantLiteral.args()) {
 						loadRegister(arg);
 					}
+					cb.invokestatic(
+						variantInfo.variantClassDesc(),
+						variantInfo.builder().builderMethodName(),
+						variantInfo.builder().builderFactoryMethodDesc()
+					);
 					for(var field : enumVariantLiteral.fields()) {
+						var fieldInfo = program.getRecordFieldInfo(field.fieldId());
 						loadRegister(field.value());
+						cb.invokevirtual(
+							variantInfo.builder().builderClassDesc(),
+							fieldInfo.builderMethodName(),
+							fieldInfo.builderMethodDesc()
+						);
 					}
-					cb.invokespecial(
-						variantDesc,
-						ConstantDescs.INIT_NAME,
-						MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs.toArray(ClassDesc[]::new))
+					cb.invokevirtual(
+						variantInfo.builder().builderClassDesc(),
+						variantInfo.builder().buildMethodName(),
+						variantInfo.builder().buildMethodDesc()
 					);
 					storeRegister(enumVariantLiteral.dest());
 				}
@@ -1334,9 +1496,6 @@ final class Emitter {
 
 				case Instruction.InstanceMethodCall call -> {
 					var methodInfo = program.getMethodInfo(call.methodId());
-					var owner = tokenAsClassDesc(call.instanceType());
-					var name = ClassNaming.methodName(methodInfo.name(), methodInfo.erasedSignature());
-					var methodType = functionSignatureMethodType(methodInfo.signature());
 					var ownerIsInterface = call.instanceType() instanceof Token.Trait;
 
 					loadRegister(call.instanceObject());
@@ -1351,35 +1510,33 @@ final class Emitter {
 						call.dest(),
 						() -> {
 							if(ownerIsInterface) {
-								cb.invokeinterface(owner, name, methodType);
+								cb.invokeinterface(methodInfo.definingClass(), methodInfo.methodName(), methodInfo.descriptor());
 							}
 							else {
-								cb.invokevirtual(owner, name, methodType);
+								cb.invokevirtual(methodInfo.definingClass(), methodInfo.methodName(), methodInfo.descriptor());
 							}
 						},
 						() -> cb.invokedynamic(DynamicCallSiteDesc.of(
 							BSM_LAMBDA_METAFACTORY,
 							"step",
-							instanceMethodThunkFactoryType(owner, methodType),
+							instanceMethodThunkFactoryType(methodInfo.definingClass(), methodInfo.descriptor()),
 							MethodTypeDesc.of(CD_TRAMPOLINE),
 							MethodHandleDesc.ofMethod(
 								ownerIsInterface
 									? DirectMethodHandleDesc.Kind.INTERFACE_VIRTUAL
 									: DirectMethodHandleDesc.Kind.VIRTUAL,
-								owner,
-								name,
-								methodType
+								methodInfo.definingClass(),
+								methodInfo.methodName(),
+								methodInfo.descriptor()
 							),
 							MethodTypeDesc.of(CD_TRAMPOLINE)
 						))
 					);
 				}
-				
+
 				case Instruction.IsEnumVariantOrBreak isEnumVariantOrBreak -> {
-					var variantDesc = enumVariantClassDesc(
-						tokenAsClassDesc(isEnumVariantOrBreak.enumType()),
-						program.getEnumVariantInfo(isEnumVariantOrBreak.variantId()).name()
-					);
+					var variantInfo = program.getEnumVariantInfo(isEnumVariantOrBreak.variantId());
+					var variantDesc = variantInfo.variantClassDesc();
 					var variantDefinition = enumVariantDefinition(isEnumVariantOrBreak.variantId());
 					var argOffset = variantDefinition.signature().tokenParameters().size();
 
@@ -1393,7 +1550,7 @@ final class Emitter {
 						loadRegister(isEnumVariantOrBreak.value());
 						cb
 							.checkcast(variantDesc)
-							.getfield(variantDesc, ":pv" + (argOffset + i), registerType(arg));
+							.getfield(variantDesc, ClassNaming.instanceParameterFieldName(argOffset + i), registerType(arg));
 						storeRegister(arg);
 					}
 
@@ -1402,16 +1559,20 @@ final class Emitter {
 						loadRegister(isEnumVariantOrBreak.value());
 						cb
 							.checkcast(variantDesc)
-							.getfield(variantDesc, ClassNaming.fieldName(fieldInfo.name()), registerType(fieldExtractor.r()));
+							.getfield(variantDesc, fieldInfo.fieldName(), fieldInfo.fieldType());
 						storeRegister(fieldExtractor.r());
 					}
 				}
 				case Instruction.LoadInstanceField loadInstanceField -> {
-					var instanceDesc = tokenAsClassDesc(loadInstanceField.instanceType());
+					if(!(loadInstanceField.instanceType() instanceof Token.InstanceType instanceType)) {
+						throw new IllegalArgumentException("LoadInstanceField instruction has non-instance type: " + loadInstanceField.instanceType());
+					}
+
+					var instanceInfo = program.getInstanceInfo(instanceType.instanceId());
 					loadRegister(loadInstanceField.instanceObject());
 					cb.getfield(
-						instanceDesc,
-						instanceParameterFieldName(loadInstanceField.parameterIndex().toBigInteger().intValueExact()),
+						instanceInfo.instanceClassDesc(),
+						ClassNaming.instanceParameterFieldName(loadInstanceField.parameterIndex().toBigInteger().intValueExact()),
 						registerType(loadInstanceField.dest())
 					);
 					storeRegister(loadInstanceField.dest());
@@ -1435,14 +1596,9 @@ final class Emitter {
 
 				case Instruction.NewInstance newInstance -> {
 					var instanceInfo = program.getInstanceInfo(newInstance.instanceId());
-					var instanceDesc = ClassNaming.typeDefinitionClassDescriptor(program, instanceInfo.importSpecifier());
-					var constructorDescs = new ArrayList<ClassDesc>(tokenParameterDescs(instanceInfo.signature()));
-					for(var arg : newInstance.args()) {
-						constructorDescs.add(registerType(arg));
-					}
 
 					cb
-						.new_(instanceDesc)
+						.new_(instanceInfo.instanceClassDesc())
 						.dup();
 					for(var tokenArg : newInstance.tokenArgs()) {
 						emitTokenValue(tokenArg);
@@ -1451,9 +1607,9 @@ final class Emitter {
 						loadRegister(arg);
 					}
 					cb.invokespecial(
-						instanceDesc,
+						instanceInfo.instanceClassDesc(),
 						ConstantDescs.INIT_NAME,
-						MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs.toArray(ClassDesc[]::new))
+						instanceInfo.instanceConstructorDesc()
 					);
 					storeRegister(newInstance.dest());
 				}
@@ -1504,46 +1660,48 @@ final class Emitter {
 				case Instruction.RecordFieldLoad recordFieldLoad -> {
 					var fieldInfo = program.getRecordFieldInfo(recordFieldLoad.fieldId());
 					var owner = recordFieldOwner(fieldInfo);
-					var fieldDesc = registerType(recordFieldLoad.dest());
 					loadRegister(recordFieldLoad.recordValue());
-					cb.getfield(owner, ClassNaming.fieldName(fieldInfo.name()), fieldDesc);
+					cb.getfield(owner, fieldInfo.fieldName(), fieldInfo.fieldType());
 					storeRegister(recordFieldLoad.dest());
 				}
 
 				case Instruction.RecordFieldStore recordFieldStore -> {
 					var fieldInfo = program.getRecordFieldInfo(recordFieldStore.fieldId());
 					var owner = recordFieldOwner(fieldInfo);
-					var fieldDesc = registerType(recordFieldStore.fieldValue());
 					loadRegister(recordFieldStore.recordValue());
 					loadRegister(recordFieldStore.fieldValue());
-					cb.putfield(owner, ClassNaming.fieldName(fieldInfo.name()), fieldDesc);
+					cb.putfield(owner, fieldInfo.fieldName(), fieldInfo.fieldType());
 				}
 
 				case Instruction.RecordLiteral recordLiteral -> {
-					var recordDesc = tokenAsClassDesc(recordLiteral.recordType());
 					var record = switch(recordLiteral.recordType()) {
 						case Token.Record r -> r;
 						default -> throw new IllegalArgumentException("Record literal type is not a record");
 					};
 					var recordTokenArgs = record.args();
-					var fieldDescs = recordLiteral.fields().stream()
-						.map(field -> registerType(field.value()))
-						.toArray(ClassDesc[]::new);
-					var constructorDescs = new ArrayList<ClassDesc>(tokenParameterDescs(program.getRecordInfo(record.recordId()).signature()));
-					constructorDescs.addAll(List.of(fieldDescs));
-					cb
-						.new_(recordDesc)
-						.dup();
+					var recordInfo = program.getRecordInfo(record.recordId());
+
 					for(var tokenArg : recordTokenArgs) {
 						emitTokenValue(tokenArg);
 					}
+					cb.invokestatic(
+						recordInfo.recordClassDesc(),
+						recordInfo.builderInfo().builderMethodName(),
+						recordInfo.builderInfo().builderFactoryMethodDesc()
+					);
 					for(var field : recordLiteral.fields()) {
+						var fieldInfo = program.getRecordFieldInfo(field.fieldId());
 						loadRegister(field.value());
+						cb.invokevirtual(
+							recordInfo.builderInfo().builderClassDesc(),
+							fieldInfo.builderMethodName(),
+							fieldInfo.builderMethodDesc()
+						);
 					}
-					cb.invokespecial(
-						recordDesc,
-						ConstantDescs.INIT_NAME,
-						MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs.toArray(ClassDesc[]::new))
+					cb.invokevirtual(
+						recordInfo.builderInfo().builderClassDesc(),
+						recordInfo.builderInfo().buildMethodName(),
+						recordInfo.builderInfo().buildMethodDesc()
 					);
 					storeRegister(recordLiteral.dest());
 				}
@@ -1564,7 +1722,7 @@ final class Emitter {
 					unboxValue(tokenAsClassDesc(unbox.type()));
 					storeRegister(unbox.dest());
 				}
-				
+
 				case Instruction.UpdateReference updateReference -> {
 					loadRegister(updateReference.ref());
 					loadRegister(updateReference.value());
@@ -1677,26 +1835,14 @@ final class Emitter {
 		}
 
 		private ClassDesc recordFieldOwner(ProgramModel.RecordFieldInfo fieldInfo) {
-			if(fieldInfo.ownerType() != ProgramModel.RecordFieldInfo.OwnerType.RECORD) {
-				throw new UnsupportedOperationException("Enum variant record fields are not implemented");
-			}
+			return switch(fieldInfo.ownerType()) {
+				case RECORD -> {
+					var recordInfo = program.getRecordInfo(fieldInfo.recordId());
+					yield recordInfo.recordClassDesc();
+				}
 
-			return ClassNaming.typeDefinitionClassDescriptor(
-				program,
-				program.getRecordInfo(fieldInfo.recordId()).importSpecifier()
-			);
-		}
-
-		private MethodTypeDesc functionCallMethodType(int tokenArgCount, List<RegisterId> args) {
-			var parameterTypes = new ArrayList<ClassDesc>();
-			for(int i = 0; i < tokenArgCount; ++i) {
-				parameterTypes.add(ClassDesc.of("dev.argon.runtime.Token"));
-			}
-			for(var arg : args) {
-				parameterTypes.add(registerType(arg));
-			}
-
-			return MethodTypeDesc.of(CD_TRAMPOLINE, parameterTypes);
+				case ENUM_VARIANT -> throw new UnsupportedOperationException("Enum variant record fields are not implemented");
+			};
 		}
 
 		private void emitPartiallyAppliedFunction(
@@ -1869,19 +2015,17 @@ final class Emitter {
 
 				case Token.InstanceValue instanceValue -> {
 					var instanceInfo = program.getInstanceInfo(instanceValue.instanceId());
-					var instanceDesc = ClassNaming.typeDefinitionClassDescriptor(program, instanceInfo.importSpecifier());
-					var constructorDescs = tokenParameterDescs(instanceInfo.signature());
 
 					cb
-						.new_(instanceDesc)
+						.new_(instanceInfo.instanceClassDesc())
 						.dup();
 					for(var tokenArg : instanceValue.args()) {
 						emitTokenValue(tokenArg);
 					}
 					cb.invokespecial(
-						instanceDesc,
+						instanceInfo.instanceClassDesc(),
 						ConstantDescs.INIT_NAME,
-						MethodTypeDesc.of(ConstantDescs.CD_void, constructorDescs.toArray(ClassDesc[]::new))
+						instanceInfo.instanceConstructorDesc()
 					);
 				}
 

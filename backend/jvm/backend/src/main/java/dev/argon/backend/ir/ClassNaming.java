@@ -1,6 +1,8 @@
-package dev.argon.backend.codegen;
+package dev.argon.backend.ir;
 
+import dev.argon.backend.codegen.ProgramModel;
 import dev.argon.esexpr.UnsignedBigInteger;
+import dev.argon.jvmbackendmetadata.JvmPlatformTubeMetadata;
 import dev.argon.vm.Identifier;
 import dev.argon.vm.ImportSpecifier;
 import dev.argon.vm.ModulePath;
@@ -9,23 +11,16 @@ import dev.argon.vm.ErasedSignature;
 import dev.argon.vm.ErasedSignatureType;
 
 import java.lang.constant.ClassDesc;
+import java.lang.constant.ModuleDesc;
 
-class ClassNaming {
+public class ClassNaming {
 	private ClassNaming() {}
 
-
-	static String currentTubeModuleName(ProgramModel program) {
-		return tubeModuleName(program, UnsignedBigInteger.ZERO);
-	}
-
-	static String tubeModuleName(ProgramModel program, UnsignedBigInteger tubeId) {
-		var name = new StringBuilder();
-		appendTubeModuleName(name, program, tubeId);
-		return name.toString();
-	}
-
-	static String currentTubeModulePackageName(ProgramModel program, ModulePath modulePath) {
-		return tubeModulePackageName(program, modulePath, UnsignedBigInteger.ZERO);
+	static ModuleDesc tubeModuleName(TubeName tubeName, JvmPlatformTubeMetadata platformMetadata) {
+		return ModuleDesc.of(
+			platformMetadata.moduleName()
+				.orElseGet(() -> ClassNaming.defaultTubeModuleName(tubeName))
+		);
 	}
 
 	static String tubeModulePackageName(ProgramModel program, ModulePath modulePath, UnsignedBigInteger tubeId) {
@@ -54,11 +49,7 @@ class ClassNaming {
 				}
 
 				yield ClassDesc.of(
-					tubeModulePackageName(
-						program,
-						moduleInfo.path(),
-						moduleInfo.tubeId()
-					),
+					moduleInfo.packageName().name(),
 					globalName
 				);
 			}
@@ -69,18 +60,19 @@ class ClassNaming {
 		};
 	}
 
-	static ClassDesc moduleGlobalFunctionsClassName(ProgramModel program, ModulePath modulePath) {
-		return moduleGlobalFunctionsClassName(
-			program,
-			new ProgramModel.ModuleInfo(UnsignedBigInteger.ZERO, modulePath)
+	public static ClassDesc moduleGlobalFunctionsClassName(ProgramModel.ModuleInfo moduleInfo) {
+		return ClassDesc.of(
+			moduleInfo.packageName().name(),
+			"Globals"
 		);
 	}
 
-	static ClassDesc moduleGlobalFunctionsClassName(ProgramModel program, ProgramModel.ModuleInfo moduleInfo) {
-		return ClassDesc.of(
-			tubeModulePackageName(program, moduleInfo.path(), moduleInfo.tubeId()),
-			"Globals"
-		);
+	public static String typeTokenParameterFieldName(int index) {
+		return ":pt" + index;
+	}
+
+	public static String instanceParameterFieldName(int index) {
+		return ":pv" + index;
 	}
 
 	static String functionName(ImportSpecifier importSpecifier) {
@@ -161,14 +153,10 @@ class ClassNaming {
 		};
 	}
 
-	private static void appendTubeModuleName(StringBuilder builder, ProgramModel program, UnsignedBigInteger tubeId) {
-		var tubeInfo = program.getTubeInfo(tubeId);
-
-		var moduleName = tubeInfo.platformMetadata().moduleName();
-		moduleName.ifPresentOrElse(
-			builder::append,
-			() -> appendDefaultTubeBasePackage(builder, tubeInfo.tubeName())
-		);
+	static String defaultTubeModuleName(TubeName tubeName) {
+		var name = new StringBuilder();
+		appendDefaultTubeBasePackage(name, tubeName);
+		return name.toString();
 	}
 
 	private static void appendDefaultTubeBasePackage(StringBuilder builder, TubeName tubeName) {
@@ -197,7 +185,7 @@ class ClassNaming {
 		}
 	}
 
-	private static String defaultModulePackageName(TubeName tubeName, ModulePath modulePath) {
+	static String defaultModulePackageName(TubeName tubeName, ModulePath modulePath) {
 		var name = new StringBuilder();
 		appendDefaultModulePackageName(name, tubeName, modulePath);
 		return name.toString();
