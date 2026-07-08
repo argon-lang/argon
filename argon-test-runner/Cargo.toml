@@ -5,8 +5,13 @@ edition = "2024"
 build = "build.rs"
 
 [[test]]
-name = "compiler_tests"
-path = "tests/compiler_tests.rs"
+name = "compiler_tests_js"
+path = "tests/compiler_tests_js.rs"
+harness = false
+
+[[test]]
+name = "compiler_tests_jvm"
+path = "tests/compiler_tests_jvm.rs"
 harness = false
 
 [[bin]]
@@ -14,8 +19,12 @@ name = "compile-testcases"
 path = "src/bin/compile_testcases.rs"
 
 [[bin]]
-name = "compiler-tests-dist"
-path = "src/bin/compiler_tests_dist.rs"
+name = "compiler-tests-dist-js"
+path = "src/bin/compiler_tests_dist_js.rs"
+
+[[bin]]
+name = "compiler-tests-dist-jvm"
+path = "src/bin/compiler_tests_dist_jvm.rs"
 
 [dependencies]
 argon-io = { workspace = true }

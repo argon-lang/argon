@@ -1,6 +1,7 @@
-use argon_test_runner::cmd::DirectCommandRunner;
+use argon_test_runner::cmd::{CommandRunnerPlatform, DirectCommandRunner};
 use argon_test_runner::{
-    CompileTargetPlatform, JSPlatform, TestContext, TestSuiteContext, workspace::WorkspacePaths,
+    CompileTargetPlatform, JSPlatform, JVMPlatform, TestContext, TestSuiteContext,
+    workspace::WorkspacePaths,
 };
 use argon_testcases::load_test_case;
 use clap::{Parser, ValueEnum};
@@ -26,12 +27,14 @@ struct Args {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum Platform {
     Js,
+    Jvm,
 }
 
 impl std::fmt::Display for Platform {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Js => f.write_str("js"),
+            Self::Jvm => f.write_str("jvm"),
         }
     }
 }
@@ -47,12 +50,16 @@ fn create_temp_dir(output_dir: &Path) -> Result<TempDir, Box<dyn Error>> {
     Ok(temp_dir)
 }
 
-fn create_suite_context(
-    platform: Arc<JSPlatform>,
+fn create_suite_context<P>(
+    platform: Arc<P>,
     command_runner: Arc<DirectCommandRunner>,
     temp_dir: TempDir,
     workspace_paths: &WorkspacePaths,
-) -> Arc<TestSuiteContext<JSPlatform, DirectCommandRunner>> {
+) -> Arc<TestSuiteContext<P, DirectCommandRunner>>
+where
+    P: CompileTargetPlatform,
+    DirectCommandRunner: CommandRunnerPlatform<P>,
+{
     Arc::new(TestSuiteContext {
         platform,
         command_runner,
@@ -88,10 +95,14 @@ fn test_output_name(index: usize, test_xml_file: &Path) -> String {
     format!("{index:04}-{name}")
 }
 
-fn compile_testcases(
-    context: Arc<TestSuiteContext<JSPlatform, DirectCommandRunner>>,
+fn compile_testcases<P>(
+    context: Arc<TestSuiteContext<P, DirectCommandRunner>>,
     test_xml_files: &[PathBuf],
-) -> Result<bool, Box<dyn Error>> {
+) -> Result<bool, Box<dyn Error>>
+where
+    P: CompileTargetPlatform,
+    DirectCommandRunner: CommandRunnerPlatform<P>,
+{
     let mut compiled_all = true;
 
     for (index, test_xml_file) in test_xml_files.iter().enumerate() {
@@ -149,6 +160,15 @@ fn run() -> Result<i32, Box<dyn Error>> {
         Platform::Js => {
             let context = create_suite_context(
                 Arc::new(JSPlatform),
+                command_runner.clone(),
+                temp_dir,
+                &workspace_paths,
+            );
+            compile_testcases(context, &args.test_xml_files)?
+        }
+        Platform::Jvm => {
+            let context = create_suite_context(
+                Arc::new(JVMPlatform),
                 command_runner,
                 temp_dir,
                 &workspace_paths,

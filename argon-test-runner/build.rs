@@ -14,10 +14,12 @@ fn main() {
 
     let api_dir = workspace_dir.join("backend/js/api");
     let backend_dir = workspace_dir.join("backend/js/backend");
+    let jvm_dir = workspace_dir.join("backend/jvm");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
 
     watch_js_package(&api_dir);
     watch_js_package(&backend_dir);
+    watch_jvm_project(&jvm_dir);
     println!(
         "cargo::rerun-if-changed={}",
         workspace_dir.join("backend/nobleidl/vm/vm.nidl").display(),
@@ -40,6 +42,8 @@ fn main() {
 
     npm_install_if_needed(&backend_dir, &out_dir, "backend-js");
     npm_run_build(&backend_dir);
+
+    gradle(&jvm_dir, &[":backend:installDist", ":runtime:jar"]);
 }
 
 fn watch_js_package(package_dir: &Path) {
@@ -60,6 +64,49 @@ fn watch_js_package(package_dir: &Path) {
 
 fn npm_run_build(package_dir: &Path) {
     npm(package_dir, &["run", "build"]);
+}
+
+fn watch_jvm_project(project_dir: &Path) {
+    println!(
+        "cargo::rerun-if-changed={}/settings.gradle.kts",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/build.gradle.kts",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/gradle.properties",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/gradle/libs.versions.toml",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/api/build.gradle.kts",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/api/src/main/java",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/backend/build.gradle.kts",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/backend/src/main/java",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/runtime/build.gradle.kts",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/runtime/src/main/java",
+        project_dir.display()
+    );
 }
 
 fn npm_install_if_needed(package_dir: &Path, out_dir: &Path, package_name: &str) {
@@ -126,6 +173,29 @@ fn npm(package_dir: &Path, args: &[&str]) {
         "npm {} failed in {} with status {}",
         args.join(" "),
         package_dir.display(),
+        status,
+    );
+}
+
+fn gradle(project_dir: &Path, args: &[&str]) {
+    let status = Command::new(project_dir.join("gradlew"))
+        .args(args)
+        .current_dir(project_dir)
+        .status()
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to start gradle {} in {}: {}",
+                args.join(" "),
+                project_dir.display(),
+                err,
+            )
+        });
+
+    assert!(
+        status.success(),
+        "gradle {} failed in {} with status {}",
+        args.join(" "),
+        project_dir.display(),
         status,
     );
 }
