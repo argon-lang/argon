@@ -11,6 +11,7 @@ class PutsExterns {
 
     @ExternFunction("puts")
     public static Trampoline<Tuple0> puts(String s) {
+        System.out.println(s);
         return new Trampoline.Result<>(new Tuple0());
     }
 }

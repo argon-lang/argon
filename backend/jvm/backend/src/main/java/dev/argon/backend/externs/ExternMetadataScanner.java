@@ -101,7 +101,8 @@ public final class ExternMetadataScanner {
 			}
 
 			var implementation = new JvmExtern.JvmFunction(
-				classModel.thisClass().asInternalName(),
+				classModel.thisClass().name().stringValue(),
+				method.methodName().stringValue(),
 				method.methodType().stringValue()
 			);
 

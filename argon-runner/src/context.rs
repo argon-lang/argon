@@ -4,6 +4,7 @@ use argon_compiler::{CompileErrorReporter, Context, ContextObject};
 use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use embedded_io::{Write, WriteFmtError};
+use esexpr::ESExpr;
 use hashbrown::{HashMap, hash_map};
 use parse18_runtime::WithLocation;
 
@@ -37,6 +38,13 @@ impl RunnerContext {
                 entry.insert(platform_metadata);
             }
         }
+    }
+
+    pub fn tube_platform_metadata(&self) -> HashMap<String, ESExpr<'static>> {
+        self.platform_metadata
+            .iter()
+            .map(|(platform, metadata)| (platform.clone(), metadata.metadata.clone()))
+            .collect()
     }
 }
 

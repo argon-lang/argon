@@ -44,7 +44,13 @@ public class ClassNaming {
 				var moduleInfo = program.getModuleInfo(global.moduleId());
 
 				var globalName = identifierToName(global.name());
-				if(globalName.startsWith("_") || globalName.equals("package-info") || globalName.equals("module-info") || globalName.equals("Globals")) {
+				if(
+					globalName.startsWith("_") ||
+						globalName.equals("package-info") ||
+						globalName.equals("module-info") ||
+						globalName.equals("Globals") ||
+						globalName.equals("Main")
+				) {
 					globalName = "_" + globalName;
 				}
 

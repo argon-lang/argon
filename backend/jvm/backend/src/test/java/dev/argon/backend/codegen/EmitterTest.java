@@ -164,7 +164,7 @@ final class EmitterTest {
 
 		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
-		assertEquals(Set.of("java.base", "ref.tube.module"), requiredModules(module));
+		assertEquals(Set.of("java.base", "dev.argon.runtime", "ref.tube.module"), requiredModules(module));
 	}
 
 	@Test
@@ -252,7 +252,67 @@ final class EmitterTest {
 
 		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
-		assertEquals(Set.of("java.base", "java.logging", "added.module"), requiredModules(module));
+		assertEquals(Set.of("java.base", "dev.argon.runtime", "java.logging", "added.module"), requiredModules(module));
+	}
+
+	@Test
+	void emitExecutableMainClass() throws Exception {
+		var modulePath = new ModulePath(List.of("Test", "Executable"));
+		var platformMetadata = new JvmPlatformTubeMetadata(
+			Optional.of("test.module"),
+			Optional.of(List.of(new ModuleMetadata(modulePath, Optional.of("test.executable")))),
+			Optional.empty()
+		);
+		var main = functionDefinition(
+			0,
+			"main",
+			new FunctionSignature(
+				List.of(),
+				List.of(new SignatureParameter(Optional.empty(), new Token.Tuple(List.of()))),
+				new Token.Tuple(List.of())
+			),
+			new FunctionBody(
+				new VariableDeclarations(List.of()),
+				new Block(List.of(new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))))
+			)
+		);
+		var modules = List.of(new ProgramModel.ModuleModel(
+			modulePath,
+			List.of(new ProgramModel.ModuleExportEntry.FunctionDefinition(new TubeFileEntry.FunctionDefinition(main))),
+			UnsignedBigInteger.ZERO
+		));
+
+		var entries = emitEntries(new TestProgramModel(platformMetadata, modules), true);
+
+		var mainClassBytes = entries.get("test/executable/Main.class");
+		assertNotNull(mainClassBytes);
+		var mainClass = Classfile.parse(mainClassBytes).model();
+		var mainMethod = mainClass.methods().stream()
+			.filter(method -> method.methodName().equalsString("main"))
+			.findAny()
+			.orElseThrow();
+		assertTrue(mainMethod.flags().has(AccessFlag.PUBLIC));
+		assertTrue(mainMethod.flags().has(AccessFlag.STATIC));
+		assertEquals("([Ljava/lang/String;)V", mainMethod.methodType().stringValue());
+
+		var invokeInstructions = mainMethod.code().orElseThrow()
+			.elementStream()
+			.filter(InvokeInstruction.class::isInstance)
+			.map(InvokeInstruction.class::cast)
+			.toList();
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+				invoke.opcode() == Opcode.INVOKESTATIC &&
+				invoke.owner().asInternalName().equals("test/executable/Globals") &&
+				invoke.name().equalsString("main") &&
+				invoke.type().equalsString("(Ldev/argon/runtime/Tuple0;)Ldev/argon/runtime/Trampoline;")
+		));
+		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
+			invoke.opcode() == Opcode.INVOKESTATIC &&
+				invoke.owner().asInternalName().equals("dev/argon/runtime/Trampoline") &&
+				invoke.name().equalsString("resolve") &&
+				invoke.type().equalsString("(Ldev/argon/runtime/Trampoline;)Ljava/lang/Object;") &&
+				invoke.isInterface()
+		));
 	}
 
 	@Test
@@ -859,6 +919,52 @@ final class EmitterTest {
 
 		assertTrue(branchInstructions.stream().anyMatch(branch -> branch.opcode() == Opcode.IFEQ));
 		assertTrue(branchInstructions.stream().anyMatch(branch -> branch.opcode() == Opcode.GOTO));
+	}
+
+	@Test
+	void emitIfElseInstructionWithReturningBranches() throws Exception {
+		var boolType = new Token.Builtin(new BuiltinType.Bool());
+		var conditionRegister = new RegisterId(UnsignedBigInteger.ZERO);
+		var whenTrueBlockId = new BlockId(UnsignedBigInteger.ZERO);
+		var whenFalseBlockId = new BlockId(UnsignedBigInteger.ONE);
+		var caller = functionDefinition(
+			0,
+			"caller",
+			new FunctionSignature(
+				List.of(),
+				List.of(new SignatureParameter(Optional.empty(), boolType)),
+				boolType
+			),
+			new FunctionBody(
+				new VariableDeclarations(List.of(
+					new VariableDeclaration(boolType),
+					new VariableDeclaration(boolType)
+				)),
+				new Block(List.of(new Instruction.IfElse(
+					whenTrueBlockId,
+					whenFalseBlockId,
+					new Block(List.of(new Instruction.BlockBreakUnless(whenFalseBlockId, conditionRegister))),
+					new Block(List.of(
+						new Instruction.ConstBool(new RegisterId(UnsignedBigInteger.ONE), true),
+						new Instruction.Return(new RegisterId(UnsignedBigInteger.ONE))
+					)),
+					new Block(List.of(
+						new Instruction.ConstBool(new RegisterId(UnsignedBigInteger.valueOf(2)), false),
+						new Instruction.Return(new RegisterId(UnsignedBigInteger.valueOf(2)))
+					))
+				)))
+			)
+		);
+
+		var callerMethod = emittedSingleFunctionMethod(caller);
+		var branchInstructions = callerMethod.code().orElseThrow()
+			.elementStream()
+			.filter(BranchInstruction.class::isInstance)
+			.map(BranchInstruction.class::cast)
+			.toList();
+
+		assertTrue(branchInstructions.stream().anyMatch(branch -> branch.opcode() == Opcode.IFEQ));
+		assertFalse(branchInstructions.stream().anyMatch(branch -> branch.opcode() == Opcode.GOTO));
 	}
 
 	@Test
@@ -1942,9 +2048,17 @@ final class EmitterTest {
 	}
 
 	private Map<String, byte[]> emitEntries(ProgramModel program) throws IOException {
+		return emitEntries(program, false);
+	}
+
+	private Map<String, byte[]> emitEntries(ProgramModel program, boolean executable) throws IOException {
 		var jar = new ByteArrayOutputStream();
 		try(var zip = new ZipOutputStream(jar)) {
-			new Emitter(program, zip).emit();
+			var emitter = new Emitter(program, zip);
+			if(executable) {
+				emitter.markEmitExecutable();
+			}
+			emitter.emit();
 		}
 
 		var entries = new HashMap<String, byte[]>();

@@ -3,8 +3,7 @@ use crate::module::{process_source_file, register_module_reexports};
 use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
 use argon_io::InputDirectory;
-use argon_util::sync::{parallel::*, ThreadSafe};
-use hashbrown::HashMap;
+use argon_util::sync::{ThreadSafe, parallel::*};
 
 mod enums;
 mod function;
@@ -21,6 +20,7 @@ pub struct SourceCodeTubeOptions<I> {
     pub name: TubeName,
     pub referenced_tubes: Vec<TubeName>,
     pub input_dirs: Vec<I>,
+    pub metadata: TubeMetadata,
 }
 
 pub fn define_source_tube<I>(
@@ -32,13 +32,7 @@ where
     I: InputDirectory + ThreadSafe,
     I::File: ThreadSafe,
 {
-    let tb = tube_collection.add_tube(
-        options.name,
-        TubeMetadata {
-            platform: HashMap::new(),
-        },
-        options.referenced_tubes,
-    );
+    let tb = tube_collection.add_tube(options.name, options.metadata, options.referenced_tubes);
 
     let parse_results = options
         .input_dirs
@@ -69,12 +63,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::{define_source_tube, SourceCodeTubeOptions};
+    use super::{SourceCodeTubeOptions, define_source_tube};
     use alloc::{string::String, string::ToString, vec, vec::Vec};
     use argon_compiler::platform::PlatformExtern;
     use argon_compiler::{
-        CompileErrorReporter, Context, ContextObject
-        , ModulePath, TubeCollectionBuilder, TubeName,
+        CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder,
+        TubeMetadata, TubeName,
     };
     use argon_io::{InputDirectory, InputFile};
     use argon_parser::ast::Identifier;
@@ -262,6 +256,9 @@ public def c: type = __argon_builtin never_type
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
                 input_dirs: vec![source_dir(dir.path())],
+                metadata: TubeMetadata {
+                    platform: HashMap::new(),
+                },
             },
             &tube_collection,
         );
@@ -303,6 +300,9 @@ export ::A::*
                 name: tube_name(),
                 referenced_tubes: Vec::new(),
                 input_dirs: vec![source_dir(dir.path())],
+                metadata: TubeMetadata {
+                    platform: HashMap::new(),
+                },
             },
             &tube_collection,
         );

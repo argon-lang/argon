@@ -8,7 +8,7 @@ use crate::backend::metadata::load_platform_metadata;
 use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use alloc::{string::String, sync::Arc, vec::Vec};
-use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeName, Unload};
+use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeMetadata, TubeName, Unload};
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
 use argon_util::sync::{ThreadSafe, parallel::*};
@@ -49,6 +49,7 @@ where
         load_platform_metadata(&mut context, input_file);
     }
 
+    let platform_metadata = context.tube_platform_metadata();
     let context = Arc::new(context);
     let tube_collection = TubeCollectionBuilder::new(context.clone());
 
@@ -63,6 +64,9 @@ where
         name: options.tube_name,
         referenced_tubes: referenced_tube_names,
         input_dirs: options.input_dirs,
+        metadata: TubeMetadata {
+            platform: platform_metadata,
+        },
     };
 
     'errors: {

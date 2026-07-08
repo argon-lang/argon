@@ -103,7 +103,8 @@ public final class Main {
 	private static int runCodegen(JvmCodegenCommand command) throws Exception {
 		Codegen.codegen(new Codegen.JVMCodegenOptions(
 			InputFile.fromPath(command.input),
-			OutputFile.fromPath(command.output)
+			OutputFile.fromPath(command.output),
+			command.executable
 		));
 
 		return 0;
@@ -204,6 +205,9 @@ public final class Main {
 
 		@Option(names = { "-o", "--output" }, required = true, description = "Output JAR file")
 		private Path output;
+
+		@Option(names = "--executable", description = "Generate an executable Main class")
+		private boolean executable;
 
 		@Override
 		public Integer call() throws Exception {

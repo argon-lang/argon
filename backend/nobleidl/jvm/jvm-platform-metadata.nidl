@@ -38,6 +38,7 @@ extern type estree-function-declaration;
 enum jvm-extern {
     jvm-function {
         class: string;
+        name: string;
         descriptor: string;
     },
 }

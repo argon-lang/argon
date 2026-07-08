@@ -25,12 +25,14 @@ import java.lang.constant.PackageDesc;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 final class Emitter {
 	private static final ClassFile CLASS_FILE = ClassFile.of();
 	private static final String MODULE_INFO_ENTRY = "module-info.class";
+	private static final ModuleDesc MD_ARGON_RUNTIME = ModuleDesc.of("dev.argon.runtime");
 	private static final ClassDesc CD_LAMBDA_METAFACTORY = ClassDesc.of("java.lang.invoke.LambdaMetafactory");
 	private static final ClassDesc CD_PARTIAL_APPLICATION_SUPPORT = ClassDesc.of("dev.argon.runtime.PartialApplicationSupport");
 	private static final ClassDesc CD_STRING_CONCAT_FACTORY = ClassDesc.of("java.lang.invoke.StringConcatFactory");
@@ -79,8 +81,13 @@ final class Emitter {
 		this.zos = zos;
 	}
 
+	public void markEmitExecutable() {
+		this.executable = true;
+	}
+
 	private final ProgramModel program;
 	private final ZipOutputStream zos;
+	private boolean executable = false;
 	private boolean emittedModuleInfo = false;
 
 	public void emit() throws IOException {
@@ -90,6 +97,10 @@ final class Emitter {
 
 		for(var module : program.modules()) {
 			emitModule(module);
+		}
+
+		if(executable) {
+			emitExecutableMain();
 		}
 	}
 
@@ -146,6 +157,7 @@ final class Emitter {
 
 	private Set<ModuleDesc> requiredRequires() {
 		var requires = new HashSet<ModuleDesc>();
+		requires.add(MD_ARGON_RUNTIME);
 
 		for(int i = 0; i < program.metadata().referencedTubes().size(); ++i) {
 			requires.add(program.getTubeInfo(UnsignedBigInteger.valueOf(i + 1)).moduleName());
@@ -296,6 +308,80 @@ final class Emitter {
 		writeEntry(classEntryName(classDesc), bytes);
 	}
 
+	private void emitExecutableMain() throws IOException {
+		var rootModule = program.modules().stream()
+			.filter(module -> module.moduleId().equals(UnsignedBigInteger.ZERO))
+			.findAny()
+			.orElseThrow(() -> new IllegalArgumentException("Executable output requires a root module"));
+		var argonMain = rootModule.exports().stream()
+			.flatMap(export -> switch(export) {
+				case ProgramModel.ModuleExportEntry.FunctionDefinition(var function) ->
+					Stream.of(function.definition());
+				default -> Stream.<FunctionDefinition>of();
+			})
+			.filter(function -> {
+				var functionInfo = program.getFunctionInfo(function.functionId());
+				return functionInfo.name().equals("main") && isExecutableMainDescriptor(functionInfo.descriptor());
+			})
+			.findAny()
+			.orElseThrow(() -> new IllegalArgumentException(
+				"Executable output requires an exported main function with one empty tuple parameter"
+			));
+		var argonMainInfo = program.getFunctionInfo(argonMain.functionId());
+
+		var moduleInfo = program.getModuleInfo(UnsignedBigInteger.ZERO);
+		var mainClassDesc = ClassDesc.of(moduleInfo.packageName().name(), "Main");
+		var bytes = CLASS_FILE.build(mainClassDesc, classBuilder -> {
+			classBuilder
+				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withSuperclass(ConstantDescs.CD_Object);
+
+			classBuilder.withMethodBody(
+				ConstantDescs.INIT_NAME,
+				ConstantDescs.MTD_void,
+				ClassFile.ACC_PRIVATE,
+				codeBuilder -> codeBuilder
+					.aload(0)
+					.invokespecial(ConstantDescs.CD_Object, ConstantDescs.INIT_NAME, ConstantDescs.MTD_void)
+					.return_()
+			);
+
+			classBuilder.withMethodBody(
+				"main",
+				MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_String.arrayType()),
+				ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
+				codeBuilder -> codeBuilder
+					.new_(ClassDesc.of("dev.argon.runtime", "Tuple0"))
+					.dup()
+					.invokespecial(
+						ClassDesc.of("dev.argon.runtime", "Tuple0"),
+						ConstantDescs.INIT_NAME,
+						ConstantDescs.MTD_void
+					)
+					.invokestatic(
+						argonMainInfo.definingClass(),
+						argonMainInfo.name(),
+						argonMainInfo.descriptor()
+					)
+					.invokestatic(
+						ClassDesc.of("dev.argon.runtime", "Trampoline"),
+						"resolve",
+						MethodTypeDesc.of(ConstantDescs.CD_Object, ClassDesc.of("dev.argon.runtime", "Trampoline")),
+						true
+					)
+					.pop()
+					.return_()
+			);
+		});
+
+		writeEntry(classEntryName(mainClassDesc), bytes);
+	}
+
+	private boolean isExecutableMainDescriptor(MethodTypeDesc descriptor) {
+		return descriptor.parameterCount() == 1 &&
+			descriptor.parameterType(0).equals(ClassDesc.of("dev.argon.runtime", "Tuple0"));
+	}
+
 	private void emitGlobalFunctionBody(CodeBuilder cb, FunctionDefinition function) {
 		var implementation = function.implementation();
 		if(implementation.isEmpty()) {
@@ -397,7 +483,7 @@ final class Emitter {
 		FunctionImplementation.Extern extern
 	) {
 		var jvmFunction = decodeJvmFunction(extern);
-		var externMethod = resolveExternMethod(jvmFunction);
+		var externMethod = jvmFunction.name();
 		var externMethodType = MethodTypeDesc.ofDescriptor(jvmFunction.descriptor());
 
 		for(int i = 0; i < signature.tokenParameters().size(); ++i) {
@@ -426,35 +512,6 @@ final class Emitter {
 		catch(DecodeException ex) {
 			throw new IllegalArgumentException("Invalid JVM extern function metadata", ex);
 		}
-	}
-
-	private String resolveExternMethod(JvmExtern.JvmFunction extern) {
-		String methodName = null;
-
-		for(var classfile : program.decodedMetadata().platformMetadata().additionalClasses().orElse(List.of())) {
-			var classModel = classfile.model();
-			if(!classModel.thisClass().asInternalName().equals(extern._class())) {
-				continue;
-			}
-
-			for(var method : classModel.methods()) {
-				if(!method.methodType().stringValue().equals(extern.descriptor())) {
-					continue;
-				}
-
-				if(methodName != null) {
-					throw new IllegalArgumentException("Ambiguous JVM extern function method: " + extern);
-				}
-
-				methodName = method.methodName().stringValue();
-			}
-		}
-
-		if(methodName == null) {
-			throw new IllegalArgumentException("Could not find JVM extern function method: " + extern);
-		}
-
-		return methodName;
 	}
 
 	private List<ClassDesc> functionParameterTypes(FunctionDefinition function) {
@@ -1243,9 +1300,14 @@ final class Emitter {
 		private final Map<BlockId, BlockLabels> blocks = new HashMap<>();
 		private Integer returnValueSlot = null;
 		private ReturnMode returnMode = new ReturnMode.Direct();
+		private boolean reachable = true;
 
 		public void emitBlock(Block block) {
+			reachable = true;
 			for(var instruction : block.instructions()) {
+				if(!reachable) {
+					break;
+				}
 				emitInstruction(instruction);
 			}
 		}
@@ -1290,50 +1352,73 @@ final class Emitter {
 						case ReturnMode.Direct() -> {
 							loadRegister(ret.src());
 							emitReturnFromStack();
+							reachable = false;
 						}
 
 						case ReturnMode.Branch(var label) -> {
 							loadRegister(ret.src());
 							cb.storeLocal(returnKind, getReturnValueSlot());
 							cb.goto_(label);
+							reachable = false;
 						}
 					}
 				}
 
-				case Instruction.Unreachable ignored ->
+				case Instruction.Unreachable ignored -> {
 					emitRuntimeUnsupported("Unreachable instruction executed");
+					reachable = false;
+				}
 
 				case Instruction.Block blockInsn -> {
 					var start = cb.newLabel();
 					var end = cb.newLabel();
-					blocks.put(blockInsn.blockId(), new BlockLabels(start, end));
+					var labels = new BlockLabels(start, end);
+					blocks.put(blockInsn.blockId(), labels);
 
 					cb.labelBinding(start);
 					emitBlock(blockInsn.body());
 					if(blockInsn.flags().isLoop()) {
-						cb.goto_(start);
+						if(reachable) {
+							cb.goto_(start);
+						}
+						reachable = false;
 					}
-					cb.labelBinding(end);
+					else {
+						labels.endReachable |= reachable;
+					}
+
+					if(labels.endReachable) {
+						cb.labelBinding(end);
+					}
+					reachable = labels.endReachable;
 
 					blocks.remove(blockInsn.blockId());
 				}
 
 				case Instruction.BlockBreak breakInsn -> {
-					cb.goto_(blocks.get(breakInsn.blockId()).end);
+					var labels = blocks.get(breakInsn.blockId());
+					labels.endReachable = true;
+					cb.goto_(labels.end);
+					reachable = false;
 				}
 
 				case Instruction.BlockBreakIf breakIf -> {
+					var labels = blocks.get(breakIf.blockId());
+					labels.endReachable = true;
 					cb.iload(registerSlot(breakIf.condition()));
-					cb.ifne(blocks.get(breakIf.blockId()).end);
+					cb.ifne(labels.end);
 				}
 
 				case Instruction.BlockBreakUnless breakUnless -> {
+					var labels = blocks.get(breakUnless.blockId());
+					labels.endReachable = true;
 					cb.iload(registerSlot(breakUnless.condition()));
-					cb.ifeq(blocks.get(breakUnless.blockId()).end);
+					cb.ifeq(labels.end);
 				}
 
 				case Instruction.BlockRetry retry -> {
 					cb.goto_(blocks.get(retry.blockId()).start);
+					reachable = false;
 				}
 
 				case Instruction.Box box -> {
@@ -1477,21 +1562,40 @@ final class Emitter {
 					var whenTrue = cb.newLabel();
 					var whenFalse = cb.newLabel();
 					var end = cb.newLabel();
+					var trueLabels = new BlockLabels(whenTrue, whenTrue);
+					var falseLabels = new BlockLabels(whenFalse, whenFalse);
 
-					blocks.put(ifElse.whenTrueBlockId(), new BlockLabels(whenTrue, whenTrue));
-					blocks.put(ifElse.whenFalseBlockId(), new BlockLabels(whenFalse, whenFalse));
+					blocks.put(ifElse.whenTrueBlockId(), trueLabels);
+					blocks.put(ifElse.whenFalseBlockId(), falseLabels);
 					emitBlock(ifElse.condition());
+					var conditionFallsThrough = reachable;
 					blocks.remove(ifElse.whenTrueBlockId());
 					blocks.remove(ifElse.whenFalseBlockId());
 
-					cb.labelBinding(whenTrue);
-					emitBlock(ifElse.whenTrue());
-					cb.goto_(end);
+					var endReachable = false;
+					var trueReachable = false;
+					if(conditionFallsThrough || trueLabels.endReachable) {
+						cb.labelBinding(whenTrue);
+						emitBlock(ifElse.whenTrue());
+						trueReachable = reachable;
+					}
 
-					cb.labelBinding(whenFalse);
-					emitBlock(ifElse.whenFalse());
+					if(trueReachable) {
+						cb.goto_(end);
+						endReachable = true;
+					}
+					reachable = false;
 
-					cb.labelBinding(end);
+					if(falseLabels.endReachable) {
+						cb.labelBinding(whenFalse);
+						emitBlock(ifElse.whenFalse());
+						endReachable |= reachable;
+					}
+
+					if(endReachable) {
+						cb.labelBinding(end);
+					}
+					reachable = endReachable;
 				}
 
 				case Instruction.InstanceMethodCall call -> {
@@ -1539,11 +1643,13 @@ final class Emitter {
 					var variantDesc = variantInfo.variantClassDesc();
 					var variantDefinition = enumVariantDefinition(isEnumVariantOrBreak.variantId());
 					var argOffset = variantDefinition.signature().tokenParameters().size();
+					var notVariantLabels = blocks.get(isEnumVariantOrBreak.notVariantBlockId());
+					notVariantLabels.endReachable = true;
 
 					loadRegister(isEnumVariantOrBreak.value());
 					cb
 						.instanceOf(variantDesc)
-						.ifeq(blocks.get(isEnumVariantOrBreak.notVariantBlockId()).end);
+						.ifeq(notVariantLabels.end);
 
 					for(int i = 0; i < isEnumVariantOrBreak.args().size(); ++i) {
 						var arg = isEnumVariantOrBreak.args().get(i);
@@ -1656,6 +1762,7 @@ final class Emitter {
 					cb
 						.checkcast(CD_ARGON_EXCEPTION)
 						.athrow();
+					reachable = false;
 				}
 				case Instruction.RecordFieldLoad recordFieldLoad -> {
 					var fieldInfo = program.getRecordFieldInfo(recordFieldLoad.fieldId());
@@ -1980,7 +2087,8 @@ final class Emitter {
 			cb.invokestatic(
 				CD_TRAMPOLINE,
 				"resolve",
-				MethodTypeDesc.of(ConstantDescs.CD_Object, CD_TRAMPOLINE)
+				MethodTypeDesc.of(ConstantDescs.CD_Object, CD_TRAMPOLINE),
+				true
 			);
 		}
 
@@ -2617,10 +2725,15 @@ final class Emitter {
 			ERASED,
 		}
 
-		private record BlockLabels(
-			Label start,
-			Label end
-		) {
+		private static final class BlockLabels {
+			private final Label start;
+			private final Label end;
+			private boolean endReachable = false;
+
+			private BlockLabels(Label start, Label end) {
+				this.start = start;
+				this.end = end;
+			}
 		}
 
 		private record FinallyJumpTarget(

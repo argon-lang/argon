@@ -14,7 +14,8 @@ public class Codegen {
 
 	public record JVMCodegenOptions(
 		InputFile inputFile,
-		OutputFile outputFile
+		OutputFile outputFile,
+		boolean executable
 	) {}
 
 	public static void codegen(JVMCodegenOptions options) throws SyntaxException, IOException, DecodeException {
@@ -24,6 +25,9 @@ public class Codegen {
 		try {
 			try(var zos = new ZipOutputStream(options.outputFile.open())) {
 				var emitter = new Emitter(program, zos);
+				if(options.executable) {
+					emitter.markEmitExecutable();
+				}
 				emitter.emit();
 			}
 
