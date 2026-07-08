@@ -77,7 +77,12 @@ pub struct CodeGenCommand {
 #[derive(Subcommand)]
 pub enum CodeGenBackendCommand {
     /// Generate JavaScript code from Argon VM IR.
+    #[command(name = "js")]
     JS(JsCodeGenOptions),
+
+    /// Generate JVM code from Argon VM IR.
+    #[command(name = "jvm")]
+    JVM(JvmCodeGenOptions),
 }
 
 #[derive(Args, Debug)]
@@ -91,6 +96,21 @@ pub struct JsCodeGenOptions {
     pub output: PathBuf,
 }
 
+#[derive(Args, Debug)]
+pub struct JvmCodeGenOptions {
+    /// Input Argon VM IR file.
+    #[arg(short, long)]
+    pub input: PathBuf,
+
+    /// Output JAR file.
+    #[arg(short, long)]
+    pub output: PathBuf,
+
+    /// Generate an executable Main class.
+    #[arg(long)]
+    pub executable: bool,
+}
+
 #[derive(Args)]
 pub struct PlatformMetadataCommand {
     #[clap(subcommand)]
@@ -100,7 +120,12 @@ pub struct PlatformMetadataCommand {
 #[derive(Subcommand)]
 pub enum PlatformMetadataBackendCommand {
     /// Load platform metadata for JavaScript.
+    #[command(name = "js")]
     JS(JsPlatformMetadataOptions),
+
+    /// Load platform metadata for JVM.
+    #[command(name = "jvm")]
+    JVM(JvmPlatformMetadataOptions),
 }
 
 #[derive(Args, Debug)]
@@ -110,6 +135,17 @@ pub struct JsPlatformMetadataOptions {
     pub package_name: Option<String>,
 
     /// JavaScript extern file.
+    #[arg(long = "extern")]
+    pub extern_files: Vec<PathBuf>,
+
+    /// Output platform metadata file.
+    #[arg(short, long)]
+    pub output_file: PathBuf,
+}
+
+#[derive(Args, Debug)]
+pub struct JvmPlatformMetadataOptions {
+    /// JVM extern classfile or directory.
     #[arg(long = "extern")]
     pub extern_files: Vec<PathBuf>,
 

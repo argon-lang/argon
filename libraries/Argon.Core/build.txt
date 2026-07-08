@@ -5,9 +5,9 @@ rm -rf libraries/Argon.Core/bin
 mkdir -p libraries/Argon.Core/bin/{,js,jvm,jvm/externs}
 node backend/js/backend/lib/main.js platform-metadata js --extern libraries/Argon.Core/js/externs.js -o libraries/Argon.Core/bin/platform-js.esx
 javac -d libraries/Argon.Core/bin/jvm/externs -cp backend/jvm/runtime/build/classes/java/main/ libraries/Argon.Core/jvm/externs/**/*.java
-backend/jvm/gradlew -p backend/jvm :backend:run --args="platform-metadata jvm --extern $(pwd)/libraries/Argon.Core/bin/jvm/externs -o $(pwd)/libraries/Argon.Core/bin/platform-jvm.esx"
+RUST_BACKTRACE=1 cargo run --bin argonc platform-metadata jvm --extern libraries/Argon.Core/bin/jvm/externs -o libraries/Argon.Core/bin/platform-jvm.esx
 RUST_BACKTRACE=1 cargo run --bin argonc compile --tube-name Argon.Core --input libraries/Argon.Core/src/ --platform libraries/Argon.Core/bin/platform-js.esx --platform libraries/Argon.Core/bin/platform-jvm.esx -o libraries/Argon.Core/bin/Argon.Core.artube
 RUST_BACKTRACE=1 cargo run --bin argonc genir --input libraries/Argon.Core/bin/Argon.Core.artube --platform js -o libraries/Argon.Core/bin/Argon.Core.js.arvm
 node backend/js/backend/lib/main.js codegen js -i libraries/Argon.Core/bin/Argon.Core.js.arvm -o libraries/Argon.Core/bin/js
 RUST_BACKTRACE=1 cargo run --bin argonc genir --input libraries/Argon.Core/bin/Argon.Core.artube --platform jvm -o libraries/Argon.Core/bin/Argon.Core.jvm.arvm
-backend/jvm/gradlew -p backend/jvm :backend:run --args="codegen jvm -i $(pwd)/libraries/Argon.Core/bin/Argon.Core.jvm.arvm -o $(pwd)/libraries/Argon.Core/bin/jvm/Argon.Core.jar"
+RUST_BACKTRACE=1 cargo run --bin argonc codegen jvm -i libraries/Argon.Core/bin/Argon.Core.jvm.arvm -o libraries/Argon.Core/bin/jvm/Argon.Core.jar

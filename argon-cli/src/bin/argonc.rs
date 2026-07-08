@@ -52,10 +52,16 @@ fn main() {
             CodeGenBackendCommand::JS(_) => {
                 execute_backend_subcommand(Backend::JavaScript);
             }
+            CodeGenBackendCommand::JVM(_) => {
+                execute_backend_subcommand(Backend::JVM);
+            }
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
             PlatformMetadataBackendCommand::JS(_) => {
                 execute_backend_subcommand(Backend::JavaScript);
+            }
+            PlatformMetadataBackendCommand::JVM(_) => {
+                execute_backend_subcommand(Backend::JVM);
             }
         },
     }
@@ -80,6 +86,16 @@ fn execute_backend_subcommand(backend: Backend) {
 
             command = Command::new("node");
             command.arg(executable_path);
+        }
+        Backend::JVM => {
+            executable_path.push("backend/jvm");
+
+            command = Command::new("java");
+            command
+                .arg("--module-path")
+                .arg(executable_path)
+                .arg("--module")
+                .arg("dev.argon.backend");
         }
     }
 

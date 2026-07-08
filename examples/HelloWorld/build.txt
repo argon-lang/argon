@@ -6,7 +6,7 @@ RUST_BACKTRACE=1 cargo run --bin argonc compile --tube-name HelloWorld --input e
 RUST_BACKTRACE=1 cargo run --bin argonc genir --input examples/HelloWorld/bin/HelloWorld.artube -r libraries/Argon.Core/bin/Argon.Core.artube --platform js -o examples/HelloWorld/bin/HelloWorld.js.arvm
 node backend/js/backend/lib/main.js codegen js -i examples/HelloWorld/bin/HelloWorld.js.arvm -o examples/HelloWorld/bin/js/
 RUST_BACKTRACE=1 cargo run --bin argonc genir --input examples/HelloWorld/bin/HelloWorld.artube -r libraries/Argon.Core/bin/Argon.Core.artube --platform jvm -o examples/HelloWorld/bin/HelloWorld.jvm.arvm
-backend/jvm/gradlew -p backend/jvm :backend:run --args="codegen jvm --executable -i $(pwd)/examples/HelloWorld/bin/HelloWorld.jvm.arvm -o $(pwd)/examples/HelloWorld/bin/jvm/HelloWorld.jar"
+RUST_BACKTRACE=1 cargo run --bin argonc codegen jvm --executable -i examples/HelloWorld/bin/HelloWorld.jvm.arvm -o examples/HelloWorld/bin/jvm/HelloWorld.jar
 java --module-path backend/jvm/runtime/build/libs/runtime-0.1.0.jar:libraries/Argon.Core/bin/jvm/Argon.Core.jar:examples/HelloWorld/bin/jvm/HelloWorld.jar --module argontube1.HelloWorld/argontube1.HelloWorld.Main
 
 
@@ -14,5 +14,4 @@ java --module-path backend/jvm/runtime/build/libs/runtime-0.1.0.jar:libraries/Ar
 Execute:
 
 java --module-path backend/jvm/runtime/build/libs/runtime-0.1.0.jar:libraries/Argon.Core/bin/jvm/Argon.Core.jar:examples/HelloWorld/bin/jvm/HelloWorld.jar --module argontube1.HelloWorld/argontube1.HelloWorld.Main
-
 

@@ -116,12 +116,12 @@ public final class Main {
 			CodegenCommand.class,
 		}
 	)
-	private static final class RootCommand implements Callable<Integer> {
+	public static final class RootCommand implements Callable<Integer> {
 		@Mixin
-		private HelpOptions helpOptions;
+		public HelpOptions helpOptions;
 
 		@Spec
-		private CommandSpec spec;
+		public CommandSpec spec;
 
 		@Override
 		public Integer call() {
@@ -137,12 +137,12 @@ public final class Main {
 			JvmPlatformMetadataCommand.class,
 		}
 	)
-	private static final class PlatformMetadataCommand implements Callable<Integer> {
+	public static final class PlatformMetadataCommand implements Callable<Integer> {
 		@Mixin
-		private HelpOptions helpOptions;
+		public HelpOptions helpOptions;
 
 		@Spec
-		private CommandSpec spec;
+		public CommandSpec spec;
 
 		@Override
 		public Integer call() {
@@ -155,15 +155,15 @@ public final class Main {
 		name = "jvm",
 		description = "Load platform metadata for JVM"
 	)
-	private static final class JvmPlatformMetadataCommand implements Callable<Integer> {
+	public static final class JvmPlatformMetadataCommand implements Callable<Integer> {
 		@Mixin
-		private HelpOptions helpOptions;
+		public HelpOptions helpOptions;
 
 		@Option(names = "--extern", description = "JVM extern file")
-		private List<Path> externFiles = new ArrayList<>();
+		public List<Path> externFiles = new ArrayList<>();
 
 		@Option(names = { "-o", "--output-file" }, required = true, description = "Output platform metadata file")
-		private Path outputFile;
+		public Path outputFile;
 
 		@Override
 		public Integer call() throws IOException {
@@ -178,12 +178,12 @@ public final class Main {
 			JvmCodegenCommand.class,
 		}
 	)
-	private static final class CodegenCommand implements Callable<Integer> {
+	public static final class CodegenCommand implements Callable<Integer> {
 		@Mixin
-		private HelpOptions helpOptions;
+		public HelpOptions helpOptions;
 
 		@Spec
-		private CommandSpec spec;
+		public CommandSpec spec;
 
 		@Override
 		public Integer call() {
@@ -196,18 +196,18 @@ public final class Main {
 		name = "jvm",
 		description = "Generate JVM code from Argon VM IR"
 	)
-	private static final class JvmCodegenCommand implements Callable<Integer> {
+	public static final class JvmCodegenCommand implements Callable<Integer> {
 		@Mixin
-		private HelpOptions helpOptions;
+		public HelpOptions helpOptions;
 
 		@Option(names = { "-i", "--input" }, required = true, description = "Input Argon VM IR file")
-		private Path input;
+		public Path input;
 
 		@Option(names = { "-o", "--output" }, required = true, description = "Output JAR file")
-		private Path output;
+		public Path output;
 
 		@Option(names = "--executable", description = "Generate an executable Main class")
-		private boolean executable;
+		public boolean executable;
 
 		@Override
 		public Integer call() throws Exception {
@@ -215,8 +215,8 @@ public final class Main {
 		}
 	}
 
-	private static final class HelpOptions {
+	public static final class HelpOptions {
 		@Option(names = { "-h", "--help" }, usageHelp = true, description = "Show this help message")
-		private boolean help;
+		public boolean help;
 	}
 }

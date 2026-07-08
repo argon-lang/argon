@@ -36,6 +36,17 @@ fn main() {
                 command.arg(executable_path);
                 command
             }
+            Backend::JVM => {
+                executable_path.push("backend/jvm");
+
+                let mut command = ProcessCommand::new("java");
+                command
+                    .arg("--module-path")
+                    .arg(executable_path)
+                    .arg("--module")
+                    .arg("dev.argon.backend");
+                command
+            }
         }
     }
 
@@ -61,10 +72,14 @@ fn main() {
 
         Command::CodeGen(cmd) => match cmd.backend_command {
             CodeGenBackendCommand::JS(_) => backend_command(Backend::JavaScript, executable_path),
+            CodeGenBackendCommand::JVM(_) => backend_command(Backend::JVM, executable_path),
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
             PlatformMetadataBackendCommand::JS(_) => {
                 backend_command(Backend::JavaScript, executable_path)
+            }
+            PlatformMetadataBackendCommand::JVM(_) => {
+                backend_command(Backend::JVM, executable_path)
             }
         },
     };

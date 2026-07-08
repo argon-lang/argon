@@ -23,6 +23,7 @@ npm ci --prefix backend/js/backend
 npm run build --prefix backend/js/backend
 npm ci --prefix backend/js/util/copy-deploy
 npm run build --prefix backend/js/util/copy-deploy
+backend/jvm/gradlew -p backend/jvm :backend:installDist
 
 
 
@@ -36,6 +37,7 @@ mkdir dist/arch/aarch64-unknown-linux-gnu/
 mkdir dist/arch/x86_64-pc-windows-gnullvm/
 mkdir dist/arch/i686-pc-windows-gnullvm/
 mkdir dist/backend/
+mkdir dist/backend/jvm/
 mkdir dist/bin/
 cp -p target/x86_64-unknown-linux-gnu/release/argonc dist/arch/x86_64-unknown-linux-gnu/
 cp -p target/i686-unknown-linux-gnu/release/argonc dist/arch/i686-unknown-linux-gnu/
@@ -43,6 +45,7 @@ cp -p target/aarch64-unknown-linux-gnu/release/argonc dist/arch/aarch64-unknown-
 cp -p target/x86_64-pc-windows-gnullvm/release/argonc.exe dist/arch/x86_64-pc-windows-gnullvm/
 cp -p target/i686-pc-windows-gnullvm/release/argonc.exe dist/arch/i686-pc-windows-gnullvm/
 node backend/js/util/copy-deploy/lib/main.js backend/js/backend dist/backend/js
+cp -p backend/jvm/backend/build/install/backend/lib/*.jar dist/backend/jvm/
 
 # Launchers
 cp scripts/argonc dist/bin/argonc
