@@ -122,11 +122,13 @@ async function codegenJs(
     options: {
         readonly input: string;
         readonly output: string;
+        readonly executable?: string | undefined;
     },
 ): Promise<void> {
     await codegen({
         tube: new LocalInputFile(options.input),
         outputDirectory: new LocalOutputDirectory(options.output),
+        executable: options.executable,
     })
 }
 
@@ -153,6 +155,7 @@ program
     .description("Generate JavaScript code from Argon VM IR")
     .requiredOption("-i, --input <file>", "Input Argon VM IR file")
     .requiredOption("-o, --output <dir>", "Output directory")
+    .option("--executable <name>", "Name of the executable to generate")
     .action(codegenJs);
 
 try {

@@ -17,6 +17,7 @@ export interface OutputModuleInfo {
 
 export interface EmitOptions {
     readonly program: ProgramModel,
+    readonly executable?: string | undefined,
 }
 
 

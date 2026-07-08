@@ -32,5 +32,6 @@ export interface JSPlatformMetadataOptions {
 export interface JSCodeGenOptions {
     readonly tube: InputFile;
     readonly outputDirectory: OutputDirectory;
+    readonly executable?: string | undefined;
 }
 

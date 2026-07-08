@@ -8,22 +8,36 @@ import {type JSPlatformMetadataOptions, JsPlatformTubeMetadata} from "@argon-lan
 import type { PlatformMetadataResult } from "@argon-lang/js-backend-api/metadata.js";
 import type {JSCodeGenOptions} from "@argon-lang/js-backend-api";
 
+function emitMainJS(): string {
+    return "import * as rt from \"@argon-lang/runtime\";\n" +
+				"import { main$a$t$e$r$t$e } from \"./lib/index.js\";\n" +
+				"rt.resolve(main$a$t$e$r$t$e());\n";
+}
+
 function emitPackageJson(options: EmitOptions): ReadonlyDeep<PackageJson> {
     const exports: PackageJson.ExportConditions = {};
 
     for(const module of options.program.modules) {
         const internalPath = getModulePathUrl(module.path);
         const externalPath = getModulePathExternalUrl(module.path);
-        exports[externalPath === "" ? "." : "./" + externalPath] = "./" + internalPath;
+        exports[externalPath === "" ? "." : "./" + externalPath] = "./lib/" + internalPath;
     }
 
 
-    return {
+    const packageJson: PackageJson = {
         name: tubePackageName(options.program.getTubeInfo(0n)),
         private: true,
         type: "module",
         exports,
     };
+
+    if(options.executable) {
+        packageJson.bin = Object.fromEntries([
+            [options.executable, "./main.js"],
+        ]);
+    }
+
+    return packageJson;
 }
 
 
@@ -48,6 +62,7 @@ export async function codegen(options: JSCodeGenOptions): Promise<void> {
 
     const emitOptions: EmitOptions = {
         program,
+        executable: options.executable,
     };
 
     for(const outputModule of emitTube(emitOptions)) {
@@ -56,11 +71,23 @@ export async function codegen(options: JSCodeGenOptions): Promise<void> {
         const program = outputModule.emitJsProgram();
         const programStr = astring.generate(program);
 
-        const file = options.outputDirectory.getFile(...outputFileParts[0], outputFileParts[1]);
+        const file = options.outputDirectory.getFile("lib", ...outputFileParts[0], outputFileParts[1]);
 
         const stream = await file.open();
         try {
             await stream.write(new TextEncoder().encode(programStr));
+        }
+        finally {
+            await stream.close();
+        }
+    }
+
+    if(options.executable) {
+        const mainJS = emitMainJS();
+        const mainJSFile = options.outputDirectory.getFile("main.js");
+        const stream = await mainJSFile.open();
+        try {
+            await stream.write(new TextEncoder().encode(mainJS));
         }
         finally {
             await stream.close();

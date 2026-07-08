@@ -94,6 +94,10 @@ pub struct JsCodeGenOptions {
     /// Output directory.
     #[arg(short, long)]
     pub output: PathBuf,
+
+    /// Name of the executable defined by this tube.
+    #[arg(long)]
+    pub executable: Option<String>,
 }
 
 #[derive(Args, Debug)]

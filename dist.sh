@@ -13,10 +13,6 @@ cd "$(readlink -f "$(dirname "$0")")"
 cargo zigbuild --bin argonc --release --target x86_64-unknown-linux-gnu.2.17
 cargo zigbuild --bin argonc --release --target i686-unknown-linux-gnu.2.17
 cargo zigbuild --bin argonc --release --target aarch64-unknown-linux-gnu.2.17
-cargo zigbuild --bin argonc --release --target x86_64-pc-windows-gnullvm
-cargo zigbuild --bin argonc --release --target i686-pc-windows-gnullvm
-cargo zigbuild --bin argonc --release --target aarch64-pc-windows-gnullvm
-cargo zigbuild --bin argonc_launcher_windows --profile small --target aarch64-pc-windows-gnullvm
 npm ci --prefix backend/js/api
 npm run build --prefix backend/js/api
 npm ci --prefix backend/js/backend
@@ -34,20 +30,15 @@ mkdir dist/arch/
 mkdir dist/arch/x86_64-unknown-linux-gnu/
 mkdir dist/arch/i686-unknown-linux-gnu/
 mkdir dist/arch/aarch64-unknown-linux-gnu/
-mkdir dist/arch/x86_64-pc-windows-gnullvm/
-mkdir dist/arch/i686-pc-windows-gnullvm/
 mkdir dist/backend/
 mkdir dist/backend/jvm/
 mkdir dist/bin/
 cp -p target/x86_64-unknown-linux-gnu/release/argonc dist/arch/x86_64-unknown-linux-gnu/
 cp -p target/i686-unknown-linux-gnu/release/argonc dist/arch/i686-unknown-linux-gnu/
 cp -p target/aarch64-unknown-linux-gnu/release/argonc dist/arch/aarch64-unknown-linux-gnu/
-cp -p target/x86_64-pc-windows-gnullvm/release/argonc.exe dist/arch/x86_64-pc-windows-gnullvm/
-cp -p target/i686-pc-windows-gnullvm/release/argonc.exe dist/arch/i686-pc-windows-gnullvm/
 node backend/js/util/copy-deploy/lib/main.js backend/js/backend dist/backend/js
 cp -p backend/jvm/backend/build/install/backend/lib/*.jar dist/backend/jvm/
 
 # Launchers
 cp scripts/argonc dist/bin/argonc
 chmod +x scripts/argonc dist/bin/argonc
-cp -p target/i686-pc-windows-gnullvm/small/argonc_launcher_windows.exe dist/bin/argonc.exe

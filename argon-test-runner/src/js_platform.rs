@@ -23,6 +23,7 @@ pub struct JsPlatformMetadataOptions<I, O> {
 pub struct JsCodeGenOptions<I, O> {
     pub input_file: I,
     pub output_dir: O,
+    pub executable: Option<String>,
 }
 
 impl JSPlatform {
@@ -56,6 +57,7 @@ impl JSPlatform {
                     JsCodeGenOptions {
                         input_file: LocalInputFile::new(input_file),
                         output_dir: LocalOutputDirectory::new(output_dir.clone()),
+                        executable: None,
                     },
                     &mut StdIoWrite::new(&mut output),
                 );
@@ -169,6 +171,7 @@ impl CompileTargetPlatform for JSPlatform {
             JsCodeGenOptions {
                 input_file: LocalInputFile::new(input_file),
                 output_dir: LocalOutputDirectory::new(output_dir.clone()),
+                executable: Some("test-program".to_owned()),
             },
             &mut StdIoWrite::new(&mut output),
         );
@@ -181,15 +184,6 @@ impl CompileTargetPlatform for JSPlatform {
 
         if test_context.test_suite_context.print_commands && !output.is_empty() {
             print!("{}", String::from_utf8_lossy(&output));
-        }
-
-        {
-            let entrypoint_path = output_dir.join("main.js");
-            let contents = "import * as rt from \"@argon-lang/runtime\";\n\
-				import { main$a$t$e$r$t$e } from \"./index.js\";\n\
-				rt.resolve(main$a$t$e$r$t$e());\n";
-
-            std::fs::write(&entrypoint_path, contents).unwrap();
         }
     }
 

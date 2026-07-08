@@ -236,7 +236,7 @@ impl CliCommandRunner {
         })?;
 
         let command_output =
-            self.run_argonc_command(&js_codegen_args(input_file, output_dir.clone()))?;
+            self.run_argonc_command(&js_codegen_args(input_file, output_dir.clone(), options.executable.as_deref()))?;
 
         copy_temp_output_dir(&output_dir, options.output_dir)?;
 

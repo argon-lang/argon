@@ -18,13 +18,20 @@ pub(crate) fn js_platform_metadata_args(
     args
 }
 
-pub(crate) fn js_codegen_args(input_file: PathBuf, output_dir: PathBuf) -> Vec<OsString> {
-    vec![
+pub(crate) fn js_codegen_args(input_file: PathBuf, output_dir: PathBuf, executable: Option<&str>) -> Vec<OsString> {
+    let mut args = vec![
         OsString::from("codegen"),
         OsString::from("js"),
         OsString::from("--input"),
         input_file.into_os_string(),
         OsString::from("--output"),
         output_dir.into_os_string(),
-    ]
+    ];
+
+    if let Some(executable_name) = executable {
+        args.push(OsString::from("--executable"));
+        args.push(OsString::from(executable_name));
+    }
+
+    args
 }

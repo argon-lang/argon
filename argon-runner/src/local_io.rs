@@ -192,6 +192,10 @@ impl OutputFile for LocalOutputFile {
     }
 
     fn open(&self) -> Result<Self::Writer, InternalCompilerError> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|err| InternalCompilerError::IoError(parent.to_path_buf(), err))?;
+        }
         std::fs::File::create(&self.path)
             .map(|file| LocalFileWriter {
                 file,
