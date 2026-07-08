@@ -1106,7 +1106,8 @@ final class Emitter {
 
 		var traitInfo = program.getTraitInfo(traitToken.traitId());
 
-		var superclassDesc = isCoreExceptionTrait(traitToken)
+		var isCoreException = isCoreExceptionTrait(traitToken);
+		var superclassDesc = isCoreException
 			? ClassDesc.of("dev.argon.runtime.ArgonException")
 			: ConstantDescs.CD_Object;
 
@@ -1176,9 +1177,63 @@ final class Emitter {
 						)
 				);
 			}
+
+			if(isCoreException) {
+				emitArgonExceptionGetMessage(classBuilder, definition.methods());
+			}
 		});
 
 		writeEntry(classEntryName(instanceInfo.instanceClassDesc()), bytes);
+	}
+
+	private void emitArgonExceptionGetMessage(
+		ClassBuilder classBuilder,
+		List<MethodDefinition> methods
+	) {
+		var messageMethod = methods.stream()
+			.map(MethodDefinition::methodId)
+			.map(program::getMethodInfo)
+			.filter(methodInfo ->
+				methodInfo.name() instanceof Identifier.Named(var name) &&
+					name.equals("message") &&
+					methodInfo.descriptor().parameterCount() == 0
+			)
+			.findAny();
+
+		classBuilder.withMethodBody(
+			"getMessage",
+			MethodTypeDesc.of(ConstantDescs.CD_String),
+			ClassFile.ACC_PUBLIC,
+			codeBuilder -> {
+				if(messageMethod.isPresent()) {
+					var methodInfo = messageMethod.get();
+					codeBuilder
+						.aload(0)
+						.invokevirtual(methodInfo.definingClass(), methodInfo.methodName(), methodInfo.descriptor())
+						.invokestatic(
+							ClassDesc.of("dev.argon.runtime", "Trampoline"),
+							"resolve",
+							MethodTypeDesc.of(
+								ConstantDescs.CD_Object,
+								ClassDesc.of("dev.argon.runtime", "Trampoline")
+							),
+							true
+						)
+						.checkcast(ConstantDescs.CD_String)
+						.areturn();
+				}
+				else {
+					codeBuilder
+						.aload(0)
+						.invokespecial(
+							ClassDesc.of("dev.argon.runtime.ArgonException"),
+							"getMessage",
+							MethodTypeDesc.of(ConstantDescs.CD_String)
+						)
+						.areturn();
+				}
+			}
+		);
 	}
 
 	private void emitMethod(
@@ -1258,7 +1313,6 @@ final class Emitter {
 		private static final ClassDesc CD_TRAMPOLINE_THUNK = ClassDesc.of("dev.argon.runtime", "Trampoline$Thunk");
 		private static final ClassDesc CD_TUPLE_BASE = ClassDesc.of("dev.argon.runtime", "TupleBase");
 		private static final ClassDesc CD_TUPLE_XL = ClassDesc.of("dev.argon.runtime", "TupleXL");
-		private static final ClassDesc CD_CLASS = ClassDesc.of("java.lang.Class");
 		private static final ClassDesc CD_UNSUPPORTED_OPERATION_EXCEPTION =
 			ClassDesc.of("java.lang.UnsupportedOperationException");
 
@@ -2139,7 +2193,34 @@ final class Emitter {
 
 				case Token.Builtin(var builtin) -> {
 					switch(builtin) {
-						case BuiltinType.Array(var elementType) -> emitTypeInfoTokenValue(token, List.of(elementType));
+						case BuiltinType.Array(var elementType) -> {
+							if(TokenTypes.elementTypeRequiresErasedArray(elementType)) {
+								cb
+									.new_(CD_TYPE_INFO)
+									.dup();
+
+								emitTokenValue(elementType);
+								cb.invokevirtual(
+									CD_TYPE_INFO,
+									"javaClass",
+									MethodTypeDesc.of(ConstantDescs.CD_Class)
+								);
+								cb.invokevirtual(
+									ConstantDescs.CD_Class,
+									"arrayType",
+									MethodTypeDesc.of(ConstantDescs.CD_Class)
+								);
+
+								cb.invokespecial(
+									CD_TYPE_INFO,
+									ConstantDescs.INIT_NAME,
+									MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_Class)
+								);
+							}
+							else {
+								emitTypeInfoTokenValue(token, List.of());
+							}
+						}
 						case BuiltinType.Bool(), BuiltinType.Int(), BuiltinType.Never(), BuiltinType.String() ->
 							emitTypeInfoTokenValue(token, List.of());
 						case BuiltinType.Conjunction _, BuiltinType.Disjunction _ -> throw new UnsupportedOperationException(
@@ -2173,7 +2254,7 @@ final class Emitter {
 				cb.invokespecial(
 					CD_TYPE_INFO,
 					ConstantDescs.INIT_NAME,
-					MethodTypeDesc.of(ConstantDescs.CD_void, CD_CLASS)
+					MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_Class)
 				);
 			}
 			else {
@@ -2189,7 +2270,7 @@ final class Emitter {
 				cb.invokespecial(
 					CD_TYPE_INFO,
 					ConstantDescs.INIT_NAME,
-					MethodTypeDesc.of(ConstantDescs.CD_void, CD_CLASS, CD_TOKEN.arrayType())
+					MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_Class, CD_TOKEN.arrayType())
 				);
 			}
 		}
@@ -2197,15 +2278,38 @@ final class Emitter {
 		private void emitBuiltin(BuiltinOp op) {
 			switch(op) {
 				case BuiltinOp.ArrayCreateUnsafeUninitialized arrayCreate -> {
-					var elementType = tokenAsClassDesc(arrayCreate.elementType());
-					var elementKind = TypeKind.from(elementType).asLoadable();
+					if(TokenTypes.elementTypeRequiresErasedArray(arrayCreate.elementType())) {
+						emitTokenValue(arrayCreate.elementType());
 
-					loadBigIntegerAsInt(arrayCreate.length());
-					if(elementKind == TypeKind.REFERENCE) {
-						cb.anewarray(elementType);
+						cb.invokevirtual(
+							CD_TYPE_INFO,
+							"javaClass",
+							MethodTypeDesc.of(ConstantDescs.CD_Class)
+						);
+
+						loadBigIntegerAsInt(arrayCreate.length());
+
+						cb.invokestatic(
+							ClassDesc.of("java.lang.reflect.Array"),
+							"newInstance",
+							MethodTypeDesc.of(
+								ConstantDescs.CD_Object,
+								ConstantDescs.CD_Class,
+								ConstantDescs.CD_int
+							)
+						);
 					}
 					else {
-						cb.newarray(elementKind);
+						var elementType = tokenAsClassDesc(arrayCreate.elementType());
+						var elementKind = TypeKind.from(elementType).asLoadable();
+
+						loadBigIntegerAsInt(arrayCreate.length());
+						if(elementKind == TypeKind.REFERENCE) {
+							cb.anewarray(elementType);
+						}
+						else {
+							cb.newarray(elementKind);
+						}
 					}
 					storeRegister(arrayCreate.dest());
 				}
@@ -2213,13 +2317,36 @@ final class Emitter {
 				case BuiltinOp.ArrayGet arrayGet -> {
 					loadRegister(arrayGet.array());
 					loadBigIntegerAsInt(arrayGet.index());
-					cb.arrayLoad(arrayElementKind(arrayGet.elementType()));
+					if(TokenTypes.elementTypeRequiresErasedArray(arrayGet.elementType())) {
+						cb.invokestatic(
+							ClassDesc.of("java.lang.reflect.Array"),
+							"get",
+							MethodTypeDesc.of(
+								ConstantDescs.CD_Object,
+								ConstantDescs.CD_Object,
+								ConstantDescs.CD_int
+							)
+						);
+					}
+					else {
+						cb.arrayLoad(arrayElementKind(arrayGet.elementType()));
+					}
 					storeRegister(arrayGet.dest());
 				}
 
 				case BuiltinOp.ArrayLength arrayLength -> {
 					loadRegister(arrayLength.array());
-					cb.arraylength();
+					if(TokenTypes.elementTypeRequiresErasedArray(arrayLength.elementType())) {
+						cb.invokestatic(
+							ClassDesc.of("java.lang.reflect.Array"),
+							"getLength",
+							MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_Object)
+						);
+					}
+					else {
+						cb.arraylength();
+					}
+
 					intToBigInteger();
 					storeRegister(arrayLength.dest());
 				}
@@ -2228,7 +2355,16 @@ final class Emitter {
 					loadRegister(arraySet.array());
 					loadBigIntegerAsInt(arraySet.index());
 					loadRegister(arraySet.value());
-					cb.arrayStore(arrayElementKind(arraySet.elementType()));
+					if(TokenTypes.elementTypeRequiresErasedArray(arraySet.elementType())) {
+						cb.invokestatic(
+							ClassDesc.of("java.lang.reflect.Array"),
+							"set",
+							MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_Object, ConstantDescs.CD_int, ConstantDescs.CD_Object)
+						);
+					}
+					else {
+						cb.arrayStore(arrayElementKind(arraySet.elementType()));
+					}
 				}
 
 				case BuiltinOp.BoolEq boolEq -> {
