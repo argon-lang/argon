@@ -1401,22 +1401,7 @@ final class Emitter {
 					storeRegister(move.dest());
 				}
 
-				case Instruction.Return ret -> {
-					switch(returnMode) {
-						case ReturnMode.Direct() -> {
-							loadRegister(ret.src());
-							emitReturnFromStack();
-							reachable = false;
-						}
-
-						case ReturnMode.Branch(var label) -> {
-							loadRegister(ret.src());
-							cb.storeLocal(returnKind, getReturnValueSlot());
-							cb.goto_(label);
-							reachable = false;
-						}
-					}
-				}
+				case Instruction.Return ret -> emitReturn(ret);
 
 				case Instruction.Unreachable ignored -> {
 					emitRuntimeUnsupported("Unreachable instruction executed");
@@ -1695,8 +1680,6 @@ final class Emitter {
 				case Instruction.IsEnumVariantOrBreak isEnumVariantOrBreak -> {
 					var variantInfo = program.getEnumVariantInfo(isEnumVariantOrBreak.variantId());
 					var variantDesc = variantInfo.variantClassDesc();
-					var variantDefinition = enumVariantDefinition(isEnumVariantOrBreak.variantId());
-					var argOffset = variantDefinition.signature().tokenParameters().size();
 					var notVariantLabels = blocks.get(isEnumVariantOrBreak.notVariantBlockId());
 					notVariantLabels.endReachable = true;
 
@@ -1708,9 +1691,20 @@ final class Emitter {
 					for(int i = 0; i < isEnumVariantOrBreak.args().size(); ++i) {
 						var arg = isEnumVariantOrBreak.args().get(i);
 						loadRegister(isEnumVariantOrBreak.value());
+
+						ClassDesc fieldDesc;
+						if(i < variantInfo.signature().tokenParameters().size()) {
+							fieldDesc = tokenAsClassDesc(variantInfo.signature().tokenParameters().get(i).kind());
+						}
+						else {
+							fieldDesc = tokenAsClassDesc(variantInfo.signature().parameters().get(i - variantInfo.signature().tokenParameters().size()).paramType());
+						}
+
 						cb
 							.checkcast(variantDesc)
-							.getfield(variantDesc, ClassNaming.instanceParameterFieldName(argOffset + i), registerType(arg));
+							.getfield(variantDesc, ClassNaming.instanceParameterFieldName(i), fieldDesc);
+
+						unboxValueFrom(fieldDesc, registerType(arg));
 						storeRegister(arg);
 					}
 
@@ -1823,6 +1817,7 @@ final class Emitter {
 					var owner = recordFieldOwner(fieldInfo);
 					loadRegister(recordFieldLoad.recordValue());
 					cb.getfield(owner, fieldInfo.fieldName(), fieldInfo.fieldType());
+					unboxValueFrom(fieldInfo.fieldType(), registerType(recordFieldLoad.dest()));
 					storeRegister(recordFieldLoad.dest());
 				}
 
@@ -2133,6 +2128,7 @@ final class Emitter {
 				case FunctionResult.ReturnValue ignored -> {
 					emitThunk.run();
 					cb.areturn();
+					reachable = false;
 				}
 			}
 		}
@@ -2578,41 +2574,62 @@ final class Emitter {
 			}
 
 			cb.labelBinding(start);
-			try {
-				installFinallyJumpLabels(originalBlocks, finallyJumpLabels);
-				emitBlock(finallyInsn.action());
-			}
-			finally {
-				blocks.clear();
-				blocks.putAll(originalBlocks);
-				returnMode = oldReturnMode;
-			}
+			installFinallyJumpLabels(originalBlocks, finallyJumpLabels);
+			emitBlock(finallyInsn.action());
+			blocks.clear();
+			blocks.putAll(originalBlocks);
+			returnMode = oldReturnMode;
 			cb.labelBinding(end);
 
-			emitBlock(finallyInsn.ensuring());
-			cb.goto_(done);
+			if(reachable) {
+				emitBlock(finallyInsn.ensuring());
+				if(reachable) {
+					cb.goto_(done);
+				}
+			}
+
+			boolean oldReachable = reachable;
 
 			for(var entry : finallyJumpLabels.entrySet()) {
+				reachable = true;
 				cb.labelBinding(entry.getValue());
 				emitBlock(finallyInsn.ensuring());
-				cb.goto_(entry.getKey().label(originalBlocks));
+				if(reachable) {
+					cb.goto_(entry.getKey().label(originalBlocks));
+				}
 			}
 
 			if(returnFinallyLabel != null) {
+				reachable = true;
 				cb.labelBinding(returnFinallyLabel);
 				emitBlock(finallyInsn.ensuring());
-				cb.loadLocal(returnKind, getReturnValueSlot());
-				emitReturnFromStack();
+
+				switch(returnMode) {
+					case ReturnMode.Direct() -> {
+						cb.loadLocal(returnKind, getReturnValueSlot());
+						emitReturnFromStack();
+					}
+
+					case ReturnMode.Branch(var label) -> {
+						cb.goto_(label);
+					}
+				}
 			}
+
+			reachable = true;
 
 			cb.labelBinding(handler);
 			cb.storeLocal(TypeKind.REFERENCE, exceptionSlot);
 			emitBlock(finallyInsn.ensuring());
-			cb.loadLocal(TypeKind.REFERENCE, exceptionSlot);
-			cb.athrow();
+			if(reachable) {
+				cb.loadLocal(TypeKind.REFERENCE, exceptionSlot);
+				cb.athrow();
+			}
 
 			cb.labelBinding(done);
 			cb.exceptionCatchAll(start, end, handler);
+
+			reachable = oldReachable;
 		}
 
 		private Set<FinallyJumpTarget> scanFinallyJumpTargets(
@@ -2687,6 +2704,23 @@ final class Emitter {
 				);
 
 				blocks.put(blockId, new BlockLabels(start, end));
+			}
+		}
+
+		private void emitReturn(Instruction.Return ret) {
+			switch(returnMode) {
+				case ReturnMode.Direct() -> {
+					loadRegister(ret.src());
+					emitReturnFromStack();
+					reachable = false;
+				}
+
+				case ReturnMode.Branch(var label) -> {
+					loadRegister(ret.src());
+					cb.storeLocal(returnKind, getReturnValueSlot());
+					cb.goto_(label);
+					reachable = false;
+				}
 			}
 		}
 
@@ -2816,6 +2850,12 @@ final class Emitter {
 				case REFERENCE -> cb.checkcast(type);
 
 				case VOID -> throw new IllegalArgumentException("Cannot unbox void");
+			}
+		}
+
+		private void unboxValueFrom(ClassDesc src, ClassDesc dest) {
+			if(src.equals(ConstantDescs.CD_Object) && !dest.equals(ConstantDescs.CD_Object)) {
+				unboxValue(dest);
 			}
 		}
 

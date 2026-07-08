@@ -1112,10 +1112,14 @@ impl FunctionSignatureBuilder {
             }
             ErasureMode::Concrete => {
                 let t = self.token_emitter(encoder).token_expr(param.var_type())?;
-                let sig_param = vf::SignatureParameter {
+                let mut sig_param = vf::SignatureParameter {
                     name: param.name().map(encode_identifier).map(Box::new),
                     param_type: Box::new(t),
                 };
+
+                if captured_ref {
+                    sig_param.param_type = Box::new(vf::Token::RefCell { inner: sig_param.param_type });
+                }
 
                 let index = self.parameters.len();
                 self.parameters.push(Box::new(sig_param));

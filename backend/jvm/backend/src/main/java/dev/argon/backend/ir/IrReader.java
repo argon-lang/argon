@@ -663,6 +663,7 @@ public final class IrReader {
 			return new EnumVariantInfo(
 				entry.enumId(),
 				entry.name(),
+				entry.signature(),
 				variantName,
 				variantClassDesc,
 				new RecordBuilderInfo(

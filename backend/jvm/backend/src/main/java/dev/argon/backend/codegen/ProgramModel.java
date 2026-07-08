@@ -126,6 +126,7 @@ public interface ProgramModel {
 	record EnumVariantInfo(
 		UnsignedBigInteger enumId,
 		Identifier name,
+		FunctionSignature signature,
 		String nestedClassName,
 		ClassDesc variantClassDesc,
 		RecordBuilderInfo builder
