@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use argon_compiler::DefaultExprContext;
 use argon_compiler::expr_type::get_pattern_type;
 use argon_expr::{Expr, Pattern, Variable};
-use argon_format::vm as vf;
+use argon_format_vm::vm as vf;
 use num_bigint::BigUint;
 
 pub(super) fn emit_pattern(

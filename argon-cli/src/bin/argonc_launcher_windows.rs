@@ -51,7 +51,7 @@ fn main() {
     }
 
     let mut command = match options.command {
-        Command::Compile(_) | Command::GenIR(_) => {
+        Command::Compile(_) | Command::GenIR(_) | Command::Optimize(_) => {
             let arch_name = unsafe {
                 let mut info = SYSTEM_INFO::default();
                 GetNativeSystemInfo(&mut info);

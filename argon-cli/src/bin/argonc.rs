@@ -48,6 +48,18 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Command::Optimize(cmd) => {
+            let runner_options = argon_runner::OptimizeOptions {
+                input_file: LocalInputFile::new(cmd.input),
+                output_file: LocalOutputFile::new(cmd.output),
+                optimizations: cmd.optimizations,
+            };
+
+            let mut stderr = StdIoWrite::new(std::io::stderr());
+            if !argon_runner::optimize(runner_options, &mut stderr) {
+                std::process::exit(1);
+            }
+        }
         Command::CodeGen(cmd) => match cmd.backend_command {
             CodeGenBackendCommand::JS(_) => {
                 execute_backend_subcommand(Backend::JavaScript);

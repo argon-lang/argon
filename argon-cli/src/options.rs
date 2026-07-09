@@ -18,6 +18,10 @@ pub enum Command {
     #[command(name = "genir")]
     GenIR(GenIrOptions),
 
+    /// Optimize Argon VM IR.
+    #[command(name = "optimize")]
+    Optimize(OptimizeOptions),
+
     /// Generate code from Argon VM IR.
     #[command(name = "codegen")]
     CodeGen(CodeGenCommand),
@@ -66,6 +70,21 @@ pub struct GenIrOptions {
 
     #[arg(long)]
     pub platform: String,
+}
+
+#[derive(Args, Debug)]
+pub struct OptimizeOptions {
+    /// Input Argon VM IR file.
+    #[arg(short, long)]
+    pub input: PathBuf,
+
+    /// Output Argon VM IR file.
+    #[arg(short, long)]
+    pub output: PathBuf,
+
+    /// Optimization pass to run.
+    #[arg(short = 'O', long = "optimization", required = true)]
+    pub optimizations: Vec<String>,
 }
 
 #[derive(Args)]

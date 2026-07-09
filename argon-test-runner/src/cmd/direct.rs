@@ -1,19 +1,19 @@
 use crate::{
-    JSPlatform, JVMPlatform,
     cmd::{
-        CommandRunner, CommandRunnerPlatform,
         backend_options::{
             js_codegen_args, js_platform_metadata_args, jvm_codegen_args,
             jvm_platform_metadata_args,
         },
         staging::{copy_temp_output, copy_temp_output_dir, stage_input_file, stage_input_files},
+        CommandRunner, CommandRunnerPlatform,
     },
     js_platform::{JsCodeGenOptions, JsPlatformMetadataOptions},
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
     workspace::WorkspacePaths,
+    JSPlatform, JVMPlatform,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
-use argon_runner::{CompileOptions, GenIrOptions};
+use argon_runner::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
 use std::ffi::OsStr;
 use std::process::Command;
@@ -52,6 +52,15 @@ impl CommandRunner for DirectCommandRunner {
         W: Write,
     {
         argon_runner::gen_ir(options, error_output)
+    }
+
+    fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
+    where
+        IF: InputFile + ThreadSafe,
+        O: OutputFile,
+        W: Write,
+    {
+        argon_runner::optimize(options, error_output)
     }
 }
 

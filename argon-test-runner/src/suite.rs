@@ -1,9 +1,9 @@
 use crate::cmd::{CommandRunner, CommandRunnerPlatform};
 use argon_runner::{
-    CompileOptions, GenIrOptions,
     local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite},
+    CompileOptions, GenIrOptions, OptimizeOptions,
 };
-use argon_testcases::{ExpectedResult, TestCase, load_test_case};
+use argon_testcases::{load_test_case, ExpectedResult, TestCase};
 use hashbrown::{HashMap, HashSet};
 use libtest_mimic::{Arguments, Conclusion, Trial};
 use serde::Deserialize;
@@ -18,12 +18,24 @@ pub struct TestSuiteContext<P: CompileTargetPlatform, R: CommandRunner + Command
     pub lib_dir: PathBuf,
     pub backend_dir: PathBuf,
     pub print_commands: bool,
+    pub options: TestSuiteOptions,
 
     pub library_platform_metadata: Mutex<HashMap<String, Vec<PathBuf>>>,
     pub library_compiled_tubes: Mutex<HashMap<String, PathBuf>>,
     pub library_generated_ir: Mutex<HashMap<String, PathBuf>>,
     pub platform_state: P::PlatformState,
 }
+
+#[derive(Clone, Debug, Default)]
+pub struct TestSuiteOptions {
+    pub optimize_ir: bool,
+}
+
+const DEFAULT_OPTIMIZATIONS: &[&str] = &[
+    "copy-propagation",
+    "dead-code-elimination",
+    "unused-register-elimination",
+];
 
 impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> TestSuiteContext<P, R> {
     pub fn library_info(self: Arc<Self>, library_name: &str) -> LibraryInfo<P, R> {
@@ -206,6 +218,13 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 let output_file = library
                     .library_output_path
                     .join(format!("{}.arvm", library.name));
+                let gen_ir_output_file = if library.test_suite_context.options.optimize_ir {
+                    library
+                        .library_output_path
+                        .join(format!("{}.unoptimized.arvm", library.name))
+                } else {
+                    output_file.clone()
+                };
 
                 let dependency_references = library
                     .test_suite_context
@@ -233,7 +252,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                             .map(LocalInputFile::new)
                             .collect(),
                         platform: P::ID.to_owned(),
-                        output_file: LocalOutputFile::new(output_file.clone()),
+                        output_file: LocalOutputFile::new(gen_ir_output_file.clone()),
                     },
                     &mut StdIoWrite::new(&mut output),
                 );
@@ -244,6 +263,25 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                     library.name,
                     String::from_utf8_lossy(&output),
                 );
+
+                if library.test_suite_context.options.optimize_ir {
+                    let mut output = Vec::new();
+                    let success = library.test_suite_context.command_runner.optimize(
+                        OptimizeOptions {
+                            input_file: LocalInputFile::new(gen_ir_output_file),
+                            output_file: LocalOutputFile::new(output_file.clone()),
+                            optimizations: default_optimizations(),
+                        },
+                        &mut StdIoWrite::new(&mut output),
+                    );
+
+                    assert!(
+                        success,
+                        "IR optimization of library {} failed\n{}",
+                        library.name,
+                        String::from_utf8_lossy(&output),
+                    );
+                }
 
                 output_file
             })
@@ -324,6 +362,11 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
 
     pub fn genir_test_case(&self) -> PathBuf {
         let output_file = self.test_data_dir.join("Argon.TestCase.arvm");
+        let gen_ir_output_file = if self.test_suite_context.options.optimize_ir {
+            self.test_data_dir.join("Argon.TestCase.unoptimized.arvm")
+        } else {
+            output_file.clone()
+        };
         let input_file = self.compile_test_case().unwrap();
 
         let referenced_tubes = self
@@ -343,7 +386,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 input_tube: LocalInputFile::new(input_file),
                 referenced_tubes,
                 platform: P::ID.to_owned(),
-                output_file: LocalOutputFile::new(output_file.clone()),
+                output_file: LocalOutputFile::new(gen_ir_output_file.clone()),
             },
             &mut StdIoWrite::new(&mut output),
         );
@@ -354,8 +397,33 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
             String::from_utf8_lossy(&output),
         );
 
+        if self.test_suite_context.options.optimize_ir {
+            let mut output = Vec::new();
+            let success = self.test_suite_context.command_runner.optimize(
+                OptimizeOptions {
+                    input_file: LocalInputFile::new(gen_ir_output_file),
+                    output_file: LocalOutputFile::new(output_file.clone()),
+                    optimizations: default_optimizations(),
+                },
+                &mut StdIoWrite::new(&mut output),
+            );
+
+            assert!(
+                success,
+                "IR optimization of test case failed\n{}",
+                String::from_utf8_lossy(&output),
+            );
+        }
+
         output_file
     }
+}
+
+fn default_optimizations() -> Vec<String> {
+    DEFAULT_OPTIMIZATIONS
+        .iter()
+        .map(|optimization| (*optimization).to_owned())
+        .collect()
 }
 
 pub struct LibraryInfo<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> {
@@ -461,6 +529,7 @@ fn run_test<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P
 pub fn build_test_suite<P, R>(
     platform: Arc<P>,
     command_runner: Arc<R>,
+    options: TestSuiteOptions,
     test_cases: &[Arc<(String, TestCase)>],
     tests: &mut Vec<Trial>,
 ) where
@@ -477,6 +546,7 @@ pub fn build_test_suite<P, R>(
         lib_dir: workspace_paths.libraries_dir(),
         backend_dir: workspace_paths.backend_dir(),
         print_commands: false,
+        options,
 
         library_platform_metadata: Mutex::new(HashMap::new()),
         library_compiled_tubes: Mutex::new(HashMap::new()),
@@ -531,15 +601,19 @@ fn load_test_cases() -> Vec<Arc<(String, TestCase)>> {
     test_cases
 }
 
-pub fn run<P, R>(platform: Arc<P>, command_runner: Arc<R>)
+pub fn run<P, R>(platform: Arc<P>, command_runner: Arc<R>, options: TestSuiteOptions)
 where
     P: CompileTargetPlatform,
     R: CommandRunner + CommandRunnerPlatform<P> + Send + Sync + 'static,
 {
-    run_conclusion(platform, command_runner).exit()
+    run_conclusion(platform, command_runner, options).exit()
 }
 
-pub fn run_conclusion<P, R>(platform: Arc<P>, command_runner: Arc<R>) -> Conclusion
+pub fn run_conclusion<P, R>(
+    platform: Arc<P>,
+    command_runner: Arc<R>,
+    options: TestSuiteOptions,
+) -> Conclusion
 where
     P: CompileTargetPlatform,
     R: CommandRunner + CommandRunnerPlatform<P> + Send + Sync + 'static,
@@ -548,7 +622,7 @@ where
     let test_cases = load_test_cases();
     let mut tests = Vec::new();
 
-    build_test_suite(platform, command_runner, &test_cases, &mut tests);
+    build_test_suite(platform, command_runner, options, &test_cases, &mut tests);
 
     libtest_mimic::run(&args, tests)
 }

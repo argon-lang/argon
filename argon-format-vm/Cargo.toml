@@ -1,5 +1,5 @@
 [package]
-name = "argon-format"
+name = "argon-format-vm"
 publish = false
 edition = "2024"
 
@@ -14,4 +14,4 @@ noble-idl-compiler-rust = { workspace = true }
 workspace = true
 
 [package.metadata.noble-idl.package_mapping]
-"argon.tube" = "tube"
+"argon.vm" = "vm"

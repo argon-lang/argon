@@ -1,7 +1,7 @@
 use alloc::borrow::ToOwned;
 use alloc::format;
 use alloc::string::String;
-use parse18_runtime::{write_location_file, Location, LocationFile};
+use parse18_runtime::{Location, LocationFile, write_location_file};
 use std::path::PathBuf;
 
 pub trait ErrorReporter<E> {
@@ -54,6 +54,7 @@ pub enum ErrorCode {
     MissingRecordLiteralField = 0x0029,
     MutableErasedLocalVariable = 0x002A,
     ImpureErasedFunction = 0x002B,
+    UnknownOptimization = 0x002C,
 }
 
 impl ErrorCode {
@@ -460,6 +461,14 @@ impl CompileError {
                 names.join(", ")
             ),
             Some(loc),
+        )
+    }
+
+    pub fn unknown_optimization(name: impl AsRef<str>) -> Self {
+        Self::new(
+            ErrorCode::UnknownOptimization,
+            format!("Unknown optimization: {}", name.as_ref()),
+            None,
         )
     }
 }

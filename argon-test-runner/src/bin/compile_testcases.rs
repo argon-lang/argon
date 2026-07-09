@@ -1,7 +1,7 @@
 use argon_test_runner::cmd::{CommandRunnerPlatform, DirectCommandRunner};
 use argon_test_runner::{
-    CompileTargetPlatform, JSPlatform, JVMPlatform, TestContext, TestSuiteContext,
-    workspace::WorkspacePaths,
+    workspace::WorkspacePaths, CompileTargetPlatform, JSPlatform, JVMPlatform, TestContext,
+    TestSuiteContext, TestSuiteOptions,
 };
 use argon_testcases::load_test_case;
 use clap::{Parser, ValueEnum};
@@ -19,6 +19,9 @@ struct Args {
 
     #[arg(long, value_name = "DIR", default_value = ".")]
     output_dir: PathBuf,
+
+    #[arg(long)]
+    optimize_ir: bool,
 
     #[arg(value_name = "TEST_XML", required = true)]
     test_xml_files: Vec<PathBuf>,
@@ -55,6 +58,7 @@ fn create_suite_context<P>(
     command_runner: Arc<DirectCommandRunner>,
     temp_dir: TempDir,
     workspace_paths: &WorkspacePaths,
+    options: TestSuiteOptions,
 ) -> Arc<TestSuiteContext<P, DirectCommandRunner>>
 where
     P: CompileTargetPlatform,
@@ -67,6 +71,7 @@ where
         lib_dir: workspace_paths.libraries_dir(),
         backend_dir: workspace_paths.backend_dir(),
         print_commands: true,
+        options,
 
         library_platform_metadata: Mutex::new(HashMap::new()),
         library_compiled_tubes: Mutex::new(HashMap::new()),
@@ -163,6 +168,9 @@ fn run() -> Result<i32, Box<dyn Error>> {
                 command_runner.clone(),
                 temp_dir,
                 &workspace_paths,
+                TestSuiteOptions {
+                    optimize_ir: args.optimize_ir,
+                },
             );
             compile_testcases(context, &args.test_xml_files)?
         }
@@ -172,6 +180,9 @@ fn run() -> Result<i32, Box<dyn Error>> {
                 command_runner,
                 temp_dir,
                 &workspace_paths,
+                TestSuiteOptions {
+                    optimize_ir: args.optimize_ir,
+                },
             );
             compile_testcases(context, &args.test_xml_files)?
         }

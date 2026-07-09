@@ -10,8 +10,18 @@ path = "tests/compiler_tests_js.rs"
 harness = false
 
 [[test]]
+name = "compiler_tests_js_opt"
+path = "tests/compiler_tests_js_opt.rs"
+harness = false
+
+[[test]]
 name = "compiler_tests_jvm"
 path = "tests/compiler_tests_jvm.rs"
+harness = false
+
+[[test]]
+name = "compiler_tests_jvm_opt"
+path = "tests/compiler_tests_jvm_opt.rs"
 harness = false
 
 [[bin]]

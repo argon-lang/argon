@@ -5,7 +5,7 @@ mod staging;
 
 use crate::CompileTargetPlatform;
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
-use argon_runner::{CompileOptions, GenIrOptions};
+use argon_runner::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
 
 pub use cli::CliCommandRunner;
@@ -25,6 +25,12 @@ pub trait CommandRunner {
         W: Write;
 
     fn gen_ir<IF, O, W>(&self, options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
+    where
+        IF: InputFile + ThreadSafe,
+        O: OutputFile,
+        W: Write;
+
+    fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
     where
         IF: InputFile + ThreadSafe,
         O: OutputFile,

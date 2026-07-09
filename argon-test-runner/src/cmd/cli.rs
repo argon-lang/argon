@@ -1,7 +1,5 @@
 use crate::{
-    JSPlatform, JVMPlatform,
     cmd::{
-        CommandRunner, CommandRunnerPlatform,
         backend_options::{
             js_codegen_args, js_platform_metadata_args, jvm_codegen_args,
             jvm_platform_metadata_args,
@@ -10,13 +8,15 @@ use crate::{
             copy_temp_output, copy_temp_output_dir, stage_input_dirs, stage_input_file,
             stage_input_files,
         },
+        CommandRunner, CommandRunnerPlatform,
     },
     js_platform::{JsCodeGenOptions, JsPlatformMetadataOptions},
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
     workspace::WorkspacePaths,
+    JSPlatform, JVMPlatform,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
-use argon_runner::{CompileOptions, GenIrOptions};
+use argon_runner::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -64,6 +64,24 @@ impl CommandRunner for CliCommandRunner {
         W: Write,
     {
         match self.gen_ir_staged(options) {
+            Ok(output) => {
+                write_message(error_output, &output);
+                true
+            }
+            Err(err) => {
+                write_message(error_output, &err);
+                false
+            }
+        }
+    }
+
+    fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
+    where
+        IF: InputFile + ThreadSafe,
+        O: OutputFile,
+        W: Write,
+    {
+        match self.optimize_staged(options) {
             Ok(output) => {
                 write_message(error_output, &output);
                 true
@@ -231,6 +249,36 @@ impl CliCommandRunner {
         for reference in referenced_tubes {
             args.push("--reference".into());
             args.push(reference.into_os_string());
+        }
+
+        let command_output = self.run_argonc_command(&args)?;
+        copy_temp_output(&output_file, options.output_file)?;
+
+        Ok(command_output)
+    }
+
+    fn optimize_staged<IF, O>(&self, options: OptimizeOptions<IF, O>) -> Result<String, String>
+    where
+        IF: InputFile,
+        O: OutputFile,
+    {
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|err| format!("failed to create temporary command directory: {err}"))?;
+        let temp_path = temp_dir.path();
+
+        let input_file = stage_input_file(temp_path, "input", 0, options.input_file)?;
+        let output_file = temp_path.join("output.arvm");
+
+        let mut args = vec![
+            "optimize".into(),
+            "--input".into(),
+            input_file.into_os_string(),
+            "--output".into(),
+            output_file.clone().into_os_string(),
+        ];
+        for optimization in options.optimizations {
+            args.push("--optimization".into());
+            args.push(optimization.into());
         }
 
         let command_output = self.run_argonc_command(&args)?;

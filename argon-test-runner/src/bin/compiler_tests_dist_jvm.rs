@@ -1,4 +1,6 @@
-use argon_test_runner::{JVMPlatform, cmd::CliCommandRunner, suite, workspace::WorkspacePaths};
+use argon_test_runner::{
+    cmd::CliCommandRunner, suite, workspace::WorkspacePaths, JVMPlatform, TestSuiteOptions,
+};
 use std::sync::Arc;
 
 fn main() {
@@ -6,5 +8,6 @@ fn main() {
     suite::run(
         Arc::new(JVMPlatform),
         Arc::new(CliCommandRunner::new(workspace_paths)),
+        TestSuiteOptions::default(),
     );
 }

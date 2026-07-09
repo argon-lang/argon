@@ -1,7 +1,7 @@
 use crate::vm::{AnyRegister, EmitResult, EmitStop, ExprEmitter};
 use argon_compiler::DefaultExprContext;
 use argon_expr::Expr;
-use argon_format::vm as vf;
+use argon_format_vm::vm as vf;
 
 use crate::vm::pattern::emit_pattern;
 use alloc::boxed::Box;

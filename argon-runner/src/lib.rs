@@ -9,12 +9,14 @@ use crate::context::RunnerContext;
 use crate::tubes::load_referenced_tube;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeMetadata, TubeName, Unload};
+use argon_format_vm::vm as vf;
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
-use argon_util::sync::{ThreadSafe, parallel::*};
+use argon_util::sync::{parallel::*, ThreadSafe};
+use argon_util::{CompileError, ErrorReporter, InternalCompilerError, TubeFormatError};
 use embedded_io::{Write, WriteFmtError};
 use esexpr::ESExprCodec;
-use esexpr_binary::{ExprGeneratorSync, GeneratorError};
+use esexpr_binary::{ExprGeneratorSync, ExprParserSync, GeneratorError, ParseError};
 
 pub struct CompileOptions<ID, IF, O> {
     pub tube_name: TubeName,
@@ -29,6 +31,12 @@ pub struct GenIrOptions<IF, O> {
     pub referenced_tubes: Vec<IF>,
     pub platform: String,
     pub output_file: O,
+}
+
+pub struct OptimizeOptions<IF, O> {
+    pub input_file: IF,
+    pub output_file: O,
+    pub optimizations: Vec<String>,
 }
 
 pub struct JsCodeGenOptions<I, O> {
@@ -211,4 +219,146 @@ where
     O: OutputDirectory,
 {
     todo!("generate JavaScript code from Argon VM IR")
+}
+
+pub fn optimize<IF, O, W>(options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
+where
+    IF: InputFile,
+    O: OutputFile,
+    W: Write,
+{
+    let context = RunnerContext::new();
+
+    let mut optimizer = argon_opt::optimizer::Optimizer::new();
+    for optimization in &options.optimizations {
+        let Some(pass) = argon_opt::pass::pass_by_name(optimization) else {
+            context
+                .runner_reporter()
+                .report_error(CompileError::unknown_optimization(optimization));
+            let _ = context.runner_reporter().print_error_messages(error_output);
+            return false;
+        };
+
+        optimizer.add_pass(pass);
+    }
+
+    'errors: {
+        let mut in_file = match options.input_file.open() {
+            Ok(file) => file,
+            Err(err) => {
+                context.runner_reporter().report_error(err);
+                break 'errors;
+            }
+        };
+
+        let mut entries = Vec::new();
+        let mut expr_stream = esexpr_binary::parse_sync(&mut in_file);
+        loop {
+            let expr = match expr_stream.try_read_next_expr() {
+                Ok(Some(expr)) => expr,
+                Ok(None) => break,
+                Err(err) => {
+                    context
+                        .runner_reporter()
+                        .report_error(ir_parse_error(&options.input_file, err));
+                    break 'errors;
+                }
+            };
+
+            let mut entry = match vf::TubeFileEntry::decode_esexpr(expr) {
+                Ok(entry) => entry,
+                Err(err) => {
+                    context.runner_reporter().report_error(ir_format_error(
+                        &options.input_file,
+                        TubeFormatError::from(err),
+                    ));
+                    break 'errors;
+                }
+            };
+
+            argon_opt::optimize_entry(&optimizer, &mut entry);
+            entries.push(entry);
+        }
+
+        let mut out_file = match options.output_file.open() {
+            Ok(file) => file,
+            Err(err) => {
+                context.runner_reporter().report_error(err);
+                break 'errors;
+            }
+        };
+
+        let mut expr_gen = esexpr_binary::ExprGenerator::new(&mut out_file);
+        for entry in entries {
+            let expr = entry.encode_esexpr();
+            match expr_gen.generate(&expr) {
+                Ok(()) => {}
+                Err(GeneratorError::IOError(err)) => {
+                    context.runner_reporter().report_error(err);
+                    break 'errors;
+                }
+            }
+        }
+
+        if context.runner_reporter().has_errors() {
+            break 'errors;
+        }
+
+        let _ = writeln!(error_output, "Optimization succeeded.");
+        return true;
+    }
+
+    let _ = context.runner_reporter().print_error_messages(error_output);
+    let _ = delete_output_file(&options.output_file, error_output);
+    false
+}
+
+fn ir_format_error<F>(file: &F, error: TubeFormatError) -> InternalCompilerError
+where
+    F: InputFile,
+{
+    match error {
+        TubeFormatError::FileError(_, err) => InternalCompilerError::TubeFormatError(
+            TubeFormatError::FileError(file.path().to_path_buf(), err),
+        ),
+        error => InternalCompilerError::TubeFormatError(error),
+    }
+}
+
+fn ir_parse_error<F>(file: &F, error: ParseError<InternalCompilerError>) -> InternalCompilerError
+where
+    F: InputFile,
+{
+    match error {
+        ParseError::IOError(err) => match err {
+            InternalCompilerError::IoError(_, io_err) => {
+                InternalCompilerError::IoError(file.path().to_path_buf(), io_err)
+            }
+            err => err,
+        },
+        ParseError::InvalidTokenByte(value) => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::InvalidTokenByte(value)),
+        ),
+        ParseError::InvalidStringTableIndex => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::InvalidStringTableIndex),
+        ),
+        ParseError::InvalidLength => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::InvalidLength),
+        ),
+        ParseError::UnexpectedKeywordToken => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::UnexpectedKeywordToken),
+        ),
+        ParseError::UnexpectedConstructorEnd => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::UnexpectedConstructorEnd),
+        ),
+        ParseError::UnexpectedEndOfFile => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::UnexpectedEndOfFile),
+        ),
+        ParseError::InvalidStringPool(err) => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::InvalidStringPool(err)),
+        ),
+        ParseError::Utf8Error(err) => InternalCompilerError::TubeFormatError(
+            TubeFormatError::ExprParseErrorNoIo(ParseError::Utf8Error(err)),
+        ),
+    }
 }

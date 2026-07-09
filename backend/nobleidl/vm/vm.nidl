@@ -812,7 +812,7 @@ record record-field-literal {
 }
 
 @esexpr:(derive-codec)
-record register-id {
+record register-id derives eq, hash {
     id: nat;
 }
 

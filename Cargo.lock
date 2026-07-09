@@ -138,6 +138,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "argon-format-vm"
+version = "0.0.0"
+dependencies = [
+ "esexpr",
+ "noble-idl-compiler-rust",
+ "noble-idl-runtime",
+]
+
+[[package]]
 name = "argon-io"
 version = "0.1.0"
 dependencies = [
@@ -145,6 +154,17 @@ dependencies = [
  "embedded-io",
  "esexpr-binary",
  "parse18-runtime",
+]
+
+[[package]]
+name = "argon-opt"
+version = "0.1.0"
+dependencies = [
+ "argon-format-vm",
+ "argon-vm",
+ "esexpr",
+ "num-bigint",
+ "num-traits",
 ]
 
 [[package]]
@@ -179,7 +199,9 @@ version = "0.1.0"
 dependencies = [
  "argon-compiler",
  "argon-format",
+ "argon-format-vm",
  "argon-io",
+ "argon-opt",
  "argon-source",
  "argon-tube",
  "argon-util",
@@ -249,7 +271,9 @@ dependencies = [
  "argon-compiler",
  "argon-expr",
  "argon-format",
+ "argon-format-vm",
  "argon-util",
+ "argon-vm",
  "embedded-io",
  "esexpr",
  "esexpr-binary",
@@ -269,6 +293,13 @@ dependencies = [
  "parse18-runtime",
  "rayon",
  "walkdir",
+]
+
+[[package]]
+name = "argon-vm"
+version = "0.0.0"
+dependencies = [
+ "argon-format-vm",
 ]
 
 [[package]]

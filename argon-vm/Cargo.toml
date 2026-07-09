@@ -1,0 +1,10 @@
+[package]
+name = "argon-vm"
+publish = false
+edition = "2024"
+
+[dependencies]
+argon-format-vm = { workspace = true }
+
+[lints]
+workspace = true
