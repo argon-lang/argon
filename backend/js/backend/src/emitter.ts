@@ -798,7 +798,7 @@ class ModuleEmitter extends EmitterBase {
                 }
 
                 const blockEmitter = new BlockEmitter(this, parentExpr);
-                blockEmitter.emitBlock(impl.body.block);
+                blockEmitter.emitRegion(impl.body.region);
 
                 const block = blockEmitter.toBlock();
                 block.body.unshift(...varStmts);
@@ -1435,15 +1435,38 @@ class BlockEmitter extends EmitterBase {
         return new BlockEmitter(this.moduleEmitter, this.parentExpr);
     }
 
-    private emitNestedBlock(block: ir.Block): estree.BlockStatement {
+    private emitNestedBlock(block: ir.Region): estree.BlockStatement {
         const nestedEmitter = this.nestedBlockEmitter();
-        nestedEmitter.emitBlock(block);
+        nestedEmitter.emitRegion(block);
         return nestedEmitter.toBlock();
     }
 
-    emitBlock(block: ir.Block): void {
-        for(const insn of block.instructions) {
-            this.emitInstruction(insn);
+    emitRegion(region: ir.Region): void {
+        switch(region.$type) {
+            case "basic-block":
+                this.emitBasicBlock(region);
+                break;
+
+            case "block":
+                this.emitBlockRegion(region);
+                break;
+
+            case "sequence":
+                for(const subRegion of region.regions) {
+                    this.emitRegion(subRegion);
+                }
+                break;
+
+            case "if-else":
+                this.emitIfElseRegion(region);
+                break;
+
+            case "finally":
+                this.emitFinallyRegion(region);
+                break;
+
+            default:
+                region satisfies never;
         }
     }
 
@@ -1452,6 +1475,146 @@ class BlockEmitter extends EmitterBase {
             type: "BlockStatement",
             body: this.stmts,
         };
+    }
+
+    private emitBasicBlock(bb: ir.Region & { $type: "basic-block" }): void {
+        for(const insn of bb.instructions) {
+            this.emitInstruction(insn);
+        }
+    }
+
+    private emitBlockRegion(region: ir.Region & { $type: "block" }): void {
+        const body = this.emitNestedBlock(region.region);
+
+        let loopStmt: estree.Statement;
+        if(region.flags.hasRetry || region.flags.isLoop) {
+            if(!region.flags.isLoop) {
+                body.body.push({
+                    type: "BreakStatement",
+                });
+            }
+
+            loopStmt = {
+                type: "ForStatement",
+                init: null,
+                test: null,
+                update: null,
+                body,
+            };
+        }
+        else {
+            loopStmt = body;
+        }
+
+        if(region.flags.hasRetry || region.flags.hasBreak) {
+            const label = this.getLabel(region.blockId);
+
+            loopStmt = {
+                type: "LabeledStatement",
+                label,
+                body: loopStmt,
+            }
+        }
+
+        this.stmts.push(loopStmt);
+    }
+
+    private emitIfElseRegion(region: ir.Region & { $type: "if-else" }): void {
+        const conditionBlock = this.emitNestedBlock(region.condition);
+
+        const whenTrueLabel = this.getLabel(region.whenTrueBlockId);
+        const whenFalseLabel = this.getLabel(region.whenFalseBlockId);
+
+        const condVar: estree.Identifier = {
+            type: "Identifier",
+            name: "cond_" + whenTrueLabel.name,
+        };
+
+        this.stmts.push({
+            type: "VariableDeclaration",
+            kind: "let",
+            declarations: [
+                {
+                    type: "VariableDeclarator",
+                    id: condVar,
+                    init: {
+                        type: "Literal",
+                        value: true,
+                    },
+                },
+            ],
+        });
+
+        if(!(conditionBlock.body.length > 0 && conditionBlock.body[conditionBlock.body.length - 1]!.type === "BreakStatement")) {
+            conditionBlock.body.push({
+                type: "BreakStatement",
+                label: whenTrueLabel,
+            });
+        }
+
+
+        this.stmts.push({
+            type: "LabeledStatement",
+            label: whenTrueLabel,
+            body: {
+                type: "BlockStatement",
+                body: [
+                    {
+                        type: "LabeledStatement",
+                        label: whenFalseLabel,
+                        body: conditionBlock
+                    },
+                    {
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            left: condVar,
+                            operator: "=",
+                            right: {
+                                type: "Literal",
+                                value: false,
+                            },
+                        },
+                    },
+                ],
+            },
+        });
+
+        if(region.whenFalse.$type == "sequence" && region.whenFalse.regions.length === 0) {
+            this.stmts.push({
+                type: "IfStatement",
+                test: condVar,
+                consequent: this.emitNestedBlock(region.whenTrue),
+            });
+        }
+        else if(region.whenTrue.$type == "sequence" && region.whenTrue.regions.length === 0) {
+            this.stmts.push({
+                type: "IfStatement",
+                test: {
+                    type: "UnaryExpression",
+                    prefix: true,
+                    operator: "!",
+                    argument: condVar,
+                },
+                consequent: this.emitNestedBlock(region.whenFalse),
+            });
+        }
+        else {
+            this.stmts.push({
+                type: "IfStatement",
+                test: condVar,
+                consequent: this.emitNestedBlock(region.whenTrue),
+                alternate: this.emitNestedBlock(region.whenFalse),
+            });
+        }
+    }
+
+    private emitFinallyRegion(region: ir.Region & { $type: "finally" }): void {
+        this.stmts.push({
+            type: "TryStatement",
+            block: this.emitNestedBlock(region.action),
+            finalizer: this.emitNestedBlock(region.ensuring),
+        });
     }
 
     private emitInstruction(insn: ir.Instruction): void {
@@ -1525,44 +1688,6 @@ class BlockEmitter extends EmitterBase {
         }
 
         switch(insn.$type) {
-            case "block": {
-                const body = this.emitNestedBlock(insn.body);
-
-                let loopStmt: estree.Statement;
-                if(insn.flags.hasRetry || insn.flags.isLoop) {
-                    if(!insn.flags.isLoop) {
-                        body.body.push({
-                            type: "BreakStatement",
-                        });
-                    }
-
-                    loopStmt = {
-                        type: "ForStatement",
-                        init: null,
-                        test: null,
-                        update: null,
-                        body,
-                    };
-                }
-                else {
-                    loopStmt = body;
-                }
-
-                if(insn.flags.hasRetry || insn.flags.hasBreak) {
-                    const label = this.getLabel(insn.blockId);
-
-                    loopStmt = {
-                        type: "LabeledStatement",
-                        label,
-                        body: loopStmt,
-                    }
-                }
-
-                stmts.push(loopStmt);
-
-                break;
-            }
-
             case "block-break": {
                 const label = this.getLabel(insn.blockId);
 
@@ -1965,16 +2090,6 @@ class BlockEmitter extends EmitterBase {
                 break;
             }
 
-            case "finally":
-            {
-                stmts.push({
-                    type: "TryStatement",
-                    block: this.emitNestedBlock(insn.action),
-                    finalizer: this.emitNestedBlock(insn.ensuring),
-                });
-                break;
-            }
-
             case "function-call":
             {
                 const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
@@ -2036,140 +2151,6 @@ class BlockEmitter extends EmitterBase {
                 };
 
                 functionOutput(insn.dest, callExpr);
-                break;
-            }
-
-            case "if-else": {
-                const conditionBlock = this.emitNestedBlock(insn.condition);
-
-                const whenTrueLabel = this.getLabel(insn.whenTrueBlockId);
-                const whenFalseLabel = this.getLabel(insn.whenFalseBlockId);
-
-                const condVar: estree.Identifier = {
-                    type: "Identifier",
-                    name: "cond_" + whenTrueLabel.name,
-                };
-
-                stmts.push({
-                    type: "VariableDeclaration",
-                    kind: "let",
-                    declarations: [
-                        {
-                            type: "VariableDeclarator",
-                            id: condVar,
-                            init: {
-                                type: "Literal",
-                                value: true,
-                            },
-                        },
-                    ],
-                });
-
-                if(!(conditionBlock.body.length > 0 && conditionBlock.body[conditionBlock.body.length - 1]!.type === "BreakStatement")) {
-                    conditionBlock.body.push({
-                        type: "BreakStatement",
-                        label: whenTrueLabel,
-                    });
-                }
-
-
-                stmts.push({
-                    type: "LabeledStatement",
-                    label: whenTrueLabel,
-                    body: {
-                        type: "BlockStatement",
-                        body: [
-                            {
-                                type: "LabeledStatement",
-                                label: whenFalseLabel,
-                                body: conditionBlock
-                            },
-                            {
-                                type: "ExpressionStatement",
-                                expression: {
-                                    type: "AssignmentExpression",
-                                    left: condVar,
-                                    operator: "=",
-                                    right: {
-                                        type: "Literal",
-                                        value: false,
-                                    },
-                                },
-                            },
-                        ],
-                    },
-                });
-
-                if(
-                    insn.whenTrue.instructions.length === 1 &&
-                    insn.whenFalse.instructions.length === 1
-                ) {
-                    let whenTrueInsn = insn.whenTrue.instructions[0]!;
-                    let whenFalseInsn = insn.whenFalse.instructions[0]!;
-                    if(
-                        whenTrueInsn.$type === "const-bool" &&
-                        whenFalseInsn.$type === "const-bool" &&
-                        whenTrueInsn.dest === whenFalseInsn.dest
-                    ) {
-                        if(whenTrueInsn.value && !whenFalseInsn.value) {
-                            stmts.push({
-                                type: "ExpressionStatement",
-                                expression: {
-                                    type: "AssignmentExpression",
-                                    operator: "=",
-                                    left: this.getReg(whenTrueInsn.dest),
-                                    right: condVar,
-                                },
-                            });
-                            break;
-                        }
-                        else if(!whenTrueInsn.value && whenFalseInsn.value) {
-                            stmts.push({
-                                type: "ExpressionStatement",
-                                expression: {
-                                    type: "AssignmentExpression",
-                                    operator: "=",
-                                    left: this.getReg(whenTrueInsn.dest),
-                                    right: {
-                                        type: "UnaryExpression",
-                                        operator: "!",
-                                        prefix: true,
-                                        argument: condVar,
-                                    },
-                                },
-                            });
-                            break;
-                        }
-                    }
-                }
-
-                if (insn.whenFalse.instructions.length === 0) {
-                    stmts.push({
-                        type: "IfStatement",
-                        test: condVar,
-                        consequent: this.emitNestedBlock(insn.whenTrue),
-                    });
-                }
-                else if (insn.whenTrue.instructions.length === 0) {
-                    stmts.push({
-                        type: "IfStatement",
-                        test: {
-                            type: "UnaryExpression",
-                            prefix: true,
-                            operator: "!",
-                            argument: condVar,
-                        },
-                        consequent: this.emitNestedBlock(insn.whenFalse),
-                    });
-                }
-                else {
-                    stmts.push({
-                        type: "IfStatement",
-                        test: condVar,
-                        consequent: this.emitNestedBlock(insn.whenTrue),
-                        alternate: this.emitNestedBlock(insn.whenFalse),
-                    });
-                }
                 break;
             }
 

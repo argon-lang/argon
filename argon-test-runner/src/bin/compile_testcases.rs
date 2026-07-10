@@ -1,7 +1,7 @@
 use argon_test_runner::cmd::{CommandRunnerPlatform, DirectCommandRunner};
 use argon_test_runner::{
-    workspace::WorkspacePaths, CompileTargetPlatform, JSPlatform, JVMPlatform, TestContext,
-    TestSuiteContext, TestSuiteOptions,
+    CompileTargetPlatform, JSPlatform, JVMPlatform, TestContext, TestSuiteContext,
+    TestSuiteOptions, workspace::WorkspacePaths,
 };
 use argon_testcases::load_test_case;
 use clap::{Parser, ValueEnum};

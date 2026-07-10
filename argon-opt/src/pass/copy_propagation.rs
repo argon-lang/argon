@@ -2,16 +2,17 @@ use argon_format_vm::vm as vf;
 use std::collections::HashMap;
 
 use super::OptimizationPass;
-use crate::analysis::branches::InstructionPointer;
 use crate::analysis::control_path::ControlPathAnalysis;
 use crate::analysis::reaching_defs::ReachingDefinitionsAnalysis;
-use crate::analysis::use_def::{build_use_def, InstructionUseDef};
-use crate::mutator::{instruction_registers_mut, InstructionRegisterType};
+use crate::analysis::use_def::UseDefAnalysis;
+use crate::analysis::{InstructionPointer, RegionPointer};
+use crate::mutator::{InstructionRegisterType, instruction_registers_mut};
 use crate::optimizer::OptimizationState;
-use argon_vm::analysis::{instruction_foreach_mut, instructions};
+use argon_vm::analysis::{basic_blocks, basic_blocks_foreach_mut};
 
 struct CopyDefinition {
     copied_from: vf::RegisterId,
+    copy_basic_block: RegionPointer,
     copy_instruction: InstructionPointer,
     copy_flow_path: ControlPathAnalysis,
 }
@@ -22,107 +23,150 @@ pub struct CopyPropagation;
 pub static COPY_PROPAGATION: CopyPropagation = CopyPropagation;
 
 impl OptimizationPass for CopyPropagation {
+    fn name(&self) -> &'static str {
+        "copy-propagation"
+    }
+
     fn max_iterations(&self) -> Option<usize> {
         None
     }
 
     fn optimize(&self, state: &mut OptimizationState, function: &mut vf::FunctionBody) {
         let mut copy_definitions: HashMap<vf::RegisterId, Vec<CopyDefinition>> = HashMap::new();
-        let use_def = build_use_def(&function.block);
-        let reaching_defs = ReachingDefinitionsAnalysis::analyze(&function.block);
+        let use_def = UseDefAnalysis::analyze(&function.region);
+        let reaching_defs = ReachingDefinitionsAnalysis::analyze(&function.region);
 
-        for instruction in instructions(&function.block) {
-            match instruction {
-                vf::Instruction::Move { dest, src } => {
-                    let flow_path = ControlPathAnalysis::analyze(
-                        &function.block,
-                        instruction as *const vf::Instruction,
-                        true,
-                    );
+        for bb in basic_blocks(&function.region) {
+            let vf::Region::BasicBlock { instructions } = bb else {
+                continue;
+            };
+            let region_pointer = bb as RegionPointer;
 
-                    copy_definitions
-                        .entry((**dest).clone())
-                        .or_default()
-                        .push(CopyDefinition {
-                            copied_from: (**src).clone(),
-                            copy_instruction: instruction as *const vf::Instruction,
-                            copy_flow_path: flow_path,
-                        });
+            for instruction in instructions {
+                match instruction.as_ref() {
+                    vf::Instruction::Move { dest, src } => {
+                        let flow_path = ControlPathAnalysis::analyze(
+                            &function.region,
+                            region_pointer,
+                            instruction.as_ref() as InstructionPointer,
+                            true,
+                        );
+
+                        copy_definitions.entry((**dest).clone()).or_default().push(
+                            CopyDefinition {
+                                copied_from: (**src).clone(),
+                                copy_basic_block: region_pointer,
+                                copy_instruction: instruction.as_ref() as InstructionPointer,
+                                copy_flow_path: flow_path,
+                            },
+                        );
+                    }
+
+                    _ => {}
                 }
-
-                _ => {}
             }
         }
 
-        let mut propagations = HashMap::new();
+        let mut propagations: HashMap<
+            RegionPointer,
+            HashMap<InstructionPointer, HashMap<&vf::RegisterId, &vf::RegisterId>>,
+        > = HashMap::new();
 
-        for instruction in instructions(&function.block) {
-            let Some(instruction_use_def) = use_def.get(&(instruction as *const vf::Instruction))
-            else {
-                return;
+        for bb in basic_blocks(&function.region) {
+            let vf::Region::BasicBlock { instructions } = bb else {
+                continue;
             };
+            let region_pointer = bb as RegionPointer;
 
-            let mut replacements = HashMap::new();
+            for instruction in instructions {
+                let instruction_pointer = instruction.as_ref() as InstructionPointer;
 
-            let mut in_flow_path_cell = None;
+                let instruction_use_def = &use_def.instructions[&instruction_pointer];
 
-            for use_reg in &instruction_use_def.uses {
-                for definition in copy_definitions
-                    .get(use_reg)
-                    .iter()
-                    .flat_map(|definitions| definitions.iter())
-                {
-                    let in_flow_path = in_flow_path_cell.get_or_insert_with(|| {
-                        ControlPathAnalysis::analyze(
-                            &function.block,
-                            instruction as *const vf::Instruction,
-                            false,
-                        )
-                    });
+                let mut replacements: HashMap<
+                    InstructionPointer,
+                    HashMap<&vf::RegisterId, &vf::RegisterId>,
+                > = HashMap::new();
 
-                    if is_safe_propagation(
-                        instruction,
-                        use_reg,
-                        function,
-                        definition,
-                        &use_def,
-                        &reaching_defs,
-                        in_flow_path,
-                    ) {
-                        replacements.insert(use_reg, &definition.copied_from);
+                let mut in_flow_path_cell = None;
+
+                for use_reg in &instruction_use_def.uses {
+                    for definition in copy_definitions
+                        .get(use_reg)
+                        .iter()
+                        .flat_map(|definitions| definitions.iter())
+                    {
+                        let in_flow_path = in_flow_path_cell.get_or_insert_with(|| {
+                            ControlPathAnalysis::analyze(
+                                &function.region,
+                                region_pointer,
+                                instruction_pointer,
+                                false,
+                            )
+                        });
+
+                        if is_safe_propagation(
+                            region_pointer,
+                            instruction,
+                            use_reg,
+                            function,
+                            definition,
+                            &use_def,
+                            &reaching_defs,
+                            in_flow_path,
+                        ) {
+                            replacements
+                                .entry(instruction.as_ref() as InstructionPointer)
+                                .or_default()
+                                .insert(use_reg, &definition.copied_from);
+                        }
                     }
                 }
-            }
 
-            if !replacements.is_empty() {
-                propagations.insert(instruction as *const vf::Instruction, replacements);
+                if !replacements.is_empty() {
+                    propagations.insert(region_pointer, replacements);
+                }
             }
         }
 
         if !propagations.is_empty() {
             state.mark_changed();
 
-            instruction_foreach_mut(&mut function.block, |instruction| {
-                let Some(prop) = propagations.get(&(instruction as *const vf::Instruction)) else {
+            basic_blocks_foreach_mut(&mut function.region, |bb| {
+                let region_pointer = bb as RegionPointer;
+                let vf::Region::BasicBlock { instructions } = bb else {
                     return;
                 };
 
-                instruction_registers_mut(instruction, InstructionRegisterType::Use, |r| {
-                    if let Some(new_reg) = prop.get(r) {
-                        *r = (*new_reg).clone();
-                    }
-                })
+                let Some(bb_propagations) = propagations.get(&region_pointer) else {
+                    return;
+                };
+
+                for instruction in instructions {
+                    let Some(prop) =
+                        bb_propagations.get(&(instruction.as_ref() as InstructionPointer))
+                    else {
+                        continue;
+                    };
+
+                    instruction_registers_mut(instruction, InstructionRegisterType::Use, |r| {
+                        if let Some(new_reg) = prop.get(r) {
+                            *r = (*new_reg).clone();
+                        }
+                    })
+                }
             });
         }
     }
 }
 
 fn is_safe_propagation(
+    instruction_region: RegionPointer,
     instruction: &vf::Instruction,
     use_reg: &vf::RegisterId,
     function: &vf::FunctionBody,
     definition: &CopyDefinition,
-    use_def: &HashMap<InstructionPointer, InstructionUseDef>,
+    use_def: &UseDefAnalysis,
     reaching_defs: &ReachingDefinitionsAnalysis,
     in_flow_path: &ControlPathAnalysis,
 ) -> bool {
@@ -131,24 +175,50 @@ fn is_safe_propagation(
         return false;
     };
 
-    if found_uses.len() != 1 || !found_uses.contains(&(instruction as *const vf::Instruction)) {
+    if found_uses.len() != 1 || !found_uses.contains(&(instruction as InstructionPointer)) {
         return false;
     }
 
-    !instructions(&function.block).any(|insn| {
-        definition
+    !basic_blocks(&function.region).any(|bb| {
+        let vf::Region::BasicBlock { instructions } = bb else {
+            return false;
+        };
+        let bb_region = bb as RegionPointer;
+
+        if (!definition
             .copy_flow_path
-            .reachable
-            .contains(&(insn as *const vf::Instruction))
-            && in_flow_path
-                .reachable
-                .contains(&(insn as *const vf::Instruction))
-            && use_def
-                .get(&(insn as *const vf::Instruction))
-                .is_none_or(|insn_use_def| {
-                    insn_use_def.definitions.contains(use_reg)
-                        || insn_use_def.uses.contains(&definition.copied_from)
-                })
+            .reachable_regions
+            .contains(&bb_region)
+            && bb_region != definition.copy_basic_block)
+            || (!in_flow_path.reachable_regions.contains(&bb_region)
+                && bb_region != instruction_region)
+        {
+            return false;
+        }
+
+        instructions.iter().any(|insn| {
+            let insn_pointer = insn.as_ref() as InstructionPointer;
+
+            (definition
+                .copy_flow_path
+                .reachable_regions
+                .contains(&bb_region)
+                || definition
+                    .copy_flow_path
+                    .current_basic_block_reachable
+                    .contains(&insn_pointer))
+                && (in_flow_path.reachable_regions.contains(&bb_region)
+                    || in_flow_path
+                        .current_basic_block_reachable
+                        .contains(&insn_pointer))
+                && use_def
+                    .instructions
+                    .get(&insn_pointer)
+                    .is_none_or(|insn_use_def| {
+                        insn_use_def.definitions.contains(use_reg)
+                            || insn_use_def.definitions.contains(&definition.copied_from)
+                    })
+        })
     })
 }
 
@@ -162,29 +232,40 @@ mod tests {
             variables: Box::new(vf::VariableDeclarations {
                 variables: vec![declaration(), declaration()],
             }),
-            block: Box::new(vf::Block {
-                instructions: vec![
-                    Box::new(vf::Instruction::ConstInt {
-                        dest: register(0),
-                        value: 1.into(),
-                    }),
-                    Box::new(vf::Instruction::Move {
-                        dest: register(1),
-                        src: register(0),
-                    }),
-                    Box::new(vf::Instruction::Return { src: register(1) }),
-                ],
-            }),
+            region: Box::new(basic_block(vec![
+                Box::new(vf::Instruction::ConstInt {
+                    dest: register(0),
+                    value: 1.into(),
+                }),
+                Box::new(vf::Instruction::Move {
+                    dest: register(1),
+                    src: register(0),
+                }),
+                Box::new(vf::Instruction::Return { src: register(1) }),
+            ])),
         };
         let mut state = OptimizationState::new(&[]);
 
         COPY_PROPAGATION.optimize(&mut state, &mut function);
 
         assert!(state.changed());
-        let vf::Instruction::Return { src } = function.block.instructions[2].as_ref() else {
+        let vf::Instruction::Return { src } =
+            basic_block_instructions(&function.region)[2].as_ref()
+        else {
             unreachable!()
         };
         assert_eq!(src.id, 0_u32.into());
+    }
+
+    fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
+        vf::Region::BasicBlock { instructions }
+    }
+
+    fn basic_block_instructions(region: &vf::Region) -> &[Box<vf::Instruction>] {
+        let vf::Region::BasicBlock { instructions } = region else {
+            unreachable!()
+        };
+        instructions
     }
 
     fn declaration() -> Box<vf::VariableDeclaration> {

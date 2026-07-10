@@ -1,4 +1,5 @@
 use argon_format_vm::vm as vf;
+use argon_vm::analysis::instruction_foreach_mut;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum InstructionRegisterType {
@@ -8,21 +9,13 @@ pub enum InstructionRegisterType {
 }
 
 pub(crate) fn registers_mut(
-    block: &mut vf::Block,
+    region: &mut vf::Region,
     register_type: InstructionRegisterType,
     mut mutate: impl FnMut(&mut vf::RegisterId),
 ) {
-    visit_block(block, register_type, &mut mutate);
-}
-
-fn visit_block(
-    block: &mut vf::Block,
-    register_type: InstructionRegisterType,
-    mutate: &mut impl FnMut(&mut vf::RegisterId),
-) {
-    for instruction in &mut block.instructions {
-        visit_instruction(instruction, register_type, mutate);
-    }
+    instruction_foreach_mut(region, |instruction| {
+        visit_instruction(instruction, register_type, &mut mutate);
+    });
 }
 
 fn visit_instruction(
@@ -31,7 +24,6 @@ fn visit_instruction(
     mutate: &mut impl FnMut(&mut vf::RegisterId),
 ) {
     match instruction {
-        vf::Instruction::Block { body, .. } => visit_block(body, register_type, mutate),
         vf::Instruction::BlockBreak { .. }
         | vf::Instruction::BlockRetry { .. }
         | vf::Instruction::Unreachable {} => {}
@@ -76,10 +68,6 @@ fn visit_instruction(
                 );
             }
         }
-        vf::Instruction::Finally { action, ensuring } => {
-            visit_block(action, register_type, mutate);
-            visit_block(ensuring, register_type, mutate);
-        }
         vf::Instruction::FunctionCall { dest, args, .. } => {
             visit_result(dest, register_type, mutate);
             visit_registers(args, InstructionRegisterType::Use, register_type, mutate);
@@ -107,16 +95,6 @@ fn visit_instruction(
                 register_type,
                 mutate,
             );
-        }
-        vf::Instruction::IfElse {
-            condition,
-            when_true,
-            when_false,
-            ..
-        } => {
-            visit_block(condition, register_type, mutate);
-            visit_block(when_true, register_type, mutate);
-            visit_block(when_false, register_type, mutate);
         }
         vf::Instruction::InstanceMethodCall {
             dest,
@@ -354,6 +332,39 @@ mod tests {
         };
         assert_eq!(dest.id, 101_u32.into());
         assert_eq!(src.id, 12_u32.into());
+    }
+
+    #[test]
+    fn mutates_registers_across_region_basic_blocks() {
+        let mut region = vf::Region::Finally {
+            action: Box::new(basic_block(vec![Box::new(vf::Instruction::Move {
+                dest: register(1),
+                src: register(2),
+            })])),
+            ensuring: Box::new(basic_block(vec![Box::new(vf::Instruction::Return {
+                src: register(3),
+            })])),
+        };
+
+        registers_mut(&mut region, InstructionRegisterType::Use, |register| {
+            register.id += 10_u32;
+        });
+
+        let registers: Vec<_> = argon_vm::analysis::instructions(&region)
+            .flat_map(|instruction| match instruction {
+                vf::Instruction::Move { dest, src } => {
+                    vec![dest.id.clone(), src.id.clone()]
+                }
+                vf::Instruction::Return { src } => vec![src.id.clone()],
+                _ => Vec::new(),
+            })
+            .collect();
+
+        assert_eq!(registers, vec![1_u32.into(), 12_u32.into(), 13_u32.into()]);
+    }
+
+    fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
+        vf::Region::BasicBlock { instructions }
     }
 
     fn register(id: u32) -> Box<vf::RegisterId> {

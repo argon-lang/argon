@@ -38,6 +38,7 @@ path = "src/bin/compiler_tests_dist_jvm.rs"
 
 [dependencies]
 argon-io = { workspace = true }
+argon-opt = { workspace = true }
 argon-runner = { workspace = true }
 argon-testcases = { workspace = true }
 argon-util = { workspace = true }

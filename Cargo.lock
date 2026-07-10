@@ -240,6 +240,7 @@ name = "argon-test-runner"
 version = "0.0.0"
 dependencies = [
  "argon-io",
+ "argon-opt",
  "argon-runner",
  "argon-testcases",
  "argon-util",

@@ -4,7 +4,7 @@ use argon_format_vm::vm as vf;
 use num_bigint::BigUint;
 
 use super::OptimizationPass;
-use crate::mutator::{registers_mut, InstructionRegisterType};
+use crate::mutator::{InstructionRegisterType, registers_mut};
 use crate::optimizer::OptimizationState;
 
 #[derive(Debug, Default)]
@@ -13,6 +13,10 @@ pub struct UnusedRegisterElimination;
 pub static UNUSED_REGISTER_ELIMINATION: UnusedRegisterElimination = UnusedRegisterElimination;
 
 impl OptimizationPass for UnusedRegisterElimination {
+    fn name(&self) -> &'static str {
+        "unused-register-elimination"
+    }
+
     fn max_iterations(&self) -> Option<usize> {
         None
     }
@@ -20,7 +24,7 @@ impl OptimizationPass for UnusedRegisterElimination {
     fn optimize(&self, state: &mut OptimizationState, function: &mut vf::FunctionBody) {
         let mut referenced_registers = HashSet::new();
         registers_mut(
-            &mut function.block,
+            &mut function.region,
             InstructionRegisterType::Both,
             |register| {
                 referenced_registers.insert(register.id.clone());
@@ -48,7 +52,7 @@ impl OptimizationPass for UnusedRegisterElimination {
 
         if !replacements.is_empty() {
             registers_mut(
-                &mut function.block,
+                &mut function.region,
                 InstructionRegisterType::Both,
                 |register| {
                     if let Some(replacement) = replacements.get(&register.id) {
@@ -70,13 +74,11 @@ mod tests {
             variables: Box::new(vf::VariableDeclarations {
                 variables: vec![declaration(), declaration(), declaration()],
             }),
-            block: Box::new(vf::Block {
-                instructions: vec![
-                    constant(0),
-                    constant(2),
-                    Box::new(vf::Instruction::Return { src: register(2) }),
-                ],
-            }),
+            region: Box::new(basic_block(vec![
+                constant(0),
+                constant(2),
+                Box::new(vf::Instruction::Return { src: register(2) }),
+            ])),
         };
         let mut state = OptimizationState::new(&[]);
 
@@ -84,11 +86,14 @@ mod tests {
 
         assert!(state.changed());
         assert_eq!(function.variables.variables.len(), 2);
-        let vf::Instruction::ConstInt { dest, .. } = &*function.block.instructions[1] else {
+        let vf::Instruction::ConstInt { dest, .. } =
+            &*basic_block_instructions(&function.region)[1]
+        else {
             unreachable!()
         };
         assert_eq!(dest.id, 1_u32.into());
-        let vf::Instruction::Return { src } = &*function.block.instructions[2] else {
+        let vf::Instruction::Return { src } = &*basic_block_instructions(&function.region)[2]
+        else {
             unreachable!()
         };
         assert_eq!(src.id, 1_u32.into());
@@ -100,15 +105,13 @@ mod tests {
             variables: Box::new(vf::VariableDeclarations {
                 variables: vec![declaration()],
             }),
-            block: Box::new(vf::Block {
-                instructions: vec![
-                    Box::new(vf::Instruction::ConstInt {
-                        dest: register(2),
-                        value: 1.into(),
-                    }),
-                    Box::new(vf::Instruction::Return { src: register(2) }),
-                ],
-            }),
+            region: Box::new(basic_block(vec![
+                Box::new(vf::Instruction::ConstInt {
+                    dest: register(2),
+                    value: 1.into(),
+                }),
+                Box::new(vf::Instruction::Return { src: register(2) }),
+            ])),
         };
         let mut state = OptimizationState::new(&[vf::Token::Boxed {}, vf::Token::Boxed {}]);
 
@@ -116,10 +119,23 @@ mod tests {
 
         assert!(!state.changed());
         assert_eq!(function.variables.variables.len(), 1);
-        let vf::Instruction::ConstInt { dest, .. } = &*function.block.instructions[0] else {
+        let vf::Instruction::ConstInt { dest, .. } =
+            &*basic_block_instructions(&function.region)[0]
+        else {
             unreachable!()
         };
         assert_eq!(dest.id, 2_u32.into());
+    }
+
+    fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
+        vf::Region::BasicBlock { instructions }
+    }
+
+    fn basic_block_instructions(region: &vf::Region) -> &[Box<vf::Instruction>] {
+        let vf::Region::BasicBlock { instructions } = region else {
+            unreachable!()
+        };
+        instructions
     }
 
     fn declaration() -> Box<vf::VariableDeclaration> {

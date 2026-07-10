@@ -1,264 +1,195 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use argon_format_vm::vm as vf;
 
-use super::branches::{BranchAnalysis, InstructionPointer};
+use super::RegionPointer;
+use super::branches::BranchAnalysis;
 
 #[derive(Debug, Default)]
-pub struct InstructionFlow {
-    pub predecessors: HashSet<InstructionPointer>,
-    pub successors: HashSet<InstructionPointer>,
+pub struct RegionFlow {
+    pub predecessors: HashSet<RegionPointer>,
+    pub successors: HashSet<RegionPointer>,
 }
 
 #[derive(Debug, Default)]
 pub struct ControlFlowAnalysis {
-    pub instructions: HashMap<InstructionPointer, InstructionFlow>,
+    pub regions: HashMap<RegionPointer, RegionFlow>,
 }
 
 impl ControlFlowAnalysis {
-    pub fn analyze(block: &vf::Block) -> Self {
-        let branches = BranchAnalysis::analyze(block);
+    pub fn analyze(region: &vf::Region) -> Self {
+        let branches = BranchAnalysis::analyze(region);
         let mut analysis = Self::default();
-        analysis.scan_block(block, &HashSet::new(), &HashSet::new(), &branches);
+        analysis.scan_region(region, &HashSet::new(), &HashSet::new(), &branches);
         analysis
     }
 
-    fn scan_block(
+    fn scan_region(
         &mut self,
-        block: &vf::Block,
-        continuation: &HashSet<InstructionPointer>,
-        always_reachable: &HashSet<InstructionPointer>,
+        region: &vf::Region,
+        incoming: &HashSet<RegionPointer>,
+        always_predecessor_to: &HashSet<RegionPointer>,
         branches: &BranchAnalysis,
-    ) {
-        for (index, instruction) in block.instructions.iter().enumerate() {
-            let next = block
-                .instructions
-                .get(index + 1)
-                .map_or_else(|| continuation.clone(), |next| pointers([next.as_ref()]));
+    ) -> HashSet<RegionPointer> {
+        match region {
+            vf::Region::BasicBlock { .. } => {
+                let region_pointer = region as RegionPointer;
+                self.regions.entry(region_pointer).or_default();
 
-            self.scan_instruction(instruction, &next, always_reachable, branches);
-        }
-    }
+                for incoming_region in incoming {
+                    self.add_edge(*incoming_region, region_pointer);
+                }
 
-    fn scan_instruction(
-        &mut self,
-        instruction: &vf::Instruction,
-        next: &HashSet<InstructionPointer>,
-        always_reachable: &HashSet<InstructionPointer>,
-        branches: &BranchAnalysis,
-    ) {
-        let instruction_pointer = instruction as InstructionPointer;
-        self.instructions.entry(instruction_pointer).or_default();
-        self.add_edges(instruction_pointer, always_reachable);
+                for other in always_predecessor_to {
+                    self.add_edge(region_pointer, *other);
+                }
 
-        match instruction {
-            vf::Instruction::Block {
-                block_id,
-                flags,
-                body,
-            } => {
-                let body_start = first_instruction(body);
-                self.add_edges(
-                    instruction_pointer,
-                    body_start.as_ref().map_or(next, |start| start),
-                );
-                let body_continuation = if flags.is_loop {
-                    body_start
-                        .as_ref()
-                        .map_or_else(|| next.clone(), Clone::clone)
+                if branches.always_branches.contains(&region_pointer) {
+                    HashSet::new()
                 } else {
-                    next.clone()
-                };
-                self.scan_block(body, &body_continuation, always_reachable, branches);
-
-                if let Some(block_branches) = branches.blocks.get(&block_id.id) {
-                    self.add_branch_edges(&block_branches.breaks, next);
-                    if let Some(body_start) = body_start {
-                        self.add_branch_edges(&block_branches.retries, &body_start);
-                    }
+                    HashSet::from([region_pointer])
                 }
             }
-
-            vf::Instruction::Finally { action, ensuring } => {
-                let ensuring_start = first_instruction(ensuring);
-                let action_continuation = ensuring_start.as_ref().map_or(next, |start| start);
-                let action_start = first_instruction(action);
-                let action_always_reachable = always_reachable
-                    .iter()
-                    .chain(ensuring_start.iter().flatten())
-                    .copied()
-                    .collect();
-
-                self.add_edges(
-                    instruction_pointer,
-                    action_start
-                        .as_ref()
-                        .map_or(action_continuation, |start| start),
-                );
-                self.scan_block(
-                    action,
-                    action_continuation,
-                    &action_always_reachable,
-                    branches,
-                );
-                self.scan_block(ensuring, next, always_reachable, branches);
+            vf::Region::Sequence { regions } => {
+                let mut current_blocks = incoming.clone();
+                for region in regions {
+                    current_blocks =
+                        self.scan_region(region, &current_blocks, always_predecessor_to, branches);
+                }
+                current_blocks
             }
+            vf::Region::Block {
+                block_id,
+                flags,
+                region,
+            } => {
+                let mut current_blocks =
+                    self.scan_region(region, incoming, always_predecessor_to, branches);
 
-            vf::Instruction::IfElse {
+                if flags.is_loop {
+                    self.scan_region(region, &current_blocks, always_predecessor_to, branches);
+                    current_blocks.clear();
+                }
+
+                if let Some(block_branches) = branches.blocks.get(&block_id) {
+                    self.scan_region(
+                        region,
+                        &block_branches.retries,
+                        always_predecessor_to,
+                        branches,
+                    );
+                    current_blocks.extend(&block_branches.breaks);
+                }
+
+                current_blocks
+            }
+            vf::Region::IfElse {
                 when_true_block_id,
                 when_false_block_id,
                 condition,
                 when_true,
                 when_false,
             } => {
-                let when_true_start = first_instruction(when_true);
-                let when_false_start = first_instruction(when_false);
-                let condition_continuation = when_true_start
-                    .as_ref()
-                    .unwrap_or(next)
-                    .iter()
-                    .chain(when_false_start.as_ref().unwrap_or(next))
-                    .copied()
-                    .collect();
-                let condition_start = first_instruction(condition);
+                let mut entering_true_body =
+                    self.scan_region(condition, incoming, always_predecessor_to, branches);
 
-                self.add_edges(
-                    instruction_pointer,
-                    condition_start
-                        .as_ref()
-                        .map_or(&condition_continuation, |start| start),
-                );
-                self.scan_block(
-                    condition,
-                    &condition_continuation,
-                    always_reachable,
-                    branches,
-                );
-                self.scan_block(when_true, next, always_reachable, branches);
-                self.scan_block(when_false, next, always_reachable, branches);
+                if let Some(block_branches) = branches.blocks.get(&when_true_block_id) {
+                    entering_true_body.extend(&block_branches.breaks);
+                }
 
-                self.add_block_branches(
+                let mut exiting = self.scan_region(
+                    when_true,
+                    &entering_true_body,
+                    always_predecessor_to,
                     branches,
-                    &when_true_block_id.id,
-                    when_true_start.as_ref(),
-                    next,
                 );
-                self.add_block_branches(
+
+                let entering_false_body =
+                    if let Some(block_branches) = branches.blocks.get(&when_false_block_id) {
+                        Cow::Borrowed(&block_branches.breaks)
+                    } else {
+                        Cow::Owned(HashSet::new())
+                    };
+
+                let exiting_false = self.scan_region(
+                    when_false,
+                    &entering_false_body,
+                    always_predecessor_to,
                     branches,
-                    &when_false_block_id.id,
-                    when_false_start.as_ref(),
-                    next,
                 );
+
+                exiting.extend(exiting_false);
+
+                exiting
             }
+            vf::Region::Finally { action, ensuring } => {
+                let mut always_predecessor_to = always_predecessor_to.clone();
+                always_predecessor_to.insert(ensuring.as_ref() as RegionPointer);
 
-            vf::Instruction::BlockBreak { .. }
-            | vf::Instruction::BlockRetry { .. }
-            | vf::Instruction::Raise { .. }
-            | vf::Instruction::Return { .. }
-            | vf::Instruction::Unreachable {} => {}
-
-            _ => self.add_edges(instruction_pointer, next),
-        }
-    }
-
-    fn add_block_branches(
-        &mut self,
-        branches: &BranchAnalysis,
-        block_id: &num_bigint::BigUint,
-        block_start: Option<&HashSet<InstructionPointer>>,
-        continuation: &HashSet<InstructionPointer>,
-    ) {
-        if let Some(block_branches) = branches.blocks.get(block_id) {
-            self.add_branch_edges(&block_branches.breaks, continuation);
-            if let Some(block_start) = block_start {
-                self.add_branch_edges(&block_branches.retries, block_start);
+                self.scan_region(action, incoming, &always_predecessor_to, branches);
+                self.scan_region(ensuring, incoming, &always_predecessor_to, branches)
             }
         }
     }
 
-    fn add_branch_edges(
-        &mut self,
-        sources: &HashSet<InstructionPointer>,
-        targets: &HashSet<InstructionPointer>,
-    ) {
-        for &source in sources {
-            self.add_edges(source, targets);
-        }
+    fn add_edge(&mut self, source: RegionPointer, target: RegionPointer) {
+        self.regions
+            .entry(source)
+            .or_default()
+            .successors
+            .insert(target);
+        self.regions
+            .entry(target)
+            .or_default()
+            .predecessors
+            .insert(source);
     }
-
-    fn add_edges(&mut self, source: InstructionPointer, targets: &HashSet<InstructionPointer>) {
-        for &target in targets {
-            self.instructions
-                .entry(source)
-                .or_default()
-                .successors
-                .insert(target);
-            self.instructions
-                .entry(target)
-                .or_default()
-                .predecessors
-                .insert(source);
-        }
-    }
-}
-
-fn first_instruction(block: &vf::Block) -> Option<HashSet<InstructionPointer>> {
-    block
-        .instructions
-        .first()
-        .map(|instruction| pointers([instruction.as_ref()]))
-}
-
-fn pointers<'a>(
-    instructions: impl IntoIterator<Item = &'a vf::Instruction>,
-) -> HashSet<InstructionPointer> {
-    instructions
-        .into_iter()
-        .map(|instruction| instruction as InstructionPointer)
-        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use argon_vm::analysis::basic_blocks;
 
     #[test]
-    fn finally_is_reachable_from_every_action_instruction() {
-        let block = vf::Block {
-            instructions: vec![Box::new(vf::Instruction::Finally {
-                action: Box::new(vf::Block {
-                    instructions: vec![
-                        Box::new(vf::Instruction::ConstInt {
-                            dest: register(0),
-                            value: 1.into(),
-                        }),
-                        Box::new(vf::Instruction::Return { src: register(0) }),
-                    ]
-                    .into(),
-                }),
-                ensuring: Box::new(vf::Block {
-                    instructions: vec![Box::new(vf::Instruction::ConstInt {
-                        dest: register(1),
-                        value: 2.into(),
-                    })]
-                    .into(),
-                }),
-            })]
-            .into(),
+    fn finally_is_reachable_from_every_action_basic_block() {
+        let region = vf::Region::Finally {
+            action: Box::new(vf::Region::Sequence {
+                regions: vec![
+                    Box::new(basic_block(vec![Box::new(vf::Instruction::ConstInt {
+                        dest: register(0),
+                        value: 1.into(),
+                    })])),
+                    Box::new(basic_block(vec![Box::new(vf::Instruction::Return {
+                        src: register(0),
+                    })])),
+                ],
+            }),
+            ensuring: Box::new(basic_block(vec![Box::new(vf::Instruction::ConstInt {
+                dest: register(1),
+                value: 2.into(),
+            })])),
         };
-        let vf::Instruction::Finally { action, ensuring } = block.instructions[0].as_ref() else {
+        let vf::Region::Finally { action, ensuring } = &region else {
             unreachable!()
         };
-        let ensuring_pointer = ensuring.instructions[0].as_ref() as InstructionPointer;
+        let ensuring_pointer = ensuring.as_ref() as RegionPointer;
 
-        let analysis = ControlFlowAnalysis::analyze(&block);
+        let analysis = ControlFlowAnalysis::analyze(&region);
 
-        for instruction in &action.instructions {
-            let instruction_pointer = instruction.as_ref() as InstructionPointer;
-            assert!(analysis.instructions[&instruction_pointer]
-                .successors
-                .contains(&ensuring_pointer));
+        for action_basic_block in basic_blocks(action) {
+            let action_pointer = action_basic_block as RegionPointer;
+            assert!(
+                analysis.regions[&action_pointer]
+                    .successors
+                    .contains(&ensuring_pointer)
+            );
         }
+    }
+
+    fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
+        vf::Region::BasicBlock { instructions }
     }
 
     fn register(id: u32) -> Box<vf::RegisterId> {

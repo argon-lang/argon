@@ -273,7 +273,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))))
+				basicBlock(List.of(new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))))
 			)
 		);
 		var modules = List.of(new ProgramModel.ModuleModel(
@@ -418,7 +418,7 @@ final class EmitterTest {
 			signature,
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.Return(parameterRegister)))
+				basicBlock(List.of(new Instruction.Return(parameterRegister)))
 			)
 		);
 		var caller = functionDefinition(
@@ -427,7 +427,7 @@ final class EmitterTest {
 			signature,
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(intType))),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.FunctionCall(
 						UnsignedBigInteger.ZERO,
 						new FunctionResult.Register(resultRegister),
@@ -503,7 +503,7 @@ final class EmitterTest {
 			signature,
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.Return(parameterRegister)))
+				basicBlock(List.of(new Instruction.Return(parameterRegister)))
 			)
 		);
 		var caller = functionDefinition(
@@ -512,7 +512,7 @@ final class EmitterTest {
 			signature,
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.FunctionCall(
+				basicBlock(List.of(new Instruction.FunctionCall(
 					UnsignedBigInteger.ZERO,
 					new FunctionResult.ReturnValue(),
 					List.of(),
@@ -601,7 +601,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(intType))),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.FunctionObjectCall(
 						new FunctionResult.Register(resultRegister),
 						functionRegister,
@@ -650,7 +650,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(intType))),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.FunctionObjectTokenCall(
 						new FunctionResult.Register(resultRegister),
 						functionRegister,
@@ -690,7 +690,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.FunctionObjectErasedCall(
+				basicBlock(List.of(new Instruction.FunctionObjectErasedCall(
 					new FunctionResult.ReturnValue(),
 					functionRegister
 				)))
@@ -739,7 +739,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))))
+				basicBlock(List.of(new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))))
 			)
 		);
 		var tokenFunction = functionDefinition(
@@ -755,7 +755,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(intType))),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.ConstInt(new RegisterId(UnsignedBigInteger.ZERO), java.math.BigInteger.ONE),
 					new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))
 				))
@@ -771,7 +771,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(intType))),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.ConstInt(new RegisterId(UnsignedBigInteger.ZERO), java.math.BigInteger.TWO),
 					new Instruction.Return(new RegisterId(UnsignedBigInteger.ZERO))
 				))
@@ -792,7 +792,7 @@ final class EmitterTest {
 					new VariableDeclaration(new Token.FunctionErased(intType)),
 					new VariableDeclaration(intType)
 				)),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.PartiallyAppliedFunction(
 						UnsignedBigInteger.ZERO,
 						new RegisterId(UnsignedBigInteger.ZERO),
@@ -897,15 +897,15 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(boolType))),
-				new Block(List.of(
-					new Instruction.IfElse(
+				new Region.Sequence(List.of(
+					new Region.IfElse(
 						whenTrueBlockId,
 						whenFalseBlockId,
-						new Block(List.of(new Instruction.BlockBreakUnless(whenFalseBlockId, conditionRegister))),
-						new Block(List.of(new Instruction.ConstBool(resultRegister, true))),
-						new Block(List.of(new Instruction.ConstBool(resultRegister, false)))
+						basicBlock(List.of(new Instruction.BlockBreakUnless(whenFalseBlockId, conditionRegister))),
+						basicBlock(List.of(new Instruction.ConstBool(resultRegister, true))),
+						basicBlock(List.of(new Instruction.ConstBool(resultRegister, false)))
 					),
-					new Instruction.Return(resultRegister)
+					basicBlock(List.of(new Instruction.Return(resultRegister)))
 				))
 			)
 		);
@@ -940,19 +940,19 @@ final class EmitterTest {
 					new VariableDeclaration(boolType),
 					new VariableDeclaration(boolType)
 				)),
-				new Block(List.of(new Instruction.IfElse(
+				new Region.IfElse(
 					whenTrueBlockId,
 					whenFalseBlockId,
-					new Block(List.of(new Instruction.BlockBreakUnless(whenFalseBlockId, conditionRegister))),
-					new Block(List.of(
+					basicBlock(List.of(new Instruction.BlockBreakUnless(whenFalseBlockId, conditionRegister))),
+					basicBlock(List.of(
 						new Instruction.ConstBool(new RegisterId(UnsignedBigInteger.ONE), true),
 						new Instruction.Return(new RegisterId(UnsignedBigInteger.ONE))
 					)),
-					new Block(List.of(
+					basicBlock(List.of(
 						new Instruction.ConstBool(new RegisterId(UnsignedBigInteger.valueOf(2)), false),
 						new Instruction.Return(new RegisterId(UnsignedBigInteger.valueOf(2)))
 					))
-				)))
+				)
 			)
 		);
 
@@ -986,7 +986,7 @@ final class EmitterTest {
 					new VariableDeclaration(new Token.RefCell(intType)),
 					new VariableDeclaration(intType)
 				)),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.NewReference(refRegister, valueRegister),
 					new Instruction.LoadReference(loadedRegister, refRegister),
 					new Instruction.UpdateReference(refRegister, valueRegister),
@@ -1037,7 +1037,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of(new VariableDeclaration(boolType))),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.Unbox(resultRegister, boolType, boxedRegister),
 					new Instruction.Return(resultRegister)
 				))
@@ -1072,7 +1072,7 @@ final class EmitterTest {
 			),
 			new FunctionBody(
 				new VariableDeclarations(List.of()),
-				new Block(List.of(new Instruction.Raise(exceptionRegister)))
+				basicBlock(List.of(new Instruction.Raise(exceptionRegister)))
 			)
 		);
 
@@ -1141,7 +1141,7 @@ final class EmitterTest {
 					new VariableDeclaration(recordType),
 					new VariableDeclaration(boolType)
 				)),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.RecordLiteral(
 						recordRegister,
 						recordType,
@@ -1373,6 +1373,7 @@ final class EmitterTest {
 		var valueRegister = new RegisterId(UnsignedBigInteger.valueOf(2));
 		var argRegister = new RegisterId(UnsignedBigInteger.valueOf(3));
 		var fieldRegister = new RegisterId(UnsignedBigInteger.valueOf(4));
+		var tokenArgRegister = new RegisterId(UnsignedBigInteger.valueOf(5));
 		var blockId = new BlockId(UnsignedBigInteger.ZERO);
 		var caller = functionDefinition(
 			0,
@@ -1389,34 +1390,39 @@ final class EmitterTest {
 				new VariableDeclarations(List.of(
 					new VariableDeclaration(enumType),
 					new VariableDeclaration(intType),
-					new VariableDeclaration(boolType)
+					new VariableDeclaration(boolType),
+					new VariableDeclaration(new Token.Boxed())
 				)),
-				new Block(List.of(
-					new Instruction.EnumVariantLiteral(
-						valueRegister,
-						enumType,
-						UnsignedBigInteger.ZERO,
-						List.of(new Token.TokenParameter(UnsignedBigInteger.ZERO)),
-						List.of(countRegister),
-						List.of(new RecordFieldLiteral(UnsignedBigInteger.ZERO, activeRegister))
-					),
-					new Instruction.Block(
+				new Region.Sequence(List.of(
+					basicBlock(List.of(
+						new Instruction.EnumVariantLiteral(
+							valueRegister,
+							enumType,
+							UnsignedBigInteger.ZERO,
+							List.of(new Token.TokenParameter(UnsignedBigInteger.ZERO)),
+							List.of(countRegister),
+							List.of(new RecordFieldLiteral(UnsignedBigInteger.ZERO, activeRegister))
+						)
+					)),
+					new Region.Block(
 						blockId,
 						new BlockFlags(true, false, false),
-						new Block(List.of(
+						basicBlock(List.of(
 							new Instruction.IsEnumVariantOrBreak(
 								blockId,
 								enumType,
 								UnsignedBigInteger.ZERO,
 								valueRegister,
-								List.of(argRegister),
+								List.of(tokenArgRegister, argRegister),
 								List.of(new FieldExtractor(fieldRegister, UnsignedBigInteger.ZERO))
 							),
 							new Instruction.Return(fieldRegister)
 						))
 					),
-					new Instruction.ConstBool(fieldRegister, false),
-					new Instruction.Return(fieldRegister)
+					basicBlock(List.of(
+						new Instruction.ConstBool(fieldRegister, false),
+						new Instruction.Return(fieldRegister)
+					))
 				))
 			)
 		);
@@ -1569,7 +1575,7 @@ final class EmitterTest {
 					),
 					Optional.of(new FunctionImplementation.VmIr(new FunctionBody(
 						new VariableDeclarations(List.of(new VariableDeclaration(new Token.Builtin(new BuiltinType.Int())))),
-						new Block(List.of(
+						basicBlock(List.of(
 							new Instruction.FunctionObjectTokenCall(
 								new FunctionResult.Discard(),
 								new RegisterId(UnsignedBigInteger.ONE),
@@ -1707,7 +1713,7 @@ final class EmitterTest {
 				),
 				Optional.of(new FunctionImplementation.VmIr(new FunctionBody(
 					new VariableDeclarations(List.of(new VariableDeclaration(intType))),
-					new Block(List.of(
+					basicBlock(List.of(
 						new Instruction.FunctionObjectTokenCall(
 							new FunctionResult.Discard(),
 							new RegisterId(UnsignedBigInteger.ONE),
@@ -1760,7 +1766,7 @@ final class EmitterTest {
 					new VariableDeclaration(instanceType),
 					new VariableDeclaration(intType)
 				)),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.NewInstance(
 						UnsignedBigInteger.ZERO,
 						instanceRegister,
@@ -2012,7 +2018,7 @@ final class EmitterTest {
 					new VariableDeclaration(tupleType),
 					new VariableDeclaration(boolType)
 				)),
-				new Block(List.of(
+				basicBlock(List.of(
 					new Instruction.Tuple(tupleRegister, List.of(countRegister, flagRegister)),
 					new Instruction.TupleElement(UnsignedBigInteger.ONE, resultRegister, tupleRegister),
 					new Instruction.Return(resultRegister)
@@ -2177,6 +2183,10 @@ final class EmitterTest {
 			signature,
 			Optional.of(new FunctionImplementation.VmIr(body))
 		);
+	}
+
+	private static Region basicBlock(List<Instruction> instructions) {
+		return new Region.BasicBlock(instructions);
 	}
 
 	private record SourceFile(String relativePath, String contents) {
@@ -2461,6 +2471,7 @@ final class EmitterTest {
 								return new EnumVariantInfo(
 									definition.enumId(),
 									variant.name(),
+									variant.signature(),
 									variantName,
 									variantClassDesc,
 									new RecordBuilderInfo(

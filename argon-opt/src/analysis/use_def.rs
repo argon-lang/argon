@@ -1,63 +1,79 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use argon_format_vm::vm as vf;
 
-use super::branches::InstructionPointer;
+use super::{InstructionPointer, RegionPointer, VariableSet};
 
-pub type VariableSet = HashSet<vf::RegisterId>;
+pub struct UseDefAnalysis {
+    pub basic_blocks: HashMap<RegionPointer, UseDef>,
+    pub instructions: HashMap<InstructionPointer, UseDef>,
+}
 
-#[derive(Debug, Default)]
-pub struct InstructionUseDef {
+#[derive(Debug, Default, Clone)]
+pub struct UseDef {
     pub uses: VariableSet,
     pub definitions: VariableSet,
 }
 
-pub fn build_use_def(block: &vf::Block) -> HashMap<InstructionPointer, InstructionUseDef> {
-    let mut result = HashMap::new();
-    collect_use_def(block, &mut result);
-    result
-}
+impl UseDefAnalysis {
+    pub fn analyze(region: &vf::Region) -> Self {
+        let mut result = Self {
+            basic_blocks: HashMap::new(),
+            instructions: HashMap::new(),
+        };
+        result.scan_region(region);
+        result
+    }
 
-pub(crate) fn collect_use_def(
-    block: &vf::Block,
-    result: &mut HashMap<InstructionPointer, InstructionUseDef>,
-) {
-    for instruction in &block.instructions {
-        result.insert(
-            instruction.as_ref() as InstructionPointer,
-            instruction_use_def(instruction),
-        );
-        match instruction.as_ref() {
-            vf::Instruction::Block { body, .. } => collect_use_def(body, result),
-            vf::Instruction::Finally { action, ensuring } => {
-                collect_use_def(action, result);
-                collect_use_def(ensuring, result);
+    pub fn scan_region(&mut self, region: &vf::Region) {
+        match region {
+            vf::Region::BasicBlock { instructions } => {
+                let mut basic_block_usedef = UseDef::default();
+                for instruction in instructions {
+                    let usedef = instruction_use_def(instruction);
+                    basic_block_usedef
+                        .definitions
+                        .extend(usedef.definitions.iter().cloned());
+                    basic_block_usedef.uses.extend(usedef.uses.iter().cloned());
+                    self.instructions
+                        .insert(instruction.as_ref() as InstructionPointer, usedef);
+                }
+                self.basic_blocks
+                    .insert(region as RegionPointer, basic_block_usedef);
             }
-            vf::Instruction::IfElse {
+            vf::Region::Sequence { regions } => {
+                for region in regions {
+                    self.scan_region(region);
+                }
+            }
+            vf::Region::Block { region, .. } => {
+                self.scan_region(region);
+            }
+            vf::Region::IfElse {
                 condition,
                 when_true,
                 when_false,
                 ..
             } => {
-                collect_use_def(condition, result);
-                collect_use_def(when_true, result);
-                collect_use_def(when_false, result);
+                self.scan_region(condition);
+                self.scan_region(when_true);
+                self.scan_region(when_false);
             }
-            _ => {}
+            vf::Region::Finally { action, ensuring } => {
+                self.scan_region(action);
+                self.scan_region(ensuring);
+            }
         }
     }
 }
 
-fn instruction_use_def(instruction: &vf::Instruction) -> InstructionUseDef {
+fn instruction_use_def(instruction: &vf::Instruction) -> UseDef {
     let mut uses = VariableSet::new();
     let mut definitions = VariableSet::new();
 
     match instruction {
-        vf::Instruction::Block { .. }
-        | vf::Instruction::BlockBreak { .. }
+        vf::Instruction::BlockBreak { .. }
         | vf::Instruction::BlockRetry { .. }
-        | vf::Instruction::Finally { .. }
-        | vf::Instruction::IfElse { .. }
         | vf::Instruction::Unreachable {} => {}
 
         vf::Instruction::BlockBreakIf { condition, .. }
@@ -196,7 +212,7 @@ fn instruction_use_def(instruction: &vf::Instruction) -> InstructionUseDef {
         }
     }
 
-    InstructionUseDef { uses, definitions }
+    UseDef { uses, definitions }
 }
 
 fn builtin_use_def(op: &vf::BuiltinOp, uses: &mut VariableSet, definitions: &mut VariableSet) {
@@ -287,34 +303,46 @@ mod tests {
 
     #[test]
     fn computes_instruction_uses_and_definitions() {
-        let block = vf::Block {
-            instructions: vec![
-                Box::new(vf::Instruction::ConstInt {
-                    dest: register(0),
-                    value: 1.into(),
-                }),
-                Box::new(vf::Instruction::Move {
-                    dest: register(1),
-                    src: register(0),
-                }),
-                Box::new(vf::Instruction::Return { src: register(1) }),
-            ]
-            .into(),
+        let region = basic_block(vec![
+            Box::new(vf::Instruction::ConstInt {
+                dest: register(0),
+                value: 1.into(),
+            }),
+            Box::new(vf::Instruction::Move {
+                dest: register(1),
+                src: register(0),
+            }),
+            Box::new(vf::Instruction::Return { src: register(1) }),
+        ]);
+        let vf::Region::BasicBlock { instructions } = &region else {
+            unreachable!()
         };
-        let pointers = block
-            .instructions
+        let pointers = instructions
             .iter()
             .map(|instruction| instruction.as_ref() as InstructionPointer)
             .collect::<Vec<_>>();
 
-        let analysis = build_use_def(&block);
+        let analysis = UseDefAnalysis::analyze(&region);
 
-        assert_eq!(analysis[&pointers[0]].uses, variables([]));
-        assert_eq!(analysis[&pointers[0]].definitions, variables([0]));
-        assert_eq!(analysis[&pointers[1]].uses, variables([0]));
-        assert_eq!(analysis[&pointers[1]].definitions, variables([1]));
-        assert_eq!(analysis[&pointers[2]].uses, variables([1]));
-        assert_eq!(analysis[&pointers[2]].definitions, variables([]));
+        assert_eq!(analysis.instructions[&pointers[0]].uses, variables([]));
+        assert_eq!(
+            analysis.instructions[&pointers[0]].definitions,
+            variables([0])
+        );
+        assert_eq!(analysis.instructions[&pointers[1]].uses, variables([0]));
+        assert_eq!(
+            analysis.instructions[&pointers[1]].definitions,
+            variables([1])
+        );
+        assert_eq!(analysis.instructions[&pointers[2]].uses, variables([1]));
+        assert_eq!(
+            analysis.instructions[&pointers[2]].definitions,
+            variables([])
+        );
+    }
+
+    fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
+        vf::Region::BasicBlock { instructions }
     }
 
     fn register(id: u32) -> Box<vf::RegisterId> {

@@ -472,7 +472,7 @@ final class Emitter {
 					registerKinds,
 					returnKind
 				);
-				blockEmitter.emitBlock(ir.body().block());
+				blockEmitter.emitRegion(ir.body().region());
 			}
 		}
 	}
@@ -1356,13 +1356,93 @@ final class Emitter {
 		private ReturnMode returnMode = new ReturnMode.Direct();
 		private boolean reachable = true;
 
-		public void emitBlock(Block block) {
+		public void emitRegion(Region region) {
 			reachable = true;
-			for(var instruction : block.instructions()) {
-				if(!reachable) {
-					break;
+			switch(region) {
+				case Region.BasicBlock basicBlock -> {
+					for(var instruction : basicBlock.instructions()) {
+						if(!reachable) {
+							break;
+						}
+						emitInstruction(instruction);
+					}
 				}
-				emitInstruction(instruction);
+				case Region.Block blockRegion -> {
+					var start = cb.newLabel();
+					var end = cb.newLabel();
+					var labels = new BlockLabels(start, end);
+					blocks.put(blockRegion.blockId(), labels);
+
+					cb.labelBinding(start);
+					emitRegion(blockRegion.region());
+					if(blockRegion.flags().isLoop()) {
+						if(reachable) {
+							cb.goto_(start);
+						}
+						reachable = false;
+					}
+					else {
+						labels.endReachable |= reachable;
+					}
+
+					if(labels.endReachable) {
+						cb.labelBinding(end);
+					}
+					reachable = labels.endReachable;
+
+					blocks.remove(blockRegion.blockId());
+				}
+				case Region.Finally finallyRegion -> {
+					emitFinally(finallyRegion);
+				}
+				case Region.IfElse ifElse -> {
+					var whenTrue = cb.newLabel();
+					var whenFalse = cb.newLabel();
+					var end = cb.newLabel();
+					var trueLabels = new BlockLabels(whenTrue, whenTrue);
+					var falseLabels = new BlockLabels(whenFalse, whenFalse);
+
+					blocks.put(ifElse.whenTrueBlockId(), trueLabels);
+					blocks.put(ifElse.whenFalseBlockId(), falseLabels);
+					emitRegion(ifElse.condition());
+					var conditionFallsThrough = reachable;
+					blocks.remove(ifElse.whenTrueBlockId());
+					blocks.remove(ifElse.whenFalseBlockId());
+
+					var endReachable = false;
+					var trueReachable = false;
+					if(conditionFallsThrough || trueLabels.endReachable) {
+						cb.labelBinding(whenTrue);
+						emitRegion(ifElse.whenTrue());
+						trueReachable = reachable;
+					}
+
+					if(trueReachable) {
+						cb.goto_(end);
+						endReachable = true;
+					}
+					reachable = false;
+
+					if(falseLabels.endReachable) {
+						cb.labelBinding(whenFalse);
+						emitRegion(ifElse.whenFalse());
+						endReachable |= reachable;
+					}
+
+					if(endReachable) {
+						cb.labelBinding(end);
+					}
+					reachable = endReachable;
+				}
+				case Region.Sequence sequence -> {
+					for(var subRegion : sequence.regions()) {
+						if(!reachable) {
+							break;
+						}
+
+						emitRegion(subRegion);
+					}
+				}
 			}
 		}
 
@@ -1406,32 +1486,6 @@ final class Emitter {
 				case Instruction.Unreachable ignored -> {
 					emitRuntimeUnsupported("Unreachable instruction executed");
 					reachable = false;
-				}
-
-				case Instruction.Block blockInsn -> {
-					var start = cb.newLabel();
-					var end = cb.newLabel();
-					var labels = new BlockLabels(start, end);
-					blocks.put(blockInsn.blockId(), labels);
-
-					cb.labelBinding(start);
-					emitBlock(blockInsn.body());
-					if(blockInsn.flags().isLoop()) {
-						if(reachable) {
-							cb.goto_(start);
-						}
-						reachable = false;
-					}
-					else {
-						labels.endReachable |= reachable;
-					}
-
-					if(labels.endReachable) {
-						cb.labelBinding(end);
-					}
-					reachable = labels.endReachable;
-
-					blocks.remove(blockInsn.blockId());
 				}
 
 				case Instruction.BlockBreak breakInsn -> {
@@ -1506,8 +1560,6 @@ final class Emitter {
 					);
 					storeRegister(enumVariantLiteral.dest());
 				}
-
-				case Instruction.Finally finallyInsn -> emitFinally(finallyInsn);
 
 				case Instruction.FunctionCall call -> {
 					var function = program.getFunctionInfo(call.functionId());
@@ -1595,46 +1647,6 @@ final class Emitter {
 							MethodTypeDesc.of(CD_TRAMPOLINE_THUNK, CD_FUNCTION_TOKEN, ConstantDescs.CD_Object)
 						)
 					);
-				}
-
-				case Instruction.IfElse ifElse -> {
-					var whenTrue = cb.newLabel();
-					var whenFalse = cb.newLabel();
-					var end = cb.newLabel();
-					var trueLabels = new BlockLabels(whenTrue, whenTrue);
-					var falseLabels = new BlockLabels(whenFalse, whenFalse);
-
-					blocks.put(ifElse.whenTrueBlockId(), trueLabels);
-					blocks.put(ifElse.whenFalseBlockId(), falseLabels);
-					emitBlock(ifElse.condition());
-					var conditionFallsThrough = reachable;
-					blocks.remove(ifElse.whenTrueBlockId());
-					blocks.remove(ifElse.whenFalseBlockId());
-
-					var endReachable = false;
-					var trueReachable = false;
-					if(conditionFallsThrough || trueLabels.endReachable) {
-						cb.labelBinding(whenTrue);
-						emitBlock(ifElse.whenTrue());
-						trueReachable = reachable;
-					}
-
-					if(trueReachable) {
-						cb.goto_(end);
-						endReachable = true;
-					}
-					reachable = false;
-
-					if(falseLabels.endReachable) {
-						cb.labelBinding(whenFalse);
-						emitBlock(ifElse.whenFalse());
-						endReachable |= reachable;
-					}
-
-					if(endReachable) {
-						cb.labelBinding(end);
-					}
-					reachable = endReachable;
 				}
 
 				case Instruction.InstanceMethodCall call -> {
@@ -2554,7 +2566,7 @@ final class Emitter {
 			return TypeKind.from(tokenAsClassDesc(elementType)).asLoadable();
 		}
 
-		private void emitFinally(Instruction.Finally finallyInsn) {
+		private void emitFinally(Region.Finally finallyRegion) {
 			var start = cb.newLabel();
 			var end = cb.newLabel();
 			var handler = cb.newLabel();
@@ -2562,27 +2574,27 @@ final class Emitter {
 			var exceptionSlot = cb.allocateLocal(TypeKind.REFERENCE);
 			var originalBlocks = new HashMap<>(blocks);
 			var finallyJumpLabels = new LinkedHashMap<FinallyJumpTarget, Label>();
-			for(var target : scanFinallyJumpTargets(finallyInsn.action(), originalBlocks)) {
+			for(var target : scanFinallyJumpTargets(finallyRegion.action(), originalBlocks)) {
 				finallyJumpLabels.put(target, cb.newLabel());
 			}
 
 			var oldReturnMode = returnMode;
 			Label returnFinallyLabel = null;
-			if(containsReturn(finallyInsn.action())) {
+			if(containsReturn(finallyRegion.action())) {
 				returnFinallyLabel = cb.newLabel();
 				returnMode = new ReturnMode.Branch(returnFinallyLabel);
 			}
 
 			cb.labelBinding(start);
 			installFinallyJumpLabels(originalBlocks, finallyJumpLabels);
-			emitBlock(finallyInsn.action());
+			emitRegion(finallyRegion.action());
 			blocks.clear();
 			blocks.putAll(originalBlocks);
 			returnMode = oldReturnMode;
 			cb.labelBinding(end);
 
 			if(reachable) {
-				emitBlock(finallyInsn.ensuring());
+				emitRegion(finallyRegion.ensuring());
 				if(reachable) {
 					cb.goto_(done);
 				}
@@ -2593,7 +2605,7 @@ final class Emitter {
 			for(var entry : finallyJumpLabels.entrySet()) {
 				reachable = true;
 				cb.labelBinding(entry.getValue());
-				emitBlock(finallyInsn.ensuring());
+				emitRegion(finallyRegion.ensuring());
 				if(reachable) {
 					cb.goto_(entry.getKey().label(originalBlocks));
 				}
@@ -2602,7 +2614,7 @@ final class Emitter {
 			if(returnFinallyLabel != null) {
 				reachable = true;
 				cb.labelBinding(returnFinallyLabel);
-				emitBlock(finallyInsn.ensuring());
+				emitRegion(finallyRegion.ensuring());
 
 				switch(returnMode) {
 					case ReturnMode.Direct() -> {
@@ -2620,7 +2632,7 @@ final class Emitter {
 
 			cb.labelBinding(handler);
 			cb.storeLocal(TypeKind.REFERENCE, exceptionSlot);
-			emitBlock(finallyInsn.ensuring());
+			emitRegion(finallyRegion.ensuring());
 			if(reachable) {
 				cb.loadLocal(TypeKind.REFERENCE, exceptionSlot);
 				cb.athrow();
@@ -2633,7 +2645,7 @@ final class Emitter {
 		}
 
 		private Set<FinallyJumpTarget> scanFinallyJumpTargets(
-			Block block,
+			Region region,
 			Map<BlockId, BlockLabels> knownBlocks
 		) {
 			var targets = new LinkedHashSet<FinallyJumpTarget>();
@@ -2666,12 +2678,12 @@ final class Emitter {
 						targets.add(new FinallyJumpTarget(blockId, kind));
 					}
 				}
-			}.scan(block);
+			}.scan(region);
 
 			return targets;
 		}
 
-		private boolean containsReturn(Block block) {
+		private boolean containsReturn(Region region) {
 			var scanner = new InstructionScanner() {
 				boolean containsReturn = false;
 
@@ -2682,7 +2694,7 @@ final class Emitter {
 					}
 				}
 			};
-			scanner.scan(block);
+			scanner.scan(region);
 
 			return scanner.containsReturn;
 		}

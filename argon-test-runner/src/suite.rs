@@ -1,9 +1,10 @@
 use crate::cmd::{CommandRunner, CommandRunnerPlatform};
+use argon_opt::pass::ALL_OPTIMIZATIONS;
 use argon_runner::{
-    local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite},
     CompileOptions, GenIrOptions, OptimizeOptions,
+    local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite},
 };
-use argon_testcases::{load_test_case, ExpectedResult, TestCase};
+use argon_testcases::{ExpectedResult, TestCase, load_test_case};
 use hashbrown::{HashMap, HashSet};
 use libtest_mimic::{Arguments, Conclusion, Trial};
 use serde::Deserialize;
@@ -30,12 +31,6 @@ pub struct TestSuiteContext<P: CompileTargetPlatform, R: CommandRunner + Command
 pub struct TestSuiteOptions {
     pub optimize_ir: bool,
 }
-
-const DEFAULT_OPTIMIZATIONS: &[&str] = &[
-    "copy-propagation",
-    "dead-code-elimination",
-    "unused-register-elimination",
-];
 
 impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> TestSuiteContext<P, R> {
     pub fn library_info(self: Arc<Self>, library_name: &str) -> LibraryInfo<P, R> {
@@ -420,9 +415,9 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
 }
 
 fn default_optimizations() -> Vec<String> {
-    DEFAULT_OPTIMIZATIONS
+    ALL_OPTIMIZATIONS
         .iter()
-        .map(|optimization| (*optimization).to_owned())
+        .map(|optimization| optimization.name().to_owned())
         .collect()
 }
 

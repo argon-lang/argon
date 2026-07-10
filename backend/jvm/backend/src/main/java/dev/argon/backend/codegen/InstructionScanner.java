@@ -1,36 +1,38 @@
 package dev.argon.backend.codegen;
 
-import dev.argon.vm.Block;
 import dev.argon.vm.Instruction;
+import dev.argon.vm.Region;
 
 abstract class InstructionScanner {
-	public final void scan(Block block) {
-		for(var instruction : block.instructions()) {
-			scan(instruction);
+	public final void scan(Region region) {
+		switch(region) {
+			case Region.BasicBlock basicBlock -> {
+				for(var instruction : basicBlock.instructions()) {
+					scan(instruction);
+				}
+			}
+			case Region.Block block -> {
+				scan(block.region());
+			}
+			case Region.Finally aFinally -> {
+				scan(aFinally.action());
+				scan(aFinally.ensuring());
+			}
+			case Region.IfElse ifElse -> {
+				scan(ifElse.condition());
+				scan(ifElse.whenTrue());
+				scan(ifElse.whenFalse());
+			}
+			case Region.Sequence sequence -> {
+				for(var subRegion : sequence.regions()) {
+					scan(subRegion);
+				}
+			}
 		}
 	}
 
 	public final void scan(Instruction instruction) {
 		visitInstruction(instruction);
-
-		switch(instruction) {
-			case Instruction.Block block ->
-				scan(block.body());
-
-			case Instruction.Finally finallyInsn -> {
-				scan(finallyInsn.action());
-				scan(finallyInsn.ensuring());
-			}
-
-			case Instruction.IfElse ifElse -> {
-				scan(ifElse.condition());
-				scan(ifElse.whenTrue());
-				scan(ifElse.whenFalse());
-			}
-
-			default -> {
-			}
-		}
 	}
 
 	protected void visitInstruction(Instruction instruction) {

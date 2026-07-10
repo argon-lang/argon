@@ -1,51 +1,72 @@
 use std::collections::{HashMap, HashSet};
 
 use argon_format_vm::vm as vf;
-use num_bigint::BigUint;
 
-pub type InstructionPointer = *const vf::Instruction;
+use super::RegionPointer;
 
 #[derive(Debug, Default)]
 pub struct BlockBranches {
-    pub breaks: HashSet<InstructionPointer>,
-    pub retries: HashSet<InstructionPointer>,
+    pub breaks: HashSet<RegionPointer>,
+    pub retries: HashSet<RegionPointer>,
 }
 
 #[derive(Debug, Default)]
 pub struct BranchAnalysis {
-    pub blocks: HashMap<BigUint, BlockBranches>,
+    pub blocks: HashMap<vf::BlockId, BlockBranches>,
+    pub always_branches: HashSet<RegionPointer>,
 }
 
 impl BranchAnalysis {
-    pub fn analyze(block: &vf::Block) -> Self {
+    pub fn analyze(region: &vf::Region) -> Self {
         let mut analysis = Self::default();
-        analysis.scan_block(block);
+        analysis.scan_region(region);
         analysis
     }
 
-    fn scan_block(&mut self, block: &vf::Block) {
-        for instruction in &block.instructions {
-            self.scan_instruction(instruction);
+    fn scan_region(&mut self, region: &vf::Region) {
+        match region {
+            vf::Region::BasicBlock { instructions } => {
+                if let Some(instruction) = instructions.last() {
+                    self.scan_instruction(region, instruction);
+                }
+            }
+            vf::Region::Sequence { regions } => {
+                for region in regions {
+                    self.scan_region(region);
+                }
+            }
+            vf::Region::Block { region, .. } => {
+                self.scan_region(region);
+            }
+            vf::Region::IfElse {
+                condition,
+                when_true,
+                when_false,
+                ..
+            } => {
+                self.scan_region(condition);
+                self.scan_region(when_true);
+                self.scan_region(when_false);
+            }
+            vf::Region::Finally { action, ensuring } => {
+                self.scan_region(action);
+                self.scan_region(ensuring);
+            }
         }
     }
 
-    fn scan_instruction(&mut self, instruction: &vf::Instruction) {
-        let instruction_pointer = instruction as InstructionPointer;
+    fn scan_instruction(&mut self, region: &vf::Region, instruction: &vf::Instruction) {
+        let region_pointer = region as RegionPointer;
 
         match instruction {
-            vf::Instruction::Block { block_id, body, .. } => {
-                self.blocks.entry(block_id.id.clone()).or_default();
-                self.scan_block(body);
-            }
-
             vf::Instruction::BlockBreak { block_id }
             | vf::Instruction::BlockBreakIf { block_id, .. }
             | vf::Instruction::BlockBreakUnless { block_id, .. } => {
                 self.blocks
-                    .entry(block_id.id.clone())
+                    .entry((**block_id).clone())
                     .or_default()
                     .breaks
-                    .insert(instruction_pointer);
+                    .insert(region_pointer);
             }
 
             vf::Instruction::IsEnumVariantOrBreak {
@@ -53,41 +74,18 @@ impl BranchAnalysis {
                 ..
             } => {
                 self.blocks
-                    .entry(not_variant_block_id.id.clone())
+                    .entry((**not_variant_block_id).clone())
                     .or_default()
                     .breaks
-                    .insert(instruction_pointer);
+                    .insert(region_pointer);
             }
 
             vf::Instruction::BlockRetry { block_id } => {
                 self.blocks
-                    .entry(block_id.id.clone())
+                    .entry((**block_id).clone())
                     .or_default()
                     .retries
-                    .insert(instruction_pointer);
-            }
-
-            vf::Instruction::Finally { action, ensuring } => {
-                self.scan_block(action);
-                self.scan_block(ensuring);
-            }
-
-            vf::Instruction::IfElse {
-                when_true_block_id,
-                when_false_block_id,
-                condition,
-                when_true,
-                when_false,
-            } => {
-                self.blocks
-                    .entry(when_true_block_id.id.clone())
-                    .or_default();
-                self.blocks
-                    .entry(when_false_block_id.id.clone())
-                    .or_default();
-                self.scan_block(condition);
-                self.scan_block(when_true);
-                self.scan_block(when_false);
+                    .insert(region_pointer);
             }
 
             _ => {}

@@ -3,17 +3,6 @@ use argon_format_vm::vm as vf;
 #[must_use]
 pub fn is_instruction_pure(instruction: &vf::Instruction) -> bool {
     match instruction {
-        vf::Instruction::Block { body, .. } => is_block_pure(body),
-        vf::Instruction::Finally { action, ensuring } => {
-            is_block_pure(action) && is_block_pure(ensuring)
-        }
-        vf::Instruction::IfElse {
-            condition,
-            when_true,
-            when_false,
-            ..
-        } => is_block_pure(condition) && is_block_pure(when_true) && is_block_pure(when_false),
-
         vf::Instruction::BlockBreak { .. }
         | vf::Instruction::BlockBreakIf { .. }
         | vf::Instruction::BlockBreakUnless { .. }
@@ -54,11 +43,6 @@ pub fn is_instruction_pure(instruction: &vf::Instruction) -> bool {
     }
 }
 
-#[must_use]
-pub fn is_block_pure(block: &vf::Block) -> bool {
-    block.instructions.is_empty()
-}
-
 fn is_builtin_pure(op: &vf::BuiltinOp) -> bool {
     !matches!(op, vf::BuiltinOp::ArraySet { .. })
 }
@@ -94,16 +78,10 @@ mod tests {
     }
 
     #[test]
-    fn classifies_non_empty_blocks_as_impure() {
-        let block = vf::Block {
-            instructions: vec![Box::new(vf::Instruction::ConstInt {
-                dest: register(0),
-                value: 1.into(),
-            })]
-            .into(),
-        };
-
-        assert!(!is_block_pure(&block));
+    fn classifies_control_flow_instruction_as_impure() {
+        assert!(!is_instruction_pure(&vf::Instruction::BlockBreak {
+            block_id: Box::new(vf::BlockId { id: 0_u32.into() }),
+        }));
     }
 
     fn register(id: u32) -> Box<vf::RegisterId> {

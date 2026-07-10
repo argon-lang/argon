@@ -984,6 +984,7 @@ impl VmEncoder {
             var_offset,
             known_vars: mem::take(&mut signature.known_vars),
             declared_vars: Vec::new(),
+            regions: Vec::new(),
             instructions: Vec::new(),
             parent_import_specifier: import_specifier,
             captured_vars: CaptureScanner::scan_captures(expr),
@@ -1519,6 +1520,7 @@ struct ExprEmitter<'a> {
     var_offset: usize,
     known_vars: HashMap<Variable<DefaultExprContext>, VariableRealization>,
     declared_vars: Vec<Box<vf::VariableDeclaration>>,
+    regions: Vec<Box<vf::Region>>,
     instructions: Vec<Box<vf::Instruction>>,
     parent_import_specifier: ImportSpecifier,
     captured_vars: HashSet<Variable<DefaultExprContext>>,
@@ -1547,20 +1549,38 @@ impl TokenEmitterCommon for ExprEmitter<'_> {
 }
 
 impl<'a> ExprEmitter<'a> {
+    fn flush_instructions(&mut self) {
+        if !self.instructions.is_empty() {
+            self.regions.push(Box::new(vf::Region::BasicBlock {
+                instructions: mem::take(&mut self.instructions),
+            }));
+        }
+    }
+
     fn with_nested_block<A>(
         &mut self,
         f: impl FnOnce(&mut Self) -> EmitResult<A>,
-    ) -> Result<(vf::Block, EmitResult<A>), InternalCompilerError> {
-        let mut instructions = mem::take(&mut self.instructions);
+    ) -> Result<(Box<vf::Region>, EmitResult<A>), InternalCompilerError> {
+        self.flush_instructions();
+
+        let mut regions = mem::take(&mut self.regions);
         let result = match f(self) {
             Ok(result) => Ok(result),
             Err(EmitStop::Error(err)) => return Err(err),
             Err(EmitStop::Branch) => Err(EmitStop::Branch),
         };
-        mem::swap(&mut self.instructions, &mut instructions);
-        let block = vf::Block { instructions };
 
-        Ok((block, result))
+        self.flush_instructions();
+
+        mem::swap(&mut self.regions, &mut regions);
+        let region =
+            if regions.len() == 1 && let Some(region) = regions.pop() {
+                region
+            } else {
+                Box::new(vf::Region::Sequence { regions })
+            };
+
+        Ok((region, result))
     }
 
     fn prohibit_tail_call<A>(
@@ -1634,19 +1654,46 @@ impl<'a> ExprEmitter<'a> {
             })
     }
 
-    fn into_function_body(self) -> vf::FunctionBody {
+    fn into_function_body(mut self) -> vf::FunctionBody {
+        self.flush_instructions();
+
+        let region =
+            if self.regions.len() == 1 && let Some(region) = self.regions.pop() {
+                region
+            } else {
+                Box::new(vf::Region::Sequence {
+                    regions: self.regions,
+                })
+            };
+
         vf::FunctionBody {
             variables: Box::new(vf::VariableDeclarations {
                 variables: self.declared_vars,
             }),
-            block: Box::new(vf::Block {
-                instructions: self.instructions,
-            }),
+            region,
         }
     }
 
     fn emit(&mut self, insn: vf::Instruction) {
+        let is_branch = is_branch_instruction(&insn);
         self.instructions.push(Box::new(insn));
+
+        if is_branch {
+            self.flush_instructions();
+        }
+    }
+
+    fn emit_region(&mut self, region: Box<vf::Region>) {
+        self.flush_instructions();
+
+        match *region {
+            vf::Region::Sequence { regions } => {
+                self.regions.extend(regions);
+            }
+            _ => {
+                self.regions.push(region);
+            }
+        }
     }
 
     fn expr<O: ExprOutput>(
@@ -1671,23 +1718,23 @@ impl<'a> ExprEmitter<'a> {
                     cond_emitter.emit_condition(e)
                 })?;
 
-                self.emit(vf::Instruction::IfElse {
-                    condition: Box::new(block),
+                self.emit_region(Box::new(vf::Region::IfElse {
+                    condition: block,
                     when_true_block_id: Box::new(when_true_label),
                     when_false_block_id: Box::new(when_false_label),
-                    when_true: Box::new(vf::Block {
+                    when_true: Box::new(vf::Region::BasicBlock {
                         instructions: vec![Box::new(vf::Instruction::ConstBool {
                             dest: Box::new(rb.register().clone()),
                             value: true,
                         })],
                     }),
-                    when_false: Box::new(vf::Block {
+                    when_false: Box::new(vf::Region::BasicBlock {
                         instructions: vec![Box::new(vf::Instruction::ConstBool {
                             dest: Box::new(rb.register().clone()),
                             value: false,
                         })],
                     }),
-                });
+                }));
 
                 rb.into_result(self)?
             }
@@ -2066,10 +2113,10 @@ impl<'a> ExprEmitter<'a> {
                     })
                 })?;
 
-                self.emit(vf::Instruction::Finally {
-                    action: Box::new(block_body),
-                    ensuring: Box::new(finally_body),
-                });
+                self.emit_region(Box::new(vf::Region::Finally {
+                    action: block_body,
+                    ensuring: finally_body,
+                }));
 
                 let value = block_result?;
                 finally_result?;
@@ -2164,13 +2211,13 @@ impl<'a> ExprEmitter<'a> {
                 let (when_false, false_result) =
                     self.with_nested_block(|emitter| emitter.expr(when_false, output))?;
 
-                self.emit(vf::Instruction::IfElse {
-                    condition: Box::new(cond),
+                self.emit_region(Box::new(vf::Region::IfElse {
+                    condition: cond,
                     when_true_block_id: Box::new(when_true_label),
                     when_false_block_id: Box::new(when_false_label),
-                    when_true: Box::new(when_true),
-                    when_false: Box::new(when_false),
-                });
+                    when_true,
+                    when_false,
+                }));
 
                 match (true_result, false_result) {
                     (Err(EmitStop::Branch), Err(EmitStop::Branch)) => Err(EmitStop::Branch)?,
@@ -2218,15 +2265,15 @@ impl<'a> ExprEmitter<'a> {
                             Err::<(), _>(EmitStop::Branch)
                         })?;
 
-                        emitter.emit(vf::Instruction::IfElse {
-                            condition: Box::new(condition),
+                        emitter.emit_region(Box::new(vf::Region::IfElse {
+                            condition,
                             when_true_block_id: Box::new(when_true_label),
                             when_false_block_id: Box::new(when_false_label),
-                            when_true: Box::new(when_true),
-                            when_false: Box::new(vf::Block {
-                                instructions: vec![],
+                            when_true,
+                            when_false: Box::new(vf::Region::Sequence {
+                                regions: vec![],
                             }),
-                        });
+                        }));
                     }
 
                     emitter.emit(vf::Instruction::Unreachable {});
@@ -2558,54 +2605,24 @@ impl<'a> ExprEmitter<'a> {
         })
     }
 
-    fn emit_block(&mut self, block_id: vf::BlockId, mut block: vf::Block) {
-        // If the block ends with a break for the current loop, we can just skip it.
-        let mut is_loop = false;
-        loop {
-            match block.instructions.last().map(Box::as_ref) {
-                Some(vf::Instruction::BlockBreak {
-                    block_id: last_break_id,
-                }) if (**last_break_id).id == block_id.id => {
-                    block.instructions.pop();
-                    is_loop = false;
-                }
-
-                Some(vf::Instruction::BlockRetry {
-                    block_id: last_break_id,
-                }) if (**last_break_id).id == block_id.id => {
-                    block.instructions.pop();
-                    is_loop = true;
-                }
-
-                _ => break,
-            }
-        }
-
-        while let Some(vf::Instruction::BlockBreak {
-            block_id: last_break_id,
-        }) = block.instructions.last().map(Box::as_ref)
-            && (**last_break_id).id == block_id.id
-        {
-            block.instructions.pop();
-        }
-
+    fn emit_block(&mut self, block_id: vf::BlockId, block: Box<vf::Region>) {
         let mut scan = BlockJumpScan::new(&block_id);
-        scan.scan_block(&block);
+        scan.scan_region(&block);
 
-        if !is_loop && !scan.has_break && !scan.has_retry {
-            self.instructions.extend(block.instructions);
+        if !scan.has_break && !scan.has_retry {
+            self.emit_region(block);
         } else {
             let flags = vf::BlockFlags {
                 has_break: scan.has_break,
                 has_retry: scan.has_retry,
-                is_loop,
+                is_loop: false,
             };
 
-            self.emit(vf::Instruction::Block {
+            self.emit_region(Box::new(vf::Region::Block {
                 block_id: Box::new(block_id),
                 flags,
-                body: Box::new(block),
-            });
+                region: block,
+            }));
         }
     }
 
@@ -3129,4 +3146,25 @@ fn import_specifier_tube(import: &ImportSpecifier) -> &TubeName {
         ImportSpecifier::Global { tube, .. } => tube,
         ImportSpecifier::Local { parent, .. } => import_specifier_tube(parent),
     }
+}
+
+fn is_branch_instruction(insn: &vf::Instruction) -> bool {
+    match insn {
+        vf::Instruction::BlockBreak { .. }
+        | vf::Instruction::BlockBreakIf { .. }
+        | vf::Instruction::BlockBreakUnless { .. }
+        | vf::Instruction::BlockRetry { .. }
+        | vf::Instruction::IsEnumVariantOrBreak { .. }
+        | vf::Instruction::Return { .. } => true,
+
+        vf::Instruction::FunctionCall { dest, .. }
+        | vf::Instruction::FunctionObjectCall { dest, .. }
+        | vf::Instruction::FunctionObjectTokenCall { dest, .. }
+        | vf::Instruction::FunctionObjectErasedCall { dest, .. }
+        | vf::Instruction::InstanceMethodCall { dest, .. } =>
+            matches!(&**dest, vf::FunctionResult::ReturnValue {}),
+
+        _ => false,
+    }
+
 }

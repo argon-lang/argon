@@ -1,5 +1,5 @@
 use argon_test_runner::{
-    cmd::CliCommandRunner, suite, workspace::WorkspacePaths, JSPlatform, TestSuiteOptions,
+    JSPlatform, TestSuiteOptions, cmd::CliCommandRunner, suite, workspace::WorkspacePaths,
 };
 use std::sync::Arc;
 

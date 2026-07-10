@@ -3,134 +3,245 @@ use alloc::vec::Vec;
 use argon_format_vm::vm as vf;
 use core::slice;
 
-pub fn instructions(block: &vf::Block) -> impl Iterator<Item = &vf::Instruction> + '_ {
-    BlockInstructionIter::new(block)
+pub fn instructions(region: &vf::Region) -> impl Iterator<Item = &vf::Instruction> + '_ {
+    RegionInstructionIter::new(region)
+}
+
+pub fn basic_blocks(region: &vf::Region) -> impl Iterator<Item = &vf::Region> + '_ {
+    BasicBlockIter::new(region)
+}
+
+pub fn basic_blocks_foreach_mut(
+    region: &mut vf::Region,
+    mut callback: impl FnMut(&mut vf::Region),
+) {
+    basic_blocks_foreach_mut_impl(region, &mut callback);
 }
 
 pub fn instruction_foreach_mut(
-    block: &mut vf::Block,
+    region: &mut vf::Region,
     mut callback: impl FnMut(&mut vf::Instruction),
 ) {
-    instruction_foreach_mut_impl(block, &mut callback);
+    instruction_foreach_mut_impl(region, &mut callback);
 }
 
 pub fn instruction_retain(
-    block: &mut vf::Block,
+    region: &mut vf::Region,
     mut callback: impl FnMut(&mut vf::Instruction) -> bool,
 ) {
-    instruction_retain_impl(block, &mut callback);
+    instruction_retain_impl(region, &mut callback);
 }
 
 fn instruction_retain_impl(
-    block: &mut vf::Block,
+    region: &mut vf::Region,
     callback: &mut impl FnMut(&mut vf::Instruction) -> bool,
 ) {
-    block.instructions.retain_mut(|instruction| {
-        match instruction.as_mut() {
-            vf::Instruction::Block { body, .. } => {
-                instruction_retain_impl(body, callback);
-            }
-            vf::Instruction::Finally { action, ensuring } => {
-                instruction_retain_impl(action, callback);
-                instruction_retain_impl(ensuring, callback);
-            }
-            vf::Instruction::IfElse {
-                condition,
-                when_true,
-                when_false,
-                ..
-            } => {
-                instruction_retain_impl(condition, callback);
-                instruction_retain_impl(when_true, callback);
-                instruction_retain_impl(when_false, callback);
-            }
-            _ => {}
+    match region {
+        vf::Region::BasicBlock { instructions, .. } => {
+            instructions.retain_mut(|instruction| callback(instruction));
         }
+        vf::Region::Sequence { regions } => {
+            for region in regions {
+                instruction_retain_impl(region, callback);
+            }
+        }
+        vf::Region::Block { region, .. } => {
+            instruction_retain_impl(region, callback);
+        }
+        vf::Region::IfElse {
+            condition,
+            when_true,
+            when_false,
+            ..
+        } => {
+            instruction_retain_impl(condition, callback);
+            instruction_retain_impl(when_true, callback);
+            instruction_retain_impl(when_false, callback);
+        }
+        vf::Region::Finally { action, ensuring } => {
+            instruction_retain_impl(action, callback);
+            instruction_retain_impl(ensuring, callback);
+        }
+    }
+}
 
-        callback(instruction)
-    });
+fn basic_blocks_foreach_mut_impl(
+    region: &mut vf::Region,
+    callback: &mut impl FnMut(&mut vf::Region),
+) {
+    match region {
+        vf::Region::BasicBlock { .. } => callback(region),
+        vf::Region::Sequence { regions } => {
+            for region in regions {
+                basic_blocks_foreach_mut_impl(region, callback);
+            }
+        }
+        vf::Region::Block { region, .. } => {
+            basic_blocks_foreach_mut_impl(region, callback);
+        }
+        vf::Region::IfElse {
+            condition,
+            when_true,
+            when_false,
+            ..
+        } => {
+            basic_blocks_foreach_mut_impl(condition, callback);
+            basic_blocks_foreach_mut_impl(when_true, callback);
+            basic_blocks_foreach_mut_impl(when_false, callback);
+        }
+        vf::Region::Finally { action, ensuring } => {
+            basic_blocks_foreach_mut_impl(action, callback);
+            basic_blocks_foreach_mut_impl(ensuring, callback);
+        }
+    }
 }
 
 fn instruction_foreach_mut_impl(
-    block: &mut vf::Block,
+    region: &mut vf::Region,
     callback: &mut impl FnMut(&mut vf::Instruction),
 ) {
-    for instruction in &mut block.instructions {
-        callback(instruction);
-
-        match instruction.as_mut() {
-            vf::Instruction::Block { body, .. } => {
-                instruction_foreach_mut_impl(body, callback);
+    match region {
+        vf::Region::BasicBlock { instructions, .. } => {
+            for instruction in instructions {
+                callback(instruction);
             }
-            vf::Instruction::Finally { action, ensuring } => {
-                instruction_foreach_mut_impl(action, callback);
-                instruction_foreach_mut_impl(ensuring, callback);
+        }
+        vf::Region::Sequence { regions } => {
+            for region in regions {
+                instruction_foreach_mut_impl(region, callback);
             }
-            vf::Instruction::IfElse {
-                condition,
-                when_true,
-                when_false,
-                ..
-            } => {
-                instruction_foreach_mut_impl(when_true, callback);
-                instruction_foreach_mut_impl(when_false, callback);
-                instruction_foreach_mut_impl(condition, callback);
-            }
-            _ => {}
+        }
+        vf::Region::Block { region, .. } => {
+            instruction_foreach_mut_impl(region, callback);
+        }
+        vf::Region::IfElse {
+            condition,
+            when_true,
+            when_false,
+            ..
+        } => {
+            instruction_foreach_mut_impl(condition, callback);
+            instruction_foreach_mut_impl(when_true, callback);
+            instruction_foreach_mut_impl(when_false, callback);
+        }
+        vf::Region::Finally { action, ensuring } => {
+            instruction_foreach_mut_impl(action, callback);
+            instruction_foreach_mut_impl(ensuring, callback);
         }
     }
 }
 
-struct BlockInstructionIter<'a> {
-    stack: Vec<slice::Iter<'a, Box<vf::Instruction>>>,
+enum RegionInstructionIterFrame<'a> {
+    Region(&'a vf::Region),
+    Instructions(slice::Iter<'a, Box<vf::Instruction>>),
 }
 
-impl<'a> BlockInstructionIter<'a> {
-    fn new(block: &'a vf::Block) -> Self {
-        BlockInstructionIter {
-            stack: alloc::vec![block.instructions.iter()],
-        }
-    }
+struct RegionInstructionIter<'a> {
+    stack: Vec<RegionInstructionIterFrame<'a>>,
+}
 
-    fn push_nested_blocks(&mut self, instruction: &'a vf::Instruction) {
-        match instruction {
-            vf::Instruction::Block { body, .. } => {
-                self.stack.push(body.instructions.iter());
-            }
-            vf::Instruction::Finally { action, ensuring } => {
-                self.stack.push(ensuring.instructions.iter());
-                self.stack.push(action.instructions.iter());
-            }
-            vf::Instruction::IfElse {
-                condition,
-                when_true,
-                when_false,
-                ..
-            } => {
-                self.stack.push(condition.instructions.iter());
-                self.stack.push(when_false.instructions.iter());
-                self.stack.push(when_true.instructions.iter());
-            }
-            _ => {}
+impl<'a> RegionInstructionIter<'a> {
+    fn new(region: &'a vf::Region) -> Self {
+        RegionInstructionIter {
+            stack: alloc::vec![RegionInstructionIterFrame::Region(region)],
         }
     }
 }
 
-impl<'a> Iterator for BlockInstructionIter<'a> {
+impl<'a> Iterator for RegionInstructionIter<'a> {
     type Item = &'a vf::Instruction;
 
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let instructions = self.stack.last_mut()?;
+        while let Some(frame) = self.stack.pop() {
+            match frame {
+                RegionInstructionIterFrame::Region(region) => match region {
+                    vf::Region::BasicBlock { instructions, .. } => {
+                        self.stack
+                            .push(RegionInstructionIterFrame::Instructions(instructions.iter()));
+                    }
+                    vf::Region::Sequence { regions } => {
+                        self.stack
+                            .extend(regions.iter().rev().map(|region| {
+                                RegionInstructionIterFrame::Region(region)
+                            }));
+                    }
+                    vf::Region::Block { region, .. } => {
+                        self.stack.push(RegionInstructionIterFrame::Region(region));
+                    }
+                    vf::Region::IfElse {
+                        condition,
+                        when_true,
+                        when_false,
+                        ..
+                    } => {
+                        self.stack.push(RegionInstructionIterFrame::Region(when_false));
+                        self.stack.push(RegionInstructionIterFrame::Region(when_true));
+                        self.stack.push(RegionInstructionIterFrame::Region(condition));
+                    }
+                    vf::Region::Finally { action, ensuring } => {
+                        self.stack.push(RegionInstructionIterFrame::Region(ensuring));
+                        self.stack.push(RegionInstructionIterFrame::Region(action));
+                    }
+                },
+                RegionInstructionIterFrame::Instructions(mut instructions) => {
+                    if let Some(instruction) = instructions.next() {
+                        self.stack
+                            .push(RegionInstructionIterFrame::Instructions(instructions));
 
-            if let Some(instruction) = instructions.next() {
-                let instruction = instruction.as_ref();
-                self.push_nested_blocks(instruction);
-                return Some(instruction);
+                        return Some(instruction.as_ref());
+                    }
+                }
             }
-
-            self.stack.pop();
         }
+
+        None
+    }
+}
+
+struct BasicBlockIter<'a> {
+    stack: Vec<&'a vf::Region>,
+}
+
+impl<'a> BasicBlockIter<'a> {
+    fn new(region: &'a vf::Region) -> Self {
+        BasicBlockIter {
+            stack: alloc::vec![region],
+        }
+    }
+}
+
+impl<'a> Iterator for BasicBlockIter<'a> {
+    type Item = &'a vf::Region;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while let Some(region) = self.stack.pop() {
+            match region {
+                vf::Region::BasicBlock { .. } => return Some(region),
+                vf::Region::Sequence { regions } => {
+                    self.stack
+                        .extend(regions.iter().rev().map(Box::as_ref));
+                }
+                vf::Region::Block { region, .. } => {
+                    self.stack.push(region);
+                }
+                vf::Region::IfElse {
+                    condition,
+                    when_true,
+                    when_false,
+                    ..
+                } => {
+                    self.stack.push(when_false);
+                    self.stack.push(when_true);
+                    self.stack.push(condition);
+                }
+                vf::Region::Finally { action, ensuring } => {
+                    self.stack.push(ensuring);
+                    self.stack.push(action);
+                }
+            }
+        }
+
+        None
     }
 }
 
@@ -154,8 +265,8 @@ impl<'a> BlockJumpScan<'a> {
         self.has_break && self.has_retry
     }
 
-    pub fn scan_block(&mut self, block: &vf::Block) {
-        for instruction in instructions(block) {
+    pub fn scan_region(&mut self, region: &vf::Region) {
+        for instruction in instructions(region) {
             self.scan_instruction(instruction);
 
             if self.found_both() {
@@ -195,31 +306,24 @@ mod tests {
 
     #[test]
     fn mutably_visits_top_level_and_nested_instructions() {
-        let mut block = vf::Block {
-            instructions: vec![
+        let mut region = vf::Region::Finally {
+            action: Box::new(basic_block(vec![
                 constant(1),
-                Box::new(vf::Instruction::Finally {
-                    action: Box::new(vf::Block {
-                        instructions: vec![constant(2)].into(),
-                    }),
-                    ensuring: Box::new(vf::Block {
-                        instructions: vec![constant(3)].into(),
-                    }),
-                }),
-            ]
-            .into(),
+                constant(2),
+            ])),
+            ensuring: Box::new(basic_block(vec![constant(3)])),
         };
         let mut visited = 0;
-        instruction_foreach_mut(&mut block, |instruction| {
+        instruction_foreach_mut(&mut region, |instruction| {
             visited += 1;
             if let vf::Instruction::ConstInt { value, .. } = instruction {
                 *value = 0.into();
             }
         });
 
-        assert_eq!(visited, 4);
+        assert_eq!(visited, 3);
         assert!(
-            instructions(&block)
+            instructions(&region)
                 .filter_map(|instruction| match instruction {
                     vf::Instruction::ConstInt { value, .. } => Some(value),
                     _ => None,
@@ -230,36 +334,127 @@ mod tests {
 
     #[test]
     fn retains_top_level_and_nested_instructions_matching_predicate() {
-        let mut block = vf::Block {
-            instructions: vec![
-                constant(1),
-                Box::new(vf::Instruction::Block {
+        let mut region = vf::Region::Sequence {
+            regions: vec![
+                Box::new(basic_block(vec![constant(1)])),
+                Box::new(vf::Region::Block {
                     block_id: Box::new(vf::BlockId { id: 0_u32.into() }),
                     flags: vf::BlockFlags {
                         has_break: false,
                         has_retry: false,
                         is_loop: false,
                     },
-                    body: Box::new(vf::Block {
-                        instructions: vec![constant(2), constant(3)].into(),
-                    }),
+                    region: Box::new(basic_block(vec![constant(2), constant(3)])),
                 }),
             ]
             .into(),
         };
 
-        instruction_retain(&mut block, |instruction| {
+        instruction_retain(&mut region, |instruction| {
             !matches!(
                 instruction,
                 vf::Instruction::ConstInt { value, .. } if *value == 2.into()
             )
         });
 
-        assert_eq!(instructions(&block).count(), 3);
-        assert!(!instructions(&block).any(|instruction| matches!(
+        assert_eq!(instructions(&region).count(), 2);
+        assert!(!instructions(&region).any(|instruction| matches!(
             instruction,
             vf::Instruction::ConstInt { value, .. } if *value == 2.into()
         )));
+    }
+
+    #[test]
+    fn iterates_basic_blocks_in_region_order() {
+        let region = vf::Region::Sequence {
+            regions: vec![
+                Box::new(basic_block(vec![constant(1)])),
+                Box::new(vf::Region::IfElse {
+                    when_true_block_id: Box::new(vf::BlockId { id: 0_u32.into() }),
+                    when_false_block_id: Box::new(vf::BlockId { id: 1_u32.into() }),
+                    condition: Box::new(basic_block(vec![constant(2)])),
+                    when_true: Box::new(vf::Region::Block {
+                        block_id: Box::new(vf::BlockId { id: 2_u32.into() }),
+                        flags: vf::BlockFlags {
+                            has_break: false,
+                            has_retry: false,
+                            is_loop: true,
+                        },
+                        region: Box::new(basic_block(vec![constant(3)])),
+                    }),
+                    when_false: Box::new(basic_block(vec![constant(4)])),
+                }),
+            ]
+            .into(),
+        };
+
+        let values: Vec<_> = basic_blocks(&region)
+            .map(|region| {
+                let vf::Region::BasicBlock { instructions, .. } = region else {
+                    unreachable!();
+                };
+                let Some(vf::Instruction::ConstInt { value, .. }) =
+                    instructions.first().map(Box::as_ref)
+                else {
+                    unreachable!();
+                };
+                value.clone()
+            })
+            .collect();
+
+        assert_eq!(
+            values,
+            vec![1_u32.into(), 2_u32.into(), 3_u32.into(), 4_u32.into()]
+        );
+    }
+
+    #[test]
+    fn mutably_visits_basic_blocks_in_region_order() {
+        let mut region = vf::Region::Finally {
+            action: Box::new(vf::Region::Sequence {
+                regions: vec![
+                    Box::new(basic_block(vec![constant(1)])),
+                    Box::new(basic_block(vec![constant(2)])),
+                ]
+                .into(),
+            }),
+            ensuring: Box::new(basic_block(vec![constant(3)])),
+        };
+
+        let mut next = 10_u32;
+        basic_blocks_foreach_mut(&mut region, |region| {
+            let vf::Region::BasicBlock { instructions, .. } = region else {
+                unreachable!();
+            };
+
+            instructions.push(constant(next));
+            next += 1;
+        });
+
+        let last_values: Vec<_> = basic_blocks(&region)
+            .map(|region| {
+                let vf::Region::BasicBlock { instructions, .. } = region else {
+                    unreachable!();
+                };
+                let Some(vf::Instruction::ConstInt { value, .. }) =
+                    instructions.last().map(Box::as_ref)
+                else {
+                    unreachable!();
+                };
+                value.clone()
+            })
+            .collect();
+
+        assert_eq!(
+            last_values,
+            vec![10_u32.into(), 11_u32.into(), 12_u32.into()]
+        );
+    }
+
+    fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
+        vf::Region::BasicBlock {
+            instructions,
+        }
     }
 
     fn constant(value: u32) -> Box<vf::Instruction> {
