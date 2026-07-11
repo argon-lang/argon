@@ -1,10 +1,10 @@
 use crate::modifiers::{
-    ModifierParser, ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS,
-    METHOD_SLOT_ABSTRACT, METHOD_SLOT_CONCRETE,
+    ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT,
+    METHOD_SLOT_CONCRETE, ModifierParser,
 };
 use crate::module::DeclarationResult;
 use crate::signature::SignatureParser;
-use crate::type_checker::{type_check_expr, TypeCheckOptions};
+use crate::type_checker::{TypeCheckOptions, type_check_expr};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use argon_compiler::access::{AccessModifier, AccessToken};

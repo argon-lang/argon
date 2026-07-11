@@ -3,7 +3,7 @@ use crate::scanner::PurityScanner;
 use crate::shifter::DefaultToExprTypeContextShifter;
 use crate::{Context, FunctionSignature};
 use argon_expr::{
-    default_scan, Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer,
+    Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer, default_scan,
 };
 use argon_util::CompileError;
 use parse18_runtime::Location;
@@ -42,7 +42,10 @@ where
                 Expr::Hole(_) => self.erased_required(),
 
                 Expr::Builtin(
-                    Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType,
+                    Builtin::IntType { .. }
+                    | Builtin::BoolType
+                    | Builtin::StringType
+                    | Builtin::NeverType,
                 ) => {}
 
                 Expr::Builtin(Builtin::ArrayType { element_type }) => {

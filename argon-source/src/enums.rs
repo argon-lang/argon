@@ -1,11 +1,11 @@
-use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL};
+use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
 use alloc::borrow::Cow;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{

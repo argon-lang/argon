@@ -156,14 +156,17 @@ impl<'a> Iterator for RegionInstructionIter<'a> {
             match frame {
                 RegionInstructionIterFrame::Region(region) => match region {
                     vf::Region::BasicBlock { instructions, .. } => {
-                        self.stack
-                            .push(RegionInstructionIterFrame::Instructions(instructions.iter()));
+                        self.stack.push(RegionInstructionIterFrame::Instructions(
+                            instructions.iter(),
+                        ));
                     }
                     vf::Region::Sequence { regions } => {
-                        self.stack
-                            .extend(regions.iter().rev().map(|region| {
-                                RegionInstructionIterFrame::Region(region)
-                            }));
+                        self.stack.extend(
+                            regions
+                                .iter()
+                                .rev()
+                                .map(|region| RegionInstructionIterFrame::Region(region)),
+                        );
                     }
                     vf::Region::Block { region, .. } => {
                         self.stack.push(RegionInstructionIterFrame::Region(region));
@@ -174,12 +177,16 @@ impl<'a> Iterator for RegionInstructionIter<'a> {
                         when_false,
                         ..
                     } => {
-                        self.stack.push(RegionInstructionIterFrame::Region(when_false));
-                        self.stack.push(RegionInstructionIterFrame::Region(when_true));
-                        self.stack.push(RegionInstructionIterFrame::Region(condition));
+                        self.stack
+                            .push(RegionInstructionIterFrame::Region(when_false));
+                        self.stack
+                            .push(RegionInstructionIterFrame::Region(when_true));
+                        self.stack
+                            .push(RegionInstructionIterFrame::Region(condition));
                     }
                     vf::Region::Finally { action, ensuring } => {
-                        self.stack.push(RegionInstructionIterFrame::Region(ensuring));
+                        self.stack
+                            .push(RegionInstructionIterFrame::Region(ensuring));
                         self.stack.push(RegionInstructionIterFrame::Region(action));
                     }
                 },
@@ -218,8 +225,7 @@ impl<'a> Iterator for BasicBlockIter<'a> {
             match region {
                 vf::Region::BasicBlock { .. } => return Some(region),
                 vf::Region::Sequence { regions } => {
-                    self.stack
-                        .extend(regions.iter().rev().map(Box::as_ref));
+                    self.stack.extend(regions.iter().rev().map(Box::as_ref));
                 }
                 vf::Region::Block { region, .. } => {
                     self.stack.push(region);
@@ -307,10 +313,7 @@ mod tests {
     #[test]
     fn mutably_visits_top_level_and_nested_instructions() {
         let mut region = vf::Region::Finally {
-            action: Box::new(basic_block(vec![
-                constant(1),
-                constant(2),
-            ])),
+            action: Box::new(basic_block(vec![constant(1), constant(2)])),
             ensuring: Box::new(basic_block(vec![constant(3)])),
         };
         let mut visited = 0;
@@ -452,9 +455,7 @@ mod tests {
     }
 
     fn basic_block(instructions: Vec<Box<vf::Instruction>>) -> vf::Region {
-        vf::Region::BasicBlock {
-            instructions,
-        }
+        vf::Region::BasicBlock { instructions }
     }
 
     fn constant(value: u32) -> Box<vf::Instruction> {

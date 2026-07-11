@@ -221,6 +221,7 @@ record erased-signature derives eq, hash {
 @esexpr:(derive-codec)
 enum erased-signature-type derives eq, hash {
     int,
+    u8,
     bool,
     string,
     never,
@@ -246,7 +247,9 @@ enum erased-signature-type derives eq, hash {
 
 @esexpr:(derive-codec)
 enum builtin-type {
-    int,
+    int {
+        integer-type: integer-type;
+    },
     bool,
     string,
     never,
@@ -261,6 +264,12 @@ enum builtin-type {
         lhs: token;
         rhs: token;
     },
+}
+
+@esexpr:(derive-codec)
+simple enum integer-type derives eq, hash {
+    int,
+    u8,
 }
 
 @esexpr:(derive-codec)
@@ -622,6 +631,11 @@ enum instruction {
         value: int;
     },
 
+    const-u8 {
+        dest: register-id;
+        value: u8;
+    },
+
     const-string {
         dest: register-id;
         value: string;
@@ -854,21 +868,21 @@ enum function-result {
 
 @esexpr:(derive-codec)
 enum builtin-op {
-    int-negate { dest: register-id; value: register-id; },
-    int-bit-not { dest: register-id; value: register-id; },
-    int-add { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-sub { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-mul { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-bit-and { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-bit-or { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-bit-xor { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-bit-shift-left { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-bit-shift-right { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-eq { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-lt { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-le { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-gt { dest: register-id; lhs: register-id; rhs: register-id; },
-    int-ge { dest: register-id; lhs: register-id; rhs: register-id; },
+    int-negate { integer-type: integer-type; dest: register-id; value: register-id; },
+    int-bit-not { integer-type: integer-type; dest: register-id; value: register-id; },
+    int-add { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-sub { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-mul { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-and { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-or { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-xor { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-shift-left { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-bit-shift-right { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-eq { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-lt { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-le { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-gt { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
+    int-ge { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
 
     string-concat {
         dest: register-id;

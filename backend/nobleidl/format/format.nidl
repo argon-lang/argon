@@ -277,6 +277,7 @@ record erased-signature {
 @esexpr:(derive-codec)
 enum erased-signature-type {
     int,
+    u8,
     bool,
     string,
     never,
@@ -684,6 +685,9 @@ enum expr {
     int-literal {
         i: int;
     },
+    u8-literal {
+        value: u8;
+    },
     is {
         value: expr;
         pattern: pattern;
@@ -833,7 +837,9 @@ record record-field-pattern {
 
 @esexpr:(derive-codec)
 enum builtin {
-    int-type,
+    int-type {
+        integer-type: integer-type;
+    },
     bool-type,
     string-type,
     never-type,
@@ -841,21 +847,21 @@ enum builtin {
         element-type: expr;
     },
 
-    int-negate { value: expr; },
-    int-bit-not { value: expr; },
-    int-add { lhs: expr; rhs: expr; },
-    int-sub { lhs: expr; rhs: expr; },
-    int-mul { lhs: expr; rhs: expr; },
-    int-bit-and { lhs: expr; rhs: expr; },
-    int-bit-or { lhs: expr; rhs: expr; },
-    int-bit-xor { lhs: expr; rhs: expr; },
-    int-bit-shift-left { lhs: expr; rhs: expr; },
-    int-bit-shift-right { lhs: expr; rhs: expr; },
-    int-eq { lhs: expr; rhs: expr; },
-    int-lt { lhs: expr; rhs: expr; },
-    int-le { lhs: expr; rhs: expr; },
-    int-gt { lhs: expr; rhs: expr; },
-    int-ge { lhs: expr; rhs: expr; },
+    int-negate { integer-type: integer-type; value: expr; },
+    int-bit-not { integer-type: integer-type; value: expr; },
+    int-add { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-sub { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-mul { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-bit-and { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-bit-or { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-bit-xor { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-bit-shift-left { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-bit-shift-right { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-eq { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-lt { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-le { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-gt { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-ge { integer-type: integer-type; lhs: expr; rhs: expr; },
     
     string-concat {
         @esexpr:(vararg)
@@ -891,6 +897,12 @@ enum builtin {
     unsafe-assume-erased {
         type: expr;
     },
+}
+
+@esexpr:(derive-codec)
+simple enum integer-type {
+    int,
+    u8,
 }
 
 @esexpr:(derive-codec)

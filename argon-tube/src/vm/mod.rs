@@ -16,7 +16,7 @@ use argon_compiler::{
 };
 use argon_expr::{
     BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
-    NormalizerScanner, TraitType, Variable,
+    IntegerType, NormalizerScanner, TraitType, Variable,
 };
 use argon_format_vm::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
@@ -774,6 +774,7 @@ impl VmEncoder {
     ) -> Result<vf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
             ErasedSignatureType::Int => vf::ErasedSignatureType::Int {},
+            ErasedSignatureType::U8 => vf::ErasedSignatureType::U8 {},
             ErasedSignatureType::Bool => vf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => vf::ErasedSignatureType::String {},
             ErasedSignatureType::Never => vf::ErasedSignatureType::Never {},
@@ -1463,7 +1464,9 @@ trait TokenEmitterCommon {
         builtin: &Builtin<DefaultExprContext>,
     ) -> Result<Option<vf::BuiltinType>, InternalCompilerError> {
         Ok(Some(match builtin {
-            Builtin::IntType => vf::BuiltinType::Int {},
+            Builtin::IntType { integer_type } => vf::BuiltinType::Int {
+                integer_type: encode_vm_integer_type(*integer_type),
+            },
             Builtin::BoolType => vf::BuiltinType::Bool {},
             Builtin::StringType => vf::BuiltinType::String {},
             Builtin::NeverType => vf::BuiltinType::Never {},
@@ -1580,12 +1583,13 @@ impl<'a> ExprEmitter<'a> {
         self.flush_instructions();
 
         mem::swap(&mut self.regions, &mut regions);
-        let region =
-            if regions.len() == 1 && let Some(region) = regions.pop() {
-                region
-            } else {
-                Box::new(vf::Region::Sequence { regions })
-            };
+        let region = if regions.len() == 1
+            && let Some(region) = regions.pop()
+        {
+            region
+        } else {
+            Box::new(vf::Region::Sequence { regions })
+        };
 
         Ok((region, result))
     }
@@ -1664,14 +1668,15 @@ impl<'a> ExprEmitter<'a> {
     fn into_function_body(mut self) -> vf::FunctionBody {
         self.flush_instructions();
 
-        let region =
-            if self.regions.len() == 1 && let Some(region) = self.regions.pop() {
-                region
-            } else {
-                Box::new(vf::Region::Sequence {
-                    regions: self.regions,
-                })
-            };
+        let region = if self.regions.len() == 1
+            && let Some(region) = self.regions.pop()
+        {
+            region
+        } else {
+            Box::new(vf::Region::Sequence {
+                regions: self.regions,
+            })
+        };
 
         vf::FunctionBody {
             variables: Box::new(vf::VariableDeclarations {
@@ -1912,12 +1917,26 @@ impl<'a> ExprEmitter<'a> {
                     output.output_unit_result(emitter)
                 }
 
-                macro_rules! unary_op {
-                    ($variant:ident, $value:expr) => {{
+                macro_rules! integer_unary_op {
+                    ($variant:ident, $integer_type:expr, $value:expr) => {{
                         let value = self.expr($value, AnyRegister)?;
                         emit_value_op(self, e, output, |dest| vf::BuiltinOp::$variant {
+                            integer_type: encode_vm_integer_type(*$integer_type),
                             dest: Box::new(dest),
                             value: Box::new(value),
+                        })?
+                    }};
+                }
+
+                macro_rules! integer_binary_op {
+                    ($variant:ident, $integer_type:expr, $lhs:expr, $rhs:expr) => {{
+                        let lhs = self.expr($lhs, AnyRegister)?;
+                        let rhs = self.expr($rhs, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| vf::BuiltinOp::$variant {
+                            integer_type: encode_vm_integer_type(*$integer_type),
+                            dest: Box::new(dest),
+                            lhs: Box::new(lhs),
+                            rhs: Box::new(rhs),
                         })?
                     }};
                 }
@@ -1935,7 +1954,7 @@ impl<'a> ExprEmitter<'a> {
                 }
 
                 match builtin {
-                    Builtin::IntType
+                    Builtin::IntType { .. }
                     | Builtin::BoolType
                     | Builtin::StringType
                     | Builtin::NeverType
@@ -1949,25 +1968,83 @@ impl<'a> ExprEmitter<'a> {
                         rb.into_result(self)?
                     }
 
-                    Builtin::IntNegate { value } => unary_op!(IntNegate, value),
-                    Builtin::IntBitNot { value } => unary_op!(IntBitNot, value),
-                    Builtin::IntAdd { lhs, rhs } => binary_op!(IntAdd, lhs, rhs),
-                    Builtin::IntSub { lhs, rhs } => binary_op!(IntSub, lhs, rhs),
-                    Builtin::IntMul { lhs, rhs } => binary_op!(IntMul, lhs, rhs),
-                    Builtin::IntBitAnd { lhs, rhs } => binary_op!(IntBitAnd, lhs, rhs),
-                    Builtin::IntBitOr { lhs, rhs } => binary_op!(IntBitOr, lhs, rhs),
-                    Builtin::IntBitXor { lhs, rhs } => binary_op!(IntBitXor, lhs, rhs),
-                    Builtin::IntBitShiftLeft { lhs, rhs } => {
-                        binary_op!(IntBitShiftLeft, lhs, rhs)
+                    Builtin::IntNegate {
+                        integer_type,
+                        value,
+                    } => integer_unary_op!(IntNegate, integer_type, value),
+                    Builtin::IntBitNot {
+                        integer_type,
+                        value,
+                    } => integer_unary_op!(IntBitNot, integer_type, value),
+                    Builtin::IntAdd {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntAdd, integer_type, lhs, rhs),
+                    Builtin::IntSub {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntSub, integer_type, lhs, rhs),
+                    Builtin::IntMul {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntMul, integer_type, lhs, rhs),
+                    Builtin::IntBitAnd {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntBitAnd, integer_type, lhs, rhs),
+                    Builtin::IntBitOr {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntBitOr, integer_type, lhs, rhs),
+                    Builtin::IntBitXor {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntBitXor, integer_type, lhs, rhs),
+                    Builtin::IntBitShiftLeft {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => {
+                        integer_binary_op!(IntBitShiftLeft, integer_type, lhs, rhs)
                     }
-                    Builtin::IntBitShiftRight { lhs, rhs } => {
-                        binary_op!(IntBitShiftRight, lhs, rhs)
+                    Builtin::IntBitShiftRight {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => {
+                        integer_binary_op!(IntBitShiftRight, integer_type, lhs, rhs)
                     }
-                    Builtin::IntEq { lhs, rhs } => binary_op!(IntEq, lhs, rhs),
-                    Builtin::IntLt { lhs, rhs } => binary_op!(IntLt, lhs, rhs),
-                    Builtin::IntLe { lhs, rhs } => binary_op!(IntLe, lhs, rhs),
-                    Builtin::IntGt { lhs, rhs } => binary_op!(IntGt, lhs, rhs),
-                    Builtin::IntGe { lhs, rhs } => binary_op!(IntGe, lhs, rhs),
+                    Builtin::IntEq {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntEq, integer_type, lhs, rhs),
+                    Builtin::IntLt {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntLt, integer_type, lhs, rhs),
+                    Builtin::IntLe {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntLe, integer_type, lhs, rhs),
+                    Builtin::IntGt {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntGt, integer_type, lhs, rhs),
+                    Builtin::IntGe {
+                        integer_type,
+                        lhs,
+                        rhs,
+                    } => integer_binary_op!(IntGe, integer_type, lhs, rhs),
                     Builtin::StringConcat { values } => match values.as_slice() {
                         [] => self.expr(&Expr::StringLiteral(Box::from("")), output)?,
                         [value] => self.expr(value, output)?,
@@ -2242,6 +2319,16 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
+            Expr::U8Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstU8 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Match { value, cases } => {
                 let (result, output) = output.into_known_location(self, e)?;
                 let value_reg = self.expr(value, AnyRegister)?;
@@ -2277,9 +2364,7 @@ impl<'a> ExprEmitter<'a> {
                             when_true_block_id: Box::new(when_true_label),
                             when_false_block_id: Box::new(when_false_label),
                             when_true,
-                            when_false: Box::new(vf::Region::Sequence {
-                                regions: vec![],
-                            }),
+                            when_false: Box::new(vf::Region::Sequence { regions: vec![] }),
                         }));
                     }
 
@@ -3148,6 +3233,13 @@ fn encode_unary_operator(op: UnaryOperatorIdentifier) -> vf::UnaryOperator {
     }
 }
 
+fn encode_vm_integer_type(integer_type: IntegerType) -> vf::IntegerType {
+    match integer_type {
+        IntegerType::Int => vf::IntegerType::Int {},
+        IntegerType::U8 => vf::IntegerType::U8 {},
+    }
+}
+
 fn import_specifier_tube(import: &ImportSpecifier) -> &TubeName {
     match import {
         ImportSpecifier::Global { tube, .. } => tube,
@@ -3168,10 +3260,10 @@ fn is_branch_instruction(insn: &vf::Instruction) -> bool {
         | vf::Instruction::FunctionObjectCall { dest, .. }
         | vf::Instruction::FunctionObjectTokenCall { dest, .. }
         | vf::Instruction::FunctionObjectErasedCall { dest, .. }
-        | vf::Instruction::InstanceMethodCall { dest, .. } =>
-            matches!(&**dest, vf::FunctionResult::ReturnValue {}),
+        | vf::Instruction::InstanceMethodCall { dest, .. } => {
+            matches!(&**dest, vf::FunctionResult::ReturnValue {})
+        }
 
         _ => false,
     }
-
 }

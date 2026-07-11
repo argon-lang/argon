@@ -2,6 +2,7 @@ package dev.argon.backend.ir;
 
 import dev.argon.backend.codegen.ProgramModel;
 import dev.argon.vm.BuiltinType;
+import dev.argon.vm.IntegerType;
 import dev.argon.vm.Token;
 
 import java.lang.constant.ClassDesc;
@@ -28,7 +29,10 @@ public final class TokenTypes {
 				case BuiltinType.Bool() -> ConstantDescs.CD_boolean;
 				case BuiltinType.Conjunction _ -> throw new RuntimeException("Conjunction not implemented");
 				case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
-				case BuiltinType.Int() -> ClassDesc.of("java.math.BigInteger");
+				case BuiltinType.Int(var integerType) -> switch(integerType) {
+					case INT -> ClassDesc.of("java.math.BigInteger");
+					case U8 -> ConstantDescs.CD_byte;
+				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
 				case BuiltinType.String() -> ConstantDescs.CD_String;
 			};

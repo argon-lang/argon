@@ -2,7 +2,7 @@ use crate::{
     Context, DefaultExprContext, DefaultExprNormalizer, FunctionSignature, ModulePath, TubeName,
 };
 use alloc::{boxed::Box, vec::Vec};
-use argon_expr::{Builtin, ErasureMode, Expr, NormalizerScanner};
+use argon_expr::{Builtin, ErasureMode, Expr, IntegerType, NormalizerScanner};
 use argon_parser::ast::Identifier;
 use argon_util::{UniqueIdentifier, Unload};
 
@@ -15,6 +15,7 @@ pub struct ErasedSignature {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ErasedSignatureType {
     Int,
+    U8,
     Bool,
     String,
     Never,
@@ -114,7 +115,10 @@ pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedS
 
 fn erase_builtin(context: &Context, builtin: Builtin<DefaultExprContext>) -> ErasedSignatureType {
     match builtin {
-        Builtin::IntType => ErasedSignatureType::Int,
+        Builtin::IntType { integer_type } => match integer_type {
+            IntegerType::Int => ErasedSignatureType::Int,
+            IntegerType::U8 => ErasedSignatureType::U8,
+        },
         Builtin::BoolType => ErasedSignatureType::Bool,
         Builtin::StringType => ErasedSignatureType::String,
         Builtin::NeverType => ErasedSignatureType::Never,

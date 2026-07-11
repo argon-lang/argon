@@ -135,6 +135,7 @@ pub(super) fn emit_pattern(
 
             emitter.emit(vf::Instruction::Builtin {
                 op: Box::new(vf::BuiltinOp::IntEq {
+                    integer_type: vf::IntegerType::Int {},
                     dest: Box::new(check_res.clone()),
                     lhs: Box::new(sr),
                     rhs: Box::new(value_reg),

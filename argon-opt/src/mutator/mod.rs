@@ -50,6 +50,7 @@ fn visit_instruction(
         vf::Instruction::Builtin { op } => visit_builtin(op, register_type, mutate),
         vf::Instruction::ConstBool { dest, .. }
         | vf::Instruction::ConstInt { dest, .. }
+        | vf::Instruction::ConstU8 { dest, .. }
         | vf::Instruction::ConstString { dest, .. }
         | vf::Instruction::LoadToken { dest, .. } => {
             visit_register(dest, InstructionRegisterType::Def, register_type, mutate);
@@ -221,8 +222,8 @@ fn visit_builtin(
     mutate: &mut impl FnMut(&mut vf::RegisterId),
 ) {
     match op {
-        vf::BuiltinOp::IntNegate { dest, value }
-        | vf::BuiltinOp::IntBitNot { dest, value }
+        vf::BuiltinOp::IntNegate { dest, value, .. }
+        | vf::BuiltinOp::IntBitNot { dest, value, .. }
         | vf::BuiltinOp::BoolNot { dest, value }
         | vf::BuiltinOp::ArrayCreateUnsafeUninitialized {
             dest,
@@ -235,19 +236,19 @@ fn visit_builtin(
             visit_register(dest, InstructionRegisterType::Def, register_type, mutate);
             visit_register(value, InstructionRegisterType::Use, register_type, mutate);
         }
-        vf::BuiltinOp::IntAdd { dest, lhs, rhs }
-        | vf::BuiltinOp::IntSub { dest, lhs, rhs }
-        | vf::BuiltinOp::IntMul { dest, lhs, rhs }
-        | vf::BuiltinOp::IntBitAnd { dest, lhs, rhs }
-        | vf::BuiltinOp::IntBitOr { dest, lhs, rhs }
-        | vf::BuiltinOp::IntBitXor { dest, lhs, rhs }
-        | vf::BuiltinOp::IntBitShiftLeft { dest, lhs, rhs }
-        | vf::BuiltinOp::IntBitShiftRight { dest, lhs, rhs }
-        | vf::BuiltinOp::IntEq { dest, lhs, rhs }
-        | vf::BuiltinOp::IntLt { dest, lhs, rhs }
-        | vf::BuiltinOp::IntLe { dest, lhs, rhs }
-        | vf::BuiltinOp::IntGt { dest, lhs, rhs }
-        | vf::BuiltinOp::IntGe { dest, lhs, rhs }
+        vf::BuiltinOp::IntAdd { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntSub { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntMul { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntBitAnd { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntBitOr { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntBitXor { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntBitShiftLeft { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntBitShiftRight { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntEq { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntLt { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntLe { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntGt { dest, lhs, rhs, .. }
+        | vf::BuiltinOp::IntGe { dest, lhs, rhs, .. }
         | vf::BuiltinOp::StringEq { dest, lhs, rhs }
         | vf::BuiltinOp::BoolEq { dest, lhs, rhs }
         | vf::BuiltinOp::ArrayGet {

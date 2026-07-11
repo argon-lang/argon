@@ -1,7 +1,7 @@
 use argon_format_vm::vm as vf;
 use argon_vm::analysis;
 use argon_vm::model::{
-    next_available_block_id, prepare_function_body_for_inline, ModuleExportEntry, TubeModel,
+    ModuleExportEntry, TubeModel, next_available_block_id, prepare_function_body_for_inline,
 };
 use num_bigint::BigUint;
 
@@ -85,9 +85,12 @@ fn inline_basic_block(
     first_block_id: BigUint,
 ) -> Option<vf::Region> {
     for (index, instruction) in instructions.iter().enumerate() {
-        let Some(replacement) =
-            inline_instruction(state, variables, instruction.as_ref(), first_block_id.clone())
-        else {
+        let Some(replacement) = inline_instruction(
+            state,
+            variables,
+            instruction.as_ref(),
+            first_block_id.clone(),
+        ) else {
             continue;
         };
         let before = basic_block(instructions[..index].to_vec());

@@ -3,10 +3,10 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use argon_expr::{Builtin, Expr, ExprContext, RecordFieldLiteral, Variable};
+use argon_expr::{Builtin, Expr, ExprContext, IntegerType, RecordFieldLiteral, Variable};
 use core::str::FromStr;
 use hashbrown::{HashMap, HashSet};
-use z3::ast::{self, Ast, Bool, Dynamic, Int, Seq, String as Z3String};
+use z3::ast::{self, Ast, BV, Bool, Dynamic, Int, Seq, String as Z3String};
 use z3::{
     DatatypeAccessor, DatatypeBuilder, DatatypeSort, DatatypeVariant, FuncDecl, Params, Pattern,
     Solver, Sort,
@@ -38,13 +38,13 @@ struct ConstructorAxiomArg<'a> {
 }
 
 impl<
-        EC: ExprContext<
-                Enum = Arc<dyn Enum>,
-                EnumVariant = Arc<dyn EnumVariant>,
-                Record = Arc<dyn Record>,
-                RecordField = Arc<dyn RecordField>,
-            > + ?Sized,
-    > Z3Expr<EC>
+    EC: ExprContext<
+            Enum = Arc<dyn Enum>,
+            EnumVariant = Arc<dyn EnumVariant>,
+            Record = Arc<dyn Record>,
+            RecordField = Arc<dyn RecordField>,
+        > + ?Sized,
+> Z3Expr<EC>
 {
     #[must_use]
     pub fn new(context: Context) -> Self {
@@ -250,10 +250,12 @@ impl<
 
     fn assert_variable_type(&mut self, c: &Dynamic, t: &Expr<EC>) {
         match t {
-            Expr::Builtin(Builtin::IntType) => {
-                self.solver.assert(dynamic_to_bool(
-                    self.argon_value_sort.value_testers.int_literal.apply(&[c]),
-                ));
+            Expr::Builtin(Builtin::IntType { integer_type }) => {
+                let tester = match integer_type {
+                    IntegerType::Int => &self.argon_value_sort.value_testers.int_literal,
+                    IntegerType::U8 => &self.argon_value_sort.value_testers.u8_literal,
+                };
+                self.solver.assert(dynamic_to_bool(tester.apply(&[c])));
             }
             Expr::Builtin(Builtin::StringType) => {
                 self.solver.assert(dynamic_to_bool(
@@ -423,6 +425,16 @@ impl<
                 name: "value",
                 sort: Sort::int(),
                 accessor: Some(&sort.value_accessors.int_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "u8_literal",
+            &sort.value_constructors.u8_literal,
+            &sort.value_testers.u8_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::bitvector(8),
+                accessor: Some(&sort.value_accessors.u8_literal_value),
             }],
         );
         self.assert_value_constructor_axiom(
@@ -689,73 +701,239 @@ impl<
                 ))
             }
             Expr::Builtin(builtin) => match builtin {
-                Builtin::IntNegate { value } => {
+                Builtin::IntNegate {
+                    integer_type,
+                    value,
+                } => {
                     let value = self.expr_to_z3(value);
-                    let value = self.int_literal_value(&value).unary_minus();
-                    Some(self.wrap_int_literal(&value))
+                    match integer_type {
+                        IntegerType::Int => {
+                            let value = self.int_literal_value(&value).unary_minus();
+                            Some(self.wrap_int_literal(&value))
+                        }
+                        IntegerType::U8 => {
+                            let value = self.u8_literal_value(&value).bvneg();
+                            Some(self.wrap_u8_literal(&value))
+                        }
+                    }
                 }
-                Builtin::IntAdd { lhs, rhs } => {
+                Builtin::IntBitNot {
+                    integer_type: IntegerType::U8,
+                    value,
+                } => {
+                    let value = self.expr_to_z3(value);
+                    let value = self.u8_literal_value(&value).bvnot();
+                    Some(self.wrap_u8_literal(&value))
+                }
+                Builtin::IntAdd {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = Int::add(&[lhs, rhs]);
-                    Some(self.wrap_int_literal(&value))
+                    match integer_type {
+                        IntegerType::Int => {
+                            let lhs = self.int_literal_value(&lhs);
+                            let rhs = self.int_literal_value(&rhs);
+                            let value = Int::add(&[lhs, rhs]);
+                            Some(self.wrap_int_literal(&value))
+                        }
+                        IntegerType::U8 => {
+                            let value = self
+                                .u8_literal_value(&lhs)
+                                .bvadd(&self.u8_literal_value(&rhs));
+                            Some(self.wrap_u8_literal(&value))
+                        }
+                    }
                 }
-                Builtin::IntSub { lhs, rhs } => {
+                Builtin::IntSub {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = Int::sub(&[lhs, rhs]);
-                    Some(self.wrap_int_literal(&value))
+                    match integer_type {
+                        IntegerType::Int => {
+                            let lhs = self.int_literal_value(&lhs);
+                            let rhs = self.int_literal_value(&rhs);
+                            let value = Int::sub(&[lhs, rhs]);
+                            Some(self.wrap_int_literal(&value))
+                        }
+                        IntegerType::U8 => {
+                            let value = self
+                                .u8_literal_value(&lhs)
+                                .bvsub(&self.u8_literal_value(&rhs));
+                            Some(self.wrap_u8_literal(&value))
+                        }
+                    }
                 }
-                Builtin::IntMul { lhs, rhs } => {
+                Builtin::IntMul {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = Int::mul(&[lhs, rhs]);
-                    Some(self.wrap_int_literal(&value))
+                    match integer_type {
+                        IntegerType::Int => {
+                            let lhs = self.int_literal_value(&lhs);
+                            let rhs = self.int_literal_value(&rhs);
+                            let value = Int::mul(&[lhs, rhs]);
+                            Some(self.wrap_int_literal(&value))
+                        }
+                        IntegerType::U8 => {
+                            let value = self
+                                .u8_literal_value(&lhs)
+                                .bvmul(&self.u8_literal_value(&rhs));
+                            Some(self.wrap_u8_literal(&value))
+                        }
+                    }
                 }
-                Builtin::IntEq { lhs, rhs } => {
+                Builtin::IntBitAnd {
+                    integer_type: IntegerType::U8,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = lhs.eq(&rhs);
+                    let value = self
+                        .u8_literal_value(&lhs)
+                        .bvand(&self.u8_literal_value(&rhs));
+                    Some(self.wrap_u8_literal(&value))
+                }
+                Builtin::IntBitOr {
+                    integer_type: IntegerType::U8,
+                    lhs,
+                    rhs,
+                } => {
+                    let lhs = self.expr_to_z3(lhs);
+                    let rhs = self.expr_to_z3(rhs);
+                    let value = self
+                        .u8_literal_value(&lhs)
+                        .bvor(&self.u8_literal_value(&rhs));
+                    Some(self.wrap_u8_literal(&value))
+                }
+                Builtin::IntBitXor {
+                    integer_type: IntegerType::U8,
+                    lhs,
+                    rhs,
+                } => {
+                    let lhs = self.expr_to_z3(lhs);
+                    let rhs = self.expr_to_z3(rhs);
+                    let value = self
+                        .u8_literal_value(&lhs)
+                        .bvxor(&self.u8_literal_value(&rhs));
+                    Some(self.wrap_u8_literal(&value))
+                }
+                Builtin::IntBitShiftLeft {
+                    integer_type: IntegerType::U8,
+                    lhs,
+                    rhs,
+                } => {
+                    let lhs = self.expr_to_z3(lhs);
+                    let rhs = self.expr_to_z3(rhs);
+                    let value = self
+                        .u8_literal_value(&lhs)
+                        .bvshl(&self.u8_literal_value(&rhs));
+                    Some(self.wrap_u8_literal(&value))
+                }
+                Builtin::IntBitShiftRight {
+                    integer_type: IntegerType::U8,
+                    lhs,
+                    rhs,
+                } => {
+                    let lhs = self.expr_to_z3(lhs);
+                    let rhs = self.expr_to_z3(rhs);
+                    let value = self
+                        .u8_literal_value(&lhs)
+                        .bvlshr(&self.u8_literal_value(&rhs));
+                    Some(self.wrap_u8_literal(&value))
+                }
+                Builtin::IntEq {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
+                    let lhs = self.expr_to_z3(lhs);
+                    let rhs = self.expr_to_z3(rhs);
+                    let value = match integer_type {
+                        IntegerType::Int => self
+                            .int_literal_value(&lhs)
+                            .eq(&self.int_literal_value(&rhs)),
+                        IntegerType::U8 => {
+                            self.u8_literal_value(&lhs).eq(&self.u8_literal_value(&rhs))
+                        }
+                    };
                     Some(self.wrap_bool_literal(&value))
                 }
-                Builtin::IntLt { lhs, rhs } => {
+                Builtin::IntLt {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = lhs.lt(&rhs);
+                    let value = match integer_type {
+                        IntegerType::Int => self
+                            .int_literal_value(&lhs)
+                            .lt(&self.int_literal_value(&rhs)),
+                        IntegerType::U8 => self
+                            .u8_literal_value(&lhs)
+                            .bvult(&self.u8_literal_value(&rhs)),
+                    };
                     Some(self.wrap_bool_literal(&value))
                 }
-                Builtin::IntLe { lhs, rhs } => {
+                Builtin::IntLe {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = lhs.le(&rhs);
+                    let value = match integer_type {
+                        IntegerType::Int => self
+                            .int_literal_value(&lhs)
+                            .le(&self.int_literal_value(&rhs)),
+                        IntegerType::U8 => self
+                            .u8_literal_value(&lhs)
+                            .bvule(&self.u8_literal_value(&rhs)),
+                    };
                     Some(self.wrap_bool_literal(&value))
                 }
-                Builtin::IntGt { lhs, rhs } => {
+                Builtin::IntGt {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = lhs.gt(&rhs);
+                    let value = match integer_type {
+                        IntegerType::Int => self
+                            .int_literal_value(&lhs)
+                            .gt(&self.int_literal_value(&rhs)),
+                        IntegerType::U8 => self
+                            .u8_literal_value(&lhs)
+                            .bvugt(&self.u8_literal_value(&rhs)),
+                    };
                     Some(self.wrap_bool_literal(&value))
                 }
-                Builtin::IntGe { lhs, rhs } => {
+                Builtin::IntGe {
+                    integer_type,
+                    lhs,
+                    rhs,
+                } => {
                     let lhs = self.expr_to_z3(lhs);
                     let rhs = self.expr_to_z3(rhs);
-                    let lhs = self.int_literal_value(&lhs);
-                    let rhs = self.int_literal_value(&rhs);
-                    let value = lhs.ge(&rhs);
+                    let value = match integer_type {
+                        IntegerType::Int => self
+                            .int_literal_value(&lhs)
+                            .ge(&self.int_literal_value(&rhs)),
+                        IntegerType::U8 => self
+                            .u8_literal_value(&lhs)
+                            .bvuge(&self.u8_literal_value(&rhs)),
+                    };
                     Some(self.wrap_bool_literal(&value))
                 }
                 Builtin::StringConcat { values } => {
@@ -767,7 +945,9 @@ impl<
                         })
                         .collect::<Vec<_>>();
                     let value = match values.as_slice() {
-                        [] => Z3String::from_str("").expect("empty string must be a valid Z3 string"),
+                        [] => {
+                            Z3String::from_str("").expect("empty string must be a valid Z3 string")
+                        }
                         [value] => value.clone(),
                         values => Z3String::concat(values),
                     };
@@ -794,6 +974,10 @@ impl<
             Expr::IntLiteral(value) => {
                 let value = z3_int_from_big_int(value);
                 Some(self.wrap_int_literal(&value))
+            }
+            Expr::U8Literal(value) => {
+                let value = BV::from_u64((*value).into(), 8);
+                Some(self.wrap_u8_literal(&value))
             }
             Expr::StringLiteral(value) => match Z3String::from_str(value) {
                 Ok(value) => Some(self.wrap_string_literal(&value)),
@@ -943,6 +1127,15 @@ impl<
             .expect("int literal accessor must return a Z3 int")
     }
 
+    fn u8_literal_value(&self, value: &impl Ast) -> BV {
+        self.argon_value_sort
+            .value_accessors
+            .u8_literal_value
+            .apply(&[value])
+            .as_bv()
+            .expect("u8 literal accessor must return a Z3 bitvector")
+    }
+
     fn string_literal_value(&self, value: &impl Ast) -> Z3String {
         self.argon_value_sort
             .value_accessors
@@ -962,6 +1155,13 @@ impl<
     fn wrap_int_literal(&self, value: &Int) -> Dynamic {
         self.construct_value(
             &self.argon_value_sort.value_constructors.int_literal,
+            &[value],
+        )
+    }
+
+    fn wrap_u8_literal(&self, value: &BV) -> Dynamic {
+        self.construct_value(
+            &self.argon_value_sort.value_constructors.u8_literal,
             &[value],
         )
     }
@@ -1003,6 +1203,7 @@ pub struct ArgonValueSort {
 pub struct ArgonValueConstructors {
     pub bool_literal: FuncDecl,
     pub int_literal: FuncDecl,
+    pub u8_literal: FuncDecl,
     pub string_literal: FuncDecl,
     pub record_literal: FuncDecl,
     pub enum_variant_literal: FuncDecl,
@@ -1016,6 +1217,7 @@ pub struct ArgonValueConstructors {
 pub struct ArgonValueTesters {
     pub bool_literal: FuncDecl,
     pub int_literal: FuncDecl,
+    pub u8_literal: FuncDecl,
     pub string_literal: FuncDecl,
     pub record_literal: FuncDecl,
     pub enum_variant_literal: FuncDecl,
@@ -1029,6 +1231,7 @@ pub struct ArgonValueTesters {
 pub struct ArgonValueAccessors {
     pub bool_literal_value: FuncDecl,
     pub int_literal_value: FuncDecl,
+    pub u8_literal_value: FuncDecl,
     pub string_literal_value: FuncDecl,
     pub record_literal_record: FuncDecl,
     pub record_literal_fields: FuncDecl,
@@ -1079,6 +1282,7 @@ impl ArgonValueSort {
         let value_constructors = ArgonValueConstructors {
             bool_literal: FuncDecl::new("argon_value_bool_literal", &[&Sort::bool()], &value),
             int_literal: FuncDecl::new("argon_value_int_literal", &[&Sort::int()], &value),
+            u8_literal: FuncDecl::new("argon_value_u8_literal", &[&Sort::bitvector(8)], &value),
             string_literal: FuncDecl::new("argon_value_string_literal", &[&Sort::string()], &value),
             record_literal: FuncDecl::new(
                 "argon_value_record_literal",
@@ -1104,6 +1308,7 @@ impl ArgonValueSort {
         let value_testers = ArgonValueTesters {
             bool_literal: tester("argon_value_is_bool_literal", &value),
             int_literal: tester("argon_value_is_int_literal", &value),
+            u8_literal: tester("argon_value_is_u8_literal", &value),
             string_literal: tester("argon_value_is_string_literal", &value),
             record_literal: tester("argon_value_is_record_literal", &value),
             enum_variant_literal: tester("argon_value_is_enum_variant_literal", &value),
@@ -1117,6 +1322,7 @@ impl ArgonValueSort {
         let value_accessors = ArgonValueAccessors {
             bool_literal_value: accessor("argon_value_bool_literal_value", &value, &Sort::bool()),
             int_literal_value: accessor("argon_value_int_literal_value", &value, &Sort::int()),
+            u8_literal_value: accessor("argon_value_u8_literal_value", &value, &Sort::bitvector(8)),
             string_literal_value: accessor(
                 "argon_value_string_literal_value",
                 &value,
@@ -1186,6 +1392,7 @@ impl ArgonValueSort {
         [
             &self.value_testers.bool_literal,
             &self.value_testers.int_literal,
+            &self.value_testers.u8_literal,
             &self.value_testers.string_literal,
             &self.value_testers.record_literal,
             &self.value_testers.enum_variant_literal,
@@ -1298,8 +1505,8 @@ mod tests {
     use super::*;
     use crate::test_utils::TestContext;
     use crate::{
-        test_utils::{TestEnum, TestEnumVariant},
         DefaultExprContext,
+        test_utils::{TestEnum, TestEnumVariant},
     };
     use alloc::{sync::Arc, vec};
     use argon_expr::Builtin;
@@ -1462,6 +1669,7 @@ mod tests {
     fn opaque_expr_conversion_reuses_cached_value() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
         let expr = Expr::Builtin(Builtin::IntBitAnd {
+            integer_type: IntegerType::Int,
             lhs: Box::new(Expr::IntLiteral(1.into())),
             rhs: Box::new(Expr::IntLiteral(2.into())),
         });
@@ -1479,12 +1687,14 @@ mod tests {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
         let neg = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntNegate {
+            integer_type: IntegerType::Int,
             value: Box::new(int_expr(4)),
         }));
         let expected_neg = int_expr_value(&mut z3expr, 4).unary_minus();
         assert_eq!(z3expr.wrap_int_literal(&expected_neg), neg);
 
         let add = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntAdd {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(2)),
         }));
@@ -1494,6 +1704,7 @@ mod tests {
         assert_eq!(z3expr.wrap_int_literal(&expected_add), add);
 
         let sub = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntSub {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(5)),
             rhs: Box::new(int_expr(3)),
         }));
@@ -1503,6 +1714,7 @@ mod tests {
         assert_eq!(z3expr.wrap_int_literal(&expected_sub), sub);
 
         let mul = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntMul {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(6)),
             rhs: Box::new(int_expr(7)),
         }));
@@ -1517,6 +1729,7 @@ mod tests {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
         let eq = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntEq {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(1)),
         }));
@@ -1526,6 +1739,7 @@ mod tests {
         assert_eq!(z3expr.wrap_bool_literal(&expected_eq), eq);
 
         let lt = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntLt {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(2)),
         }));
@@ -1535,6 +1749,7 @@ mod tests {
         assert_eq!(z3expr.wrap_bool_literal(&expected_lt), lt);
 
         let le = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntLe {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(2)),
         }));
@@ -1544,6 +1759,7 @@ mod tests {
         assert_eq!(z3expr.wrap_bool_literal(&expected_le), le);
 
         let gt = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntGt {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(2)),
             rhs: Box::new(int_expr(1)),
         }));
@@ -1553,6 +1769,7 @@ mod tests {
         assert_eq!(z3expr.wrap_bool_literal(&expected_gt), gt);
 
         let ge = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntGe {
+            integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(2)),
             rhs: Box::new(int_expr(1)),
         }));
@@ -2049,7 +2266,9 @@ mod tests {
     #[test]
     fn inhabited_uses_predicate_for_opaque_types() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let expr = Expr::Builtin(Builtin::IntType);
+        let expr = Expr::Builtin(Builtin::IntType {
+            integer_type: IntegerType::Int,
+        });
         let value = z3expr.expr_to_z3(&expr);
 
         let expected = dynamic_to_bool(z3expr.inhabited_func().apply(&[&value]));
@@ -2061,7 +2280,9 @@ mod tests {
     #[test]
     fn inhabited_reduces_structural_type_rules() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let lhs = Expr::Builtin(Builtin::IntType);
+        let lhs = Expr::Builtin(Builtin::IntType {
+            integer_type: IntegerType::Int,
+        });
         let rhs = Expr::Builtin(Builtin::BoolType);
         let lhs_inhabited = z3expr.inhabited(&lhs);
         let rhs_inhabited = z3expr.inhabited(&rhs);

@@ -67,7 +67,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                 value,
             ),
 
-            Expr::Builtin(Builtin::IntType) => tester(
+            Expr::Builtin(Builtin::IntType { .. }) => tester(
                 z3expr,
                 &z3expr.argon_value_sort().value_testers.int_literal,
                 value,

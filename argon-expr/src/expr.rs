@@ -127,6 +127,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     InstanceType(InstanceType<EC>),
     IntLiteral(BigInt),
+    U8Literal(u8),
     Is {
         value: Box<Expr<EC>>,
         pattern: Box<Pattern<EC>>,
@@ -202,7 +203,15 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
     }
 
     pub fn int_type() -> Expr<EC> {
-        Expr::Builtin(Builtin::IntType)
+        Expr::integer_type(IntegerType::Int)
+    }
+
+    pub fn u8_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::U8)
+    }
+
+    pub fn integer_type(integer_type: IntegerType) -> Expr<EC> {
+        Expr::Builtin(Builtin::IntType { integer_type })
     }
 
     pub fn string_type() -> Expr<EC> {
@@ -235,7 +244,9 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
 #[derivative(Eq(bound = ""))]
 #[derivative(Hash(bound = ""))]
 pub enum Builtin<EC: ExprContext + ?Sized> {
-    IntType,
+    IntType {
+        integer_type: IntegerType,
+    },
     BoolType,
     StringType,
     NeverType,
@@ -243,60 +254,75 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         element_type: Box<Expr<EC>>,
     },
     IntNegate {
+        integer_type: IntegerType,
         value: Box<Expr<EC>>,
     },
     IntBitNot {
+        integer_type: IntegerType,
         value: Box<Expr<EC>>,
     },
     IntAdd {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntSub {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntMul {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntBitAnd {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntBitOr {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntBitXor {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntBitShiftLeft {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntBitShiftRight {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntEq {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntLt {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntLe {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntGt {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
     IntGe {
+        integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
     },
@@ -339,29 +365,89 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IntegerType {
+    Int,
+    U8,
+}
+
+impl IntegerType {
+    pub fn type_name(self) -> &'static str {
+        match self {
+            IntegerType::Int => "int_type",
+            IntegerType::U8 => "u8_type",
+        }
+    }
+}
+
 impl<EC: ExprContext + ?Sized> Builtin<EC> {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Builtin::IntType => "int_type",
+            Builtin::IntType { integer_type } => integer_type.type_name(),
             Builtin::BoolType => "bool_type",
             Builtin::StringType => "string_type",
             Builtin::NeverType => "never_type",
             Builtin::ArrayType { .. } => "array_type",
-            Builtin::IntNegate { .. } => "int_negate",
-            Builtin::IntBitNot { .. } => "int_bitnot",
-            Builtin::IntAdd { .. } => "int_add",
-            Builtin::IntSub { .. } => "int_sub",
-            Builtin::IntMul { .. } => "int_mul",
-            Builtin::IntBitAnd { .. } => "int_bitand",
-            Builtin::IntBitOr { .. } => "int_bitor",
-            Builtin::IntBitXor { .. } => "int_bitxor",
-            Builtin::IntBitShiftLeft { .. } => "int_bitshiftleft",
-            Builtin::IntBitShiftRight { .. } => "int_bitshiftright",
-            Builtin::IntEq { .. } => "int_eq",
-            Builtin::IntLt { .. } => "int_lt",
-            Builtin::IntLe { .. } => "int_le",
-            Builtin::IntGt { .. } => "int_gt",
-            Builtin::IntGe { .. } => "int_ge",
+            Builtin::IntNegate { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_negate",
+                IntegerType::U8 => "u8_negate",
+            },
+            Builtin::IntBitNot { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_bitnot",
+                IntegerType::U8 => "u8_bitnot",
+            },
+            Builtin::IntAdd { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_add",
+                IntegerType::U8 => "u8_add",
+            },
+            Builtin::IntSub { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_sub",
+                IntegerType::U8 => "u8_sub",
+            },
+            Builtin::IntMul { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_mul",
+                IntegerType::U8 => "u8_mul",
+            },
+            Builtin::IntBitAnd { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_bitand",
+                IntegerType::U8 => "u8_bitand",
+            },
+            Builtin::IntBitOr { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_bitor",
+                IntegerType::U8 => "u8_bitor",
+            },
+            Builtin::IntBitXor { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_bitxor",
+                IntegerType::U8 => "u8_bitxor",
+            },
+            Builtin::IntBitShiftLeft { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_bitshiftleft",
+                IntegerType::U8 => "u8_bitshiftleft",
+            },
+            Builtin::IntBitShiftRight { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_bitshiftright",
+                IntegerType::U8 => "u8_bitshiftright",
+            },
+            Builtin::IntEq { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_eq",
+                IntegerType::U8 => "u8_eq",
+            },
+            Builtin::IntLt { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_lt",
+                IntegerType::U8 => "u8_lt",
+            },
+            Builtin::IntLe { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_le",
+                IntegerType::U8 => "u8_le",
+            },
+            Builtin::IntGt { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_gt",
+                IntegerType::U8 => "u8_gt",
+            },
+            Builtin::IntGe { integer_type, .. } => match integer_type {
+                IntegerType::Int => "int_ge",
+                IntegerType::U8 => "u8_ge",
+            },
             Builtin::StringConcat { .. } => "string_concat",
             Builtin::StringEq { .. } => "string_eq",
             Builtin::BoolEq { .. } => "bool_eq",

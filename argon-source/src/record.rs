@@ -1,11 +1,11 @@
 use crate::enums::SourceEnumVariant;
-use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL};
+use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::{type_check_type_expr, TypeCheckOptions};
+use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{

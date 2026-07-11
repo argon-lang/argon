@@ -125,6 +125,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "mitsein",
  "num-bigint",
+ "num-traits",
  "parse18-runtime",
 ]
 

@@ -1,13 +1,13 @@
 use crate::method::{MethodClosure, SourceMethod};
-use crate::modifiers::{ModifierParser, ACCESS_MODIFIER_GLOBAL, ERASURE_MODE_CONCRETE};
+use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ERASURE_MODE_CONCRETE, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
-use argon_compiler::vtable::{build_vtable, VTable};
+use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
     Context, DefaultExprContext, ErasureMode, Instance, MethodEntry, MethodOwner, TypeDeclaration,
     Unload,

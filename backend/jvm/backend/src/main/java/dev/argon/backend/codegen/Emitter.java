@@ -1466,6 +1466,11 @@ final class Emitter {
 					storeRegister(constInt.dest());
 				}
 
+				case Instruction.ConstU8 constU8 -> {
+					cb.ldc(Byte.toUnsignedInt(constU8.value()));
+					storeRegister(constU8.dest());
+				}
+
 				case Instruction.ConstBool constBool -> {
 					if(constBool.value()) {
 						cb.iconst_1();
@@ -2229,7 +2234,7 @@ final class Emitter {
 								emitTypeInfoTokenValue(token, List.of());
 							}
 						}
-						case BuiltinType.Bool(), BuiltinType.Int(), BuiltinType.Never(), BuiltinType.String() ->
+						case BuiltinType.Bool(), BuiltinType.Int _, BuiltinType.Never(), BuiltinType.String() ->
 							emitTypeInfoTokenValue(token, List.of());
 						case BuiltinType.Conjunction _, BuiltinType.Disjunction _ -> throw new UnsupportedOperationException(
 							"TypeInfo is not implemented for JVM backend token: " + builtin.getClass().getSimpleName()

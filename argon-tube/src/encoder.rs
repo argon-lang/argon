@@ -13,8 +13,9 @@ use num_bigint::{BigInt, BigUint};
 
 use crate::ids::TubeIdProvider;
 use argon_expr::{
-    BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, LocalVariable,
-    MatchCase, MethodInstanceType, Pattern, RecordFieldPattern, RecordType, TraitType, Variable,
+    BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, IntegerType,
+    LocalVariable, MatchCase, MethodInstanceType, Pattern, RecordFieldPattern, RecordType,
+    TraitType, Variable,
 };
 use argon_format::tube as tf;
 
@@ -362,7 +363,9 @@ impl TubeEncoder {
             }
 
             EntryEmitter::RecordField(field) => {
-                if import_specifier_tube(&field.owning_record().import_specifier()) == self.tube.name() {
+                if import_specifier_tube(&field.owning_record().import_specifier())
+                    == self.tube.name()
+                {
                     return Ok(None);
                 }
 
@@ -392,7 +395,7 @@ impl TubeEncoder {
                         }
                     }
                 }
-            },
+            }
             EntryEmitter::Enum(enum_) => {
                 let enum_id = BigUint::from(self.ids.enum_ids.get(enum_.clone()));
                 let import_specifier = enum_.clone().import_specifier();
@@ -452,7 +455,9 @@ impl TubeEncoder {
             EntryEmitter::EnumVariant(variant) => {
                 let variant_enum = variant.owning_enum();
 
-                if import_specifier_tube(&variant_enum.clone().import_specifier()) == self.tube.name() {
+                if import_specifier_tube(&variant_enum.clone().import_specifier())
+                    == self.tube.name()
+                {
                     return Ok(None);
                 }
 
@@ -542,8 +547,9 @@ impl TubeEncoder {
                     method.clone().signature().as_ref(),
                 ))?;
 
-
-                if import_specifier_tube(&method.clone().owner().import_specifier()) == self.tube.name() {
+                if import_specifier_tube(&method.clone().owner().import_specifier())
+                    == self.tube.name()
+                {
                     return Ok(None);
                 }
 
@@ -686,6 +692,7 @@ impl TubeEncoder {
     ) -> Result<tf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
             ErasedSignatureType::Int => tf::ErasedSignatureType::Int {},
+            ErasedSignatureType::U8 => tf::ErasedSignatureType::U8 {},
             ErasedSignatureType::Bool => tf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => tf::ErasedSignatureType::String {},
             ErasedSignatureType::Never => tf::ErasedSignatureType::Never {},
@@ -905,6 +912,7 @@ impl TubeEncoder {
             },
             Expr::BoolLiteral(value) => tf::Expr::BoolLiteral { value: *value },
             Expr::IntLiteral(i) => tf::Expr::IntLiteral { i: i.clone() },
+            Expr::U8Literal(value) => tf::Expr::U8Literal { value: *value },
             Expr::StringLiteral(s) => tf::Expr::StringLiteral { s: s.to_string() },
             Expr::Tuple { items } => tf::Expr::Tuple {
                 items: items
@@ -1068,40 +1076,36 @@ impl TubeEncoder {
                 record_type,
                 field,
                 record_value,
-            } => {
-                tf::Expr::RecordFieldLoad {
-                    record: Box::new(tf::RecordType {
-                        id: BigUint::from(self.get_record_id(record_type.record.clone())),
-                        args: record_type
-                            .arguments
-                            .iter()
-                            .map(|arg| self.emit_expr(arg).map(Box::new))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
-                    field_id: BigUint::from(self.get_record_field_id(field.clone())),
-                    record_value: Box::new(self.emit_expr(record_value)?),
-                }
-            }
+            } => tf::Expr::RecordFieldLoad {
+                record: Box::new(tf::RecordType {
+                    id: BigUint::from(self.get_record_id(record_type.record.clone())),
+                    args: record_type
+                        .arguments
+                        .iter()
+                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+                field_id: BigUint::from(self.get_record_field_id(field.clone())),
+                record_value: Box::new(self.emit_expr(record_value)?),
+            },
             Expr::RecordFieldStore {
                 record_type,
                 field,
                 record_value,
                 new_value,
-            } => {
-                tf::Expr::RecordFieldStore {
-                    record: Box::new(tf::RecordType {
-                        id: BigUint::from(self.get_record_id(record_type.record.clone())),
-                        args: record_type
-                            .arguments
-                            .iter()
-                            .map(|arg| self.emit_expr(arg).map(Box::new))
-                            .collect::<Result<Vec<_>, _>>()?,
-                    }),
-                    field_id: BigUint::from(self.get_record_field_id(field.clone())),
-                    record_value: Box::new(self.emit_expr(record_value)?),
-                    field_value: Box::new(self.emit_expr(new_value)?),
-                }
-            }
+            } => tf::Expr::RecordFieldStore {
+                record: Box::new(tf::RecordType {
+                    id: BigUint::from(self.get_record_id(record_type.record.clone())),
+                    args: record_type
+                        .arguments
+                        .iter()
+                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?,
+                }),
+                field_id: BigUint::from(self.get_record_field_id(field.clone())),
+                record_value: Box::new(self.emit_expr(record_value)?),
+                field_value: Box::new(self.emit_expr(new_value)?),
+            },
             Expr::RecordLiteral {
                 record_type,
                 fields,
@@ -1207,68 +1211,143 @@ impl TubeEncoder {
         builtin: &Builtin<argon_compiler::DefaultExprContext>,
     ) -> Result<tf::Builtin, InternalCompilerError> {
         Ok(match builtin {
-            Builtin::IntType => tf::Builtin::IntType {},
+            Builtin::IntType { integer_type } => tf::Builtin::IntType {
+                integer_type: encode_format_integer_type(*integer_type),
+            },
             Builtin::BoolType => tf::Builtin::BoolType {},
             Builtin::StringType => tf::Builtin::StringType {},
             Builtin::NeverType => tf::Builtin::NeverType {},
             Builtin::ArrayType { element_type } => tf::Builtin::ArrayType {
                 element_type: Box::new(self.emit_expr(element_type)?),
             },
-            Builtin::IntNegate { value } => tf::Builtin::IntNegate {
+            Builtin::IntNegate {
+                integer_type,
+                value,
+            } => tf::Builtin::IntNegate {
+                integer_type: encode_format_integer_type(*integer_type),
                 value: Box::new(self.emit_expr(value)?),
             },
-            Builtin::IntBitNot { value } => tf::Builtin::IntBitNot {
+            Builtin::IntBitNot {
+                integer_type,
+                value,
+            } => tf::Builtin::IntBitNot {
+                integer_type: encode_format_integer_type(*integer_type),
                 value: Box::new(self.emit_expr(value)?),
             },
-            Builtin::IntAdd { lhs, rhs } => tf::Builtin::IntAdd {
+            Builtin::IntAdd {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntAdd {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntSub { lhs, rhs } => tf::Builtin::IntSub {
+            Builtin::IntSub {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntSub {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntMul { lhs, rhs } => tf::Builtin::IntMul {
+            Builtin::IntMul {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntMul {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntBitAnd { lhs, rhs } => tf::Builtin::IntBitAnd {
+            Builtin::IntBitAnd {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntBitAnd {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntBitOr { lhs, rhs } => tf::Builtin::IntBitOr {
+            Builtin::IntBitOr {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntBitOr {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntBitXor { lhs, rhs } => tf::Builtin::IntBitXor {
+            Builtin::IntBitXor {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntBitXor {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntBitShiftLeft { lhs, rhs } => tf::Builtin::IntBitShiftLeft {
+            Builtin::IntBitShiftLeft {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntBitShiftLeft {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntBitShiftRight { lhs, rhs } => tf::Builtin::IntBitShiftRight {
+            Builtin::IntBitShiftRight {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntBitShiftRight {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntEq { lhs, rhs } => tf::Builtin::IntEq {
+            Builtin::IntEq {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntEq {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntLt { lhs, rhs } => tf::Builtin::IntLt {
+            Builtin::IntLt {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntLt {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntLe { lhs, rhs } => tf::Builtin::IntLe {
+            Builtin::IntLe {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntLe {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntGt { lhs, rhs } => tf::Builtin::IntGt {
+            Builtin::IntGt {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntGt {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
-            Builtin::IntGe { lhs, rhs } => tf::Builtin::IntGe {
+            Builtin::IntGe {
+                integer_type,
+                lhs,
+                rhs,
+            } => tf::Builtin::IntGe {
+                integer_type: encode_format_integer_type(*integer_type),
                 lhs: Box::new(self.emit_expr(lhs)?),
                 rhs: Box::new(self.emit_expr(rhs)?),
             },
@@ -1687,5 +1766,12 @@ fn encode_parameter_list_type(
             tf::FunctionParameterListType::InferrableList { level }
         }
         FunctionParameterListType::RequiresList => tf::FunctionParameterListType::RequiresList {},
+    }
+}
+
+fn encode_format_integer_type(integer_type: IntegerType) -> tf::IntegerType {
+    match integer_type {
+        IntegerType::Int => tf::IntegerType::Int {},
+        IntegerType::U8 => tf::IntegerType::U8 {},
     }
 }

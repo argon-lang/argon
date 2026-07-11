@@ -42,7 +42,7 @@ abstract class TokenEmitter {
                     case "int":
                         return {
                             type: "Literal",
-                            value: "bigint",
+                            value: t.b.integerType === "u8" ? "number" : "bigint",
                         };
 
                     case "string":
@@ -478,6 +478,7 @@ abstract class EmitterBase {
     protected getExportNameForType(t: ir.ErasedSignatureType): string {
         switch(t.$type) {
             case "int":
+            case "u8":
             case "bool":
             case "string":
             case "never":
@@ -2035,6 +2036,13 @@ class BlockEmitter extends EmitterBase {
                     type: "Literal",
                     value: insn.value,
                     bigint: insn.value.toString()
+                });
+                break;
+
+            case "const-u8":
+                assign(insn.dest, {
+                    type: "Literal",
+                    value: insn.value,
                 });
                 break;
 

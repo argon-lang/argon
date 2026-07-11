@@ -117,7 +117,7 @@ where
             when_false,
         } => scanner.scan(condition) && scanner.scan(when_true) && scanner.scan(when_false),
         Expr::InstanceType(instance_type) => default_scan_instance_type(scanner, instance_type),
-        Expr::IntLiteral(_) => true,
+        Expr::IntLiteral(_) | Expr::U8Literal(_) => true,
         Expr::Is { value, pattern } => scanner.scan(value) && scanner.scan_pattern(pattern),
         Expr::Match { value, cases } => {
             scanner.scan(value)
@@ -199,22 +199,24 @@ where
     S: ExprScanner + ?Sized,
 {
     match builtin {
-        Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => true,
+        Builtin::IntType { .. } | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
+            true
+        }
         Builtin::ArrayType { element_type } => scanner.scan(element_type),
-        Builtin::IntNegate { value } | Builtin::IntBitNot { value } => scanner.scan(value),
-        Builtin::IntAdd { lhs, rhs }
-        | Builtin::IntSub { lhs, rhs }
-        | Builtin::IntMul { lhs, rhs }
-        | Builtin::IntBitAnd { lhs, rhs }
-        | Builtin::IntBitOr { lhs, rhs }
-        | Builtin::IntBitXor { lhs, rhs }
-        | Builtin::IntBitShiftLeft { lhs, rhs }
-        | Builtin::IntBitShiftRight { lhs, rhs }
-        | Builtin::IntEq { lhs, rhs }
-        | Builtin::IntLt { lhs, rhs }
-        | Builtin::IntLe { lhs, rhs }
-        | Builtin::IntGt { lhs, rhs }
-        | Builtin::IntGe { lhs, rhs }
+        Builtin::IntNegate { value, .. } | Builtin::IntBitNot { value, .. } => scanner.scan(value),
+        Builtin::IntAdd { lhs, rhs, .. }
+        | Builtin::IntSub { lhs, rhs, .. }
+        | Builtin::IntMul { lhs, rhs, .. }
+        | Builtin::IntBitAnd { lhs, rhs, .. }
+        | Builtin::IntBitOr { lhs, rhs, .. }
+        | Builtin::IntBitXor { lhs, rhs, .. }
+        | Builtin::IntBitShiftLeft { lhs, rhs, .. }
+        | Builtin::IntBitShiftRight { lhs, rhs, .. }
+        | Builtin::IntEq { lhs, rhs, .. }
+        | Builtin::IntLt { lhs, rhs, .. }
+        | Builtin::IntLe { lhs, rhs, .. }
+        | Builtin::IntGt { lhs, rhs, .. }
+        | Builtin::IntGe { lhs, rhs, .. }
         | Builtin::StringEq { lhs, rhs }
         | Builtin::BoolEq { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
         Builtin::StringConcat { values } => values.iter().all(|value| scanner.scan(value)),
@@ -430,7 +432,7 @@ where
                 && scanner.scan(when_false.as_mut())
         }
         Expr::InstanceType(instance_type) => default_scan_instance_type_mut(scanner, instance_type),
-        Expr::IntLiteral(_) => true,
+        Expr::IntLiteral(_) | Expr::U8Literal(_) => true,
         Expr::Is { value, pattern } => {
             scanner.scan(value.as_mut()) && scanner.scan_pattern(pattern.as_mut())
         }
@@ -517,22 +519,24 @@ where
     S: ExprScannerMut + ?Sized,
 {
     match builtin {
-        Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => true,
+        Builtin::IntType { .. } | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
+            true
+        }
         Builtin::ArrayType { element_type } => scanner.scan(element_type),
-        Builtin::IntNegate { value } | Builtin::IntBitNot { value } => scanner.scan(value),
-        Builtin::IntAdd { lhs, rhs }
-        | Builtin::IntSub { lhs, rhs }
-        | Builtin::IntMul { lhs, rhs }
-        | Builtin::IntBitAnd { lhs, rhs }
-        | Builtin::IntBitOr { lhs, rhs }
-        | Builtin::IntBitXor { lhs, rhs }
-        | Builtin::IntBitShiftLeft { lhs, rhs }
-        | Builtin::IntBitShiftRight { lhs, rhs }
-        | Builtin::IntEq { lhs, rhs }
-        | Builtin::IntLt { lhs, rhs }
-        | Builtin::IntLe { lhs, rhs }
-        | Builtin::IntGt { lhs, rhs }
-        | Builtin::IntGe { lhs, rhs }
+        Builtin::IntNegate { value, .. } | Builtin::IntBitNot { value, .. } => scanner.scan(value),
+        Builtin::IntAdd { lhs, rhs, .. }
+        | Builtin::IntSub { lhs, rhs, .. }
+        | Builtin::IntMul { lhs, rhs, .. }
+        | Builtin::IntBitAnd { lhs, rhs, .. }
+        | Builtin::IntBitOr { lhs, rhs, .. }
+        | Builtin::IntBitXor { lhs, rhs, .. }
+        | Builtin::IntBitShiftLeft { lhs, rhs, .. }
+        | Builtin::IntBitShiftRight { lhs, rhs, .. }
+        | Builtin::IntEq { lhs, rhs, .. }
+        | Builtin::IntLt { lhs, rhs, .. }
+        | Builtin::IntLe { lhs, rhs, .. }
+        | Builtin::IntGt { lhs, rhs, .. }
+        | Builtin::IntGe { lhs, rhs, .. }
         | Builtin::StringEq { lhs, rhs }
         | Builtin::BoolEq { lhs, rhs } => scanner.scan(lhs) && scanner.scan(rhs),
         Builtin::StringConcat { values } => values.iter_mut().all(|value| scanner.scan(value)),

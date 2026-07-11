@@ -1,12 +1,10 @@
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::erased_sig::{
-    erase_signature, ErasedSignature, ErasedSignatureType, ImportSpecifier,
+    ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
 };
 use argon_compiler::platform::PlatformExtern;
 use argon_compiler::signature::{ParameterBinding, SignatureParameter};
 use argon_compiler::{
-    access::{AccessModifier, AccessToken},
-    vtable::{build_vtable, VTable},
     AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
     EffectInfo, Enum, EnumVariant, EnumVariantMetadata, ErasureMode, Expr, Function,
     FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature,
@@ -15,14 +13,16 @@ use argon_compiler::{
     RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
     TubeCollectionBuilder, TubeMetadata, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
     Unload,
+    access::{AccessModifier, AccessToken},
+    vtable::{VTable, build_vtable},
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
-    LocalVariable, MatchCase, MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral,
-    RecordFieldPattern, RecordType, TraitType, Variable,
+    IntegerType, LocalVariable, MatchCase, MethodInstanceType, ParameterVariable, Pattern,
+    RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
-use argon_util::sync::{rwlock_read, rwlock_write, RwLock};
+use argon_util::sync::{RwLock, rwlock_read, rwlock_write};
 use argon_util::{UniqueIdentifier, UnloadCell};
 use core::fmt::Debug;
 use core::iter;
@@ -252,10 +252,7 @@ impl TubeDecoder {
                     insert_unique(
                         &mut self.record_field_references,
                         field.field_id.clone(),
-                        (
-                            definition.record_id.clone(),
-                            (*field.name).clone()
-                        ),
+                        (definition.record_id.clone(), (*field.name).clone()),
                         "field entry",
                     );
                 }
@@ -279,20 +276,14 @@ impl TubeDecoder {
                     insert_unique(
                         &mut self.enum_variant_references,
                         variant.variant_id.clone(),
-                        (
-                            definition.enum_id.clone(),
-                            (*variant.name).clone()
-                        ),
+                        (definition.enum_id.clone(), (*variant.name).clone()),
                         "enum variant reference",
                     );
                     for field in &variant.fields {
                         insert_unique(
                             &mut self.enum_variant_record_field_references,
                             field.field_id.clone(),
-                            (
-                                variant.variant_id.clone(),
-                                (*field.name).clone()
-                            ),
+                            (variant.variant_id.clone(), (*field.name).clone()),
                             "field entry",
                         );
                     }
@@ -1084,6 +1075,7 @@ impl TubeDecoder {
     ) -> ErasedSignatureType {
         match sig_type {
             tf::ErasedSignatureType::Int {} => ErasedSignatureType::Int,
+            tf::ErasedSignatureType::U8 {} => ErasedSignatureType::U8,
             tf::ErasedSignatureType::Bool {} => ErasedSignatureType::Bool,
             tf::ErasedSignatureType::String {} => ErasedSignatureType::String,
             tf::ErasedSignatureType::Never {} => ErasedSignatureType::Never,
@@ -1320,6 +1312,7 @@ impl TubeDecoder {
                 arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
             },
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
+            tf::Expr::U8Literal { value } => Expr::U8Literal(value),
             tf::Expr::Is { value, pattern } => Expr::Is {
                 value: Box::new(self.decode_expr(*value)),
                 pattern: Box::new(self.decode_pattern(*pattern)),
@@ -1453,68 +1446,143 @@ impl TubeDecoder {
 
     fn decode_builtin(self: &Arc<Self>, builtin: tf::Builtin) -> Builtin<DefaultExprContext> {
         match builtin {
-            tf::Builtin::IntType {} => Builtin::IntType,
+            tf::Builtin::IntType { integer_type } => Builtin::IntType {
+                integer_type: decode_format_integer_type(integer_type),
+            },
             tf::Builtin::BoolType {} => Builtin::BoolType,
             tf::Builtin::StringType {} => Builtin::StringType,
             tf::Builtin::NeverType {} => Builtin::NeverType,
             tf::Builtin::ArrayType { element_type } => Builtin::ArrayType {
                 element_type: Box::new(self.decode_expr(*element_type)),
             },
-            tf::Builtin::IntNegate { value } => Builtin::IntNegate {
+            tf::Builtin::IntNegate {
+                integer_type,
+                value,
+            } => Builtin::IntNegate {
+                integer_type: decode_format_integer_type(integer_type),
                 value: Box::new(self.decode_expr(*value)),
             },
-            tf::Builtin::IntBitNot { value } => Builtin::IntBitNot {
+            tf::Builtin::IntBitNot {
+                integer_type,
+                value,
+            } => Builtin::IntBitNot {
+                integer_type: decode_format_integer_type(integer_type),
                 value: Box::new(self.decode_expr(*value)),
             },
-            tf::Builtin::IntAdd { lhs, rhs } => Builtin::IntAdd {
+            tf::Builtin::IntAdd {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntAdd {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntSub { lhs, rhs } => Builtin::IntSub {
+            tf::Builtin::IntSub {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntSub {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntMul { lhs, rhs } => Builtin::IntMul {
+            tf::Builtin::IntMul {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntMul {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntBitAnd { lhs, rhs } => Builtin::IntBitAnd {
+            tf::Builtin::IntBitAnd {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntBitAnd {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntBitOr { lhs, rhs } => Builtin::IntBitOr {
+            tf::Builtin::IntBitOr {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntBitOr {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntBitXor { lhs, rhs } => Builtin::IntBitXor {
+            tf::Builtin::IntBitXor {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntBitXor {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntBitShiftLeft { lhs, rhs } => Builtin::IntBitShiftLeft {
+            tf::Builtin::IntBitShiftLeft {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntBitShiftLeft {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntBitShiftRight { lhs, rhs } => Builtin::IntBitShiftRight {
+            tf::Builtin::IntBitShiftRight {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntBitShiftRight {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntEq { lhs, rhs } => Builtin::IntEq {
+            tf::Builtin::IntEq {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntEq {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntLt { lhs, rhs } => Builtin::IntLt {
+            tf::Builtin::IntLt {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntLt {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntLe { lhs, rhs } => Builtin::IntLe {
+            tf::Builtin::IntLe {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntLe {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntGt { lhs, rhs } => Builtin::IntGt {
+            tf::Builtin::IntGt {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntGt {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
-            tf::Builtin::IntGe { lhs, rhs } => Builtin::IntGe {
+            tf::Builtin::IntGe {
+                integer_type,
+                lhs,
+                rhs,
+            } => Builtin::IntGe {
+                integer_type: decode_format_integer_type(integer_type),
                 lhs: Box::new(self.decode_expr(*lhs)),
                 rhs: Box::new(self.decode_expr(*rhs)),
             },
@@ -2655,5 +2723,12 @@ fn decode_parameter_list_type(
             FunctionParameterListType::InferrableList(level)
         }
         tf::FunctionParameterListType::RequiresList {} => FunctionParameterListType::RequiresList,
+    }
+}
+
+fn decode_format_integer_type(integer_type: tf::IntegerType) -> IntegerType {
+    match integer_type {
+        tf::IntegerType::Int {} => IntegerType::Int,
+        tf::IntegerType::U8 {} => IntegerType::U8,
     }
 }

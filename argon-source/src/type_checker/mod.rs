@@ -17,9 +17,9 @@ use argon_compiler::{
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut,
-    ExpressionOwner, LocalVariable, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
-    RecordFieldLiteral, RecordType, SubstScanner, TraitType, TypeComparer, Unify, Variable,
-    VariableTupleElement,
+    ExpressionOwner, IntegerType, LocalVariable, LoopLabels, MatchCase, Normalizer,
+    NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType,
+    TypeComparer, Unify, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -487,7 +487,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn treat_as_token(&self, expr: &Expr<TypeCheckExprContext>) -> bool {
         match expr {
-            Expr::Builtin(Builtin::IntType)
+            Expr::Builtin(Builtin::IntType { .. })
             | Expr::Builtin(Builtin::BoolType)
             | Expr::Builtin(Builtin::StringType)
             | Expr::Builtin(Builtin::NeverType)
@@ -1815,21 +1815,46 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             };
         }
 
+        macro_rules! fixed_integer_builtin {
+            (
+                $variant:ident,
+                $integer_type:expr,
+                [$($param_type:expr),* $(,)?] => $result_type:expr,
+                { $($field:ident),+ $(,)? }
+            ) => {
+                self.infer_fixed_builtin(
+                    location,
+                    builtin_name,
+                    args,
+                    || [$($param_type),*],
+                    || $result_type,
+                    |[$($field),+]| Builtin::$variant {
+                        integer_type: $integer_type,
+                        $(
+                            $field: Box::new($field),
+                        )+
+                    },
+                )
+            };
+        }
+
         macro_rules! int_to_int_binary_builtin {
-            ($variant:ident) => {
-                fixed_builtin!(
+            ($variant:ident, $integer_type:expr) => {
+                fixed_integer_builtin!(
                     $variant,
-                    [Expr::int_type(), Expr::int_type()] => Expr::int_type(),
+                    $integer_type,
+                    [Expr::integer_type($integer_type), Expr::integer_type($integer_type)] => Expr::integer_type($integer_type),
                     { lhs, rhs }
                 )
             };
         }
 
         macro_rules! int_to_bool_binary_builtin {
-            ($variant:ident) => {
-                fixed_builtin!(
+            ($variant:ident, $integer_type:expr) => {
+                fixed_integer_builtin!(
                     $variant,
-                    [Expr::int_type(), Expr::int_type()] => Expr::bool_type(),
+                    $integer_type,
+                    [Expr::integer_type($integer_type), Expr::integer_type($integer_type)] => Expr::bool_type(),
                     { lhs, rhs }
                 )
             };
@@ -1875,7 +1900,26 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
 
         match builtin_name {
-            "int_type" => nullary_builtin!(IntType),
+            "int_type" => self.infer_fixed_builtin(
+                location,
+                builtin_name,
+                args,
+                || [],
+                || Expr::type_n(0),
+                |[]| Builtin::IntType {
+                    integer_type: IntegerType::Int,
+                },
+            ),
+            "u8_type" => self.infer_fixed_builtin(
+                location,
+                builtin_name,
+                args,
+                || [],
+                || Expr::type_n(0),
+                |[]| Builtin::IntType {
+                    integer_type: IntegerType::U8,
+                },
+            ),
             "bool_type" => nullary_builtin!(BoolType),
             "string_type" => nullary_builtin!(StringType),
             "never_type" => nullary_builtin!(NeverType),
@@ -1890,31 +1934,58 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 },
             ),
 
-            "int_negate" => fixed_builtin!(
+            "int_negate" => fixed_integer_builtin!(
                 IntNegate,
+                IntegerType::Int,
                 [Expr::int_type()] => Expr::int_type(),
                 { value }
             ),
-            "int_bitnot" => fixed_builtin!(
+            "u8_negate" => fixed_integer_builtin!(
+                IntNegate,
+                IntegerType::U8,
+                [Expr::u8_type()] => Expr::u8_type(),
+                { value }
+            ),
+            "int_bitnot" => fixed_integer_builtin!(
                 IntBitNot,
+                IntegerType::Int,
                 [Expr::int_type()] => Expr::int_type(),
                 { value }
             ),
+            "u8_bitnot" => fixed_integer_builtin!(
+                IntBitNot,
+                IntegerType::U8,
+                [Expr::u8_type()] => Expr::u8_type(),
+                { value }
+            ),
 
-            "int_add" => int_to_int_binary_builtin!(IntAdd),
-            "int_sub" => int_to_int_binary_builtin!(IntSub),
-            "int_mul" => int_to_int_binary_builtin!(IntMul),
-            "int_bitand" => int_to_int_binary_builtin!(IntBitAnd),
-            "int_bitor" => int_to_int_binary_builtin!(IntBitOr),
-            "int_bitxor" => int_to_int_binary_builtin!(IntBitXor),
-            "int_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft),
-            "int_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight),
+            "int_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::Int),
+            "u8_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::U8),
+            "int_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::Int),
+            "u8_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::U8),
+            "int_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::Int),
+            "u8_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::U8),
+            "int_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::Int),
+            "u8_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::U8),
+            "int_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::Int),
+            "u8_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::U8),
+            "int_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::Int),
+            "u8_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::U8),
+            "int_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::Int),
+            "u8_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::U8),
+            "int_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::Int),
+            "u8_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::U8),
 
-            "int_eq" => int_to_bool_binary_builtin!(IntEq),
-            "int_lt" => int_to_bool_binary_builtin!(IntLt),
-            "int_le" => int_to_bool_binary_builtin!(IntLe),
-            "int_gt" => int_to_bool_binary_builtin!(IntGt),
-            "int_ge" => int_to_bool_binary_builtin!(IntGe),
+            "int_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::Int),
+            "u8_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::U8),
+            "int_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::Int),
+            "u8_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::U8),
+            "int_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::Int),
+            "u8_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::U8),
+            "int_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::Int),
+            "u8_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::U8),
+            "int_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::Int),
+            "u8_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::U8),
 
             "string_concat" => self.infer_variadic_builtin(
                 location,
@@ -2429,7 +2500,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     );
                 }
                 Expr::TraitType(ref trait_type) => {
-                    let instance_type_as_method_owner = Some(MethodOwner::Trait(trait_type.trait_.clone()));
+                    let instance_type_as_method_owner =
+                        Some(MethodOwner::Trait(trait_type.trait_.clone()));
 
                     let methods = trait_type.trait_.clone().methods();
 
@@ -2438,10 +2510,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .filter(|entry| {
                             entry.method.metadata().name == adjusted_member_name
                                 && self.access.allows_access(
-                                &Declaration::Method(entry.method.clone()),
-                                instance_type_as_method_owner.as_ref(),
-                                entry.access,
-                            )
+                                    &Declaration::Method(entry.method.clone()),
+                                    instance_type_as_method_owner.as_ref(),
+                                    entry.access,
+                                )
                         })
                         .map(|entry| Overloadable::InstanceMethod {
                             method: entry.method.clone(),

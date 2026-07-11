@@ -24,6 +24,7 @@ pub fn is_instruction_pure(instruction: &vf::Instruction) -> bool {
         vf::Instruction::Box { .. }
         | vf::Instruction::ConstBool { .. }
         | vf::Instruction::ConstInt { .. }
+        | vf::Instruction::ConstU8 { .. }
         | vf::Instruction::ConstString { .. }
         | vf::Instruction::EnumVariantLiteral { .. }
         | vf::Instruction::LoadInstanceField { .. }
@@ -68,7 +69,9 @@ mod tests {
         assert!(!is_instruction_pure(&vf::Instruction::Builtin {
             op: Box::new(vf::BuiltinOp::ArraySet {
                 element_type: Box::new(vf::Token::Builtin {
-                    b: Box::new(vf::BuiltinType::Int {}),
+                    b: Box::new(vf::BuiltinType::Int {
+                        integer_type: vf::IntegerType::Int {},
+                    }),
                 }),
                 array: register(0),
                 index: register(1),

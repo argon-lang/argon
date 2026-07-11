@@ -114,6 +114,7 @@ public class ClassNaming {
 	private static void appendErasedSignatureType(StringBuilder builder, ErasedSignatureType type) {
 		switch(type) {
 			case ErasedSignatureType.Int _ -> builder.append("$bint$a$e");
+			case ErasedSignatureType.U8 _ -> builder.append("$bu8$a$e");
 			case ErasedSignatureType.Bool _ -> builder.append("$bbool$a$e");
 			case ErasedSignatureType.String _ -> builder.append("$bstring$a$e");
 			case ErasedSignatureType.Never _ -> builder.append("$bnever$a$e");

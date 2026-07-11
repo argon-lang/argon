@@ -27,10 +27,10 @@ pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
     UnaryOperatorIdentifier,
 };
-use argon_util::sync::{
-    rwlock_read, rwlock_write, RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe,
-};
 pub use argon_util::Unload;
+use argon_util::sync::{
+    RwLock, RwLockReadGuard, RwLockWriteGuard, ThreadSafe, rwlock_read, rwlock_write,
+};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};

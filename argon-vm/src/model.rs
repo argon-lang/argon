@@ -837,6 +837,7 @@ impl TubeModel {
     ) -> Option<vf::ErasedSignatureType> {
         match signature_type {
             vf::ErasedSignatureType::Int {} => Some(vf::ErasedSignatureType::Int {}),
+            vf::ErasedSignatureType::U8 {} => Some(vf::ErasedSignatureType::U8 {}),
             vf::ErasedSignatureType::Bool {} => Some(vf::ErasedSignatureType::Bool {}),
             vf::ErasedSignatureType::String {} => Some(vf::ErasedSignatureType::String {}),
             vf::ErasedSignatureType::Never {} => Some(vf::ErasedSignatureType::Never {}),
@@ -944,7 +945,9 @@ impl TubeModel {
         builtin_type: &vf::BuiltinType,
     ) -> Option<vf::BuiltinType> {
         match builtin_type {
-            vf::BuiltinType::Int {} => Some(vf::BuiltinType::Int {}),
+            vf::BuiltinType::Int { integer_type } => Some(vf::BuiltinType::Int {
+                integer_type: integer_type.clone(),
+            }),
             vf::BuiltinType::Bool {} => Some(vf::BuiltinType::Bool {}),
             vf::BuiltinType::String {} => Some(vf::BuiltinType::String {}),
             vf::BuiltinType::Never {} => Some(vf::BuiltinType::Never {}),
@@ -1076,6 +1079,10 @@ impl TubeModel {
             vf::Instruction::ConstInt { dest, value } => Some(vf::Instruction::ConstInt {
                 dest: dest.clone(),
                 value: value.clone(),
+            }),
+            vf::Instruction::ConstU8 { dest, value } => Some(vf::Instruction::ConstU8 {
+                dest: dest.clone(),
+                value: *value,
             }),
             vf::Instruction::ConstString { dest, value } => Some(vf::Instruction::ConstString {
                 dest: dest.clone(),
@@ -1309,79 +1316,167 @@ impl TubeModel {
         op: &vf::BuiltinOp,
     ) -> Option<vf::BuiltinOp> {
         match op {
-            vf::BuiltinOp::IntNegate { dest, value } => Some(vf::BuiltinOp::IntNegate {
+            vf::BuiltinOp::IntNegate {
+                integer_type,
+                dest,
+                value,
+            } => Some(vf::BuiltinOp::IntNegate {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 value: value.clone(),
             }),
-            vf::BuiltinOp::IntBitNot { dest, value } => Some(vf::BuiltinOp::IntBitNot {
+            vf::BuiltinOp::IntBitNot {
+                integer_type,
+                dest,
+                value,
+            } => Some(vf::BuiltinOp::IntBitNot {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 value: value.clone(),
             }),
-            vf::BuiltinOp::IntAdd { dest, lhs, rhs } => Some(vf::BuiltinOp::IntAdd {
+            vf::BuiltinOp::IntAdd {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntAdd {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntSub { dest, lhs, rhs } => Some(vf::BuiltinOp::IntSub {
+            vf::BuiltinOp::IntSub {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntSub {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntMul { dest, lhs, rhs } => Some(vf::BuiltinOp::IntMul {
+            vf::BuiltinOp::IntMul {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntMul {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntBitAnd { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitAnd {
+            vf::BuiltinOp::IntBitAnd {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntBitAnd {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntBitOr { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitOr {
+            vf::BuiltinOp::IntBitOr {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntBitOr {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntBitXor { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitXor {
+            vf::BuiltinOp::IntBitXor {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntBitXor {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntBitShiftLeft { dest, lhs, rhs } => {
+            vf::BuiltinOp::IntBitShiftLeft {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => {
                 Some(vf::BuiltinOp::IntBitShiftLeft {
+                    integer_type: integer_type.clone(),
                     dest: dest.clone(),
                     lhs: lhs.clone(),
                     rhs: rhs.clone(),
                 })
             }
-            vf::BuiltinOp::IntBitShiftRight { dest, lhs, rhs } => {
+            vf::BuiltinOp::IntBitShiftRight {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => {
                 Some(vf::BuiltinOp::IntBitShiftRight {
+                    integer_type: integer_type.clone(),
                     dest: dest.clone(),
                     lhs: lhs.clone(),
                     rhs: rhs.clone(),
                 })
             }
-            vf::BuiltinOp::IntEq { dest, lhs, rhs } => Some(vf::BuiltinOp::IntEq {
+            vf::BuiltinOp::IntEq {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntEq {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntLt { dest, lhs, rhs } => Some(vf::BuiltinOp::IntLt {
+            vf::BuiltinOp::IntLt {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntLt {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntLe { dest, lhs, rhs } => Some(vf::BuiltinOp::IntLe {
+            vf::BuiltinOp::IntLe {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntLe {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntGt { dest, lhs, rhs } => Some(vf::BuiltinOp::IntGt {
+            vf::BuiltinOp::IntGt {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntGt {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
             }),
-            vf::BuiltinOp::IntGe { dest, lhs, rhs } => Some(vf::BuiltinOp::IntGe {
+            vf::BuiltinOp::IntGe {
+                integer_type,
+                dest,
+                lhs,
+                rhs,
+            } => Some(vf::BuiltinOp::IntGe {
+                integer_type: integer_type.clone(),
                 dest: dest.clone(),
                 lhs: lhs.clone(),
                 rhs: rhs.clone(),
@@ -1461,7 +1556,8 @@ impl TubeModel {
         }
 
         let function_id = next_id(&self.function_info);
-        let signature = self.convert_function_signature_from(source_tube, &source_info.signature)?;
+        let signature =
+            self.convert_function_signature_from(source_tube, &source_info.signature)?;
         self.function_info.insert(
             function_id.clone(),
             FunctionInfo {
@@ -1486,7 +1582,8 @@ impl TubeModel {
         }
 
         let record_id = next_id(&self.record_info);
-        let signature = self.convert_function_signature_from(source_tube, &source_info.signature)?;
+        let signature =
+            self.convert_function_signature_from(source_tube, &source_info.signature)?;
         self.record_info.insert(
             record_id.clone(),
             RecordInfo {
@@ -1511,7 +1608,8 @@ impl TubeModel {
         }
 
         let enum_id = next_id(&self.enum_info);
-        let signature = self.convert_function_signature_from(source_tube, &source_info.signature)?;
+        let signature =
+            self.convert_function_signature_from(source_tube, &source_info.signature)?;
         self.enum_info.insert(
             enum_id.clone(),
             EnumInfo {
@@ -1536,7 +1634,8 @@ impl TubeModel {
         }
 
         let trait_id = next_id(&self.trait_info);
-        let signature = self.convert_function_signature_from(source_tube, &source_info.signature)?;
+        let signature =
+            self.convert_function_signature_from(source_tube, &source_info.signature)?;
         self.trait_info.insert(
             trait_id.clone(),
             TraitInfo {
@@ -1561,7 +1660,8 @@ impl TubeModel {
         }
 
         let instance_id = next_id(&self.instance_info);
-        let signature = self.convert_function_signature_from(source_tube, &source_info.signature)?;
+        let signature =
+            self.convert_function_signature_from(source_tube, &source_info.signature)?;
         self.instance_info.insert(
             instance_id.clone(),
             InstanceInfo {
@@ -1580,13 +1680,13 @@ impl TubeModel {
         let source_info = source_tube.enum_variant_info.get(variant_id)?;
         let target_enum_id = self.convert_enum_id_from(source_tube, &source_info.enum_id)?;
 
-        if let Some(variant_id) = self
-            .enum_variant_info
-            .iter()
-            .find_map(|(target_variant_id, target_info)| {
-                (target_info.enum_id == target_enum_id && target_info.name == source_info.name)
-                    .then(|| target_variant_id.clone())
-            })
+        if let Some(variant_id) =
+            self.enum_variant_info
+                .iter()
+                .find_map(|(target_variant_id, target_info)| {
+                    (target_info.enum_id == target_enum_id && target_info.name == source_info.name)
+                        .then(|| target_variant_id.clone())
+                })
         {
             return Some(variant_id);
         }
@@ -1622,15 +1722,15 @@ impl TubeModel {
             ),
         };
 
-        if let Some(record_field_id) = self
-            .record_field_info
-            .iter()
-            .find_map(|(target_field_id, target_info)| {
-                (target_info.owner == target_owner
-                    && target_info.owner_id == target_owner_id
-                    && target_info.name == source_info.name)
-                    .then(|| target_field_id.clone())
-            })
+        if let Some(record_field_id) =
+            self.record_field_info
+                .iter()
+                .find_map(|(target_field_id, target_info)| {
+                    (target_info.owner == target_owner
+                        && target_info.owner_id == target_owner_id
+                        && target_info.name == source_info.name)
+                        .then(|| target_field_id.clone())
+                })
         {
             return Some(record_field_id);
         }
@@ -1666,21 +1766,22 @@ impl TubeModel {
         let target_erased_signature =
             self.convert_erased_signature_from(source_tube, &source_info.erased_signature)?;
 
-        if let Some(method_id) = self
-            .method_info
-            .iter()
-            .find_map(|(target_method_id, target_info)| {
-                (target_info.owner == target_owner
-                    && target_info.name == source_info.name
-                    && target_info.erased_signature == target_erased_signature)
-                    .then(|| target_method_id.clone())
-            })
+        if let Some(method_id) =
+            self.method_info
+                .iter()
+                .find_map(|(target_method_id, target_info)| {
+                    (target_info.owner == target_owner
+                        && target_info.name == source_info.name
+                        && target_info.erased_signature == target_erased_signature)
+                        .then(|| target_method_id.clone())
+                })
         {
             return Some(method_id);
         }
 
         let method_id = next_id(&self.method_info);
-        let signature = self.convert_function_signature_from(source_tube, &source_info.signature)?;
+        let signature =
+            self.convert_function_signature_from(source_tube, &source_info.signature)?;
         let parent_import_specifier =
             self.convert_import_specifier_from(source_tube, &source_info.parent_import_specifier)?;
         self.method_info.insert(
@@ -1878,7 +1979,10 @@ impl<'a> ProgramIR<'a> {
 
     pub fn current_and_referenced_tubes_mut(
         &mut self,
-    ) -> (Option<&mut TubeModel>, &HashMap<vf::TubeName, &'a TubeModel>) {
+    ) -> (
+        Option<&mut TubeModel>,
+        &HashMap<vf::TubeName, &'a TubeModel>,
+    ) {
         (self.current_tube.as_deref_mut(), &self.referenced_tubes)
     }
 
@@ -1975,7 +2079,9 @@ fn substitute_builtin_type_token_arguments(
     token_args: &[Box<vf::Token>],
 ) -> Option<vf::BuiltinType> {
     match builtin_type {
-        vf::BuiltinType::Int {} => Some(vf::BuiltinType::Int {}),
+        vf::BuiltinType::Int { integer_type } => Some(vf::BuiltinType::Int {
+            integer_type: integer_type.clone(),
+        }),
         vf::BuiltinType::Bool {} => Some(vf::BuiltinType::Bool {}),
         vf::BuiltinType::String {} => Some(vf::BuiltinType::String {}),
         vf::BuiltinType::Never {} => Some(vf::BuiltinType::Never {}),
@@ -2062,14 +2168,8 @@ fn prepare_region_for_inline(
             when_true,
             when_false,
         } => Some(vf::Region::IfElse {
-            when_true_block_id: Box::new(remap_block_id(
-                when_true_block_id,
-                block_replacements,
-            )?),
-            when_false_block_id: Box::new(remap_block_id(
-                when_false_block_id,
-                block_replacements,
-            )?),
+            when_true_block_id: Box::new(remap_block_id(when_true_block_id, block_replacements)?),
+            when_false_block_id: Box::new(remap_block_id(when_false_block_id, block_replacements)?),
             condition: Box::new(prepare_region_for_inline(
                 condition,
                 token_args,
@@ -2157,6 +2257,10 @@ fn prepare_instruction_for_inline(
         vf::Instruction::ConstInt { dest, value } => Some(vf::Instruction::ConstInt {
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: value.clone(),
+        }),
+        vf::Instruction::ConstU8 { dest, value } => Some(vf::Instruction::ConstU8 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
         }),
         vf::Instruction::ConstString { dest, value } => Some(vf::Instruction::ConstString {
             dest: Box::new(remap_register(dest, register_replacements)?),
@@ -2419,77 +2523,165 @@ fn prepare_builtin_op_for_inline(
     register_replacements: &HashMap<BigUint, BigUint>,
 ) -> Option<vf::BuiltinOp> {
     match op {
-        vf::BuiltinOp::IntNegate { dest, value } => Some(vf::BuiltinOp::IntNegate {
+        vf::BuiltinOp::IntNegate {
+            integer_type,
+            dest,
+            value,
+        } => Some(vf::BuiltinOp::IntNegate {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: Box::new(remap_register(value, register_replacements)?),
         }),
-        vf::BuiltinOp::IntBitNot { dest, value } => Some(vf::BuiltinOp::IntBitNot {
+        vf::BuiltinOp::IntBitNot {
+            integer_type,
+            dest,
+            value,
+        } => Some(vf::BuiltinOp::IntBitNot {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: Box::new(remap_register(value, register_replacements)?),
         }),
-        vf::BuiltinOp::IntAdd { dest, lhs, rhs } => Some(vf::BuiltinOp::IntAdd {
+        vf::BuiltinOp::IntAdd {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntAdd {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntSub { dest, lhs, rhs } => Some(vf::BuiltinOp::IntSub {
+        vf::BuiltinOp::IntSub {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntSub {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntMul { dest, lhs, rhs } => Some(vf::BuiltinOp::IntMul {
+        vf::BuiltinOp::IntMul {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntMul {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntBitAnd { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitAnd {
+        vf::BuiltinOp::IntBitAnd {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntBitAnd {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntBitOr { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitOr {
+        vf::BuiltinOp::IntBitOr {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntBitOr {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntBitXor { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitXor {
+        vf::BuiltinOp::IntBitXor {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntBitXor {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntBitShiftLeft { dest, lhs, rhs } => Some(vf::BuiltinOp::IntBitShiftLeft {
+        vf::BuiltinOp::IntBitShiftLeft {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntBitShiftLeft {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntBitShiftRight { dest, lhs, rhs } => {
+        vf::BuiltinOp::IntBitShiftRight {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => {
             Some(vf::BuiltinOp::IntBitShiftRight {
+                integer_type: integer_type.clone(),
                 dest: Box::new(remap_register(dest, register_replacements)?),
                 lhs: Box::new(remap_register(lhs, register_replacements)?),
                 rhs: Box::new(remap_register(rhs, register_replacements)?),
             })
         }
-        vf::BuiltinOp::IntEq { dest, lhs, rhs } => Some(vf::BuiltinOp::IntEq {
+        vf::BuiltinOp::IntEq {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntEq {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntLt { dest, lhs, rhs } => Some(vf::BuiltinOp::IntLt {
+        vf::BuiltinOp::IntLt {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntLt {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntLe { dest, lhs, rhs } => Some(vf::BuiltinOp::IntLe {
+        vf::BuiltinOp::IntLe {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntLe {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntGt { dest, lhs, rhs } => Some(vf::BuiltinOp::IntGt {
+        vf::BuiltinOp::IntGt {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntGt {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),
         }),
-        vf::BuiltinOp::IntGe { dest, lhs, rhs } => Some(vf::BuiltinOp::IntGe {
+        vf::BuiltinOp::IntGe {
+            integer_type,
+            dest,
+            lhs,
+            rhs,
+        } => Some(vf::BuiltinOp::IntGe {
+            integer_type: integer_type.clone(),
             dest: Box::new(remap_register(dest, register_replacements)?),
             lhs: Box::new(remap_register(lhs, register_replacements)?),
             rhs: Box::new(remap_register(rhs, register_replacements)?),

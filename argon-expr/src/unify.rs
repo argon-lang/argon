@@ -267,6 +267,7 @@ pub trait Unify {
                 a.instance == b.instance && self.unify_all(a.arguments, b.arguments)
             }
             (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
+            (Expr::U8Literal(a), Expr::U8Literal(b)) => a == b,
             (
                 Expr::Is {
                     value: a_value,
@@ -491,8 +492,15 @@ pub trait Unify {
 
     fn unify_builtin(&mut self, a: Builtin<Self::EC>, b: Builtin<Self::EC>) -> bool {
         match (a, b) {
-            (Builtin::IntType, Builtin::IntType)
-            | (Builtin::BoolType, Builtin::BoolType)
+            (
+                Builtin::IntType {
+                    integer_type: a_integer_type,
+                },
+                Builtin::IntType {
+                    integer_type: b_integer_type,
+                },
+            ) => a_integer_type == b_integer_type,
+            (Builtin::BoolType, Builtin::BoolType)
             | (Builtin::StringType, Builtin::StringType)
             | (Builtin::NeverType, Builtin::NeverType) => true,
             (
@@ -503,141 +511,187 @@ pub trait Unify {
                     element_type: b_element_type,
                 },
             ) => self.unify(*a_element_type, *b_element_type),
-            (Builtin::IntNegate { value: a }, Builtin::IntNegate { value: b })
-            | (Builtin::IntBitNot { value: a }, Builtin::IntBitNot { value: b }) => {
-                self.unify(*a, *b)
-            }
+            (
+                Builtin::IntNegate {
+                    integer_type: a_integer_type,
+                    value: a,
+                },
+                Builtin::IntNegate {
+                    integer_type: b_integer_type,
+                    value: b,
+                },
+            )
+            | (
+                Builtin::IntBitNot {
+                    integer_type: a_integer_type,
+                    value: a,
+                },
+                Builtin::IntBitNot {
+                    integer_type: b_integer_type,
+                    value: b,
+                },
+            ) => a_integer_type == b_integer_type && self.unify(*a, *b),
             (
                 Builtin::IntAdd {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntAdd {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntSub {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntSub {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntMul {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntMul {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntBitAnd {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntBitAnd {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntBitOr {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntBitOr {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntBitXor {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntBitXor {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntBitShiftLeft {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntBitShiftLeft {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntBitShiftRight {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntBitShiftRight {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntEq {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntEq {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntLt {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntLt {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntLe {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntLe {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntGt {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntGt {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
             )
             | (
                 Builtin::IntGe {
+                    integer_type: a_integer_type,
                     lhs: a_lhs,
                     rhs: a_rhs,
                 },
                 Builtin::IntGe {
+                    integer_type: b_integer_type,
                     lhs: b_lhs,
                     rhs: b_rhs,
                 },
-            )
-            | (
+            ) => {
+                a_integer_type == b_integer_type
+                    && self.unify(*a_lhs, *b_lhs)
+                    && self.unify(*a_rhs, *b_rhs)
+            }
+            (
                 Builtin::StringEq {
                     lhs: a_lhs,
                     rhs: a_rhs,

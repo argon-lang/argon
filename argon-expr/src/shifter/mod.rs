@@ -146,6 +146,7 @@ where
             Expr::InstanceType(default_shift_instance_type(shifter, instance_type))
         }
         Expr::IntLiteral(value) => Expr::IntLiteral(value),
+        Expr::U8Literal(value) => Expr::U8Literal(value),
         Expr::Is { value, pattern } => Expr::Is {
             value: Box::new(shifter.shift(*value)),
             pattern: Box::new(default_shift_pattern(shifter, *pattern)),
@@ -287,68 +288,141 @@ where
     S: ExprContextShifter + ?Sized,
 {
     match builtin {
-        Builtin::IntType => Builtin::IntType,
+        Builtin::IntType { integer_type } => Builtin::IntType { integer_type },
         Builtin::BoolType => Builtin::BoolType,
         Builtin::StringType => Builtin::StringType,
         Builtin::NeverType => Builtin::NeverType,
         Builtin::ArrayType { element_type } => Builtin::ArrayType {
             element_type: Box::new(shifter.shift(*element_type)),
         },
-        Builtin::IntNegate { value } => Builtin::IntNegate {
+        Builtin::IntNegate {
+            integer_type,
+            value,
+        } => Builtin::IntNegate {
+            integer_type,
             value: Box::new(shifter.shift(*value)),
         },
-        Builtin::IntBitNot { value } => Builtin::IntBitNot {
+        Builtin::IntBitNot {
+            integer_type,
+            value,
+        } => Builtin::IntBitNot {
+            integer_type,
             value: Box::new(shifter.shift(*value)),
         },
-        Builtin::IntAdd { lhs, rhs } => Builtin::IntAdd {
+        Builtin::IntAdd {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntAdd {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntSub { lhs, rhs } => Builtin::IntSub {
+        Builtin::IntSub {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntSub {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntMul { lhs, rhs } => Builtin::IntMul {
+        Builtin::IntMul {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntMul {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntBitAnd { lhs, rhs } => Builtin::IntBitAnd {
+        Builtin::IntBitAnd {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntBitAnd {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntBitOr { lhs, rhs } => Builtin::IntBitOr {
+        Builtin::IntBitOr {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntBitOr {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntBitXor { lhs, rhs } => Builtin::IntBitXor {
+        Builtin::IntBitXor {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntBitXor {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntBitShiftLeft { lhs, rhs } => Builtin::IntBitShiftLeft {
+        Builtin::IntBitShiftLeft {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntBitShiftLeft {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntBitShiftRight { lhs, rhs } => Builtin::IntBitShiftRight {
+        Builtin::IntBitShiftRight {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntBitShiftRight {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntEq { lhs, rhs } => Builtin::IntEq {
+        Builtin::IntEq {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntEq {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntLt { lhs, rhs } => Builtin::IntLt {
+        Builtin::IntLt {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntLt {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntLe { lhs, rhs } => Builtin::IntLe {
+        Builtin::IntLe {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntLe {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntGt { lhs, rhs } => Builtin::IntGt {
+        Builtin::IntGt {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntGt {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },
-        Builtin::IntGe { lhs, rhs } => Builtin::IntGe {
+        Builtin::IntGe {
+            integer_type,
+            lhs,
+            rhs,
+        } => Builtin::IntGe {
+            integer_type,
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
         },

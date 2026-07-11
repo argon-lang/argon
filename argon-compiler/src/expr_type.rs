@@ -77,6 +77,7 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
         Expr::IfElse { when_true, .. } => get_expr_type(&**when_true),
 
         Expr::IntLiteral(_) => Expr::int_type(),
+        Expr::U8Literal(_) => Expr::u8_type(),
 
         Expr::Match { .. } => todo!(),
 
@@ -115,6 +116,7 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
         Expr::Type(level) => match &**level {
             Expr::IntLiteral(level) => Expr::type_n(level + 1),
             level => Expr::Type(Box::new(Expr::Builtin(Builtin::IntAdd {
+                integer_type: argon_expr::IntegerType::Int,
                 lhs: Box::new(level.clone()),
                 rhs: Box::new(Expr::IntLiteral(1.into())),
             }))),
@@ -225,23 +227,24 @@ pub fn get_pattern_type(pattern: &Pattern<DefaultExprContext>) -> Expr<DefaultEx
 
 fn get_builtin_type<EC: ExprTypeContext + ?Sized>(builtin: &Builtin<EC>) -> Expr<EC> {
     match builtin {
-        Builtin::IntType | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
+        Builtin::IntType { .. } | Builtin::BoolType | Builtin::StringType | Builtin::NeverType => {
             Expr::type_n(0)
         }
 
         Builtin::ArrayType { element_type } => get_expr_type(element_type),
 
-        Builtin::IntNegate { .. }
-        | Builtin::IntBitNot { .. }
-        | Builtin::IntAdd { .. }
-        | Builtin::IntSub { .. }
-        | Builtin::IntMul { .. }
-        | Builtin::IntBitAnd { .. }
-        | Builtin::IntBitOr { .. }
-        | Builtin::IntBitXor { .. }
-        | Builtin::IntBitShiftLeft { .. }
-        | Builtin::IntBitShiftRight { .. }
-        | Builtin::ArrayLength { .. } => Expr::int_type(),
+        Builtin::IntNegate { integer_type, .. }
+        | Builtin::IntBitNot { integer_type, .. }
+        | Builtin::IntAdd { integer_type, .. }
+        | Builtin::IntSub { integer_type, .. }
+        | Builtin::IntMul { integer_type, .. }
+        | Builtin::IntBitAnd { integer_type, .. }
+        | Builtin::IntBitOr { integer_type, .. }
+        | Builtin::IntBitXor { integer_type, .. }
+        | Builtin::IntBitShiftLeft { integer_type, .. }
+        | Builtin::IntBitShiftRight { integer_type, .. } => Expr::integer_type(*integer_type),
+
+        Builtin::ArrayLength { .. } => Expr::int_type(),
 
         Builtin::IntEq { .. }
         | Builtin::IntLt { .. }

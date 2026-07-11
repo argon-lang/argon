@@ -190,11 +190,9 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
             let mut message = if self.rejected_overloads.is_empty() {
                 "no overloads found".to_owned()
-            }
-            else if self.rejected_overloads.len() == 1 {
+            } else if self.rejected_overloads.len() == 1 {
                 "1 overload found".to_owned()
-            }
-            else {
+            } else {
                 format!("{} overloads found", self.rejected_overloads.len())
             };
 
@@ -206,7 +204,10 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             self.type_checker
                 .context
                 .reporter()
-                .report_error(CompileError::invalid_overload(self.call_location.clone(), &message));
+                .report_error(CompileError::invalid_overload(
+                    self.call_location.clone(),
+                    &message,
+                ));
 
             return ResolvedOverload {
                 overload: None,
@@ -640,7 +641,10 @@ impl<'a> SelectedOverload<'a> {
                     checker
                         .context
                         .reporter()
-                        .report_error(CompileError::invalid_overload(self.call_location.clone(), "unknown field"));
+                        .report_error(CompileError::invalid_overload(
+                            self.call_location.clone(),
+                            "unknown field",
+                        ));
                 }
 
                 let enum_type = match &self.return_type {
