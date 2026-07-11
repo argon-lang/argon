@@ -39,10 +39,10 @@ public instance Array: ArrayOperations
     end
 end
 
-public def extension length '(token T: type) (array: Array T): Int =
+public inline def extension length '(token T: type) (array: Array T): Int =
     __argon_builtin array_length T array
 
-public proc extension operator[] '(token T: type) (array: Array T)(index: Int): T do
+public inline proc extension operator[] '(token T: type) (array: Array T)(index: Int): T do
     if index < 0 || index >= array.length then
         raise IndexOutOfBoundsException
     end
@@ -50,7 +50,7 @@ public proc extension operator[] '(token T: type) (array: Array T)(index: Int): 
     __argon_builtin array_get T array index
 end
 
-public proc extension update operator[] '(token T: type) (array: Array T)(index: Int)(value: T): () do
+public inline proc extension update operator[] '(token T: type) (array: Array T)(index: Int)(value: T): () do
     if index < 0 || index >= array.length then
         raise IndexOutOfBoundsException
     end

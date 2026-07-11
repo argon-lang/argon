@@ -12,7 +12,7 @@ use argon_compiler::{ContextObject, TubeCollectionBuilder, TubeMetadata, TubeNam
 use argon_format_vm::vm as vf;
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_source::SourceCodeTubeOptions;
-use argon_util::sync::{parallel::*, ThreadSafe};
+use argon_util::sync::{ThreadSafe, parallel::*};
 use argon_util::{CompileError, ErrorReporter, InternalCompilerError, TubeFormatError};
 use embedded_io::{Write, WriteFmtError};
 use esexpr::ESExprCodec;
@@ -35,6 +35,7 @@ pub struct GenIrOptions<IF, O> {
 
 pub struct OptimizeOptions<IF, O> {
     pub input_file: IF,
+    pub referenced_tubes: Vec<IF>,
     pub output_file: O,
     pub optimizations: Vec<String>,
 }
@@ -243,42 +244,22 @@ where
     }
 
     'errors: {
-        let mut in_file = match options.input_file.open() {
-            Ok(file) => file,
-            Err(err) => {
-                context.runner_reporter().report_error(err);
-                break 'errors;
-            }
+        let referenced_tubes = options
+            .referenced_tubes
+            .iter()
+            .filter_map(|ref_tube| load_vm_tube_model(&context, ref_tube))
+            .collect::<Vec<_>>();
+
+        let Some(mut model) = load_vm_tube_model(&context, &options.input_file) else {
+            break 'errors;
         };
 
-        let mut entries = Vec::new();
-        let mut expr_stream = esexpr_binary::parse_sync(&mut in_file);
-        loop {
-            let expr = match expr_stream.try_read_next_expr() {
-                Ok(Some(expr)) => expr,
-                Ok(None) => break,
-                Err(err) => {
-                    context
-                        .runner_reporter()
-                        .report_error(ir_parse_error(&options.input_file, err));
-                    break 'errors;
-                }
-            };
-
-            let mut entry = match vf::TubeFileEntry::decode_esexpr(expr) {
-                Ok(entry) => entry,
-                Err(err) => {
-                    context.runner_reporter().report_error(ir_format_error(
-                        &options.input_file,
-                        TubeFormatError::from(err),
-                    ));
-                    break 'errors;
-                }
-            };
-
-            argon_opt::optimize_entry(&optimizer, &mut entry);
-            entries.push(entry);
+        if context.runner_reporter().has_errors() {
+            break 'errors;
         }
+
+        argon_opt::optimize_tube(&optimizer, &mut model, referenced_tubes.iter());
+        let entries = model.into_entries();
 
         let mut out_file = match options.output_file.open() {
             Ok(file) => file,
@@ -311,6 +292,51 @@ where
     let _ = context.runner_reporter().print_error_messages(error_output);
     let _ = delete_output_file(&options.output_file, error_output);
     false
+}
+
+fn load_vm_tube_model<F>(
+    context: &RunnerContext,
+    input_file: &F,
+) -> Option<argon_vm::model::TubeModel>
+where
+    F: InputFile,
+{
+    let mut in_file = match input_file.open() {
+        Ok(file) => file,
+        Err(err) => {
+            context.runner_reporter().report_error(err);
+            return None;
+        }
+    };
+
+    let mut entries = Vec::new();
+    let mut expr_stream = esexpr_binary::parse_sync(&mut in_file);
+    loop {
+        let expr = match expr_stream.try_read_next_expr() {
+            Ok(Some(expr)) => expr,
+            Ok(None) => break,
+            Err(err) => {
+                context
+                    .runner_reporter()
+                    .report_error(ir_parse_error(input_file, err));
+                return None;
+            }
+        };
+
+        let entry = match vf::TubeFileEntry::decode_esexpr(expr) {
+            Ok(entry) => entry,
+            Err(err) => {
+                context
+                    .runner_reporter()
+                    .report_error(ir_format_error(input_file, TubeFormatError::from(err)));
+                return None;
+            }
+        };
+
+        entries.push(entry);
+    }
+
+    Some(argon_vm::model::TubeModel::from_entries(entries))
 }
 
 fn ir_format_error<F>(file: &F, error: TubeFormatError) -> InternalCompilerError

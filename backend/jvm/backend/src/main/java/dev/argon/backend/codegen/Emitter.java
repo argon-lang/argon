@@ -1243,7 +1243,7 @@ final class Emitter {
 	) {
 		var methodInfo = program.getMethodInfo(method.methodId());
 
-		if(method._abstract()) {
+		if(method.flags()._abstract()) {
 			classBuilder.withMethod(
 				methodInfo.methodName(),
 				methodInfo.descriptor(),

@@ -267,6 +267,7 @@ impl CliCommandRunner {
         let temp_path = temp_dir.path();
 
         let input_file = stage_input_file(temp_path, "input", 0, options.input_file)?;
+        let referenced_tubes = stage_input_files(temp_path, "reference", options.referenced_tubes)?;
         let output_file = temp_path.join("output.arvm");
 
         let mut args = vec![
@@ -276,6 +277,10 @@ impl CliCommandRunner {
             "--output".into(),
             output_file.clone().into_os_string(),
         ];
+        for reference in referenced_tubes {
+            args.push("--reference".into());
+            args.push(reference.into_os_string());
+        }
         for optimization in options.optimizations {
             args.push("--optimization".into());
             args.push(optimization.into());

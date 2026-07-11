@@ -248,7 +248,7 @@ mod tests {
                 },
             )])]),
         ));
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         TRAILING_BLOCK_BRANCH_ELIMINATION.optimize(&mut state, &mut function);
 
@@ -270,7 +270,7 @@ mod tests {
                 block_id: Box::new(block_id.clone()),
             })]),
         ));
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         TRAILING_BLOCK_BRANCH_ELIMINATION.optimize(&mut state, &mut function);
 
@@ -293,7 +293,7 @@ mod tests {
                 block_id: Box::new(other_block_id),
             })]),
         ));
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         TRAILING_BLOCK_BRANCH_ELIMINATION.optimize(&mut state, &mut function);
 
@@ -317,7 +317,7 @@ mod tests {
                 })]),
             ),
         ));
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         TRAILING_BLOCK_BRANCH_ELIMINATION.optimize(&mut state, &mut function);
 

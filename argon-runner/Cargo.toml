@@ -12,6 +12,7 @@ argon-opt = { workspace = true }
 argon-source = { workspace = true }
 argon-tube = { workspace = true }
 argon-util = { workspace = true }
+argon-vm = { workspace = true }
 
 embedded-io = { workspace = true }
 esexpr = { workspace = true }

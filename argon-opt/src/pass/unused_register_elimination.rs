@@ -80,7 +80,7 @@ mod tests {
                 Box::new(vf::Instruction::Return { src: register(2) }),
             ])),
         };
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         UNUSED_REGISTER_ELIMINATION.optimize(&mut state, &mut function);
 
@@ -113,7 +113,10 @@ mod tests {
                 Box::new(vf::Instruction::Return { src: register(2) }),
             ])),
         };
-        let mut state = OptimizationState::new(&[vf::Token::Boxed {}, vf::Token::Boxed {}]);
+        let mut state = OptimizationState::without_referenced_tubes(&[
+            vf::Token::Boxed {},
+            vf::Token::Boxed {},
+        ]);
 
         UNUSED_REGISTER_ELIMINATION.optimize(&mut state, &mut function);
 

@@ -314,6 +314,9 @@ impl VmEncoder {
                         definition: Box::new(vf::FunctionDefinition {
                             function_id,
                             import: Box::new(import),
+                            flags: vf::FunctionFlags {
+                                inline: function.metadata().is_inline,
+                            },
                             signature: Box::new(signature.sig),
                             implementation,
                         }),
@@ -675,6 +678,7 @@ impl VmEncoder {
                         definition: Box::new(vf::FunctionDefinition {
                             function_id: BigUint::from(syn_id),
                             import: Box::new(import_spec),
+                            flags: vf::FunctionFlags { inline: false },
                             signature: Box::new(sig.sig),
                             implementation: Some(Box::new(vf::FunctionImplementation::VmIr {
                                 body: Box::new(block),
@@ -872,7 +876,10 @@ impl VmEncoder {
             method_id: BigUint::from(self.ids.method_ids.get(method.clone())),
             name: Box::new(encode_identifier(&metadata.name)),
             erased_signature: Box::new(erased_sig),
-            r#abstract: metadata.is_abstract,
+            flags: vf::MethodFlags {
+                r#abstract: metadata.is_abstract,
+                inline: metadata.is_inline,
+            },
             signature: Box::new(signature.sig),
             implementation,
         })

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 argon-format-vm = { workspace = true }
+num-bigint = { workspace = true }
 
 [lints]
 workspace = true

@@ -93,7 +93,7 @@ mod tests {
     #[test]
     fn removes_pure_instruction_with_no_live_definitions() {
         let mut region = basic_block(vec![constant(0)]);
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         remove_dead_instructions(&mut state, &mut region);
         assert!(state.changed());
@@ -106,7 +106,7 @@ mod tests {
             constant(0),
             Box::new(vf::Instruction::Return { src: register(0) }),
         ]);
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         remove_dead_instructions(&mut state, &mut region);
         assert!(!state.changed());
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn discards_an_unused_function_result() {
         let mut region = basic_block(vec![function_call(0)]);
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         remove_dead_instructions(&mut state, &mut region);
 
@@ -135,7 +135,7 @@ mod tests {
             function_call(0),
             Box::new(vf::Instruction::Return { src: register(0) }),
         ]);
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         remove_dead_instructions(&mut state, &mut region);
 

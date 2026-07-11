@@ -194,93 +194,112 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
     }
 
     pub fn genir_library_tube(self: Arc<Self>, library_name: &str) -> PathBuf {
-        let mut tube_map = self
+        if let Some(path) = self
             .library_generated_ir
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(|e| e.into_inner())
+            .get(library_name)
+            .cloned()
+        {
+            return path;
+        }
 
-        let context2 = self.clone();
+        let library = self.clone().library_info(library_name);
 
-        tube_map
-            .entry_ref(library_name)
-            .or_insert_with(|| {
-                let library = context2.library_info(library_name);
+        let input_file = library
+            .test_suite_context
+            .clone()
+            .compile_library_tube(library_name);
+        let output_file = library
+            .library_output_path
+            .join(format!("{}.arvm", library.name));
+        let gen_ir_output_file = if library.test_suite_context.options.optimize_ir {
+            library
+                .library_output_path
+                .join(format!("{}.unoptimized.arvm", library.name))
+        } else {
+            output_file.clone()
+        };
 
-                let input_file = library
+        let dependency_names = library
+            .test_suite_context
+            .referenced_libraries(
+                &library
+                    .test_suite_context
+                    .library_dependencies(library_name),
+            )
+            .into_iter()
+            .filter(|dependency_name| dependency_name != library_name)
+            .collect::<Vec<_>>();
+
+        let dependency_references = dependency_names
+            .iter()
+            .map(|dependency_name| {
+                library
                     .test_suite_context
                     .clone()
-                    .compile_library_tube(library_name);
-                let output_file = library
-                    .library_output_path
-                    .join(format!("{}.arvm", library.name));
-                let gen_ir_output_file = if library.test_suite_context.options.optimize_ir {
-                    library
-                        .library_output_path
-                        .join(format!("{}.unoptimized.arvm", library.name))
-                } else {
-                    output_file.clone()
-                };
-
-                let dependency_references = library
-                    .test_suite_context
-                    .referenced_libraries(
-                        &library
-                            .test_suite_context
-                            .library_dependencies(library_name),
-                    )
-                    .into_iter()
-                    .filter(|dependency_name| dependency_name != library_name)
-                    .map(|dependency_name| {
-                        library
-                            .test_suite_context
-                            .clone()
-                            .compile_library_tube(&dependency_name)
-                    })
-                    .collect::<Vec<_>>();
-
-                let mut output = Vec::new();
-                let success = library.test_suite_context.command_runner.gen_ir(
-                    GenIrOptions {
-                        input_tube: LocalInputFile::new(input_file),
-                        referenced_tubes: dependency_references
-                            .into_iter()
-                            .map(LocalInputFile::new)
-                            .collect(),
-                        platform: P::ID.to_owned(),
-                        output_file: LocalOutputFile::new(gen_ir_output_file.clone()),
-                    },
-                    &mut StdIoWrite::new(&mut output),
-                );
-
-                assert!(
-                    success,
-                    "IR Generation of library {} failed\n{}",
-                    library.name,
-                    String::from_utf8_lossy(&output),
-                );
-
-                if library.test_suite_context.options.optimize_ir {
-                    let mut output = Vec::new();
-                    let success = library.test_suite_context.command_runner.optimize(
-                        OptimizeOptions {
-                            input_file: LocalInputFile::new(gen_ir_output_file),
-                            output_file: LocalOutputFile::new(output_file.clone()),
-                            optimizations: default_optimizations(),
-                        },
-                        &mut StdIoWrite::new(&mut output),
-                    );
-
-                    assert!(
-                        success,
-                        "IR optimization of library {} failed\n{}",
-                        library.name,
-                        String::from_utf8_lossy(&output),
-                    );
-                }
-
-                output_file
+                    .compile_library_tube(dependency_name)
             })
-            .clone()
+            .collect::<Vec<_>>();
+
+        let mut output = Vec::new();
+        let success = library.test_suite_context.command_runner.gen_ir(
+            GenIrOptions {
+                input_tube: LocalInputFile::new(input_file),
+                referenced_tubes: dependency_references
+                    .into_iter()
+                    .map(LocalInputFile::new)
+                    .collect(),
+                platform: P::ID.to_owned(),
+                output_file: LocalOutputFile::new(gen_ir_output_file.clone()),
+            },
+            &mut StdIoWrite::new(&mut output),
+        );
+
+        assert!(
+            success,
+            "IR Generation of library {} failed\n{}",
+            library.name,
+            String::from_utf8_lossy(&output),
+        );
+
+        if library.test_suite_context.options.optimize_ir {
+            let referenced_tubes = dependency_names
+                .into_iter()
+                .map(|dependency_name| {
+                    library
+                        .test_suite_context
+                        .clone()
+                        .genir_library_tube(&dependency_name)
+                })
+                .map(LocalInputFile::new)
+                .collect();
+
+            let mut output = Vec::new();
+            let success = library.test_suite_context.command_runner.optimize(
+                OptimizeOptions {
+                    input_file: LocalInputFile::new(gen_ir_output_file),
+                    referenced_tubes,
+                    output_file: LocalOutputFile::new(output_file.clone()),
+                    optimizations: default_optimizations(),
+                },
+                &mut StdIoWrite::new(&mut output),
+            );
+
+            assert!(
+                success,
+                "IR optimization of library {} failed\n{}",
+                library.name,
+                String::from_utf8_lossy(&output),
+            );
+        }
+
+        self.library_generated_ir
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(library_name.to_owned(), output_file.clone());
+
+        output_file
     }
 }
 
@@ -393,10 +412,22 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
         );
 
         if self.test_suite_context.options.optimize_ir {
+            let referenced_tubes = self
+                .referenced_libraries()
+                .into_iter()
+                .map(|library_name| {
+                    self.test_suite_context
+                        .clone()
+                        .genir_library_tube(&library_name)
+                })
+                .map(LocalInputFile::new)
+                .collect();
+
             let mut output = Vec::new();
             let success = self.test_suite_context.command_runner.optimize(
                 OptimizeOptions {
                     input_file: LocalInputFile::new(gen_ir_output_file),
+                    referenced_tubes,
                     output_file: LocalOutputFile::new(output_file.clone()),
                     optimizations: default_optimizations(),
                 },

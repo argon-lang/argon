@@ -96,7 +96,7 @@ mod tests {
                 Box::new(basic_block(Vec::new())),
             ],
         });
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         FLATTEN_REGIONS.optimize(&mut state, &mut function);
 
@@ -131,7 +131,7 @@ mod tests {
             }),
             ensuring: Box::new(basic_block(Vec::new())),
         });
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         FLATTEN_REGIONS.optimize(&mut state, &mut function);
 
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn replaces_empty_basic_block_with_empty_sequence() {
         let mut function = function_body(basic_block(Vec::new()));
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         FLATTEN_REGIONS.optimize(&mut state, &mut function);
 

@@ -78,6 +78,10 @@ pub struct OptimizeOptions {
     #[arg(short, long)]
     pub input: PathBuf,
 
+    /// Referenced Argon VM IR files.
+    #[arg(short, long = "reference")]
+    pub referenced_tubes: Vec<PathBuf>,
+
     /// Output Argon VM IR file.
     #[arg(short, long)]
     pub output: PathBuf,

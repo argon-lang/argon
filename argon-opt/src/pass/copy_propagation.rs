@@ -244,7 +244,7 @@ mod tests {
                 Box::new(vf::Instruction::Return { src: register(1) }),
             ])),
         };
-        let mut state = OptimizationState::new(&[]);
+        let mut state = OptimizationState::without_referenced_tubes(&[]);
 
         COPY_PROPAGATION.optimize(&mut state, &mut function);
 

@@ -156,13 +156,13 @@ record tube-reference {
 
 
 @esexpr:(derive-codec)
-record tube-name {
+record tube-name derives eq, hash {
     head: string;
     tail: list[string];
 }
 
 @esexpr:(derive-codec)
-record module-path {
+record module-path derives eq, hash {
     path: list[string];
 }
 
@@ -174,7 +174,7 @@ record module-name {
 
 
 @esexpr:(derive-codec)
-enum identifier {
+enum identifier derives eq, hash {
     named { s: string; },
     bin-op { op: binary-operator; },
     un-op { op: unary-operator; },
@@ -185,7 +185,7 @@ enum identifier {
 }
 
 @esexpr:(derive-codec)
-simple enum binary-operator {
+simple enum binary-operator derives eq, hash {
     plus,
     minus,
     mul,
@@ -205,7 +205,7 @@ simple enum binary-operator {
 }
 
 @esexpr:(derive-codec)
-simple enum unary-operator {
+simple enum unary-operator derives eq, hash {
     plus,
     minus,
     bit-not,
@@ -213,13 +213,13 @@ simple enum unary-operator {
 }
 
 @esexpr:(derive-codec)
-record erased-signature {
+record erased-signature derives eq, hash {
     params: list[erased-signature-type];
     result: erased-signature-type;
 }
 
 @esexpr:(derive-codec)
-enum erased-signature-type {
+enum erased-signature-type derives eq, hash {
     int,
     bool,
     string,
@@ -264,7 +264,7 @@ enum builtin-type {
 }
 
 @esexpr:(derive-codec)
-enum import-specifier {
+enum import-specifier derives eq, hash {
     @esexpr:(constructor "import-global")
     global {
         module-id: nat;
@@ -316,6 +316,7 @@ record parameter-binding {
 record function-definition {
     function-id: nat;
     import: import-specifier;
+    flags: function-flags;
 
     @esexpr:(keyword)
     signature: function-signature;
@@ -323,6 +324,11 @@ record function-definition {
     @esexpr:(keyword)
     @esexpr:(optional)
     implementation: optional-field[function-implementation];
+}
+
+@esexpr:(derive-codec)
+flags function-flags {
+    inline = 0x01,
 }
 
 @esexpr:(derive-codec)
@@ -403,10 +409,7 @@ record method-definition {
     method-id: nat;
     name: identifier;
     erased-signature: erased-signature;
-
-    @esexpr:(keyword)
-    @esexpr:(default-value #false)
-    abstract: bool;
+    flags: method-flags;
 
     @esexpr:(keyword)
     signature: function-signature;
@@ -414,6 +417,12 @@ record method-definition {
     @esexpr:(keyword)
     @esexpr:(optional)
     implementation: optional-field[function-implementation];
+}
+
+@esexpr:(derive-codec)
+flags method-flags {
+    abstract = 0x01,
+    inline = 0x02,
 }
 
 @esexpr:(derive-codec)

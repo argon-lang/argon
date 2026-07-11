@@ -51,6 +51,11 @@ fn main() {
         Command::Optimize(cmd) => {
             let runner_options = argon_runner::OptimizeOptions {
                 input_file: LocalInputFile::new(cmd.input),
+                referenced_tubes: cmd
+                    .referenced_tubes
+                    .into_iter()
+                    .map(LocalInputFile::new)
+                    .collect(),
                 output_file: LocalOutputFile::new(cmd.output),
                 optimizations: cmd.optimizations,
             };
