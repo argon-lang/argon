@@ -692,6 +692,7 @@ impl TubeEncoder {
     ) -> Result<tf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
             ErasedSignatureType::Int => tf::ErasedSignatureType::Int {},
+            ErasedSignatureType::I8 => tf::ErasedSignatureType::I8 {},
             ErasedSignatureType::U8 => tf::ErasedSignatureType::U8 {},
             ErasedSignatureType::Bool => tf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => tf::ErasedSignatureType::String {},
@@ -912,6 +913,7 @@ impl TubeEncoder {
             },
             Expr::BoolLiteral(value) => tf::Expr::BoolLiteral { value: *value },
             Expr::IntLiteral(i) => tf::Expr::IntLiteral { i: i.clone() },
+            Expr::I8Literal(value) => tf::Expr::I8Literal { value: *value },
             Expr::U8Literal(value) => tf::Expr::U8Literal { value: *value },
             Expr::StringLiteral(s) => tf::Expr::StringLiteral { s: s.to_string() },
             Expr::Tuple { items } => tf::Expr::Tuple {
@@ -1781,6 +1783,7 @@ fn encode_parameter_list_type(
 fn encode_format_integer_type(integer_type: IntegerType) -> tf::IntegerType {
     match integer_type {
         IntegerType::Int => tf::IntegerType::Int {},
+        IntegerType::I8 => tf::IntegerType::I8 {},
         IntegerType::U8 => tf::IntegerType::U8 {},
     }
 }

@@ -151,6 +151,7 @@ trait TokenProcessor {
                 return LexedToken::EndOfFile(lexer.current_pos);
             } else {
                 lexer.reader.next_chunk(&mut lexer.current_text);
+                lexer.current_text_offset = 0;
                 if lexer.current_text.is_empty() {
                     lexer.has_eof = true;
 

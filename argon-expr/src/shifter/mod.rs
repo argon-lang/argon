@@ -146,6 +146,7 @@ where
             Expr::InstanceType(default_shift_instance_type(shifter, instance_type))
         }
         Expr::IntLiteral(value) => Expr::IntLiteral(value),
+        Expr::I8Literal(value) => Expr::I8Literal(value),
         Expr::U8Literal(value) => Expr::U8Literal(value),
         Expr::Is { value, pattern } => Expr::Is {
             value: Box::new(shifter.shift(*value)),

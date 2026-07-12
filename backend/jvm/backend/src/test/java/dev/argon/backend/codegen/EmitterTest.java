@@ -74,6 +74,7 @@ final class EmitterTest {
 				case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
 				case BuiltinType.Int(var integerType) -> switch(integerType) {
 					case INT -> ClassDesc.of("java.math.BigInteger");
+					case I8 -> ClassDesc.ofDescriptor("I");
 					case U8 -> ClassDesc.ofDescriptor("I");
 				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");

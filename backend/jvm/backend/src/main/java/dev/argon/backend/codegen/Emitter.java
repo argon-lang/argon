@@ -1471,6 +1471,11 @@ final class Emitter {
 					storeRegister(constInt.dest());
 				}
 
+				case Instruction.ConstI8 constI8 -> {
+					cb.ldc((int) constI8.value());
+					storeRegister(constI8.dest());
+				}
+
 				case Instruction.ConstU8 constU8 -> {
 					cb.ldc(Byte.toUnsignedInt(constU8.value()));
 					storeRegister(constU8.dest());
@@ -2407,6 +2412,10 @@ final class Emitter {
 						"add",
 						() -> {
 							cb.iadd();
+							cb.i2b();
+						},
+						() -> {
+							cb.iadd();
 							maskU8();
 						}
 					);
@@ -2418,6 +2427,7 @@ final class Emitter {
 						intBitAnd.rhs(),
 						intBitAnd.integerType(),
 						"and",
+						cb::iand,
 						cb::iand
 					);
 
@@ -2427,6 +2437,10 @@ final class Emitter {
 						intBitNot.value(),
 						intBitNot.integerType(),
 						"not",
+						() -> {
+							cb.loadConstant(-1);
+							cb.ixor();
+						},
 						() -> {
 							cb.loadConstant(0xFF);
 							cb.ixor();
@@ -2443,6 +2457,7 @@ final class Emitter {
 						intBitOr.rhs(),
 						intBitOr.integerType(),
 						"or",
+						cb::ior,
 						cb::ior
 					);
 
@@ -2459,6 +2474,7 @@ final class Emitter {
 						intBitXor.rhs(),
 						intBitXor.integerType(),
 						"xor",
+						cb::ixor,
 						cb::ixor
 					);
 
@@ -2486,6 +2502,10 @@ final class Emitter {
 						"multiply",
 						() -> {
 							cb.imul();
+							cb.i2b();
+						},
+						() -> {
+							cb.imul();
 							maskU8();
 						}
 					);
@@ -2496,6 +2516,10 @@ final class Emitter {
 						intNegate.value(),
 						intNegate.integerType(),
 						"negate",
+						() -> {
+							cb.ineg();
+							cb.i2b();
+						},
 						() -> {
 							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
 						}
@@ -2508,6 +2532,10 @@ final class Emitter {
 						intSub.rhs(),
 						intSub.integerType(),
 						"subtract",
+						() -> {
+							cb.isub();
+							cb.i2b();
+						},
 						() -> {
 							cb.isub();
 							maskU8();
@@ -2567,6 +2595,7 @@ final class Emitter {
 			RegisterId value,
 			IntegerType integerType,
 			String bigIntegerMethod,
+			Runnable i8Op,
 			Runnable u8Op
 		) {
 			switch(integerType) {
@@ -2577,6 +2606,11 @@ final class Emitter {
 						bigIntegerMethod,
 						MethodTypeDesc.of(CD_BIG_INTEGER)
 					);
+					storeRegister(dest);
+				}
+				case I8 -> {
+					loadRegister(value);
+					i8Op.run();
 					storeRegister(dest);
 				}
 				case U8 -> {
@@ -2593,6 +2627,7 @@ final class Emitter {
 			RegisterId rhs,
 			IntegerType integerType,
 			String bigIntegerMethod,
+			Runnable i8Op,
 			Runnable u8Op
 		) {
 			switch(integerType) {
@@ -2604,6 +2639,12 @@ final class Emitter {
 						bigIntegerMethod,
 						MethodTypeDesc.of(CD_BIG_INTEGER, CD_BIG_INTEGER)
 					);
+					storeRegister(dest);
+				}
+				case I8 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					i8Op.run();
 					storeRegister(dest);
 				}
 				case U8 -> {
@@ -2621,6 +2662,14 @@ final class Emitter {
 				case INT -> {
 					switch(destType) {
 						case INT -> {}
+						case I8 -> {
+							cb.invokevirtual(
+								CD_BIG_INTEGER,
+								"intValue",
+								MethodTypeDesc.of(ConstantDescs.CD_int)
+							);
+							cb.i2b();
+						}
 						case U8 -> {
 							cb.invokevirtual(
 								CD_BIG_INTEGER,
@@ -2631,9 +2680,17 @@ final class Emitter {
 						}
 					}
 				}
+				case I8 -> {
+					switch(destType) {
+						case INT -> intToBigInteger();
+						case I8 -> {}
+						case U8 -> maskU8();
+					}
+				}
 				case U8 -> {
 					switch(destType) {
 						case INT -> intToBigInteger();
+						case I8 -> cb.i2b();
 						case U8 -> {}
 					}
 				}
@@ -2657,6 +2714,30 @@ final class Emitter {
 						left ? "shiftLeft" : "shiftRight",
 						MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_int)
 					);
+					storeRegister(dest);
+				}
+				case I8 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.sipush(8);
+					cb.if_icmpge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					if(left) {
+						cb.ishl();
+						cb.i2b();
+					}
+					else {
+						cb.ishr();
+					}
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.iconst_0();
+					cb.labelBinding(endLabel);
 					storeRegister(dest);
 				}
 				case U8 -> {
@@ -2704,6 +2785,12 @@ final class Emitter {
 						MethodTypeDesc.of(ConstantDescs.CD_int, CD_BIG_INTEGER)
 					);
 					emitBooleanFromBranch(bigIntegerBranch);
+					storeRegister(dest);
+				}
+				case I8 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					emitBooleanFromBranch(u8Branch);
 					storeRegister(dest);
 				}
 				case U8 -> {
@@ -2936,7 +3023,7 @@ final class Emitter {
 				);
 
 				case BYTE -> {
-					if(isU8Token(token)) {
+					if(isI8Token(token) || isU8Token(token)) {
 						cb.i2b();
 					}
 					cb.invokestatic(
@@ -3082,6 +3169,12 @@ final class Emitter {
 			return token instanceof Token.Builtin(var builtinType)
 				&& builtinType instanceof BuiltinType.Int(var integerType)
 				&& integerType == IntegerType.U8;
+		}
+
+		private boolean isI8Token(Token token) {
+			return token instanceof Token.Builtin(var builtinType)
+				&& builtinType instanceof BuiltinType.Int(var integerType)
+				&& integerType == IntegerType.I8;
 		}
 
 		private void emitRuntimeUnsupported(String message) {

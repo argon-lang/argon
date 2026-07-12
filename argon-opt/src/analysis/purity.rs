@@ -23,6 +23,7 @@ pub fn is_instruction_pure(instruction: &vf::Instruction) -> bool {
 
         vf::Instruction::Box { .. }
         | vf::Instruction::ConstBool { .. }
+        | vf::Instruction::ConstI8 { .. }
         | vf::Instruction::ConstInt { .. }
         | vf::Instruction::ConstU8 { .. }
         | vf::Instruction::ConstString { .. }

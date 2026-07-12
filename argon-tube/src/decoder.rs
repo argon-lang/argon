@@ -1075,6 +1075,7 @@ impl TubeDecoder {
     ) -> ErasedSignatureType {
         match sig_type {
             tf::ErasedSignatureType::Int {} => ErasedSignatureType::Int,
+            tf::ErasedSignatureType::I8 {} => ErasedSignatureType::I8,
             tf::ErasedSignatureType::U8 {} => ErasedSignatureType::U8,
             tf::ErasedSignatureType::Bool {} => ErasedSignatureType::Bool,
             tf::ErasedSignatureType::String {} => ErasedSignatureType::String,
@@ -1312,6 +1313,7 @@ impl TubeDecoder {
                 arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
             },
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
+            tf::Expr::I8Literal { value } => Expr::I8Literal(value),
             tf::Expr::U8Literal { value } => Expr::U8Literal(value),
             tf::Expr::Is { value, pattern } => Expr::Is {
                 value: Box::new(self.decode_expr(*value)),
@@ -2738,6 +2740,7 @@ fn decode_parameter_list_type(
 fn decode_format_integer_type(integer_type: tf::IntegerType) -> IntegerType {
     match integer_type {
         tf::IntegerType::Int {} => IntegerType::Int,
+        tf::IntegerType::I8 {} => IntegerType::I8,
         tf::IntegerType::U8 {} => IntegerType::U8,
     }
 }

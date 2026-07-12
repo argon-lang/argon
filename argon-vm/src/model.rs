@@ -837,6 +837,7 @@ impl TubeModel {
     ) -> Option<vf::ErasedSignatureType> {
         match signature_type {
             vf::ErasedSignatureType::Int {} => Some(vf::ErasedSignatureType::Int {}),
+            vf::ErasedSignatureType::I8 {} => Some(vf::ErasedSignatureType::I8 {}),
             vf::ErasedSignatureType::U8 {} => Some(vf::ErasedSignatureType::U8 {}),
             vf::ErasedSignatureType::Bool {} => Some(vf::ErasedSignatureType::Bool {}),
             vf::ErasedSignatureType::String {} => Some(vf::ErasedSignatureType::String {}),
@@ -1079,6 +1080,10 @@ impl TubeModel {
             vf::Instruction::ConstInt { dest, value } => Some(vf::Instruction::ConstInt {
                 dest: dest.clone(),
                 value: value.clone(),
+            }),
+            vf::Instruction::ConstI8 { dest, value } => Some(vf::Instruction::ConstI8 {
+                dest: dest.clone(),
+                value: *value,
             }),
             vf::Instruction::ConstU8 { dest, value } => Some(vf::Instruction::ConstU8 {
                 dest: dest.clone(),
@@ -2264,6 +2269,10 @@ fn prepare_instruction_for_inline(
         vf::Instruction::ConstInt { dest, value } => Some(vf::Instruction::ConstInt {
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: value.clone(),
+        }),
+        vf::Instruction::ConstI8 { dest, value } => Some(vf::Instruction::ConstI8 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
         }),
         vf::Instruction::ConstU8 { dest, value } => Some(vf::Instruction::ConstU8 {
             dest: Box::new(remap_register(dest, register_replacements)?),

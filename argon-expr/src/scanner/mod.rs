@@ -117,7 +117,7 @@ where
             when_false,
         } => scanner.scan(condition) && scanner.scan(when_true) && scanner.scan(when_false),
         Expr::InstanceType(instance_type) => default_scan_instance_type(scanner, instance_type),
-        Expr::IntLiteral(_) | Expr::U8Literal(_) => true,
+        Expr::IntLiteral(_) | Expr::I8Literal(_) | Expr::U8Literal(_) => true,
         Expr::Is { value, pattern } => scanner.scan(value) && scanner.scan_pattern(pattern),
         Expr::Match { value, cases } => {
             scanner.scan(value)
@@ -434,7 +434,7 @@ where
                 && scanner.scan(when_false.as_mut())
         }
         Expr::InstanceType(instance_type) => default_scan_instance_type_mut(scanner, instance_type),
-        Expr::IntLiteral(_) | Expr::U8Literal(_) => true,
+        Expr::IntLiteral(_) | Expr::I8Literal(_) | Expr::U8Literal(_) => true,
         Expr::Is { value, pattern } => {
             scanner.scan(value.as_mut()) && scanner.scan_pattern(pattern.as_mut())
         }

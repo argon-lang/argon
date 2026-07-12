@@ -15,6 +15,7 @@ pub struct ErasedSignature {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ErasedSignatureType {
     Int,
+    I8,
     U8,
     Bool,
     String,
@@ -117,6 +118,7 @@ fn erase_builtin(context: &Context, builtin: Builtin<DefaultExprContext>) -> Era
     match builtin {
         Builtin::IntType { integer_type } => match integer_type {
             IntegerType::Int => ErasedSignatureType::Int,
+            IntegerType::I8 => ErasedSignatureType::I8,
             IntegerType::U8 => ErasedSignatureType::U8,
         },
         Builtin::BoolType => ErasedSignatureType::Bool,

@@ -42,7 +42,7 @@ abstract class TokenEmitter {
                     case "int":
                         return {
                             type: "Literal",
-                            value: t.b.integerType === "u8" ? "number" : "bigint",
+                            value: t.b.integerType === "int" ? "bigint" : "number",
                         };
 
                     case "string":
@@ -478,6 +478,7 @@ abstract class EmitterBase {
     protected getExportNameForType(t: ir.ErasedSignatureType): string {
         switch(t.$type) {
             case "int":
+            case "i8":
             case "u8":
             case "bool":
             case "string":
@@ -1746,21 +1747,27 @@ class BlockEmitter extends EmitterBase {
                 const op = insn.op;
 
                 const unary = (operator: estree.UnaryOperator, op: ir.BuiltinOp & { readonly value: ir.RegisterId, readonly dest: ir.RegisterId }) => {
-                    assign(op.dest, {
+                    const expr: estree.Expression = {
                         type: "UnaryExpression",
                         prefix: true,
                         operator,
                         argument: this.getReg(op.value),
-                    });
+                    };
+                    assign(op.dest, "integerType" in op ? this.wrapInteger(op.integerType, expr) : expr);
                 };
 
-                const binary = (operator: estree.BinaryOperator, op: ir.BuiltinOp & { readonly lhs: ir.RegisterId, readonly rhs: ir.RegisterId, readonly dest: ir.RegisterId }) => {
-                    assign(op.dest, {
+                const binary = (
+                    operator: estree.BinaryOperator,
+                    op: ir.BuiltinOp & { readonly lhs: ir.RegisterId, readonly rhs: ir.RegisterId, readonly dest: ir.RegisterId },
+                    wrapIntegerResult: boolean = true,
+                ) => {
+                    const expr: estree.Expression = {
                         type: "BinaryExpression",
                         left: this.getReg(op.lhs),
                         operator,
                         right: this.getReg(op.rhs)
-                    });
+                    };
+                    assign(op.dest, wrapIntegerResult && "integerType" in op ? this.wrapInteger(op.integerType, expr) : expr);
                 };
 
                 switch(op.$type) {
@@ -1778,39 +1785,8 @@ class BlockEmitter extends EmitterBase {
                         if(op.sourceType === op.destType) {
                             assign(op.dest, value);
                         }
-                        else if(op.sourceType === "int" && op.destType === "u8") {
-                            assign(op.dest, {
-                                type: "CallExpression",
-                                optional: false,
-                                callee: {
-                                    type: "Identifier",
-                                    name: "Number",
-                                },
-                                arguments: [{
-                                    type: "CallExpression",
-                                    optional: false,
-                                    callee: {
-                                        type: "MemberExpression",
-                                        computed: false,
-                                        optional: false,
-                                        object: {
-                                            type: "Identifier",
-                                            name: "BigInt",
-                                        },
-                                        property: {
-                                            type: "Identifier",
-                                            name: "asUintN",
-                                        },
-                                    },
-                                    arguments: [
-                                        {
-                                            type: "Literal",
-                                            value: 8,
-                                        },
-                                        value,
-                                    ],
-                                }],
-                            });
+                        else if(op.sourceType === "int" && op.destType !== "int") {
+                            assign(op.dest, this.wrapInteger(op.destType, value));
                         }
                         else {
                             assign(op.dest, {
@@ -1890,23 +1866,23 @@ class BlockEmitter extends EmitterBase {
                     case "int-eq":
                     case "string-eq":
                     case "bool-eq":
-                        binary("===", op);
+                        binary("===", op, false);
                         break;
 
                     case "int-lt":
-                        binary("<", op);
+                        binary("<", op, false);
                         break;
 
                     case "int-le":
-                        binary("<=", op);
+                        binary("<=", op, false);
                         break;
 
                     case "int-gt":
-                        binary(">", op);
+                        binary(">", op, false);
                         break;
 
                     case "int-ge":
-                        binary(">=", op);
+                        binary(">=", op, false);
                         break;
 
                     case "array-create-unsafe-uninitialized": {
@@ -2090,6 +2066,13 @@ class BlockEmitter extends EmitterBase {
                     type: "Literal",
                     value: insn.value,
                     bigint: insn.value.toString()
+                });
+                break;
+
+            case "const-i8":
+                assign(insn.dest, {
+                    type: "Literal",
+                    value: insn.value,
                 });
                 break;
 
@@ -2710,6 +2693,53 @@ class BlockEmitter extends EmitterBase {
         return {
             type: "Identifier",
             name: `r${reg.id}`,
+        };
+    }
+
+    private wrapInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
+        if(integerType === "int") {
+            return value;
+        }
+
+        return {
+            type: "CallExpression",
+            optional: false,
+            callee: {
+                type: "Identifier",
+                name: "Number",
+            },
+            arguments: [{
+                type: "CallExpression",
+                optional: false,
+                callee: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: {
+                        type: "Identifier",
+                        name: "BigInt",
+                    },
+                    property: {
+                        type: "Identifier",
+                        name: integerType === "i8" ? "asIntN" : "asUintN",
+                    },
+                },
+                arguments: [
+                    {
+                        type: "Literal",
+                        value: 8,
+                    },
+                    {
+                        type: "CallExpression",
+                        optional: false,
+                        callee: {
+                            type: "Identifier",
+                            name: "BigInt",
+                        },
+                        arguments: [value],
+                    },
+                ],
+            }],
         };
     }
 

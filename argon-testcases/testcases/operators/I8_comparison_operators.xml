@@ -1,0 +1,45 @@
+<ArgonTest>
+
+    <Name>I8 comparison operators</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ((99i8 = 2i8).to_s())
+            puts ((99i8 = 99i8).to_s())
+            puts ((99i8 != 2i8).to_s())
+            puts ((99i8 != 99i8).to_s())
+            puts ((-2i8 < 99i8).to_s())
+            puts ((99i8 < 99i8).to_s())
+            puts ((-2i8 <= 99i8).to_s())
+            puts ((99i8 <= 99i8).to_s())
+            puts ((99i8 > -2i8).to_s())
+            puts ((99i8 > 99i8).to_s())
+            puts ((99i8 >= -2i8).to_s())
+            puts ((99i8 >= 99i8).to_s())
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        false
+        true
+        true
+        false
+        true
+        false
+        true
+        true
+        true
+        false
+        true
+        true
+    </ExpectedOutput>
+
+</ArgonTest>

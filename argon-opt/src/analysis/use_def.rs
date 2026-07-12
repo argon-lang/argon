@@ -90,6 +90,7 @@ fn instruction_use_def(instruction: &vf::Instruction) -> UseDef {
         vf::Instruction::Builtin { op } => builtin_use_def(op, &mut uses, &mut definitions),
 
         vf::Instruction::ConstBool { dest, .. }
+        | vf::Instruction::ConstI8 { dest, .. }
         | vf::Instruction::ConstInt { dest, .. }
         | vf::Instruction::ConstU8 { dest, .. }
         | vf::Instruction::ConstString { dest, .. }

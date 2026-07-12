@@ -823,6 +823,9 @@ struct SourceFileProcessor<'a> {
 impl<'a> SourceFileProcessor<'a> {
     fn process_stmt(&mut self, stmt: WithLocation<Stmt>) {
         match stmt.value {
+            // Ignore errors because it is due to an already reported syntax error.
+            Stmt::Error => {}
+
             Stmt::Import(import) => {
                 if self.current_scope.is_some() {
                     self.parent_scope = self.current_scope.take();
@@ -944,9 +947,10 @@ impl<'a> SourceFileProcessor<'a> {
             }
 
             _ => todo!(
-                "Top Level Statement not implemented: {:?} in {:?}",
+                "Top Level Statement not implemented: {:?} in {:?} at {:?}",
                 stmt.value,
-                self.result.path
+                self.result.path,
+                stmt.location
             ),
         }
     }

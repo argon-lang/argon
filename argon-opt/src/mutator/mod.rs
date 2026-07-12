@@ -49,6 +49,7 @@ fn visit_instruction(
         }
         vf::Instruction::Builtin { op } => visit_builtin(op, register_type, mutate),
         vf::Instruction::ConstBool { dest, .. }
+        | vf::Instruction::ConstI8 { dest, .. }
         | vf::Instruction::ConstInt { dest, .. }
         | vf::Instruction::ConstU8 { dest, .. }
         | vf::Instruction::ConstString { dest, .. }

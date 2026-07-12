@@ -31,6 +31,7 @@ public final class TokenTypes {
 				case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
 				case BuiltinType.Int(var integerType) -> switch(integerType) {
 					case INT -> ClassDesc.of("java.math.BigInteger");
+					case I8 -> ConstantDescs.CD_byte;
 					case U8 -> ConstantDescs.CD_byte;
 				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");

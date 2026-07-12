@@ -127,6 +127,7 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     InstanceType(InstanceType<EC>),
     IntLiteral(BigInt),
+    I8Literal(i8),
     U8Literal(u8),
     Is {
         value: Box<Expr<EC>>,
@@ -208,6 +209,10 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
 
     pub fn u8_type() -> Expr<EC> {
         Expr::integer_type(IntegerType::U8)
+    }
+
+    pub fn i8_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::I8)
     }
 
     pub fn integer_type(integer_type: IntegerType) -> Expr<EC> {
@@ -373,6 +378,7 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IntegerType {
     Int,
+    I8,
     U8,
 }
 
@@ -380,6 +386,7 @@ impl IntegerType {
     pub fn type_name(self) -> &'static str {
         match self {
             IntegerType::Int => "int_type",
+            IntegerType::I8 => "sbyte_type",
             IntegerType::U8 => "u8_type",
         }
     }
@@ -395,10 +402,12 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
             Builtin::ArrayType { .. } => "array_type",
             Builtin::IntNegate { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_negate",
+                IntegerType::I8 => "sbyte_negate",
                 IntegerType::U8 => "u8_negate",
             },
             Builtin::IntBitNot { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitnot",
+                IntegerType::I8 => "sbyte_bitnot",
                 IntegerType::U8 => "u8_bitnot",
             },
             Builtin::IntConvert {
@@ -407,60 +416,78 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 ..
             } => match (source_type, dest_type) {
                 (IntegerType::Int, IntegerType::Int) => "int_to_int",
+                (IntegerType::Int, IntegerType::I8) => "int_to_i8",
                 (IntegerType::Int, IntegerType::U8) => "int_to_u8",
+                (IntegerType::I8, IntegerType::Int) => "sbyte_to_int",
+                (IntegerType::I8, IntegerType::I8) => "sbyte_to_i8",
+                (IntegerType::I8, IntegerType::U8) => "sbyte_to_u8",
                 (IntegerType::U8, IntegerType::Int) => "u8_to_int",
+                (IntegerType::U8, IntegerType::I8) => "u8_to_i8",
                 (IntegerType::U8, IntegerType::U8) => "u8_to_u8",
             },
             Builtin::IntAdd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_add",
+                IntegerType::I8 => "sbyte_add",
                 IntegerType::U8 => "u8_add",
             },
             Builtin::IntSub { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_sub",
+                IntegerType::I8 => "sbyte_sub",
                 IntegerType::U8 => "u8_sub",
             },
             Builtin::IntMul { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_mul",
+                IntegerType::I8 => "sbyte_mul",
                 IntegerType::U8 => "u8_mul",
             },
             Builtin::IntBitAnd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitand",
+                IntegerType::I8 => "sbyte_bitand",
                 IntegerType::U8 => "u8_bitand",
             },
             Builtin::IntBitOr { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitor",
+                IntegerType::I8 => "sbyte_bitor",
                 IntegerType::U8 => "u8_bitor",
             },
             Builtin::IntBitXor { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitxor",
+                IntegerType::I8 => "sbyte_bitxor",
                 IntegerType::U8 => "u8_bitxor",
             },
             Builtin::IntBitShiftLeft { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitshiftleft",
+                IntegerType::I8 => "sbyte_bitshiftleft",
                 IntegerType::U8 => "u8_bitshiftleft",
             },
             Builtin::IntBitShiftRight { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitshiftright",
+                IntegerType::I8 => "sbyte_bitshiftright",
                 IntegerType::U8 => "u8_bitshiftright",
             },
             Builtin::IntEq { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_eq",
+                IntegerType::I8 => "sbyte_eq",
                 IntegerType::U8 => "u8_eq",
             },
             Builtin::IntLt { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_lt",
+                IntegerType::I8 => "sbyte_lt",
                 IntegerType::U8 => "u8_lt",
             },
             Builtin::IntLe { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_le",
+                IntegerType::I8 => "sbyte_le",
                 IntegerType::U8 => "u8_le",
             },
             Builtin::IntGt { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_gt",
+                IntegerType::I8 => "sbyte_gt",
                 IntegerType::U8 => "u8_gt",
             },
             Builtin::IntGe { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_ge",
+                IntegerType::I8 => "sbyte_ge",
                 IntegerType::U8 => "u8_ge",
             },
             Builtin::StringConcat { .. } => "string_concat",

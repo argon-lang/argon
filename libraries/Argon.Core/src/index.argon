@@ -3,10 +3,10 @@ module _
 export ::Bool::*
 export ::String::*
 export ::Int::*
+export ::I8::*
 export ::U8::*
 export ::Exception::*
 export ::Array::*
 export ::Puts::*
 
 public erased inline def Never: type = __argon_builtin never_type
-

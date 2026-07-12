@@ -77,6 +77,7 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
         Expr::IfElse { when_true, .. } => get_expr_type(&**when_true),
 
         Expr::IntLiteral(_) => Expr::int_type(),
+        Expr::I8Literal(_) => Expr::i8_type(),
         Expr::U8Literal(_) => Expr::u8_type(),
 
         Expr::Match { .. } => todo!(),

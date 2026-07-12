@@ -774,6 +774,7 @@ impl VmEncoder {
     ) -> Result<vf::ErasedSignatureType, InternalCompilerError> {
         Ok(match t {
             ErasedSignatureType::Int => vf::ErasedSignatureType::Int {},
+            ErasedSignatureType::I8 => vf::ErasedSignatureType::I8 {},
             ErasedSignatureType::U8 => vf::ErasedSignatureType::U8 {},
             ErasedSignatureType::Bool => vf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => vf::ErasedSignatureType::String {},
@@ -2332,6 +2333,16 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
+            Expr::I8Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstI8 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::U8Literal(value) => {
                 let rb = output.output_register(self, e)?;
                 self.emit(vf::Instruction::ConstU8 {
@@ -3249,6 +3260,7 @@ fn encode_unary_operator(op: UnaryOperatorIdentifier) -> vf::UnaryOperator {
 fn encode_vm_integer_type(integer_type: IntegerType) -> vf::IntegerType {
     match integer_type {
         IntegerType::Int => vf::IntegerType::Int {},
+        IntegerType::I8 => vf::IntegerType::I8 {},
         IntegerType::U8 => vf::IntegerType::U8 {},
     }
 }

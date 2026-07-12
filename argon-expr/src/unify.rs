@@ -267,6 +267,7 @@ pub trait Unify {
                 a.instance == b.instance && self.unify_all(a.arguments, b.arguments)
             }
             (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
+            (Expr::I8Literal(a), Expr::I8Literal(b)) => a == b,
             (Expr::U8Literal(a), Expr::U8Literal(b)) => a == b,
             (
                 Expr::Is {
