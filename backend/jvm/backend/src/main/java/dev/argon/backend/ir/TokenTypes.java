@@ -33,6 +33,8 @@ public final class TokenTypes {
 					case INT -> ClassDesc.of("java.math.BigInteger");
 					case I8 -> ConstantDescs.CD_byte;
 					case U8 -> ConstantDescs.CD_byte;
+					case I16 -> ConstantDescs.CD_short;
+					case U16 -> ConstantDescs.CD_short;
 				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
 				case BuiltinType.String() -> ConstantDescs.CD_String;

@@ -776,6 +776,8 @@ impl VmEncoder {
             ErasedSignatureType::Int => vf::ErasedSignatureType::Int {},
             ErasedSignatureType::I8 => vf::ErasedSignatureType::I8 {},
             ErasedSignatureType::U8 => vf::ErasedSignatureType::U8 {},
+            ErasedSignatureType::I16 => vf::ErasedSignatureType::I16 {},
+            ErasedSignatureType::U16 => vf::ErasedSignatureType::U16 {},
             ErasedSignatureType::Bool => vf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => vf::ErasedSignatureType::String {},
             ErasedSignatureType::Never => vf::ErasedSignatureType::Never {},
@@ -2353,6 +2355,26 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
+            Expr::I16Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstI16 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
+            Expr::U16Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstU16 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Match { value, cases } => {
                 let (result, output) = output.into_known_location(self, e)?;
                 let value_reg = self.expr(value, AnyRegister)?;
@@ -3262,6 +3284,8 @@ fn encode_vm_integer_type(integer_type: IntegerType) -> vf::IntegerType {
         IntegerType::Int => vf::IntegerType::Int {},
         IntegerType::I8 => vf::IntegerType::I8 {},
         IntegerType::U8 => vf::IntegerType::U8 {},
+        IntegerType::I16 => vf::IntegerType::I16 {},
+        IntegerType::U16 => vf::IntegerType::U16 {},
     }
 }
 

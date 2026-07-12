@@ -76,6 +76,8 @@ final class EmitterTest {
 					case INT -> ClassDesc.of("java.math.BigInteger");
 					case I8 -> ClassDesc.ofDescriptor("I");
 					case U8 -> ClassDesc.ofDescriptor("I");
+					case I16 -> ClassDesc.ofDescriptor("I");
+					case U16 -> ClassDesc.ofDescriptor("I");
 				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
 				case BuiltinType.String() -> ClassDesc.of("java.lang.String");

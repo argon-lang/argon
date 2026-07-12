@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>I16 math operators</Name>
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc main(): () do
+            puts ((999i16 + 2i16).to_s())
+            puts ((999i16 - 2i16).to_s())
+            puts ((100i16 * 2i16).to_s())
+            puts ((+999i16).to_s())
+            puts ((-999i16).to_s())
+        end
+        
+    </InputSource>
+
+    <ExpectedOutput>
+        1001
+        997
+        200
+        999
+        -999
+    </ExpectedOutput>
+
+</ArgonTest>

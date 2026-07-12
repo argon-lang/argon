@@ -42,7 +42,7 @@ abstract class TokenEmitter {
                     case "int":
                         return {
                             type: "Literal",
-                            value: t.b.integerType === "int" ? "bigint" : "number",
+                            value: t.b.integerType === "int" ? "bigint" : t.b.integerType,
                         };
 
                     case "string":
@@ -480,6 +480,8 @@ abstract class EmitterBase {
             case "int":
             case "i8":
             case "u8":
+            case "i16":
+            case "u16":
             case "bool":
             case "string":
             case "never":
@@ -2086,6 +2088,8 @@ class BlockEmitter extends EmitterBase {
                 break;
 
             case "const-u8":
+            case "const-i16":
+            case "const-u16":
                 assign(insn.dest, {
                     type: "Literal",
                     value: insn.value,
@@ -2710,35 +2714,39 @@ class BlockEmitter extends EmitterBase {
             return value;
         }
 
-        const byteValue: estree.Expression = {
+        const is16Bit = integerType === "i16" || integerType === "u16";
+        const mask = is16Bit ? 0xFFFF : 0xFF;
+        const shift = is16Bit ? 16 : 24;
+
+        const maskedValue: estree.Expression = {
             type: "BinaryExpression",
             left: value,
             operator: "&",
             right: {
                 type: "Literal",
-                value: 0xFF,
+                value: mask,
             },
         };
 
-        if(integerType === "u8") {
-            return byteValue;
+        if(integerType === "u8" || integerType === "u16") {
+            return maskedValue;
         }
 
         return {
             type: "BinaryExpression",
             left: {
                 type: "BinaryExpression",
-                left: byteValue,
+                left: maskedValue,
                 operator: "<<",
                 right: {
                     type: "Literal",
-                    value: 24,
+                    value: shift,
                 },
             },
             operator: ">>",
             right: {
                 type: "Literal",
-                value: 24,
+                value: shift,
             },
         };
     }

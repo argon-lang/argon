@@ -152,6 +152,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::Int, Expr::IntLiteral(value)) => Expr::IntLiteral(-value),
             (IntegerType::I8, Expr::I8Literal(value)) => Expr::I8Literal(value.wrapping_neg()),
             (IntegerType::U8, Expr::U8Literal(value)) => Expr::U8Literal(value.wrapping_neg()),
+            (IntegerType::I16, Expr::I16Literal(value)) => Expr::I16Literal(value.wrapping_neg()),
+            (IntegerType::U16, Expr::U16Literal(value)) => Expr::U16Literal(value.wrapping_neg()),
             (integer_type, value) => Expr::Builtin(Builtin::IntNegate {
                 integer_type,
                 value: Box::new(value),
@@ -165,6 +167,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::Int, Expr::IntLiteral(value)) => Expr::IntLiteral(!value),
             (IntegerType::I8, Expr::I8Literal(value)) => Expr::I8Literal(!value),
             (IntegerType::U8, Expr::U8Literal(value)) => Expr::U8Literal(!value),
+            (IntegerType::I16, Expr::I16Literal(value)) => Expr::I16Literal(!value),
+            (IntegerType::U16, Expr::U16Literal(value)) => Expr::U16Literal(!value),
             (integer_type, value) => Expr::Builtin(Builtin::IntBitNot {
                 integer_type,
                 value: Box::new(value),
@@ -179,6 +183,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::Int, IntegerType::Int, value) => value,
             (IntegerType::I8, IntegerType::I8, value) => value,
             (IntegerType::U8, IntegerType::U8, value) => value,
+            (IntegerType::I16, IntegerType::I16, value) => value,
+            (IntegerType::U16, IntegerType::U16, value) => value,
             (IntegerType::Int, IntegerType::I8, Expr::IntLiteral(value)) => {
                 Expr::I8Literal(value.to_i8().unwrap_or_else(|| {
                     let bytes = value.to_signed_bytes_le();
@@ -191,17 +197,71 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     bytes.first().copied().unwrap_or(0)
                 }))
             }
+            (IntegerType::Int, IntegerType::I16, Expr::IntLiteral(value)) => {
+                Expr::I16Literal(value.to_i16().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    i16::from_le_bytes([
+                        bytes.first().copied().unwrap_or(0),
+                        bytes.get(1).copied().unwrap_or(0),
+                    ])
+                }))
+            }
+            (IntegerType::Int, IntegerType::U16, Expr::IntLiteral(value)) => {
+                Expr::U16Literal(value.to_u16().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    u16::from_le_bytes([
+                        bytes.first().copied().unwrap_or(0),
+                        bytes.get(1).copied().unwrap_or(0),
+                    ])
+                }))
+            }
             (IntegerType::I8, IntegerType::Int, Expr::I8Literal(value)) => {
                 Expr::IntLiteral(value.into())
             }
             (IntegerType::I8, IntegerType::U8, Expr::I8Literal(value)) => {
                 Expr::U8Literal(value.to_le_bytes()[0])
             }
+            (IntegerType::I8, IntegerType::I16, Expr::I8Literal(value)) => {
+                Expr::I16Literal(value.into())
+            }
+            (IntegerType::I8, IntegerType::U16, Expr::I8Literal(value)) => {
+                Expr::U16Literal((value as i16) as u16)
+            }
             (IntegerType::U8, IntegerType::I8, Expr::U8Literal(value)) => {
                 Expr::I8Literal(i8::from_le_bytes([value]))
             }
             (IntegerType::U8, IntegerType::Int, Expr::U8Literal(value)) => {
                 Expr::IntLiteral(value.into())
+            }
+            (IntegerType::U8, IntegerType::I16, Expr::U8Literal(value)) => {
+                Expr::I16Literal(value.into())
+            }
+            (IntegerType::U8, IntegerType::U16, Expr::U8Literal(value)) => {
+                Expr::U16Literal(value.into())
+            }
+            (IntegerType::I16, IntegerType::Int, Expr::I16Literal(value)) => {
+                Expr::IntLiteral(value.into())
+            }
+            (IntegerType::I16, IntegerType::I8, Expr::I16Literal(value)) => {
+                Expr::I8Literal(value as i8)
+            }
+            (IntegerType::I16, IntegerType::U8, Expr::I16Literal(value)) => {
+                Expr::U8Literal(value as u8)
+            }
+            (IntegerType::I16, IntegerType::U16, Expr::I16Literal(value)) => {
+                Expr::U16Literal(value as u16)
+            }
+            (IntegerType::U16, IntegerType::Int, Expr::U16Literal(value)) => {
+                Expr::IntLiteral(value.into())
+            }
+            (IntegerType::U16, IntegerType::I8, Expr::U16Literal(value)) => {
+                Expr::I8Literal(value as i8)
+            }
+            (IntegerType::U16, IntegerType::U8, Expr::U16Literal(value)) => {
+                Expr::U8Literal(value as u8)
+            }
+            (IntegerType::U16, IntegerType::I16, Expr::U16Literal(value)) => {
+                Expr::I16Literal(value as i16)
             }
             (source_type, dest_type, value) => Expr::Builtin(Builtin::IntConvert {
                 source_type,
@@ -221,6 +281,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::IntLiteral(lhs + rhs),
             |lhs, rhs| Expr::I8Literal(lhs.wrapping_add(rhs)),
             |lhs, rhs| Expr::U8Literal(lhs.wrapping_add(rhs)),
+            |lhs, rhs| Expr::I16Literal(lhs.wrapping_add(rhs)),
+            |lhs, rhs| Expr::U16Literal(lhs.wrapping_add(rhs)),
             |integer_type, lhs, rhs| Builtin::IntAdd {
                 integer_type,
                 lhs,
@@ -239,6 +301,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::IntLiteral(lhs - rhs),
             |lhs, rhs| Expr::I8Literal(lhs.wrapping_sub(rhs)),
             |lhs, rhs| Expr::U8Literal(lhs.wrapping_sub(rhs)),
+            |lhs, rhs| Expr::I16Literal(lhs.wrapping_sub(rhs)),
+            |lhs, rhs| Expr::U16Literal(lhs.wrapping_sub(rhs)),
             |integer_type, lhs, rhs| Builtin::IntSub {
                 integer_type,
                 lhs,
@@ -257,6 +321,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::IntLiteral(lhs * rhs),
             |lhs, rhs| Expr::I8Literal(lhs.wrapping_mul(rhs)),
             |lhs, rhs| Expr::U8Literal(lhs.wrapping_mul(rhs)),
+            |lhs, rhs| Expr::I16Literal(lhs.wrapping_mul(rhs)),
+            |lhs, rhs| Expr::U16Literal(lhs.wrapping_mul(rhs)),
             |integer_type, lhs, rhs| Builtin::IntMul {
                 integer_type,
                 lhs,
@@ -275,6 +341,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::IntLiteral(lhs & rhs),
             |lhs, rhs| Expr::I8Literal(lhs & rhs),
             |lhs, rhs| Expr::U8Literal(lhs & rhs),
+            |lhs, rhs| Expr::I16Literal(lhs & rhs),
+            |lhs, rhs| Expr::U16Literal(lhs & rhs),
             |integer_type, lhs, rhs| Builtin::IntBitAnd {
                 integer_type,
                 lhs,
@@ -293,6 +361,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::IntLiteral(lhs | rhs),
             |lhs, rhs| Expr::I8Literal(lhs | rhs),
             |lhs, rhs| Expr::U8Literal(lhs | rhs),
+            |lhs, rhs| Expr::I16Literal(lhs | rhs),
+            |lhs, rhs| Expr::U16Literal(lhs | rhs),
             |integer_type, lhs, rhs| Builtin::IntBitOr {
                 integer_type,
                 lhs,
@@ -311,6 +381,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::IntLiteral(lhs ^ rhs),
             |lhs, rhs| Expr::I8Literal(lhs ^ rhs),
             |lhs, rhs| Expr::U8Literal(lhs ^ rhs),
+            |lhs, rhs| Expr::I16Literal(lhs ^ rhs),
+            |lhs, rhs| Expr::U16Literal(lhs ^ rhs),
             |integer_type, lhs, rhs| Builtin::IntBitXor {
                 integer_type,
                 lhs,
@@ -343,6 +415,20 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             },
             |lhs, rhs| {
                 Expr::U8Literal(if rhs >= 8 {
+                    0
+                } else {
+                    lhs.wrapping_shl(rhs.into())
+                })
+            },
+            |lhs, rhs| {
+                Expr::I16Literal(if !(0..16).contains(&rhs) {
+                    0
+                } else {
+                    lhs.wrapping_shl(rhs as u32)
+                })
+            },
+            |lhs, rhs| {
+                Expr::U16Literal(if rhs >= 16 {
                     0
                 } else {
                     lhs.wrapping_shl(rhs.into())
@@ -385,6 +471,20 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     lhs.wrapping_shr(rhs.into())
                 })
             },
+            |lhs, rhs| {
+                Expr::I16Literal(if !(0..16).contains(&rhs) {
+                    if lhs < 0 { -1 } else { 0 }
+                } else {
+                    lhs.wrapping_shr(rhs as u32)
+                })
+            },
+            |lhs, rhs| {
+                Expr::U16Literal(if rhs >= 16 {
+                    0
+                } else {
+                    lhs.wrapping_shr(rhs.into())
+                })
+            },
             |integer_type, lhs, rhs| Builtin::IntBitShiftRight {
                 integer_type,
                 lhs,
@@ -400,6 +500,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             integer_type,
             *lhs,
             *rhs,
+            |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
@@ -421,6 +523,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
             |integer_type, lhs, rhs| Builtin::IntLt {
                 integer_type,
                 lhs,
@@ -436,6 +540,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             integer_type,
             *lhs,
             *rhs,
+            |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
@@ -457,6 +563,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
             |integer_type, lhs, rhs| Builtin::IntGt {
                 integer_type,
                 lhs,
@@ -472,6 +580,8 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             integer_type,
             *lhs,
             *rhs,
+            |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
@@ -493,12 +603,16 @@ fn normalize_integer_binary_op<EC: ExprContext + ?Sized>(
     int_op: impl FnOnce(num_bigint::BigInt, num_bigint::BigInt) -> Expr<EC>,
     i8_op: impl FnOnce(i8, i8) -> Expr<EC>,
     u8_op: impl FnOnce(u8, u8) -> Expr<EC>,
+    i16_op: impl FnOnce(i16, i16) -> Expr<EC>,
+    u16_op: impl FnOnce(u16, u16) -> Expr<EC>,
     rebuild: impl FnOnce(IntegerType, Box<Expr<EC>>, Box<Expr<EC>>) -> Builtin<EC>,
 ) -> Expr<EC> {
     match (integer_type, lhs, rhs) {
         (IntegerType::Int, Expr::IntLiteral(lhs), Expr::IntLiteral(rhs)) => int_op(lhs, rhs),
         (IntegerType::I8, Expr::I8Literal(lhs), Expr::I8Literal(rhs)) => i8_op(lhs, rhs),
         (IntegerType::U8, Expr::U8Literal(lhs), Expr::U8Literal(rhs)) => u8_op(lhs, rhs),
+        (IntegerType::I16, Expr::I16Literal(lhs), Expr::I16Literal(rhs)) => i16_op(lhs, rhs),
+        (IntegerType::U16, Expr::U16Literal(lhs), Expr::U16Literal(rhs)) => u16_op(lhs, rhs),
         (integer_type, lhs, rhs) => {
             Expr::Builtin(rebuild(integer_type, Box::new(lhs), Box::new(rhs)))
         }

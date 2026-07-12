@@ -1,0 +1,30 @@
+module U16
+
+import ::Int::*
+import ::Bool::*
+import ::String::*
+
+public token inline def U16: type = __argon_builtin u16_type
+
+public inline def unary operator + (a: U16): U16 = a
+public inline def unary operator ~~~ (a: U16): U16 = __argon_builtin u16_bitnot a
+
+public inline def operator + (a: U16) (b: U16) (requires erased ev: (((__argon_builtin int_add a.to_i b.to_i) >= 0 && (__argon_builtin int_add a.to_i b.to_i) <= 65535) == true)): U16 = __argon_builtin u16_add a b
+public inline def operator - (a: U16) (b: U16) (requires erased ev: (((__argon_builtin int_sub a.to_i b.to_i) >= 0 && (__argon_builtin int_sub a.to_i b.to_i) <= 65535) == true)): U16 = __argon_builtin u16_sub a b
+public inline def operator * (a: U16) (b: U16) (requires erased ev: (((__argon_builtin int_mul a.to_i b.to_i) >= 0 && (__argon_builtin int_mul a.to_i b.to_i) <= 65535) == true)): U16 = __argon_builtin u16_mul a b
+
+public inline def operator &&& (a: U16) (b: U16): U16 = __argon_builtin u16_bitand a b
+public inline def operator ||| (a: U16) (b: U16): U16 = __argon_builtin u16_bitor a b
+public inline def operator ^^^ (a: U16) (b: U16): U16 = __argon_builtin u16_bitxor a b
+public inline def operator <<< (a: U16) (b: U16) (requires erased ev: ((b < 16u16) == true)): U16 = __argon_builtin u16_bitshiftleft a b
+public inline def operator >>> (a: U16) (b: U16) (requires erased ev: ((b < 16u16) == true)): U16 = __argon_builtin u16_bitshiftright a b
+
+public inline def operator = (a: U16) (b: U16): Bool = __argon_builtin u16_eq a b
+public inline def operator != (a: U16) (b: U16): Bool = !(__argon_builtin u16_eq a b)
+public inline def operator < (a: U16) (b: U16): Bool = __argon_builtin u16_lt a b
+public inline def operator <= (a: U16) (b: U16): Bool = __argon_builtin u16_le a b
+public inline def operator > (a: U16) (b: U16): Bool = __argon_builtin u16_gt a b
+public inline def operator >= (a: U16) (b: U16): Bool = __argon_builtin u16_ge a b
+
+public def extension to_s (n: U16)(): String = extern u16_to_s
+public inline def extension to_i (n: U16): Int = __argon_builtin u16_to_int n

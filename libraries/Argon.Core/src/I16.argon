@@ -1,0 +1,31 @@
+module I16
+
+import ::Int::*
+import ::Bool::*
+import ::String::*
+
+public token inline def I16: type = __argon_builtin i16_type
+
+public inline def unary operator + (a: I16): I16 = a
+public inline def unary operator - (a: I16): I16 = __argon_builtin i16_negate a
+public inline def unary operator ~~~ (a: I16): I16 = __argon_builtin i16_bitnot a
+
+public inline def operator + (a: I16) (b: I16) (requires erased ev: (((__argon_builtin int_add a.to_i b.to_i) >= (-32768) && (__argon_builtin int_add a.to_i b.to_i) <= 32767) == true)): I16 = __argon_builtin i16_add a b
+public inline def operator - (a: I16) (b: I16) (requires erased ev: (((__argon_builtin int_sub a.to_i b.to_i) >= (-32768) && (__argon_builtin int_sub a.to_i b.to_i) <= 32767) == true)): I16 = __argon_builtin i16_sub a b
+public inline def operator * (a: I16) (b: I16) (requires erased ev: (((__argon_builtin int_mul a.to_i b.to_i) >= (-32768) && (__argon_builtin int_mul a.to_i b.to_i) <= 32767) == true)): I16 = __argon_builtin i16_mul a b
+
+public inline def operator &&& (a: I16) (b: I16): I16 = __argon_builtin i16_bitand a b
+public inline def operator ||| (a: I16) (b: I16): I16 = __argon_builtin i16_bitor a b
+public inline def operator ^^^ (a: I16) (b: I16): I16 = __argon_builtin i16_bitxor a b
+public inline def operator <<< (a: I16) (b: I16) (requires erased ev: ((b >= 0i16 && b < 16i16) == true)): I16 = __argon_builtin i16_bitshiftleft a b
+public inline def operator >>> (a: I16) (b: I16) (requires erased ev: ((b >= 0i16 && b < 16i16) == true)): I16 = __argon_builtin i16_bitshiftright a b
+
+public inline def operator = (a: I16) (b: I16): Bool = __argon_builtin i16_eq a b
+public inline def operator != (a: I16) (b: I16): Bool = !(__argon_builtin i16_eq a b)
+public inline def operator < (a: I16) (b: I16): Bool = __argon_builtin i16_lt a b
+public inline def operator <= (a: I16) (b: I16): Bool = __argon_builtin i16_le a b
+public inline def operator > (a: I16) (b: I16): Bool = __argon_builtin i16_gt a b
+public inline def operator >= (a: I16) (b: I16): Bool = __argon_builtin i16_ge a b
+
+public def extension to_s (n: I16)(): String = extern i16_to_s
+public inline def extension to_i (n: I16): Int = __argon_builtin i16_to_int n

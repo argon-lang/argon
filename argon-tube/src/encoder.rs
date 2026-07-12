@@ -694,6 +694,8 @@ impl TubeEncoder {
             ErasedSignatureType::Int => tf::ErasedSignatureType::Int {},
             ErasedSignatureType::I8 => tf::ErasedSignatureType::I8 {},
             ErasedSignatureType::U8 => tf::ErasedSignatureType::U8 {},
+            ErasedSignatureType::I16 => tf::ErasedSignatureType::I16 {},
+            ErasedSignatureType::U16 => tf::ErasedSignatureType::U16 {},
             ErasedSignatureType::Bool => tf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => tf::ErasedSignatureType::String {},
             ErasedSignatureType::Never => tf::ErasedSignatureType::Never {},
@@ -915,6 +917,8 @@ impl TubeEncoder {
             Expr::IntLiteral(i) => tf::Expr::IntLiteral { i: i.clone() },
             Expr::I8Literal(value) => tf::Expr::I8Literal { value: *value },
             Expr::U8Literal(value) => tf::Expr::U8Literal { value: *value },
+            Expr::I16Literal(value) => tf::Expr::I16Literal { value: *value },
+            Expr::U16Literal(value) => tf::Expr::U16Literal { value: *value },
             Expr::StringLiteral(s) => tf::Expr::StringLiteral { s: s.to_string() },
             Expr::Tuple { items } => tf::Expr::Tuple {
                 items: items
@@ -1785,5 +1789,7 @@ fn encode_format_integer_type(integer_type: IntegerType) -> tf::IntegerType {
         IntegerType::Int => tf::IntegerType::Int {},
         IntegerType::I8 => tf::IntegerType::I8 {},
         IntegerType::U8 => tf::IntegerType::U8 {},
+        IntegerType::I16 => tf::IntegerType::I16 {},
+        IntegerType::U16 => tf::IntegerType::U16 {},
     }
 }

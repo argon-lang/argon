@@ -279,6 +279,8 @@ enum erased-signature-type {
     int,
     i8,
     u8,
+    i16,
+    u16,
     bool,
     string,
     never,
@@ -692,6 +694,12 @@ enum expr {
     u8-literal {
         value: u8;
     },
+    i16-literal {
+        value: i16;
+    },
+    u16-literal {
+        value: u16;
+    },
     is {
         value: expr;
         pattern: pattern;
@@ -909,6 +917,8 @@ simple enum integer-type {
     int,
     i8,
     u8,
+    i16,
+    u16,
 }
 
 @esexpr:(derive-codec)

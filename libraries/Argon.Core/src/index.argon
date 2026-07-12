@@ -5,6 +5,8 @@ export ::String::*
 export ::Int::*
 export ::I8::*
 export ::U8::*
+export ::I16::*
+export ::U16::*
 export ::Exception::*
 export ::Array::*
 export ::Puts::*

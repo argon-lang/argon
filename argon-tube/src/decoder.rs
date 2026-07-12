@@ -1077,6 +1077,8 @@ impl TubeDecoder {
             tf::ErasedSignatureType::Int {} => ErasedSignatureType::Int,
             tf::ErasedSignatureType::I8 {} => ErasedSignatureType::I8,
             tf::ErasedSignatureType::U8 {} => ErasedSignatureType::U8,
+            tf::ErasedSignatureType::I16 {} => ErasedSignatureType::I16,
+            tf::ErasedSignatureType::U16 {} => ErasedSignatureType::U16,
             tf::ErasedSignatureType::Bool {} => ErasedSignatureType::Bool,
             tf::ErasedSignatureType::String {} => ErasedSignatureType::String,
             tf::ErasedSignatureType::Never {} => ErasedSignatureType::Never,
@@ -1315,6 +1317,8 @@ impl TubeDecoder {
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
             tf::Expr::I8Literal { value } => Expr::I8Literal(value),
             tf::Expr::U8Literal { value } => Expr::U8Literal(value),
+            tf::Expr::I16Literal { value } => Expr::I16Literal(value),
+            tf::Expr::U16Literal { value } => Expr::U16Literal(value),
             tf::Expr::Is { value, pattern } => Expr::Is {
                 value: Box::new(self.decode_expr(*value)),
                 pattern: Box::new(self.decode_pattern(*pattern)),
@@ -2742,5 +2746,7 @@ fn decode_format_integer_type(integer_type: tf::IntegerType) -> IntegerType {
         tf::IntegerType::Int {} => IntegerType::Int,
         tf::IntegerType::I8 {} => IntegerType::I8,
         tf::IntegerType::U8 {} => IntegerType::U8,
+        tf::IntegerType::I16 {} => IntegerType::I16,
+        tf::IntegerType::U16 {} => IntegerType::U16,
     }
 }

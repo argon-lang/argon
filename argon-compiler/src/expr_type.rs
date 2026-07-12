@@ -79,6 +79,8 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
         Expr::IntLiteral(_) => Expr::int_type(),
         Expr::I8Literal(_) => Expr::i8_type(),
         Expr::U8Literal(_) => Expr::u8_type(),
+        Expr::I16Literal(_) => Expr::i16_type(),
+        Expr::U16Literal(_) => Expr::u16_type(),
 
         Expr::Match { .. } => todo!(),
 

@@ -269,6 +269,8 @@ pub trait Unify {
             (Expr::IntLiteral(a), Expr::IntLiteral(b)) => a == b,
             (Expr::I8Literal(a), Expr::I8Literal(b)) => a == b,
             (Expr::U8Literal(a), Expr::U8Literal(b)) => a == b,
+            (Expr::I16Literal(a), Expr::I16Literal(b)) => a == b,
+            (Expr::U16Literal(a), Expr::U16Literal(b)) => a == b,
             (
                 Expr::Is {
                     value: a_value,

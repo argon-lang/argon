@@ -1481,6 +1481,16 @@ final class Emitter {
 					storeRegister(constU8.dest());
 				}
 
+				case Instruction.ConstI16 constI16 -> {
+					cb.ldc((int) constI16.value());
+					storeRegister(constI16.dest());
+				}
+
+				case Instruction.ConstU16 constU16 -> {
+					cb.ldc(Short.toUnsignedInt(constU16.value()));
+					storeRegister(constU16.dest());
+				}
+
 				case Instruction.ConstBool constBool -> {
 					if(constBool.value()) {
 						cb.iconst_1();
@@ -2417,6 +2427,14 @@ final class Emitter {
 						() -> {
 							cb.iadd();
 							maskU8();
+						},
+						() -> {
+							cb.iadd();
+							cb.i2s();
+						},
+						() -> {
+							cb.iadd();
+							maskU16();
 						}
 					);
 
@@ -2427,6 +2445,8 @@ final class Emitter {
 						intBitAnd.rhs(),
 						intBitAnd.integerType(),
 						"and",
+						cb::iand,
+						cb::iand,
 						cb::iand,
 						cb::iand
 					);
@@ -2444,6 +2464,14 @@ final class Emitter {
 						() -> {
 							cb.loadConstant(0xFF);
 							cb.ixor();
+						},
+						() -> {
+							cb.loadConstant(-1);
+							cb.ixor();
+						},
+						() -> {
+							cb.loadConstant(0xFFFF);
+							cb.ixor();
 						}
 					);
 
@@ -2457,6 +2485,8 @@ final class Emitter {
 						intBitOr.rhs(),
 						intBitOr.integerType(),
 						"or",
+						cb::ior,
+						cb::ior,
 						cb::ior,
 						cb::ior
 					);
@@ -2474,6 +2504,8 @@ final class Emitter {
 						intBitXor.rhs(),
 						intBitXor.integerType(),
 						"xor",
+						cb::ixor,
+						cb::ixor,
 						cb::ixor,
 						cb::ixor
 					);
@@ -2507,6 +2539,14 @@ final class Emitter {
 						() -> {
 							cb.imul();
 							maskU8();
+						},
+						() -> {
+							cb.imul();
+							cb.i2s();
+						},
+						() -> {
+							cb.imul();
+							maskU16();
 						}
 					);
 
@@ -2519,6 +2559,13 @@ final class Emitter {
 						() -> {
 							cb.ineg();
 							cb.i2b();
+						},
+						() -> {
+							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
+						},
+						() -> {
+							cb.ineg();
+							cb.i2s();
 						},
 						() -> {
 							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
@@ -2539,6 +2586,14 @@ final class Emitter {
 						() -> {
 							cb.isub();
 							maskU8();
+						},
+						() -> {
+							cb.isub();
+							cb.i2s();
+						},
+						() -> {
+							cb.isub();
+							maskU16();
 						}
 					);
 
@@ -2596,7 +2651,9 @@ final class Emitter {
 			IntegerType integerType,
 			String bigIntegerMethod,
 			Runnable i8Op,
-			Runnable u8Op
+			Runnable u8Op,
+			Runnable i16Op,
+			Runnable u16Op
 		) {
 			switch(integerType) {
 				case INT -> {
@@ -2618,6 +2675,16 @@ final class Emitter {
 					u8Op.run();
 					storeRegister(dest);
 				}
+				case I16 -> {
+					loadRegister(value);
+					i16Op.run();
+					storeRegister(dest);
+				}
+				case U16 -> {
+					loadRegister(value);
+					u16Op.run();
+					storeRegister(dest);
+				}
 			}
 		}
 
@@ -2628,7 +2695,9 @@ final class Emitter {
 			IntegerType integerType,
 			String bigIntegerMethod,
 			Runnable i8Op,
-			Runnable u8Op
+			Runnable u8Op,
+			Runnable i16Op,
+			Runnable u16Op
 		) {
 			switch(integerType) {
 				case INT -> {
@@ -2651,6 +2720,18 @@ final class Emitter {
 					loadRegister(lhs);
 					loadRegister(rhs);
 					u8Op.run();
+					storeRegister(dest);
+				}
+				case I16 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					i16Op.run();
+					storeRegister(dest);
+				}
+				case U16 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					u16Op.run();
 					storeRegister(dest);
 				}
 			}
@@ -2678,6 +2759,22 @@ final class Emitter {
 							);
 							maskU8();
 						}
+						case I16 -> {
+							cb.invokevirtual(
+								CD_BIG_INTEGER,
+								"intValue",
+								MethodTypeDesc.of(ConstantDescs.CD_int)
+							);
+							cb.i2s();
+						}
+						case U16 -> {
+							cb.invokevirtual(
+								CD_BIG_INTEGER,
+								"intValue",
+								MethodTypeDesc.of(ConstantDescs.CD_int)
+							);
+							maskU16();
+						}
 					}
 				}
 				case I8 -> {
@@ -2685,6 +2782,8 @@ final class Emitter {
 						case INT -> intToBigInteger();
 						case I8 -> {}
 						case U8 -> maskU8();
+						case I16 -> {}
+						case U16 -> maskU16();
 					}
 				}
 				case U8 -> {
@@ -2692,6 +2791,26 @@ final class Emitter {
 						case INT -> intToBigInteger();
 						case I8 -> cb.i2b();
 						case U8 -> {}
+						case I16 -> {}
+						case U16 -> {}
+					}
+				}
+				case I16 -> {
+					switch(destType) {
+						case INT -> intToBigInteger();
+						case I8 -> cb.i2b();
+						case U8 -> maskU8();
+						case I16 -> {}
+						case U16 -> maskU16();
+					}
+				}
+				case U16 -> {
+					switch(destType) {
+						case INT -> intToBigInteger();
+						case I8 -> cb.i2b();
+						case U8 -> maskU8();
+						case I16 -> cb.i2s();
+						case U16 -> {}
 					}
 				}
 			}
@@ -2764,6 +2883,54 @@ final class Emitter {
 					cb.labelBinding(endLabel);
 					storeRegister(dest);
 				}
+				case I16 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.sipush(16);
+					cb.if_icmpge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					if(left) {
+						cb.ishl();
+						cb.i2s();
+					}
+					else {
+						cb.ishr();
+					}
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.iconst_0();
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
+				case U16 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.sipush(16);
+					cb.if_icmpge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					if(left) {
+						cb.ishl();
+					}
+					else {
+						cb.iushr();
+					}
+					maskU16();
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.iconst_0();
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
 			}
 		}
 
@@ -2799,6 +2966,18 @@ final class Emitter {
 					emitBooleanFromBranch(u8Branch);
 					storeRegister(dest);
 				}
+				case I16 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					emitBooleanFromBranch(u8Branch);
+					storeRegister(dest);
+				}
+				case U16 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					emitBooleanFromBranch(u8Branch);
+					storeRegister(dest);
+				}
 			}
 		}
 
@@ -2823,6 +3002,11 @@ final class Emitter {
 
 		private void maskU8() {
 			cb.sipush(0xFF);
+			cb.iand();
+		}
+
+		private void maskU16() {
+			cb.ldc(0xFFFF);
 			cb.iand();
 		}
 
@@ -3039,11 +3223,16 @@ final class Emitter {
 					MethodTypeDesc.of(ConstantDescs.CD_Character, ConstantDescs.CD_char)
 				);
 
-				case SHORT -> cb.invokestatic(
-					ConstantDescs.CD_Short,
-					"valueOf",
-					MethodTypeDesc.of(ConstantDescs.CD_Short, ConstantDescs.CD_short)
-				);
+				case SHORT -> {
+					if(isI16Token(token) || isU16Token(token)) {
+						cb.i2s();
+					}
+					cb.invokestatic(
+						ConstantDescs.CD_Short,
+						"valueOf",
+						MethodTypeDesc.of(ConstantDescs.CD_Short, ConstantDescs.CD_short)
+					);
+				}
 
 				case INT -> cb.invokestatic(
 					ConstantDescs.CD_Integer,
@@ -3112,13 +3301,22 @@ final class Emitter {
 						MethodTypeDesc.of(ConstantDescs.CD_char)
 					);
 
-				case SHORT -> cb
-					.checkcast(ConstantDescs.CD_Short)
-					.invokevirtual(
-						ConstantDescs.CD_Short,
-						"shortValue",
-						MethodTypeDesc.of(ConstantDescs.CD_short)
-					);
+				case SHORT -> {
+					cb
+						.checkcast(ConstantDescs.CD_Short)
+						.invokevirtual(
+							ConstantDescs.CD_Short,
+							"shortValue",
+							MethodTypeDesc.of(ConstantDescs.CD_short)
+						);
+					if(isU16Token(token)) {
+						cb.invokestatic(
+							ConstantDescs.CD_Short,
+							"toUnsignedInt",
+							MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_short)
+						);
+					}
+				}
 
 				case INT -> cb
 					.checkcast(ConstantDescs.CD_Integer)
@@ -3175,6 +3373,18 @@ final class Emitter {
 			return token instanceof Token.Builtin(var builtinType)
 				&& builtinType instanceof BuiltinType.Int(var integerType)
 				&& integerType == IntegerType.I8;
+		}
+
+		private boolean isU16Token(Token token) {
+			return token instanceof Token.Builtin(var builtinType)
+				&& builtinType instanceof BuiltinType.Int(var integerType)
+				&& integerType == IntegerType.U16;
+		}
+
+		private boolean isI16Token(Token token) {
+			return token instanceof Token.Builtin(var builtinType)
+				&& builtinType instanceof BuiltinType.Int(var integerType)
+				&& integerType == IntegerType.I16;
 		}
 
 		private void emitRuntimeUnsupported(String message) {

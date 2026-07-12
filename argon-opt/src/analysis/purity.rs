@@ -26,6 +26,8 @@ pub fn is_instruction_pure(instruction: &vf::Instruction) -> bool {
         | vf::Instruction::ConstI8 { .. }
         | vf::Instruction::ConstInt { .. }
         | vf::Instruction::ConstU8 { .. }
+        | vf::Instruction::ConstI16 { .. }
+        | vf::Instruction::ConstU16 { .. }
         | vf::Instruction::ConstString { .. }
         | vf::Instruction::EnumVariantLiteral { .. }
         | vf::Instruction::LoadInstanceField { .. }

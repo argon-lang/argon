@@ -839,6 +839,8 @@ impl TubeModel {
             vf::ErasedSignatureType::Int {} => Some(vf::ErasedSignatureType::Int {}),
             vf::ErasedSignatureType::I8 {} => Some(vf::ErasedSignatureType::I8 {}),
             vf::ErasedSignatureType::U8 {} => Some(vf::ErasedSignatureType::U8 {}),
+            vf::ErasedSignatureType::I16 {} => Some(vf::ErasedSignatureType::I16 {}),
+            vf::ErasedSignatureType::U16 {} => Some(vf::ErasedSignatureType::U16 {}),
             vf::ErasedSignatureType::Bool {} => Some(vf::ErasedSignatureType::Bool {}),
             vf::ErasedSignatureType::String {} => Some(vf::ErasedSignatureType::String {}),
             vf::ErasedSignatureType::Never {} => Some(vf::ErasedSignatureType::Never {}),
@@ -1086,6 +1088,14 @@ impl TubeModel {
                 value: *value,
             }),
             vf::Instruction::ConstU8 { dest, value } => Some(vf::Instruction::ConstU8 {
+                dest: dest.clone(),
+                value: *value,
+            }),
+            vf::Instruction::ConstI16 { dest, value } => Some(vf::Instruction::ConstI16 {
+                dest: dest.clone(),
+                value: *value,
+            }),
+            vf::Instruction::ConstU16 { dest, value } => Some(vf::Instruction::ConstU16 {
                 dest: dest.clone(),
                 value: *value,
             }),
@@ -2275,6 +2285,14 @@ fn prepare_instruction_for_inline(
             value: *value,
         }),
         vf::Instruction::ConstU8 { dest, value } => Some(vf::Instruction::ConstU8 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
+        }),
+        vf::Instruction::ConstI16 { dest, value } => Some(vf::Instruction::ConstI16 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
+        }),
+        vf::Instruction::ConstU16 { dest, value } => Some(vf::Instruction::ConstU16 {
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: *value,
         }),

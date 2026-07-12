@@ -129,6 +129,8 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     IntLiteral(BigInt),
     I8Literal(i8),
     U8Literal(u8),
+    I16Literal(i16),
+    U16Literal(u16),
     Is {
         value: Box<Expr<EC>>,
         pattern: Box<Pattern<EC>>,
@@ -213,6 +215,14 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
 
     pub fn i8_type() -> Expr<EC> {
         Expr::integer_type(IntegerType::I8)
+    }
+
+    pub fn i16_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::I16)
+    }
+
+    pub fn u16_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::U16)
     }
 
     pub fn integer_type(integer_type: IntegerType) -> Expr<EC> {
@@ -380,14 +390,18 @@ pub enum IntegerType {
     Int,
     I8,
     U8,
+    I16,
+    U16,
 }
 
 impl IntegerType {
     pub fn type_name(self) -> &'static str {
         match self {
             IntegerType::Int => "int_type",
-            IntegerType::I8 => "sbyte_type",
+            IntegerType::I8 => "i8_type",
             IntegerType::U8 => "u8_type",
+            IntegerType::I16 => "i16_type",
+            IntegerType::U16 => "u16_type",
         }
     }
 }
@@ -402,13 +416,17 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
             Builtin::ArrayType { .. } => "array_type",
             Builtin::IntNegate { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_negate",
-                IntegerType::I8 => "sbyte_negate",
+                IntegerType::I8 => "i8_negate",
                 IntegerType::U8 => "u8_negate",
+                IntegerType::I16 => "i16_negate",
+                IntegerType::U16 => "u16_negate",
             },
             Builtin::IntBitNot { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitnot",
-                IntegerType::I8 => "sbyte_bitnot",
+                IntegerType::I8 => "i8_bitnot",
                 IntegerType::U8 => "u8_bitnot",
+                IntegerType::I16 => "i16_bitnot",
+                IntegerType::U16 => "u16_bitnot",
             },
             Builtin::IntConvert {
                 source_type,
@@ -418,77 +436,119 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 (IntegerType::Int, IntegerType::Int) => "int_to_int",
                 (IntegerType::Int, IntegerType::I8) => "int_to_i8",
                 (IntegerType::Int, IntegerType::U8) => "int_to_u8",
-                (IntegerType::I8, IntegerType::Int) => "sbyte_to_int",
-                (IntegerType::I8, IntegerType::I8) => "sbyte_to_i8",
-                (IntegerType::I8, IntegerType::U8) => "sbyte_to_u8",
+                (IntegerType::Int, IntegerType::I16) => "int_to_i16",
+                (IntegerType::Int, IntegerType::U16) => "int_to_u16",
+                (IntegerType::I8, IntegerType::Int) => "i8_to_int",
+                (IntegerType::I8, IntegerType::I8) => "i8_to_i8",
+                (IntegerType::I8, IntegerType::U8) => "i8_to_u8",
+                (IntegerType::I8, IntegerType::I16) => "i8_to_i16",
+                (IntegerType::I8, IntegerType::U16) => "i8_to_u16",
                 (IntegerType::U8, IntegerType::Int) => "u8_to_int",
                 (IntegerType::U8, IntegerType::I8) => "u8_to_i8",
                 (IntegerType::U8, IntegerType::U8) => "u8_to_u8",
+                (IntegerType::U8, IntegerType::I16) => "u8_to_i16",
+                (IntegerType::U8, IntegerType::U16) => "u8_to_u16",
+                (IntegerType::I16, IntegerType::Int) => "i16_to_int",
+                (IntegerType::I16, IntegerType::I8) => "i16_to_i8",
+                (IntegerType::I16, IntegerType::U8) => "i16_to_u8",
+                (IntegerType::I16, IntegerType::I16) => "i16_to_i16",
+                (IntegerType::I16, IntegerType::U16) => "i16_to_u16",
+                (IntegerType::U16, IntegerType::Int) => "u16_to_int",
+                (IntegerType::U16, IntegerType::I8) => "u16_to_i8",
+                (IntegerType::U16, IntegerType::U8) => "u16_to_u8",
+                (IntegerType::U16, IntegerType::I16) => "u16_to_i16",
+                (IntegerType::U16, IntegerType::U16) => "u16_to_u16",
             },
             Builtin::IntAdd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_add",
-                IntegerType::I8 => "sbyte_add",
+                IntegerType::I8 => "i8_add",
                 IntegerType::U8 => "u8_add",
+                IntegerType::I16 => "i16_add",
+                IntegerType::U16 => "u16_add",
             },
             Builtin::IntSub { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_sub",
-                IntegerType::I8 => "sbyte_sub",
+                IntegerType::I8 => "i8_sub",
                 IntegerType::U8 => "u8_sub",
+                IntegerType::I16 => "i16_sub",
+                IntegerType::U16 => "u16_sub",
             },
             Builtin::IntMul { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_mul",
-                IntegerType::I8 => "sbyte_mul",
+                IntegerType::I8 => "i8_mul",
                 IntegerType::U8 => "u8_mul",
+                IntegerType::I16 => "i16_mul",
+                IntegerType::U16 => "u16_mul",
             },
             Builtin::IntBitAnd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitand",
-                IntegerType::I8 => "sbyte_bitand",
+                IntegerType::I8 => "i8_bitand",
                 IntegerType::U8 => "u8_bitand",
+                IntegerType::I16 => "i16_bitand",
+                IntegerType::U16 => "u16_bitand",
             },
             Builtin::IntBitOr { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitor",
-                IntegerType::I8 => "sbyte_bitor",
+                IntegerType::I8 => "i8_bitor",
                 IntegerType::U8 => "u8_bitor",
+                IntegerType::I16 => "i16_bitor",
+                IntegerType::U16 => "u16_bitor",
             },
             Builtin::IntBitXor { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitxor",
-                IntegerType::I8 => "sbyte_bitxor",
+                IntegerType::I8 => "i8_bitxor",
                 IntegerType::U8 => "u8_bitxor",
+                IntegerType::I16 => "i16_bitxor",
+                IntegerType::U16 => "u16_bitxor",
             },
             Builtin::IntBitShiftLeft { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitshiftleft",
-                IntegerType::I8 => "sbyte_bitshiftleft",
+                IntegerType::I8 => "i8_bitshiftleft",
                 IntegerType::U8 => "u8_bitshiftleft",
+                IntegerType::I16 => "i16_bitshiftleft",
+                IntegerType::U16 => "u16_bitshiftleft",
             },
             Builtin::IntBitShiftRight { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitshiftright",
-                IntegerType::I8 => "sbyte_bitshiftright",
+                IntegerType::I8 => "i8_bitshiftright",
                 IntegerType::U8 => "u8_bitshiftright",
+                IntegerType::I16 => "i16_bitshiftright",
+                IntegerType::U16 => "u16_bitshiftright",
             },
             Builtin::IntEq { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_eq",
-                IntegerType::I8 => "sbyte_eq",
+                IntegerType::I8 => "i8_eq",
                 IntegerType::U8 => "u8_eq",
+                IntegerType::I16 => "i16_eq",
+                IntegerType::U16 => "u16_eq",
             },
             Builtin::IntLt { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_lt",
-                IntegerType::I8 => "sbyte_lt",
+                IntegerType::I8 => "i8_lt",
                 IntegerType::U8 => "u8_lt",
+                IntegerType::I16 => "i16_lt",
+                IntegerType::U16 => "u16_lt",
             },
             Builtin::IntLe { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_le",
-                IntegerType::I8 => "sbyte_le",
+                IntegerType::I8 => "i8_le",
                 IntegerType::U8 => "u8_le",
+                IntegerType::I16 => "i16_le",
+                IntegerType::U16 => "u16_le",
             },
             Builtin::IntGt { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_gt",
-                IntegerType::I8 => "sbyte_gt",
+                IntegerType::I8 => "i8_gt",
                 IntegerType::U8 => "u8_gt",
+                IntegerType::I16 => "i16_gt",
+                IntegerType::U16 => "u16_gt",
             },
             Builtin::IntGe { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_ge",
-                IntegerType::I8 => "sbyte_ge",
+                IntegerType::I8 => "i8_ge",
                 IntegerType::U8 => "u8_ge",
+                IntegerType::I16 => "i16_ge",
+                IntegerType::U16 => "u16_ge",
             },
             Builtin::StringConcat { .. } => "string_concat",
             Builtin::StringEq { .. } => "string_eq",
