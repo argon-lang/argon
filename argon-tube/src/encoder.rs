@@ -913,6 +913,9 @@ impl TubeEncoder {
     ) -> Result<tf::Expr, InternalCompilerError> {
         Ok(match expr {
             Expr::Error => tf::Expr::Error {},
+            Expr::FunctionResultValue { result_type } => tf::Expr::ErasedValue {
+                r#type: Box::new(self.emit_expr(result_type)?),
+            },
             Expr::And(a, b) => tf::Expr::And {
                 a: Box::new(self.emit_expr(a)?),
                 b: Box::new(self.emit_expr(b)?),
@@ -1211,6 +1214,25 @@ impl TubeEncoder {
             Expr::VariableBinding(variable, value) => tf::Expr::BindVariable {
                 value: Box::new(self.emit_expr(value)?),
                 v: Box::new(self.emit_local_var(variable)?),
+            },
+            Expr::BindErasedAlias {
+                variable,
+                equality_witness,
+                value,
+            } => tf::Expr::BindErasedAlias {
+                value: Box::new(self.emit_expr(value)?),
+                v: Box::new(self.emit_local_var(variable)?),
+                equality_witness: equality_witness
+                    .as_ref()
+                    .map(|witness| self.emit_local_var(witness).map(Box::new))
+                    .transpose()?,
+            },
+            Expr::BindEnsures { value, variables } => tf::Expr::BindEnsures {
+                value: Box::new(self.emit_expr(value)?),
+                variables: variables
+                    .iter()
+                    .map(|variable| self.emit_local_var(variable).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::VariableStore(variable, value) => tf::Expr::VariableStore {
                 v: Box::new(self.emit_var(variable)?),

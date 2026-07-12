@@ -111,6 +111,8 @@ pub enum Token {
     KwWhile,
     #[strum(serialize = "KwBreak")]
     KwBreak,
+    #[strum(serialize = "KwReturn")]
+    KwReturn,
     #[strum(serialize = "KwNext")]
     KwNext,
     #[strum(serialize = "KwRedo")]
@@ -151,6 +153,8 @@ pub enum Token {
     KwAssert,
     #[strum(serialize = "KwSummon")]
     KwSummon,
+    #[strum(serialize = "KwResult")]
+    KwResult,
     #[strum(serialize = "KwWitness")]
     KwWitness,
     #[strum(serialize = "KwInline")]
@@ -307,6 +311,7 @@ enum Rule {
     WhileExpr,
     LoopLabel,
     BreakExpr,
+    ReturnExpr,
     NextExpr,
     RedoExpr,
     RetryExpr,
@@ -724,7 +729,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwFalse).discard() ], "(|| expr_bool_literal(false))"),
                     rule([ nonterm(IfExpr) ], "identity"),
                     rule([ term(KwBegin).discard(), nonterm(BlockBodyWithEnd) ], "with_location_value"),
-                    // function result value
+                    rule([ term(KwResult).discard() ], "(|| expr_function_result_value())"),
                     rule([ term(KwArgonBuiltin).discard(), term(IdentifierToken) ], "expr_builtin_token"),
                     rule([ nonterm(LoopExpr) ], "identity"),
                     rule([ nonterm(WhileExpr) ], "identity"),
@@ -1185,6 +1190,12 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwBreak).discard(), nonterm(LoopLabel), nonterm(TupleExpr).with_location() ], "expr_break"),
                 ]
             ),
+            ReturnExpr => ruleset(
+                "Expr",
+                [
+                    rule([ term(KwReturn).discard(), nonterm(NewLines).discard(), nonterm(Expression).with_location() ], "expr_return"),
+                ]
+            ),
             NextExpr => ruleset(
                 "Expr",
                 [
@@ -1208,6 +1219,7 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ nonterm(AssertExpr) ], "identity"),
                     rule([ nonterm(BreakExpr) ], "identity"),
+                    rule([ nonterm(ReturnExpr) ], "identity"),
                     rule([ nonterm(NextExpr) ], "identity"),
                     rule([ nonterm(RedoExpr) ], "identity"),
                     rule([ nonterm(RetryExpr) ], "identity"),

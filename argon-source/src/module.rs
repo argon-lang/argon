@@ -190,6 +190,10 @@ impl Scope for GlobalScope {
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
         None
     }
+
+    fn function_result_value_type(&self) -> Option<argon_expr::Expr<Self::ExprContext>> {
+        None
+    }
 }
 
 pub struct GlobalScopeBuilder {

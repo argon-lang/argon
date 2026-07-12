@@ -2,7 +2,7 @@ use crate::modifiers::{ERASURE_MODE, ModifierParser};
 use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::vec::Vec;
 use argon_compiler::access::AccessToken;
-use argon_compiler::scope::{ParameterScope, Scope};
+use argon_compiler::scope::{FunctionResultValueScope, ParameterScope, Scope};
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
 use argon_compiler::{Context, DefaultExprContext};
 use argon_expr::{ErasureMode, Expr, ExpressionOwner, ParameterVariable};
@@ -119,6 +119,9 @@ impl<'a> SignatureParser<'a> {
             &return_type.value.return_type,
         );
 
+        let parent_scope: &dyn Scope<ExprContext = DefaultExprContext> = &parameter_scope;
+        let result_scope = FunctionResultValueScope::new(parent_scope, conv_return_type.clone());
+
         let ensures_clauses = return_type
             .value
             .ensures_clauses
@@ -126,11 +129,7 @@ impl<'a> SignatureParser<'a> {
             .map(|clause| {
                 type_check_type_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(
-                        &self.access_token,
-                        &mut parameter_scope,
-                        ErasureMode::Token,
-                    ),
+                    TypeCheckOptions::new(&self.access_token, &result_scope, ErasureMode::Token),
                     clause,
                 )
             })

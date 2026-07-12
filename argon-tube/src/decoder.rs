@@ -1195,7 +1195,9 @@ impl TubeDecoder {
     fn decode_expr(self: &Arc<Self>, expr: tf::Expr) -> Expr<DefaultExprContext> {
         match expr {
             tf::Expr::Error {} => Expr::Error,
-            tf::Expr::ErasedValue {} => todo!("decode erased-value expression"),
+            tf::Expr::ErasedValue { r#type } => Expr::FunctionResultValue {
+                result_type: Box::new(self.decode_expr(*r#type)),
+            },
             tf::Expr::And { a, b } => Expr::And(
                 Box::new(self.decode_expr(*a)),
                 Box::new(self.decode_expr(*b)),
@@ -1205,6 +1207,28 @@ impl TubeDecoder {
                 let variable = self.decode_local_var(*v);
                 Expr::VariableBinding(variable, Box::new(value))
             }
+            tf::Expr::BindErasedAlias {
+                v,
+                equality_witness,
+                value,
+            } => {
+                let variable = self.decode_local_var(*v);
+                let equality_witness =
+                    equality_witness.map(|witness| self.decode_local_var(*witness));
+                let value = self.decode_expr(*value);
+                Expr::BindErasedAlias {
+                    variable,
+                    equality_witness,
+                    value: Box::new(value),
+                }
+            }
+            tf::Expr::BindEnsures { value, variables } => Expr::BindEnsures {
+                value: Box::new(self.decode_expr(*value)),
+                variables: variables
+                    .into_iter()
+                    .map(|variable| self.decode_local_var(*variable))
+                    .collect(),
+            },
             tf::Expr::BoolLiteral { value } => Expr::BoolLiteral(value),
             tf::Expr::Box { t, value } => Expr::Box {
                 t: Box::new(self.decode_expr(*t)),

@@ -246,7 +246,47 @@ pub trait Unify {
                     argument: b_argument,
                 },
             ) => self.unify(*a_function, *b_function) && self.unify(*a_argument, *b_argument),
-            (Expr::FunctionResultValue, Expr::FunctionResultValue) => true,
+            (
+                Expr::FunctionResultValue {
+                    result_type: a_result_type,
+                },
+                Expr::FunctionResultValue {
+                    result_type: b_result_type,
+                },
+            ) => self.unify(*a_result_type, *b_result_type),
+            (
+                Expr::BindEnsures {
+                    value: a_value,
+                    variables: a_variables,
+                },
+                Expr::BindEnsures {
+                    value: b_value,
+                    variables: b_variables,
+                },
+            ) => {
+                a_variables.len() == b_variables.len()
+                    && self.unify(*a_value, *b_value)
+                    && a_variables
+                        .into_iter()
+                        .zip(b_variables)
+                        .all(|(a, b)| a == b)
+            }
+            (
+                Expr::BindErasedAlias {
+                    variable: a_variable,
+                    equality_witness: a_equality_witness,
+                    value: a_value,
+                },
+                Expr::BindErasedAlias {
+                    variable: b_variable,
+                    equality_witness: b_equality_witness,
+                    value: b_value,
+                },
+            ) => {
+                a_variable == b_variable
+                    && a_equality_witness == b_equality_witness
+                    && self.unify(*a_value, *b_value)
+            }
             (
                 Expr::IfElse {
                     condition: a_condition,

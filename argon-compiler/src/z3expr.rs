@@ -140,6 +140,9 @@ impl<
                 lhs.eq(&rhs)
             }
             Expr::BoxedType(t) => self.inhabited(t),
+            Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
+                self.inhabited(value)
+            }
             _ => {
                 let value = self.expr_to_z3(expr);
                 dynamic_to_bool(self.inhabited.apply(&[&value]))
@@ -866,80 +869,78 @@ impl<
                 Builtin::IntConvert {
                     dest_type,
                     source_type,
-                    value
+                    value,
                 } => {
                     if dest_type == source_type {
                         self.expr_to_z3_value(value)
                     } else {
                         match (dest_type, source_type) {
-                        (IntegerType::Int, IntegerType::Int) => self.expr_to_z3_value(value),
+                            (IntegerType::Int, IntegerType::Int) => self.expr_to_z3_value(value),
 
-                        (
-                            IntegerType::I8
-                            | IntegerType::U8
-                            | IntegerType::I16
-                            | IntegerType::U16
-                            | IntegerType::I32
-                            | IntegerType::U32
-                            | IntegerType::I64
-                            | IntegerType::U64,
-                            IntegerType::Int,
-                        ) => {
-                            let value = self.expr_to_z3(value);
-                            let value = self.int_literal_value(&value);
-                            let value = BV::from_int(
-                                &value,
-                                Self::fixed_integer_bit_width(*dest_type),
-                            );
-                            Some(self.wrap_fixed_integer_literal(*dest_type, &value))
-                        }
+                            (
+                                IntegerType::I8
+                                | IntegerType::U8
+                                | IntegerType::I16
+                                | IntegerType::U16
+                                | IntegerType::I32
+                                | IntegerType::U32
+                                | IntegerType::I64
+                                | IntegerType::U64,
+                                IntegerType::Int,
+                            ) => {
+                                let value = self.expr_to_z3(value);
+                                let value = self.int_literal_value(&value);
+                                let value =
+                                    BV::from_int(&value, Self::fixed_integer_bit_width(*dest_type));
+                                Some(self.wrap_fixed_integer_literal(*dest_type, &value))
+                            }
 
-                        (
-                            IntegerType::Int,
-                            IntegerType::I8
-                            | IntegerType::U8
-                            | IntegerType::I16
-                            | IntegerType::U16
-                            | IntegerType::I32
-                            | IntegerType::U32
-                            | IntegerType::I64
-                            | IntegerType::U64,
-                        ) => {
-                            let value = self.expr_to_z3(value);
-                            let value = self.fixed_integer_literal_value(*source_type, &value);
-                            Some(self.wrap_int_literal(&Int::from_bv(
-                                &value,
-                                Self::fixed_integer_is_signed(*source_type),
-                            )))
-                        }
+                            (
+                                IntegerType::Int,
+                                IntegerType::I8
+                                | IntegerType::U8
+                                | IntegerType::I16
+                                | IntegerType::U16
+                                | IntegerType::I32
+                                | IntegerType::U32
+                                | IntegerType::I64
+                                | IntegerType::U64,
+                            ) => {
+                                let value = self.expr_to_z3(value);
+                                let value = self.fixed_integer_literal_value(*source_type, &value);
+                                Some(self.wrap_int_literal(&Int::from_bv(
+                                    &value,
+                                    Self::fixed_integer_is_signed(*source_type),
+                                )))
+                            }
 
-                        (
-                            IntegerType::I8
-                            | IntegerType::U8
-                            | IntegerType::I16
-                            | IntegerType::U16
-                            | IntegerType::I32
-                            | IntegerType::U32
-                            | IntegerType::I64
-                            | IntegerType::U64,
-                            IntegerType::I8
-                            | IntegerType::U8
-                            | IntegerType::I16
-                            | IntegerType::U16
-                            | IntegerType::I32
-                            | IntegerType::U32
-                            | IntegerType::I64
-                            | IntegerType::U64,
-                        ) => {
-                            let value = self.expr_to_z3(value);
-                            let value = self.fixed_integer_literal_value(*source_type, &value);
-                            let value =
-                                Self::convert_fixed_integer_bv(*source_type, *dest_type, value);
-                            Some(self.wrap_fixed_integer_literal(*dest_type, &value))
+                            (
+                                IntegerType::I8
+                                | IntegerType::U8
+                                | IntegerType::I16
+                                | IntegerType::U16
+                                | IntegerType::I32
+                                | IntegerType::U32
+                                | IntegerType::I64
+                                | IntegerType::U64,
+                                IntegerType::I8
+                                | IntegerType::U8
+                                | IntegerType::I16
+                                | IntegerType::U16
+                                | IntegerType::I32
+                                | IntegerType::U32
+                                | IntegerType::I64
+                                | IntegerType::U64,
+                            ) => {
+                                let value = self.expr_to_z3(value);
+                                let value = self.fixed_integer_literal_value(*source_type, &value);
+                                let value =
+                                    Self::convert_fixed_integer_bv(*source_type, *dest_type, value);
+                                Some(self.wrap_fixed_integer_literal(*dest_type, &value))
+                            }
                         }
                     }
-                    }
-                },
+                }
                 Builtin::IntAdd {
                     integer_type,
                     lhs,
@@ -1775,6 +1776,9 @@ impl<
                 ))
             }
             Expr::Variable(variable) => Some(self.variable_term(variable)),
+            Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
+                Some(self.expr_to_z3(value))
+            }
             Expr::Box { t, value } => {
                 let t = self.expr_to_z3(t);
                 let value = self.expr_to_z3(value);

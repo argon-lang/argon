@@ -581,7 +581,9 @@ enum method-implementation {
 @esexpr:(derive-codec)
 enum expr {
     error,
-    erased-value,
+    erased-value {
+        type: expr;
+    },
     and {
         a: expr;
         b: expr;
@@ -589,6 +591,21 @@ enum expr {
     bind-variable {
         v: local-var;
         value: expr;
+    },
+    bind-erased-alias {
+        v: local-var;
+
+        @esexpr:(keyword)
+        @esexpr:(optional)
+        equality-witness: optional-field[local-var];
+
+        value: expr;
+    },
+    bind-ensures {
+        value: expr;
+
+        @esexpr:(vararg)
+        variables: list[local-var];
     },
     bool-literal {
         value: bool;

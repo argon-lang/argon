@@ -105,6 +105,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("loop"), "TokenType::Token(Token::KwLoop)");
     b.add(Regex::str("while"), "TokenType::Token(Token::KwWhile)");
     b.add(Regex::str("break"), "TokenType::Token(Token::KwBreak)");
+    b.add(Regex::str("return"), "TokenType::Token(Token::KwReturn)");
     b.add(Regex::str("next"), "TokenType::Token(Token::KwNext)");
     b.add(Regex::str("redo"), "TokenType::Token(Token::KwRedo)");
     b.add(Regex::str("retry"), "TokenType::Token(Token::KwRetry)");
@@ -128,6 +129,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     );
     b.add(Regex::str("assert"), "TokenType::Token(Token::KwAssert)");
     b.add(Regex::str("summon"), "TokenType::Token(Token::KwSummon)");
+    b.add(Regex::str("result"), "TokenType::Token(Token::KwResult)");
     b.add(Regex::str("witness"), "TokenType::Token(Token::KwWitness)");
     b.add(
         Regex::str("extension"),

@@ -13,8 +13,8 @@
             a + b
         
         proc main(): () do
-            let result = add 99 2
-            puts (result.to_s())
+            let sum = add 99 2
+            puts (sum.to_s())
         end
         
             

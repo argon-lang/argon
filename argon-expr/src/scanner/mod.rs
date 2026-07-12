@@ -4,9 +4,11 @@ use crate::{
     Variable,
 };
 
+mod function_result;
 mod normalizer;
 mod subst;
 
+pub use function_result::FunctionResultValueSubstScanner;
 pub use normalizer::{FullNormalizer, Normalizer, NormalizerScanner};
 pub use subst::SubstScanner;
 
@@ -66,6 +68,23 @@ where
         Expr::Block { label, body } => default_scan_label(scanner, label) && scanner.scan(body),
         Expr::Break { label, value } => default_scan_label(scanner, label) && scanner.scan(value),
         Expr::Builtin(builtin) => default_scan_builtin(scanner, builtin),
+        Expr::BindEnsures { value, variables } => {
+            scanner.scan(value)
+                && variables
+                    .iter()
+                    .all(|variable| scanner.scan(&variable.var_type))
+        }
+        Expr::BindErasedAlias {
+            variable,
+            equality_witness,
+            value,
+        } => {
+            scanner.scan(&variable.var_type)
+                && equality_witness
+                    .as_ref()
+                    .is_none_or(|witness| scanner.scan(&witness.var_type))
+                && scanner.scan(value)
+        }
         Expr::ConjunctionType { lhs, rhs } | Expr::DisjunctionType { lhs, rhs } => {
             scanner.scan(lhs) && scanner.scan(rhs)
         }
@@ -109,7 +128,7 @@ where
         Expr::FunctionObjectCall { function, argument } => {
             scanner.scan(function) && scanner.scan(argument)
         }
-        Expr::FunctionResultValue => true,
+        Expr::FunctionResultValue { result_type } => scanner.scan(result_type),
         Expr::FunctionType { a, r } => scanner.scan(&a.var_type) && scanner.scan(r),
         Expr::IfElse {
             condition,
@@ -381,6 +400,23 @@ where
             default_scan_label_mut(scanner, label) && scanner.scan(value.as_mut())
         }
         Expr::Builtin(builtin) => default_scan_builtin_mut(scanner, builtin),
+        Expr::BindEnsures { value, variables } => {
+            scanner.scan(value)
+                && variables
+                    .iter_mut()
+                    .all(|variable| scanner.scan(&mut variable.var_type))
+        }
+        Expr::BindErasedAlias {
+            variable,
+            equality_witness,
+            value,
+        } => {
+            scanner.scan(&mut variable.var_type)
+                && equality_witness
+                    .as_mut()
+                    .is_none_or(|witness| scanner.scan(&mut witness.var_type))
+                && scanner.scan(value)
+        }
         Expr::ConjunctionType { lhs, rhs } | Expr::DisjunctionType { lhs, rhs } => {
             scanner.scan(lhs.as_mut()) && scanner.scan(rhs.as_mut())
         }
@@ -430,7 +466,7 @@ where
         Expr::FunctionObjectCall { function, argument } => {
             scanner.scan(function.as_mut()) && scanner.scan(argument.as_mut())
         }
-        Expr::FunctionResultValue => true,
+        Expr::FunctionResultValue { result_type } => scanner.scan(result_type),
         Expr::FunctionType { a, r } => scanner.scan(&mut a.var_type) && scanner.scan(r.as_mut()),
         Expr::IfElse {
             condition,

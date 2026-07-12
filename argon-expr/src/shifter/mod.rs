@@ -60,6 +60,23 @@ where
             value: Box::new(shifter.shift(*value)),
         },
         Expr::Builtin(builtin) => Expr::Builtin(default_shift_builtin(shifter, builtin)),
+        Expr::BindEnsures { value, variables } => Expr::BindEnsures {
+            value: Box::new(shifter.shift(*value)),
+            variables: variables
+                .into_iter()
+                .map(|variable| Box::new(default_shift_local_variable(shifter, *variable)))
+                .collect(),
+        },
+        Expr::BindErasedAlias {
+            variable,
+            equality_witness,
+            value,
+        } => Expr::BindErasedAlias {
+            variable: Box::new(default_shift_local_variable(shifter, *variable)),
+            equality_witness: equality_witness
+                .map(|witness| Box::new(default_shift_local_variable(shifter, *witness))),
+            value: Box::new(shifter.shift(*value)),
+        },
         Expr::ConjunctionType { lhs, rhs } => Expr::ConjunctionType {
             lhs: Box::new(shifter.shift(*lhs)),
             rhs: Box::new(shifter.shift(*rhs)),
@@ -128,7 +145,9 @@ where
             function: Box::new(shifter.shift(*function)),
             argument: Box::new(shifter.shift(*argument)),
         },
-        Expr::FunctionResultValue => Expr::FunctionResultValue,
+        Expr::FunctionResultValue { result_type } => Expr::FunctionResultValue {
+            result_type: Box::new(shifter.shift(*result_type)),
+        },
         Expr::FunctionType { a, r } => Expr::FunctionType {
             a: Box::new(default_shift_closure_parameter_variable(shifter, *a)),
             r: Box::new(shifter.shift(*r)),

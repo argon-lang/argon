@@ -191,7 +191,8 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
                             &parameter_scope,
                             self.metadata.erasure_mode,
                         )
-                        .with_effect_info(self.metadata.effect_info),
+                        .with_effect_info(self.metadata.effect_info)
+                        .with_ensures_clauses(&signature.ensures_clauses),
                         body.as_ref(),
                         &signature.return_type,
                     );

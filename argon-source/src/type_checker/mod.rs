@@ -17,9 +17,9 @@ use argon_compiler::{
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut,
-    ExpressionOwner, IntegerType, LocalVariable, LoopLabels, MatchCase, Normalizer,
-    NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType,
-    TypeComparer, Unify, Variable, VariableTupleElement,
+    ExpressionOwner, FunctionResultValueSubstScanner, IntegerType, LocalVariable, LoopLabels,
+    MatchCase, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType,
+    SubstScanner, TraitType, TypeComparer, Unify, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -60,6 +60,8 @@ pub fn type_check_type_expr(
         scope: &mut local_scope,
         model: &mut model,
         erasure_check_mode: erasure_mode,
+        ensures_clauses: Vec::new(),
+        return_position: false,
     };
 
     let expr = checker.check_type(e);
@@ -86,17 +88,26 @@ pub fn type_check_expr(
         access,
         scope,
         erasure_mode,
+        ensures_clauses,
         ..
     } = options;
     let shifted_scope = ShiftedScope::new(scope, default_to_type_check_shifter());
     let mut local_scope = LocalVariableScope::new(shifted_scope);
     let mut model = Model::new();
+    let ensures_clauses = ensures_clauses
+        .unwrap_or_default()
+        .iter()
+        .cloned()
+        .map(|clause| default_to_type_check_shifter().shift(clause))
+        .collect();
     let mut checker = TypeChecker {
         context: context.clone(),
         access,
         scope: &mut local_scope,
         model: &mut model,
         erasure_check_mode: erasure_mode,
+        ensures_clauses,
+        return_position: true,
     };
 
     let expected_type = default_to_type_check_shifter().shift(expected_type.clone());
@@ -154,6 +165,7 @@ pub struct TypeCheckOptions<'a> {
     scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
     erasure_mode: ErasureMode,
     effect_info: EffectInfo,
+    ensures_clauses: Option<&'a [Expr<DefaultExprContext>]>,
 }
 
 impl<'a> TypeCheckOptions<'a> {
@@ -167,11 +179,17 @@ impl<'a> TypeCheckOptions<'a> {
             scope,
             erasure_mode,
             effect_info: EffectInfo::Effectful,
+            ensures_clauses: None,
         }
     }
 
     pub fn with_effect_info(mut self, effect_info: EffectInfo) -> Self {
         self.effect_info = effect_info;
+        self
+    }
+
+    pub fn with_ensures_clauses(mut self, ensures_clauses: &'a [Expr<DefaultExprContext>]) -> Self {
+        self.ensures_clauses = Some(ensures_clauses);
         self
     }
 }
@@ -439,6 +457,8 @@ struct TypeChecker<'access, 'scope, 'model> {
     scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     model: &'model mut Model,
     erasure_check_mode: ErasureMode,
+    ensures_clauses: Vec<Expr<TypeCheckExprContext>>,
+    return_position: bool,
 }
 
 macro_rules! with_nested_scope {
@@ -451,6 +471,8 @@ macro_rules! with_nested_scope {
             ),
             model: $tc.model,
             erasure_check_mode: $tc.erasure_check_mode,
+            ensures_clauses: $tc.ensures_clauses.clone(),
+            return_position: $tc.return_position,
         }
     };
 }
@@ -461,9 +483,122 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         expr: &'e WithLocation<ast::Expr>,
         expected_type: &Expr<TypeCheckExprContext>,
     ) -> Expr<TypeCheckExprContext> {
+        let return_position = mem::replace(&mut self.return_position, false);
+
+        if return_position
+            && let ast::Expr::Block { body, finally_body } = &expr.value
+            && !body.value.is_empty()
+        {
+            return self.check_return_block(body, finally_body.as_ref(), expected_type);
+        }
+
         let infer = self.infer(expr);
-        self.check_inferred_type(&expr.location, infer, ExpectedType::Exact(expected_type))
-            .checked_expr
+        let checked =
+            self.check_inferred_type(&expr.location, infer, ExpectedType::Exact(expected_type));
+
+        if return_position {
+            self.apply_return_ensures(&expr.location, checked)
+        } else {
+            checked.checked_expr
+        }
+    }
+
+    fn check_return_block<'e>(
+        &mut self,
+        body: &'e WithLocation<Vec<WithLocation<ast::Stmt>>>,
+        finally_body: Option<&'e WithLocation<Vec<WithLocation<ast::Stmt>>>>,
+        expected_type: &Expr<TypeCheckExprContext>,
+    ) -> Expr<TypeCheckExprContext> {
+        let mut nested = with_nested_scope!(self);
+
+        let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
+            let infer = TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::unit(),
+                inferred_type: Expr::unit(),
+            });
+            let checked = nested.check_inferred_type(
+                &body.location,
+                infer,
+                ExpectedType::Exact(expected_type),
+            );
+            return nested.apply_return_ensures(&body.location, checked);
+        };
+
+        let checked_stmts = leading_stmts
+            .iter()
+            .map(|stmt| {
+                let old_return_position = mem::replace(&mut nested.return_position, false);
+                let checked = nested.check_stmt(stmt, &Expr::unit());
+                nested.return_position = old_return_position;
+                checked
+            })
+            .collect::<Vec<_>>();
+
+        let old_return_position = mem::replace(&mut nested.return_position, true);
+        let last_checked = nested.check_return_stmt(last_stmt, expected_type);
+        nested.return_position = old_return_position;
+
+        let block_body = match Vec1::try_from(checked_stmts) {
+            Ok(mut checked_stmts) => {
+                checked_stmts.push(last_checked);
+                Expr::Sequence(checked_stmts)
+            }
+            Err(_) => last_checked,
+        };
+
+        if let Some(finally_body) = finally_body {
+            Expr::Finally {
+                block_body: Box::new(block_body),
+                finally_body: Box::new(nested.check_block(finally_body, &Expr::unit())),
+            }
+        } else {
+            block_body
+        }
+    }
+
+    fn check_return_stmt<'e>(
+        &mut self,
+        stmt: &'e WithLocation<ast::Stmt>,
+        expected_type: &Expr<TypeCheckExprContext>,
+    ) -> Expr<TypeCheckExprContext> {
+        match &stmt.value {
+            ast::Stmt::Expr(expr) => self.check(expr, expected_type),
+            _ => {
+                let infer = self.infer_stmt(stmt);
+                let checked = self.check_inferred_type(
+                    &stmt.location,
+                    infer,
+                    ExpectedType::Exact(expected_type),
+                );
+                self.apply_return_ensures(&stmt.location, checked)
+            }
+        }
+    }
+
+    fn apply_return_ensures(
+        &mut self,
+        location: &Location,
+        inferred: InferredType,
+    ) -> Expr<TypeCheckExprContext> {
+        if self.ensures_clauses.is_empty() || Self::is_never_type(&inferred.inferred_type) {
+            return inferred.checked_expr;
+        }
+
+        for clause in self.ensures_clauses.clone() {
+            let mut clause = clause;
+            FunctionResultValueSubstScanner::subst(
+                Cow::Borrowed(&inferred.checked_expr),
+                &mut clause,
+            );
+
+            self.resolve_implicit(&clause, location);
+        }
+
+        inferred.checked_expr
+    }
+
+    fn is_never_type(t: &Expr<TypeCheckExprContext>) -> bool {
+        matches!(t, Expr::Builtin(Builtin::NeverType))
     }
 
     fn check_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> Expr<TypeCheckExprContext> {
@@ -809,7 +944,22 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             ast::Expr::FunctionResultValue => {
-                todo!()
+                if let Some(result_type) = self.scope.function_result_value_type() {
+                    TypeInferResult::Complete(InferredType {
+                        inferred_type: result_type.clone(),
+                        checked_expr: Expr::FunctionResultValue {
+                            result_type: Box::new(result_type),
+                        },
+                    })
+                } else {
+                    self.context
+                        .reporter()
+                        .report_error(CompileError::unknown_identifier(
+                            expr.location.clone(),
+                            "result",
+                        ));
+                    TypeInferResult::error()
+                }
             }
 
             ast::Expr::Paren(inner) => self.infer(inner),
@@ -1698,6 +1848,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         substitute_arg_in_param_types(
                             &mut selected_overload.unspecified_parameters,
                             &mut selected_overload.return_type,
+                            &mut selected_overload.ensures_clauses,
                             Variable::Parameter(Box::new(param_var)),
                             &Expr::Variable(closure_param_var.clone()),
                         )

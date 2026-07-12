@@ -12,11 +12,11 @@ use argon_compiler::scope::{self, LocalVariableScope, Scope};
 use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{Function, FunctionSignature, Method, RecordField};
 use argon_expr::{
-    EnumType, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, MethodInstanceType, RecordType,
-    SubstScanner, TraitType, TypeComparer, Variable,
+    EnumType, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, FunctionResultValueSubstScanner,
+    LocalVariable, MethodInstanceType, RecordType, SubstScanner, TraitType, TypeComparer, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
-use argon_util::{CompileError, MultiSlice};
+use argon_util::{CompileError, MultiSlice, UniqueIdentifier};
 use core::cmp::Ordering;
 use parse18_runtime::Location;
 
@@ -302,9 +302,12 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             access: self.type_checker.access,
             scope: &mut scope,
             erasure_check_mode: self.type_checker.erasure_check_mode,
+            ensures_clauses: Vec::new(),
+            return_position: false,
         };
 
         let mut return_type = sig.return_type.clone();
+        let mut ensures_clauses = sig.ensures_clauses.clone();
 
         let mut params = VecDeque::from(sig.parameters);
         let mut parameter_index = 0;
@@ -372,6 +375,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             self.substitute_inferred_arg_in_param_types(
                                 &mut params,
                                 &mut return_type,
+                                &mut ensures_clauses,
                                 v,
                                 &inferred_arg,
                             );
@@ -396,6 +400,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             substitute_arg_in_param_types(
                                 &mut params,
                                 &mut return_type,
+                                &mut ensures_clauses,
                                 v,
                                 &Expr::Hole(hole),
                             );
@@ -414,14 +419,27 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
         &self,
         params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
         return_type: &mut Expr<TypeCheckExprContext>,
+        ensures_clauses: &mut [Expr<TypeCheckExprContext>],
         v: Variable<TypeCheckExprContext>,
         arg: &TypeInferResult<'e>,
     ) {
         if let TypeInferResult::Complete(inferred_type) = arg {
-            substitute_arg_in_param_types(params, return_type, v, &inferred_type.checked_expr);
+            substitute_arg_in_param_types(
+                params,
+                return_type,
+                ensures_clauses,
+                v,
+                &inferred_type.checked_expr,
+            );
         } else {
             let hole = Hole::new(self.call_location.clone(), v.var_type().clone());
-            substitute_arg_in_param_types(params, return_type, v, &Expr::Hole(hole));
+            substitute_arg_in_param_types(
+                params,
+                return_type,
+                ensures_clauses,
+                v,
+                &Expr::Hole(hole),
+            );
         }
     }
 
@@ -434,6 +452,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
         let sig = overload.signature();
 
         let mut return_type = sig.return_type;
+        let mut ensures_clauses = sig.ensures_clauses;
 
         let mut params = VecDeque::from(sig.parameters);
         let mut parameter_index = 0;
@@ -488,6 +507,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             substitute_arg_in_param_types(
                                 &mut params,
                                 &mut return_type,
+                                &mut ensures_clauses,
                                 v,
                                 &arg_expr.checked_expr,
                             );
@@ -516,6 +536,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             substitute_arg_in_param_types(
                                 &mut params,
                                 &mut return_type,
+                                &mut ensures_clauses,
                                 v,
                                 &Expr::Hole(hole.clone()),
                             );
@@ -529,7 +550,13 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                             .resolve_implicit(&param.param_type, &self.call_location);
 
                         if let Some(v) = v {
-                            substitute_arg_in_param_types(&mut params, &mut return_type, v, &arg);
+                            substitute_arg_in_param_types(
+                                &mut params,
+                                &mut return_type,
+                                &mut ensures_clauses,
+                                v,
+                                &arg,
+                            );
                         }
 
                         selected_args.push(arg);
@@ -546,6 +573,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
             args: selected_args,
             return_type,
+            ensures_clauses,
             unspecified_parameters: params,
         }
     }
@@ -554,6 +582,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 pub(super) fn substitute_arg_in_param_types(
     params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
     return_type: &mut Expr<TypeCheckExprContext>,
+    ensures_clauses: &mut [Expr<TypeCheckExprContext>],
     v: Variable<TypeCheckExprContext>,
     arg: &Expr<TypeCheckExprContext>,
 ) {
@@ -565,6 +594,10 @@ pub(super) fn substitute_arg_in_param_types(
     }
 
     scanner.scan(return_type);
+
+    for clause in ensures_clauses {
+        scanner.scan(clause);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -614,11 +647,18 @@ pub(super) struct SelectedOverload<'e> {
     pub(super) overload: Overloadable<'e>,
     pub(super) args: Vec<Expr<TypeCheckExprContext>>,
     pub(super) return_type: Expr<TypeCheckExprContext>,
+    pub(super) ensures_clauses: Vec<Expr<TypeCheckExprContext>>,
     pub(super) unspecified_parameters: VecDeque<SignatureParameter<TypeCheckExprContext>>,
 }
 
 impl<'a> SelectedOverload<'a> {
-    pub(super) fn into_inferred_type(mut self, checker: &TypeChecker<'_, '_, '_>) -> InferredType {
+    pub(super) fn into_inferred_type(
+        mut self,
+        checker: &mut TypeChecker<'_, '_, '_>,
+    ) -> InferredType {
+        let return_type = self.return_type.clone();
+        let ensures_clauses = self.ensures_clauses.clone();
+
         let expr = match self.overload {
             Overloadable::Base(scope::Overloadable::Function(f)) => Expr::FunctionCall {
                 function: f,
@@ -715,9 +755,76 @@ impl<'a> SelectedOverload<'a> {
             }
         };
 
+        let expr = Self::bind_ensures_clauses(checker, expr, &return_type, &ensures_clauses);
+
         InferredType {
             checked_expr: expr,
-            inferred_type: self.return_type,
+            inferred_type: return_type,
+        }
+    }
+
+    fn bind_ensures_clauses(
+        checker: &mut TypeChecker<'_, '_, '_>,
+        expr: Expr<TypeCheckExprContext>,
+        return_type: &Expr<TypeCheckExprContext>,
+        ensures_clauses: &[Expr<TypeCheckExprContext>],
+    ) -> Expr<TypeCheckExprContext> {
+        if ensures_clauses.is_empty() {
+            return expr;
+        }
+
+        let alias = Box::new(LocalVariable {
+            id: UniqueIdentifier::new(),
+            name: None,
+            var_type: return_type.clone(),
+            erasure_mode: ErasureMode::Erased,
+            is_witness: false,
+            is_mutable: false,
+        });
+        let alias_expr = Expr::Variable(Variable::Local(alias.clone()));
+
+        let equality_witness = Box::new(LocalVariable {
+            id: UniqueIdentifier::new(),
+            name: None,
+            var_type: Expr::EqualToType {
+                r#type: Box::new(return_type.clone()),
+                lhs: Box::new(alias_expr.clone()),
+                rhs: Box::new(expr.clone()),
+            },
+            erasure_mode: ErasureMode::Erased,
+            is_witness: true,
+            is_mutable: false,
+        });
+        checker
+            .scope
+            .add_variable(Variable::Local(equality_witness.clone()));
+
+        let ensures_witnesses = ensures_clauses
+            .iter()
+            .map(|clause| {
+                let mut clause = clause.clone();
+                FunctionResultValueSubstScanner::subst(Cow::Borrowed(&alias_expr), &mut clause);
+
+                let witness = Box::new(LocalVariable {
+                    id: UniqueIdentifier::new(),
+                    name: None,
+                    var_type: clause,
+                    erasure_mode: ErasureMode::Erased,
+                    is_witness: true,
+                    is_mutable: false,
+                });
+                checker.scope.add_variable(Variable::Local(witness.clone()));
+                witness
+            })
+            .collect();
+
+        Expr::BindErasedAlias {
+            variable: alias,
+            equality_witness: Some(equality_witness),
+            value: Box::new(Expr::BindEnsures {
+                value: Box::new(expr),
+                variables: ensures_witnesses,
+            }),
         }
     }
 }

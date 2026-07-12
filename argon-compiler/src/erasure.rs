@@ -39,7 +39,7 @@ where
             ErasureMode::Token | ErasureMode::Concrete => match expr {
                 Expr::Error => {}
 
-                Expr::Hole(_) => self.erased_required(),
+                Expr::Hole(_) | Expr::FunctionResultValue { .. } => self.erased_required(),
 
                 Expr::Builtin(
                     Builtin::IntType { .. }
@@ -61,6 +61,25 @@ where
                 Expr::Builtin(Builtin::UnsafeAssumeErased { r#type }) => {
                     self.erased_required();
                     self.scan_erased(r#type);
+                }
+
+                Expr::BindEnsures { value, variables } => {
+                    self.scan(value);
+                    for variable in variables {
+                        self.scan_erased(&variable.var_type);
+                    }
+                }
+
+                Expr::BindErasedAlias {
+                    variable,
+                    equality_witness,
+                    value,
+                } => {
+                    self.scan_erased(&variable.var_type);
+                    if let Some(equality_witness) = equality_witness {
+                        self.scan_erased(&equality_witness.var_type);
+                    }
+                    self.scan(value);
                 }
 
                 Expr::EqualToType { .. }

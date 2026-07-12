@@ -681,6 +681,10 @@ fn expr_type() -> Expr {
     Expr::Type
 }
 
+fn expr_function_result_value() -> Expr {
+    Expr::FunctionResultValue
+}
+
 fn expr_big_type<T>(value: T) -> Expr
 where
     T: Into<BigInt>,
@@ -725,6 +729,10 @@ fn expr_break(label: Option<WithLocation<Identifier>>, value: WithLocation<Expr>
         label,
         value: Some(Box::new(value)),
     }
+}
+
+fn expr_return(value: WithLocation<Expr>) -> Expr {
+    value.value
 }
 
 fn identifier_expr_named(name: impl Into<String>) -> Identifier {

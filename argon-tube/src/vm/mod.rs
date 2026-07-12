@@ -2763,6 +2763,10 @@ impl<'a> ExprEmitter<'a> {
                 output.output_unit_result(self)?
             }
 
+            Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
+                self.expr(value, output)?
+            }
+
             Expr::VariableStore(v, value) => {
                 let Some(realization) = self.known_vars.get(v) else {
                     todo!("return a proper error")

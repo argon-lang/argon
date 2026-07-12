@@ -51,6 +51,10 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
 
         Expr::BoxedType(t) => get_expr_type(&*t),
 
+        Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
+            get_expr_type(value)
+        }
+
         Expr::Builtin(builtin) => get_builtin_type(builtin),
 
         Expr::Finally { block_body, .. } => get_expr_type(&**block_body),
@@ -190,7 +194,7 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
 
         Expr::RecordLiteral { record_type, .. } => Expr::RecordType(record_type.clone()),
 
-        Expr::FunctionResultValue => todo!(),
+        Expr::FunctionResultValue { result_type } => (**result_type).clone(),
     }
 }
 

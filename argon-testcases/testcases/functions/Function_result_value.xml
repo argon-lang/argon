@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Function result value</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        def getValue(): Int ensures ((result = 42) == true) =
+            42
+
+        proc main(): () do
+            puts (getValue().to_s())
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>
+        42
+    </ExpectedOutput>
+
+</ArgonTest>

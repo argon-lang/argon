@@ -8,7 +8,7 @@ use crate::{
 use alloc::boxed::Box;
 use alloc::{sync::Arc, vec::Vec};
 use argon_expr::{
-    BlockLabel, BlockLabelDeclaration, ExprContext, ExprContextShifter, ExpressionOwner,
+    BlockLabel, BlockLabelDeclaration, Expr, ExprContext, ExprContextShifter, ExpressionOwner,
     InstanceParameterVariable, LoopLabels, Variable, VariableTupleElement,
 };
 use argon_parser::ast::Identifier;
@@ -31,6 +31,7 @@ pub trait Scope {
 
     fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>>;
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>>;
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>>;
 }
 
 pub trait LocalScope: Scope {
@@ -100,6 +101,10 @@ impl<EC: ExprContext + ?Sized> Scope for &dyn Scope<ExprContext = EC> {
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
         (**self).latest_block_label()
     }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        (**self).function_result_value_type()
+    }
 }
 
 impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
@@ -134,6 +139,63 @@ impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
 
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
         (**self).latest_block_label()
+    }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        (**self).function_result_value_type()
+    }
+}
+
+pub struct FunctionResultValueScope<Sc: Scope> {
+    parent: Sc,
+    result_value_type: Expr<Sc::ExprContext>,
+}
+
+impl<Sc: Scope> FunctionResultValueScope<Sc> {
+    pub fn new(parent: Sc, result_value_type: Expr<Sc::ExprContext>) -> Self {
+        Self {
+            parent,
+            result_value_type,
+        }
+    }
+}
+
+impl<Sc: Scope> Scope for FunctionResultValueScope<Sc> {
+    type ExprContext = Sc::ExprContext;
+
+    fn lookup(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
+        self.parent.lookup(name, access)
+    }
+
+    fn lookup_assign(&self, name: &Identifier, access: &AccessToken) -> Lookup<Self::ExprContext> {
+        self.parent.lookup_assign(name, access)
+    }
+
+    fn lookup_tube(&self, name: &TubeName) -> Option<Arc<Tube>> {
+        self.parent.lookup_tube(name)
+    }
+
+    fn given_assertions(&self, givens: &mut dyn ImplicitGivens<ExprContext = Self::ExprContext>) {
+        self.parent.given_assertions(givens);
+    }
+
+    fn lookup_block_label(
+        &self,
+        name: &Identifier,
+    ) -> Option<BlockLabelDeclaration<Self::ExprContext>> {
+        self.parent.lookup_block_label(name)
+    }
+
+    fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>> {
+        self.parent.latest_loop_labels()
+    }
+
+    fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
+        self.parent.latest_block_label()
+    }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        Some(self.result_value_type.clone())
     }
 }
 
@@ -294,6 +356,10 @@ impl<Sc: Scope> Scope for ParameterScope<Sc> {
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
         None
     }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        self.parent.function_result_value_type()
+    }
 }
 
 pub struct InstanceParameterScope<Sc: Scope> {
@@ -353,6 +419,10 @@ impl<Sc: Scope> Scope for InstanceParameterScope<Sc> {
 
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>> {
         None
+    }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        self.parent.function_result_value_type()
     }
 }
 
@@ -431,6 +501,10 @@ impl<Sc: Scope> Scope for LocalVariableScope<Sc> {
         self.latest_block_label
             .clone()
             .or_else(|| self.parent.latest_block_label())
+    }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        self.parent.function_result_value_type()
     }
 }
 
@@ -590,6 +664,13 @@ where
         self.inner
             .latest_block_label()
             .map(|label| self.shift_block_label(label))
+    }
+
+    fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
+        self.inner.function_result_value_type().map(|result_type| {
+            let mut shifter = self.shifter;
+            shifter.shift(result_type)
+        })
     }
 }
 

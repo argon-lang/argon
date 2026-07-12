@@ -393,8 +393,9 @@ fn parse_unicode_hex_str(buffer: &mut String) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
+    use crate::ast::IntLiteralSuffix;
     use crate::lexer::{LexedToken, Lexer, LexerMode, LexerReader, TokenReader};
-    use crate::token::Token;
+    use crate::token::{IntTokenPayload, Token};
     use alloc::{borrow::ToOwned, boxed::Box, string::String, vec, vec::Vec};
     use argon_util::{CompileError, ErrorReporter};
     use num_bigint::BigUint;
@@ -478,6 +479,13 @@ mod tests {
         lex(LexerMode::StringText, text)
     }
 
+    fn int_token(value: BigUint) -> Token {
+        Token::IntToken(IntTokenPayload {
+            value,
+            suffix: IntLiteralSuffix::None,
+        })
+    }
+
     #[test]
     fn let_keyword() {
         assert_eq!(lex_normal("let"), vec![Token::KwLet]);
@@ -505,6 +513,11 @@ mod tests {
             lex_normal("let s"),
             vec![Token::KwLet, Token::Identifier(Box::from("s"))]
         );
+    }
+
+    #[test]
+    fn result_keyword() {
+        assert_eq!(lex_normal("result"), vec![Token::KwResult]);
     }
 
     #[test]
@@ -539,46 +552,19 @@ mod tests {
 
     #[test]
     fn simple_decimal_integer() {
-        assert_eq!(
-            lex_normal("123"),
-            vec![Token::IntToken(
-                BigUint::from(123u32),
-                IntTokenSuffix {
-                    signed: true,
-                    bits: None
-                }
-            )]
-        );
+        assert_eq!(lex_normal("123"), vec![int_token(BigUint::from(123u32))]);
     }
 
     #[test]
     fn decimal_integer_with_leading_zero() {
-        assert_eq!(
-            lex_normal("0123"),
-            vec![Token::IntToken(
-                BigUint::from(123u32),
-                IntTokenSuffix {
-                    signed: true,
-                    bits: None
-                }
-            )]
-        );
+        assert_eq!(lex_normal("0123"), vec![int_token(BigUint::from(123u32))]);
     }
 
     #[test]
     fn negative_decimal_integer() {
         assert_eq!(
             lex_normal("-123"),
-            vec![
-                Token::OpMinus,
-                Token::IntToken(
-                    BigUint::from(123u32),
-                    IntTokenSuffix {
-                        signed: true,
-                        bits: None
-                    }
-                )
-            ]
+            vec![Token::OpMinus, int_token(BigUint::from(123u32))]
         );
     }
 
@@ -593,7 +579,7 @@ mod tests {
     fn binary_integer_lowercase() {
         assert_eq!(
             lex_normal("0b101010"),
-            vec![Token::IntToken(BigUint::from(42u32))]
+            vec![int_token(BigUint::from(42u32))]
         );
     }
 
@@ -601,7 +587,7 @@ mod tests {
     fn binary_integer_uppercase_b() {
         assert_eq!(
             lex_normal("0B101010"),
-            vec![Token::IntToken(BigUint::from(42u32))]
+            vec![int_token(BigUint::from(42u32))]
         );
     }
 
@@ -609,7 +595,7 @@ mod tests {
     fn negative_binary_integer() {
         assert_eq!(
             lex_normal("-0b101010"),
-            vec![Token::OpMinus, Token::IntToken(BigUint::from(42u32))]
+            vec![Token::OpMinus, int_token(BigUint::from(42u32))]
         );
     }
 
@@ -624,9 +610,7 @@ mod tests {
     fn octal_integer() {
         assert_eq!(
             lex_normal("0o1234567"),
-            vec![Token::IntToken(
-                BigUint::from_str_radix("1234567", 8).unwrap()
-            )]
+            vec![int_token(BigUint::from_str_radix("1234567", 8).unwrap())]
         );
     }
 
@@ -636,7 +620,7 @@ mod tests {
             lex_normal("-0o1234567"),
             vec![
                 Token::OpMinus,
-                Token::IntToken(BigUint::from_str_radix("1234567", 8).unwrap())
+                int_token(BigUint::from_str_radix("1234567", 8).unwrap())
             ]
         );
     }
@@ -652,7 +636,7 @@ mod tests {
     fn hex_integer_lowercase() {
         assert_eq!(
             lex_normal("0x123456789abcdef"),
-            vec![Token::IntToken(
+            vec![int_token(
                 BigUint::from_str_radix("123456789abcdef", 16).unwrap()
             )]
         );
@@ -662,7 +646,7 @@ mod tests {
     fn hex_integer_uppercase_x() {
         assert_eq!(
             lex_normal("0X123456789abcdef"),
-            vec![Token::IntToken(
+            vec![int_token(
                 BigUint::from_str_radix("123456789abcdef", 16).unwrap()
             )]
         );
@@ -672,7 +656,7 @@ mod tests {
     fn hex_integer_uppercase_digits() {
         assert_eq!(
             lex_normal("0x123456789ABCDEF"),
-            vec![Token::IntToken(
+            vec![int_token(
                 BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
             )]
         );
@@ -682,7 +666,7 @@ mod tests {
     fn hex_integer_uppercase_x_and_digits() {
         assert_eq!(
             lex_normal("0X123456789ABCDEF"),
-            vec![Token::IntToken(
+            vec![int_token(
                 BigUint::from_str_radix("123456789ABCDEF", 16).unwrap()
             )]
         );
@@ -694,7 +678,7 @@ mod tests {
             lex_normal("-0x123456789abcdef"),
             vec![
                 Token::OpMinus,
-                Token::IntToken(BigUint::from_str_radix("123456789abcdef", 16).unwrap())
+                int_token(BigUint::from_str_radix("123456789abcdef", 16).unwrap())
             ]
         );
     }

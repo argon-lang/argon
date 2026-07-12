@@ -674,13 +674,7 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     lhs.wrapping_shl(rhs as u32)
                 })
             },
-            |lhs, rhs| {
-                Expr::U32Literal(if rhs >= 32 {
-                    0
-                } else {
-                    lhs.wrapping_shl(rhs)
-                })
-            },
+            |lhs, rhs| Expr::U32Literal(if rhs >= 32 { 0 } else { lhs.wrapping_shl(rhs) }),
             |lhs, rhs| {
                 Expr::I64Literal(if !(0..64).contains(&rhs) {
                     0
@@ -753,13 +747,7 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     lhs.wrapping_shr(rhs as u32)
                 })
             },
-            |lhs, rhs| {
-                Expr::U32Literal(if rhs >= 32 {
-                    0
-                } else {
-                    lhs.wrapping_shr(rhs)
-                })
-            },
+            |lhs, rhs| Expr::U32Literal(if rhs >= 32 { 0 } else { lhs.wrapping_shr(rhs) }),
             |lhs, rhs| {
                 Expr::I64Literal(if !(0..64).contains(&rhs) {
                     if lhs < 0 { -1 } else { 0 }

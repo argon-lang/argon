@@ -73,6 +73,23 @@ where
                 }
             }
 
+            Expr::BindEnsures { variables, .. } => {
+                for variable in variables {
+                    self.bind_variable(Variable::Local(variable.clone()));
+                }
+            }
+
+            Expr::BindErasedAlias {
+                variable,
+                equality_witness,
+                ..
+            } => {
+                self.bind_variable(Variable::Local(variable.clone()));
+                if let Some(equality_witness) = equality_witness {
+                    self.bind_variable(Variable::Local(equality_witness.clone()));
+                }
+            }
+
             Expr::VariableBinding(variable, _) => {
                 self.bind_variable(Variable::Local(variable.clone()))
             }

@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Function result value is false using return</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        def getValue(): Int ensures ((result = 99) == true) =
+            return 42
+
+        proc main(): () do
+            puts (getValue().to_s())
+        end
+
+    </InputSource>
+
+    <ExpectedError>AR0015</ExpectedError>
+
+</ArgonTest>

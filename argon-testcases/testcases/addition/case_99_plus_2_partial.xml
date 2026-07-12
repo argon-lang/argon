@@ -17,8 +17,8 @@
 
         proc main(): () do
             let f: fn Int -> Int = add 99
-            let result = callWithTwo f
-            puts (result.to_s())
+            let sum = callWithTwo f
+            puts (sum.to_s())
         end
         
             

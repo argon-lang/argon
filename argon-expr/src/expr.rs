@@ -73,6 +73,15 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         value: Box<Expr<EC>>,
     },
     Builtin(Builtin<EC>),
+    BindEnsures {
+        value: Box<Expr<EC>>,
+        variables: Vec<Box<LocalVariable<EC>>>,
+    },
+    BindErasedAlias {
+        variable: Box<LocalVariable<EC>>,
+        equality_witness: Option<Box<LocalVariable<EC>>>,
+        value: Box<Expr<EC>>,
+    },
     ConjunctionType {
         lhs: Box<Expr<EC>>,
         rhs: Box<Expr<EC>>,
@@ -115,7 +124,9 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         function: Box<Expr<EC>>,
         argument: Box<Expr<EC>>,
     },
-    FunctionResultValue,
+    FunctionResultValue {
+        result_type: Box<Expr<EC>>,
+    },
     FunctionType {
         a: Box<ClosureParameterVariable<EC>>,
         r: Box<Expr<EC>>,
