@@ -1,6 +1,6 @@
+use crate::ast::IntLiteralSuffix;
 use alloc::boxed::Box;
 use num_bigint::BigUint;
-use crate::ast::IntLiteralSuffix;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntTokenPayload {

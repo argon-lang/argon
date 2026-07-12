@@ -243,6 +243,7 @@ fn get_builtin_type<EC: ExprTypeContext + ?Sized>(builtin: &Builtin<EC>) -> Expr
         | Builtin::IntBitXor { integer_type, .. }
         | Builtin::IntBitShiftLeft { integer_type, .. }
         | Builtin::IntBitShiftRight { integer_type, .. } => Expr::integer_type(*integer_type),
+        Builtin::IntConvert { dest_type, .. } => Expr::integer_type(*dest_type),
 
         Builtin::ArrayLength { .. } => Expr::int_type(),
 

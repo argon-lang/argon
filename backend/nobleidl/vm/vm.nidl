@@ -870,6 +870,7 @@ enum function-result {
 enum builtin-op {
     int-negate { integer-type: integer-type; dest: register-id; value: register-id; },
     int-bit-not { integer-type: integer-type; dest: register-id; value: register-id; },
+    int-convert { source-type: integer-type; dest-type: integer-type; dest: register-id; value: register-id; },
     int-add { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
     int-sub { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },
     int-mul { integer-type: integer-type; dest: register-id; lhs: register-id; rhs: register-id; },

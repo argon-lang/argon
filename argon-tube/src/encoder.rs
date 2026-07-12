@@ -1234,6 +1234,15 @@ impl TubeEncoder {
                 integer_type: encode_format_integer_type(*integer_type),
                 value: Box::new(self.emit_expr(value)?),
             },
+            Builtin::IntConvert {
+                source_type,
+                dest_type,
+                value,
+            } => tf::Builtin::IntConvert {
+                source_type: encode_format_integer_type(*source_type),
+                dest_type: encode_format_integer_type(*dest_type),
+                value: Box::new(self.emit_expr(value)?),
+            },
             Builtin::IntAdd {
                 integer_type,
                 lhs,

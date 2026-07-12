@@ -220,6 +220,7 @@ fn builtin_use_def(op: &vf::BuiltinOp, uses: &mut VariableSet, definitions: &mut
     match op {
         vf::BuiltinOp::IntNegate { dest, value, .. }
         | vf::BuiltinOp::IntBitNot { dest, value, .. }
+        | vf::BuiltinOp::IntConvert { dest, value, .. }
         | vf::BuiltinOp::BoolNot { dest, value }
         | vf::BuiltinOp::ArrayCreateUnsafeUninitialized {
             dest,

@@ -540,7 +540,13 @@ mod tests {
     fn simple_decimal_integer() {
         assert_eq!(
             lex_normal("123"),
-            vec![Token::IntToken(BigUint::from(123u32), IntTokenSuffix { signed: true, bits: None })]
+            vec![Token::IntToken(
+                BigUint::from(123u32),
+                IntTokenSuffix {
+                    signed: true,
+                    bits: None
+                }
+            )]
         );
     }
 
@@ -548,7 +554,13 @@ mod tests {
     fn decimal_integer_with_leading_zero() {
         assert_eq!(
             lex_normal("0123"),
-            vec![Token::IntToken(BigUint::from(123u32), IntTokenSuffix { signed: true, bits: None })]
+            vec![Token::IntToken(
+                BigUint::from(123u32),
+                IntTokenSuffix {
+                    signed: true,
+                    bits: None
+                }
+            )]
         );
     }
 
@@ -556,7 +568,16 @@ mod tests {
     fn negative_decimal_integer() {
         assert_eq!(
             lex_normal("-123"),
-            vec![Token::OpMinus, Token::IntToken(BigUint::from(123u32), IntTokenSuffix { signed: true, bits: None })]
+            vec![
+                Token::OpMinus,
+                Token::IntToken(
+                    BigUint::from(123u32),
+                    IntTokenSuffix {
+                        signed: true,
+                        bits: None
+                    }
+                )
+            ]
         );
     }
 

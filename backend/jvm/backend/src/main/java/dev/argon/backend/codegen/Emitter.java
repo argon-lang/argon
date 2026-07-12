@@ -458,7 +458,8 @@ final class Emitter {
 					++registerOffset;
 				}
 
-				var returnKind = TypeKind.from(tokenAsClassDesc(signature.returnType()));
+				var returnToken = signature.returnType();
+				var returnKind = TypeKind.from(tokenAsClassDesc(returnToken));
 
 				var blockEmitter = new BlockEmitter(
 					cb,
@@ -470,6 +471,7 @@ final class Emitter {
 					registerTokens,
 					registerTypes,
 					registerKinds,
+					returnToken,
 					returnKind
 				);
 				blockEmitter.emitRegion(ir.body().region());
@@ -1326,6 +1328,7 @@ final class Emitter {
 			Token[] registerTokens,
 			ClassDesc[] registerTypes,
 			TypeKind[] registerKinds,
+			Token returnToken,
 			TypeKind returnKind
 		) {
 			this.cb = cb;
@@ -1337,6 +1340,7 @@ final class Emitter {
 			this.registerTokens = registerTokens;
 			this.registerTypes = registerTypes;
 			this.registerKinds = registerKinds;
+			this.returnToken = returnToken;
 			this.returnKind = returnKind;
 		}
 
@@ -1349,6 +1353,7 @@ final class Emitter {
 		private final Token[] registerTokens;
 		private final ClassDesc[] registerTypes;
 		private final TypeKind[] registerKinds;
+		private final Token returnToken;
 		private final TypeKind returnKind;
 
 		private final Map<BlockId, BlockLabels> blocks = new HashMap<>();
@@ -1521,7 +1526,7 @@ final class Emitter {
 
 				case Instruction.Box box -> {
 					loadRegister(box.value());
-					boxValue(registerKind(box.value()));
+					boxValue(registerToken(box.value()));
 					storeRegister(box.dest());
 				}
 
@@ -1603,7 +1608,7 @@ final class Emitter {
 				case Instruction.FunctionObjectCall call -> {
 					loadRegister(call.function());
 					loadRegister(call.arg());
-					boxValue(registerKind(call.arg()));
+					boxValue(registerToken(call.arg()));
 					emitFunctionResult(
 						call.dest(),
 						() -> cb.invokeinterface(
@@ -1721,7 +1726,7 @@ final class Emitter {
 							.checkcast(variantDesc)
 							.getfield(variantDesc, ClassNaming.instanceParameterFieldName(i), fieldDesc);
 
-						unboxValueFrom(fieldDesc, registerType(arg));
+						unboxValueFrom(fieldDesc, registerToken(arg));
 						storeRegister(arg);
 					}
 
@@ -1756,7 +1761,7 @@ final class Emitter {
 						"get",
 						MethodTypeDesc.of(ConstantDescs.CD_Object)
 					);
-					unboxValue(registerType(loadReference.dest()));
+					unboxValue(registerToken(loadReference.dest()));
 					storeRegister(loadReference.dest());
 				}
 
@@ -1790,7 +1795,7 @@ final class Emitter {
 						.new_(CD_REF_CELL)
 						.dup();
 					loadRegister(newReference.value());
-					boxValue(registerKind(newReference.value()));
+					boxValue(registerToken(newReference.value()));
 					cb.invokespecial(
 						CD_REF_CELL,
 						ConstantDescs.INIT_NAME,
@@ -1834,7 +1839,7 @@ final class Emitter {
 					var owner = recordFieldOwner(fieldInfo);
 					loadRegister(recordFieldLoad.recordValue());
 					cb.getfield(owner, fieldInfo.fieldName(), fieldInfo.fieldType());
-					unboxValueFrom(fieldInfo.fieldType(), registerType(recordFieldLoad.dest()));
+					unboxValueFrom(fieldInfo.fieldType(), registerToken(recordFieldLoad.dest()));
 					storeRegister(recordFieldLoad.dest());
 				}
 
@@ -1886,20 +1891,20 @@ final class Emitter {
 				case Instruction.TupleElement tupleElement -> {
 					loadRegister(tupleElement.src());
 					emitTupleElement(tupleElement.src(), tupleElement.elementIndex().toBigInteger().intValueExact());
-					unboxValue(registerType(tupleElement.dest()));
+					unboxValue(registerToken(tupleElement.dest()));
 					storeRegister(tupleElement.dest());
 				}
 
 				case Instruction.Unbox unbox -> {
 					loadRegister(unbox.value());
-					unboxValue(tokenAsClassDesc(unbox.type()));
+					unboxValue(unbox.type());
 					storeRegister(unbox.dest());
 				}
 
 				case Instruction.UpdateReference updateReference -> {
 					loadRegister(updateReference.ref());
 					loadRegister(updateReference.value());
-					boxValue(registerKind(updateReference.value()));
+					boxValue(registerToken(updateReference.value()));
 					cb.invokevirtual(
 						CD_REF_CELL,
 						"set",
@@ -1942,7 +1947,7 @@ final class Emitter {
 			if(values.size() <= 10) {
 				for(var value : values) {
 					loadRegister(value);
-					boxValue(registerKind(value));
+					boxValue(registerToken(value));
 				}
 				cb.invokespecial(
 					tupleDesc,
@@ -1956,7 +1961,7 @@ final class Emitter {
 			else {
 				for(int i = 0; i < 10; ++i) {
 					loadRegister(values.get(i));
-					boxValue(registerKind(values.get(i)));
+					boxValue(registerToken(values.get(i)));
 				}
 				emitTupleValue(values.subList(10, values.size()));
 				var parameterTypes = new ArrayList<ClassDesc>(Collections.nCopies(10, ConstantDescs.CD_Object));
@@ -2138,7 +2143,7 @@ final class Emitter {
 				case FunctionResult.Register(var id) -> {
 					emitCall.run();
 					emitResolveTrampoline();
-					unboxValue(registerType(id));
+					unboxValue(registerToken(id));
 					storeRegister(id);
 				}
 
@@ -2394,49 +2399,120 @@ final class Emitter {
 				}
 
 				case BuiltinOp.IntAdd intAdd ->
-					emitBigIntegerBinary(intAdd.dest(), intAdd.lhs(), intAdd.rhs(), "add");
+					emitIntegerBinary(
+						intAdd.dest(),
+						intAdd.lhs(),
+						intAdd.rhs(),
+						intAdd.integerType(),
+						"add",
+						() -> {
+							cb.iadd();
+							maskU8();
+						}
+					);
 
 				case BuiltinOp.IntBitAnd intBitAnd ->
-					emitBigIntegerBinary(intBitAnd.dest(), intBitAnd.lhs(), intBitAnd.rhs(), "and");
+					emitIntegerBinary(
+						intBitAnd.dest(),
+						intBitAnd.lhs(),
+						intBitAnd.rhs(),
+						intBitAnd.integerType(),
+						"and",
+						cb::iand
+					);
 
 				case BuiltinOp.IntBitNot intBitNot ->
-					emitBigIntegerUnary(intBitNot.dest(), intBitNot.value(), "not");
+					emitIntegerUnary(
+						intBitNot.dest(),
+						intBitNot.value(),
+						intBitNot.integerType(),
+						"not",
+						() -> {
+							cb.loadConstant(0xFF);
+							cb.ixor();
+						}
+					);
+
+				case BuiltinOp.IntConvert intConvert ->
+					emitIntConvert(intConvert.dest(), intConvert.value(), intConvert.sourceType(), intConvert.destType());
 
 				case BuiltinOp.IntBitOr intBitOr ->
-					emitBigIntegerBinary(intBitOr.dest(), intBitOr.lhs(), intBitOr.rhs(), "or");
+					emitIntegerBinary(
+						intBitOr.dest(),
+						intBitOr.lhs(),
+						intBitOr.rhs(),
+						intBitOr.integerType(),
+						"or",
+						cb::ior
+					);
 
 				case BuiltinOp.IntBitShiftLeft intShiftLeft ->
-					emitBigIntegerShift(intShiftLeft.dest(), intShiftLeft.lhs(), intShiftLeft.rhs(), "shiftLeft");
+					emitIntegerShift(intShiftLeft.dest(), intShiftLeft.lhs(), intShiftLeft.rhs(), intShiftLeft.integerType(), true);
 
 				case BuiltinOp.IntBitShiftRight intShiftRight ->
-					emitBigIntegerShift(intShiftRight.dest(), intShiftRight.lhs(), intShiftRight.rhs(), "shiftRight");
+					emitIntegerShift(intShiftRight.dest(), intShiftRight.lhs(), intShiftRight.rhs(), intShiftRight.integerType(), false);
 
 				case BuiltinOp.IntBitXor intBitXor ->
-					emitBigIntegerBinary(intBitXor.dest(), intBitXor.lhs(), intBitXor.rhs(), "xor");
+					emitIntegerBinary(
+						intBitXor.dest(),
+						intBitXor.lhs(),
+						intBitXor.rhs(),
+						intBitXor.integerType(),
+						"xor",
+						cb::ixor
+					);
 
 				case BuiltinOp.IntEq intEq ->
-					emitBigIntegerCompare(intEq.dest(), intEq.lhs(), intEq.rhs(), cb::ifeq);
+					emitIntegerCompare(intEq.dest(), intEq.lhs(), intEq.rhs(), intEq.integerType(), cb::ifeq, cb::if_icmpeq);
 
 				case BuiltinOp.IntGe intGe ->
-					emitBigIntegerCompare(intGe.dest(), intGe.lhs(), intGe.rhs(), cb::ifge);
+					emitIntegerCompare(intGe.dest(), intGe.lhs(), intGe.rhs(), intGe.integerType(), cb::ifge, cb::if_icmpge);
 
 				case BuiltinOp.IntGt intGt ->
-					emitBigIntegerCompare(intGt.dest(), intGt.lhs(), intGt.rhs(), cb::ifgt);
+					emitIntegerCompare(intGt.dest(), intGt.lhs(), intGt.rhs(), intGt.integerType(), cb::ifgt, cb::if_icmpgt);
 
 				case BuiltinOp.IntLe intLe ->
-					emitBigIntegerCompare(intLe.dest(), intLe.lhs(), intLe.rhs(), cb::ifle);
+					emitIntegerCompare(intLe.dest(), intLe.lhs(), intLe.rhs(), intLe.integerType(), cb::ifle, cb::if_icmple);
 
 				case BuiltinOp.IntLt intLt ->
-					emitBigIntegerCompare(intLt.dest(), intLt.lhs(), intLt.rhs(), cb::iflt);
+					emitIntegerCompare(intLt.dest(), intLt.lhs(), intLt.rhs(), intLt.integerType(), cb::iflt, cb::if_icmplt);
 
 				case BuiltinOp.IntMul intMul ->
-					emitBigIntegerBinary(intMul.dest(), intMul.lhs(), intMul.rhs(), "multiply");
+					emitIntegerBinary(
+						intMul.dest(),
+						intMul.lhs(),
+						intMul.rhs(),
+						intMul.integerType(),
+						"multiply",
+						() -> {
+							cb.imul();
+							maskU8();
+						}
+					);
 
 				case BuiltinOp.IntNegate intNegate ->
-					emitBigIntegerUnary(intNegate.dest(), intNegate.value(), "negate");
+					emitIntegerUnary(
+						intNegate.dest(),
+						intNegate.value(),
+						intNegate.integerType(),
+						"negate",
+						() -> {
+							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
+						}
+					);
 
 				case BuiltinOp.IntSub intSub ->
-					emitBigIntegerBinary(intSub.dest(), intSub.lhs(), intSub.rhs(), "subtract");
+					emitIntegerBinary(
+						intSub.dest(),
+						intSub.lhs(),
+						intSub.rhs(),
+						intSub.integerType(),
+						"subtract",
+						() -> {
+							cb.isub();
+							maskU8();
+						}
+					);
 
 				case BuiltinOp.StringConcat stringConcat -> {
 					if(stringConcat.args().isEmpty()) {
@@ -2486,53 +2562,157 @@ final class Emitter {
 			}
 		}
 
-		private void emitBigIntegerBinary(RegisterId dest, RegisterId lhs, RegisterId rhs, String method) {
-			loadRegister(lhs);
-			loadRegister(rhs);
-			cb.invokevirtual(
-				CD_BIG_INTEGER,
-				method,
-				MethodTypeDesc.of(CD_BIG_INTEGER, CD_BIG_INTEGER)
-			);
-			storeRegister(dest);
+		private void emitIntegerUnary(
+			RegisterId dest,
+			RegisterId value,
+			IntegerType integerType,
+			String bigIntegerMethod,
+			Runnable u8Op
+		) {
+			switch(integerType) {
+				case INT -> {
+					loadRegister(value);
+					cb.invokevirtual(
+						CD_BIG_INTEGER,
+						bigIntegerMethod,
+						MethodTypeDesc.of(CD_BIG_INTEGER)
+					);
+					storeRegister(dest);
+				}
+				case U8 -> {
+					loadRegister(value);
+					u8Op.run();
+					storeRegister(dest);
+				}
+			}
 		}
 
-		private void emitBigIntegerUnary(RegisterId dest, RegisterId value, String method) {
-			loadRegister(value);
-			cb.invokevirtual(
-				CD_BIG_INTEGER,
-				method,
-				MethodTypeDesc.of(CD_BIG_INTEGER)
-			);
-			storeRegister(dest);
-		}
-
-		private void emitBigIntegerShift(RegisterId dest, RegisterId lhs, RegisterId rhs, String method) {
-			loadRegister(lhs);
-			loadBigIntegerAsInt(rhs);
-			cb.invokevirtual(
-				CD_BIG_INTEGER,
-				method,
-				MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_int)
-			);
-			storeRegister(dest);
-		}
-
-		private void emitBigIntegerCompare(
+		private void emitIntegerBinary(
 			RegisterId dest,
 			RegisterId lhs,
 			RegisterId rhs,
-			Consumer<Label> branch
+			IntegerType integerType,
+			String bigIntegerMethod,
+			Runnable u8Op
 		) {
-			loadRegister(lhs);
-			loadRegister(rhs);
-			cb.invokevirtual(
-				CD_BIG_INTEGER,
-				"compareTo",
-				MethodTypeDesc.of(ConstantDescs.CD_int, CD_BIG_INTEGER)
-			);
-			emitBooleanFromBranch(branch);
+			switch(integerType) {
+				case INT -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.invokevirtual(
+						CD_BIG_INTEGER,
+						bigIntegerMethod,
+						MethodTypeDesc.of(CD_BIG_INTEGER, CD_BIG_INTEGER)
+					);
+					storeRegister(dest);
+				}
+				case U8 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					u8Op.run();
+					storeRegister(dest);
+				}
+			}
+		}
+
+		private void emitIntConvert(RegisterId dest, RegisterId value, IntegerType sourceType, IntegerType destType) {
+			loadRegister(value);
+			switch(sourceType) {
+				case INT -> {
+					switch(destType) {
+						case INT -> {}
+						case U8 -> {
+							cb.invokevirtual(
+								CD_BIG_INTEGER,
+								"intValue",
+								MethodTypeDesc.of(ConstantDescs.CD_int)
+							);
+							maskU8();
+						}
+					}
+				}
+				case U8 -> {
+					switch(destType) {
+						case INT -> intToBigInteger();
+						case U8 -> {}
+					}
+				}
+			}
 			storeRegister(dest);
+		}
+
+		private void emitIntegerShift(
+			RegisterId dest,
+			RegisterId lhs,
+			RegisterId rhs,
+			IntegerType integerType,
+			boolean left
+		) {
+			switch(integerType) {
+				case INT -> {
+					loadRegister(lhs);
+					loadBigIntegerAsInt(rhs);
+					cb.invokevirtual(
+						CD_BIG_INTEGER,
+						left ? "shiftLeft" : "shiftRight",
+						MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_int)
+					);
+					storeRegister(dest);
+				}
+				case U8 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.sipush(8);
+					cb.if_icmpge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					if(left) {
+						cb.ishl();
+					}
+					else {
+						cb.iushr();
+					}
+					maskU8();
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.iconst_0();
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
+			}
+		}
+
+		private void emitIntegerCompare(
+			RegisterId dest,
+			RegisterId lhs,
+			RegisterId rhs,
+			IntegerType integerType,
+			Consumer<Label> bigIntegerBranch,
+			Consumer<Label> u8Branch
+		) {
+			switch(integerType) {
+				case INT -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.invokevirtual(
+						CD_BIG_INTEGER,
+						"compareTo",
+						MethodTypeDesc.of(ConstantDescs.CD_int, CD_BIG_INTEGER)
+					);
+					emitBooleanFromBranch(bigIntegerBranch);
+					storeRegister(dest);
+				}
+				case U8 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					emitBooleanFromBranch(u8Branch);
+					storeRegister(dest);
+				}
+			}
 		}
 
 		private void loadBigIntegerAsInt(RegisterId register) {
@@ -2552,6 +2732,11 @@ final class Emitter {
 					"valueOf",
 					MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_long)
 				);
+		}
+
+		private void maskU8() {
+			cb.sipush(0xFF);
+			cb.iand();
 		}
 
 		private void emitBooleanFromBranch(Consumer<Label> branch) {
@@ -2741,7 +2926,8 @@ final class Emitter {
 			}
 		}
 
-		private void boxValue(TypeKind kind) {
+		private void boxValue(Token token) {
+			var kind = TypeKind.from(tokenAsClassDesc(token));
 			switch(kind) {
 				case BOOLEAN -> cb.invokestatic(
 					ConstantDescs.CD_Boolean,
@@ -2749,11 +2935,16 @@ final class Emitter {
 					MethodTypeDesc.of(ConstantDescs.CD_Boolean, ConstantDescs.CD_boolean)
 				);
 
-				case BYTE -> cb.invokestatic(
-					ConstantDescs.CD_Byte,
-					"valueOf",
-					MethodTypeDesc.of(ConstantDescs.CD_Byte, ConstantDescs.CD_byte)
-				);
+				case BYTE -> {
+					if(isU8Token(token)) {
+						cb.i2b();
+					}
+					cb.invokestatic(
+						ConstantDescs.CD_Byte,
+						"valueOf",
+						MethodTypeDesc.of(ConstantDescs.CD_Byte, ConstantDescs.CD_byte)
+					);
+				}
 
 				case CHAR -> cb.invokestatic(
 					ConstantDescs.CD_Character,
@@ -2798,7 +2989,8 @@ final class Emitter {
 			}
 		}
 
-		private void unboxValue(ClassDesc type) {
+		private void unboxValue(Token token) {
+			var type = tokenAsClassDesc(token);
 			switch(TypeKind.from(type)) {
 				case BOOLEAN -> cb
 					.checkcast(ConstantDescs.CD_Boolean)
@@ -2808,13 +3000,22 @@ final class Emitter {
 						MethodTypeDesc.of(ConstantDescs.CD_boolean)
 					);
 
-				case BYTE -> cb
-					.checkcast(ConstantDescs.CD_Byte)
-					.invokevirtual(
-						ConstantDescs.CD_Byte,
-						"byteValue",
-						MethodTypeDesc.of(ConstantDescs.CD_byte)
-					);
+				case BYTE -> {
+					cb
+						.checkcast(ConstantDescs.CD_Byte)
+						.invokevirtual(
+							ConstantDescs.CD_Byte,
+							"byteValue",
+							MethodTypeDesc.of(ConstantDescs.CD_byte)
+						);
+					if(isU8Token(token)) {
+						cb.invokestatic(
+							ConstantDescs.CD_Byte,
+							"toUnsignedInt",
+							MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_byte)
+						);
+					}
+				}
 
 				case CHAR -> cb
 					.checkcast(ConstantDescs.CD_Character)
@@ -2870,10 +3071,17 @@ final class Emitter {
 			}
 		}
 
-		private void unboxValueFrom(ClassDesc src, ClassDesc dest) {
-			if(src.equals(ConstantDescs.CD_Object) && !dest.equals(ConstantDescs.CD_Object)) {
+		private void unboxValueFrom(ClassDesc src, Token dest) {
+			var destDesc = tokenAsClassDesc(dest);
+			if(src.equals(ConstantDescs.CD_Object) && !destDesc.equals(ConstantDescs.CD_Object)) {
 				unboxValue(dest);
 			}
+		}
+
+		private boolean isU8Token(Token token) {
+			return token instanceof Token.Builtin(var builtinType)
+				&& builtinType instanceof BuiltinType.Int(var integerType)
+				&& integerType == IntegerType.U8;
 		}
 
 		private void emitRuntimeUnsupported(String message) {
@@ -2898,7 +3106,7 @@ final class Emitter {
 		}
 
 		private void emitReturnFromStack() {
-			boxValue(returnKind);
+			boxValue(returnToken);
 			cb
 				.invokestatic(
 					CD_TRAMPOLINE_RESULT,

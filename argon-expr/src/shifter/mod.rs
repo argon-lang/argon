@@ -309,6 +309,15 @@ where
             integer_type,
             value: Box::new(shifter.shift(*value)),
         },
+        Builtin::IntConvert {
+            source_type,
+            dest_type,
+            value,
+        } => Builtin::IntConvert {
+            source_type,
+            dest_type,
+            value: Box::new(shifter.shift(*value)),
+        },
         Builtin::IntAdd {
             integer_type,
             lhs,

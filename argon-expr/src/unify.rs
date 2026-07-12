@@ -532,6 +532,18 @@ pub trait Unify {
                 },
             ) => a_integer_type == b_integer_type && self.unify(*a, *b),
             (
+                Builtin::IntConvert {
+                    source_type: a_source_type,
+                    dest_type: a_dest_type,
+                    value: a,
+                },
+                Builtin::IntConvert {
+                    source_type: b_source_type,
+                    dest_type: b_dest_type,
+                    value: b,
+                },
+            ) => a_source_type == b_source_type && a_dest_type == b_dest_type && self.unify(*a, *b),
+            (
                 Builtin::IntAdd {
                     integer_type: a_integer_type,
                     lhs: a_lhs,

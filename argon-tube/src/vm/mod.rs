@@ -1976,6 +1976,19 @@ impl<'a> ExprEmitter<'a> {
                         integer_type,
                         value,
                     } => integer_unary_op!(IntBitNot, integer_type, value),
+                    Builtin::IntConvert {
+                        source_type,
+                        dest_type,
+                        value,
+                    } => {
+                        let value = self.expr(value, AnyRegister)?;
+                        emit_value_op(self, e, output, |dest| vf::BuiltinOp::IntConvert {
+                            source_type: encode_vm_integer_type(*source_type),
+                            dest_type: encode_vm_integer_type(*dest_type),
+                            dest: Box::new(dest),
+                            value: Box::new(value),
+                        })?
+                    }
                     Builtin::IntAdd {
                         integer_type,
                         lhs,

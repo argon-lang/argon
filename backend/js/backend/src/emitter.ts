@@ -1772,6 +1772,60 @@ class BlockEmitter extends EmitterBase {
                         unary("~", op);
                         break;
 
+                    case "int-convert": {
+                        const value = this.getReg(op.value);
+
+                        if(op.sourceType === op.destType) {
+                            assign(op.dest, value);
+                        }
+                        else if(op.sourceType === "int" && op.destType === "u8") {
+                            assign(op.dest, {
+                                type: "CallExpression",
+                                optional: false,
+                                callee: {
+                                    type: "Identifier",
+                                    name: "Number",
+                                },
+                                arguments: [{
+                                    type: "CallExpression",
+                                    optional: false,
+                                    callee: {
+                                        type: "MemberExpression",
+                                        computed: false,
+                                        optional: false,
+                                        object: {
+                                            type: "Identifier",
+                                            name: "BigInt",
+                                        },
+                                        property: {
+                                            type: "Identifier",
+                                            name: "asUintN",
+                                        },
+                                    },
+                                    arguments: [
+                                        {
+                                            type: "Literal",
+                                            value: 8,
+                                        },
+                                        value,
+                                    ],
+                                }],
+                            });
+                        }
+                        else {
+                            assign(op.dest, {
+                                type: "CallExpression",
+                                optional: false,
+                                callee: {
+                                    type: "Identifier",
+                                    name: "BigInt",
+                                },
+                                arguments: [value],
+                            });
+                        }
+                        break;
+                    }
+
                     case "bool-not":
                         unary("!", op);
                         break;

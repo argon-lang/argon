@@ -261,6 +261,11 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
         integer_type: IntegerType,
         value: Box<Expr<EC>>,
     },
+    IntConvert {
+        source_type: IntegerType,
+        dest_type: IntegerType,
+        value: Box<Expr<EC>>,
+    },
     IntAdd {
         integer_type: IntegerType,
         lhs: Box<Expr<EC>>,
@@ -395,6 +400,16 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
             Builtin::IntBitNot { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitnot",
                 IntegerType::U8 => "u8_bitnot",
+            },
+            Builtin::IntConvert {
+                source_type,
+                dest_type,
+                ..
+            } => match (source_type, dest_type) {
+                (IntegerType::Int, IntegerType::Int) => "int_to_int",
+                (IntegerType::Int, IntegerType::U8) => "int_to_u8",
+                (IntegerType::U8, IntegerType::Int) => "u8_to_int",
+                (IntegerType::U8, IntegerType::U8) => "u8_to_u8",
             },
             Builtin::IntAdd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_add",

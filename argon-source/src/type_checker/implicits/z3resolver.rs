@@ -54,6 +54,8 @@ impl Z3ImplicitResolver<'_> {
                             binders.push(AssertionBinder::ForAll(z3expr.expr_to_z3(&arg)));
                         }
                         FunctionParameterListType::RequiresList => {
+                            subst.scan(&mut param.param_type);
+
                             binders.push(AssertionBinder::Implies(self.convert_expr(
                                 z3expr,
                                 param.param_type,
@@ -84,10 +86,9 @@ impl Z3ImplicitResolver<'_> {
     fn convert_expr(
         &self,
         z3expr: &mut Z3Expr<TypeCheckExprContext>,
-        expr: Expr<TypeCheckExprContext>,
+        mut expr: Expr<TypeCheckExprContext>,
         model: &mut Model,
     ) -> Bool {
-        let mut expr = expr.clone();
         {
             let mut norm =
                 FullNormalizer::new(self.context.normalize_fuel(), ExprNormalizer { model });

@@ -1,0 +1,21 @@
+<ArgonTest>
+
+    <Name>u8: 99 + 2</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc main(): () do
+            puts ((99u8 + 2u8).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>101</ExpectedOutput>
+
+</ArgonTest>

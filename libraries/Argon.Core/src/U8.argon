@@ -1,0 +1,32 @@
+module U8
+
+import ::Int::*
+import ::Bool::*
+import ::String::*
+
+public token inline def U8: type = __argon_builtin u8_type
+
+public inline def unary operator + (a: U8): U8 = a
+public inline def unary operator ~~~ (a: U8): U8 = __argon_builtin u8_bitnot a
+
+public inline def operator + (a: U8) (b: U8) (requires erased ev: (((__argon_builtin int_add a.to_i b.to_i) >= 0 && (__argon_builtin int_add a.to_i b.to_i) <= 255) == true)): U8 = __argon_builtin u8_add a b
+public inline def operator - (a: U8) (b: U8) (requires erased ev: (((__argon_builtin int_sub a.to_i b.to_i) >= 0 && (__argon_builtin int_sub a.to_i b.to_i) <= 255) == true)): U8 = __argon_builtin u8_sub a b
+public inline def operator * (a: U8) (b: U8) (requires erased ev: (((__argon_builtin int_mul a.to_i b.to_i) >= 0 && (__argon_builtin int_mul a.to_i b.to_i) <= 255) == true)): U8 = __argon_builtin u8_mul a b
+
+public inline def operator &&& (a: U8) (b: U8): U8 = __argon_builtin u8_bitand a b
+public inline def operator ||| (a: U8) (b: U8): U8 = __argon_builtin u8_bitor a b
+public inline def operator ^^^ (a: U8) (b: U8): U8 = __argon_builtin u8_bitxor a b
+public inline def operator <<< (a: U8) (b: U8) (requires erased ev: ((b < 8u8) == true)): U8 = __argon_builtin u8_bitshiftleft a b
+public inline def operator >>> (a: U8) (b: U8) (requires erased ev: ((b < 8u8) == true)): U8 = __argon_builtin u8_bitshiftright a b
+
+public inline def operator = (a: U8) (b: U8): Bool = __argon_builtin u8_eq a b
+public inline def operator != (a: U8) (b: U8): Bool = !(__argon_builtin u8_eq a b)
+public inline def operator < (a: U8) (b: U8): Bool = __argon_builtin u8_lt a b
+public inline def operator <= (a: U8) (b: U8): Bool = __argon_builtin u8_le a b
+public inline def operator > (a: U8) (b: U8): Bool = __argon_builtin u8_gt a b
+public inline def operator >= (a: U8) (b: U8): Bool = __argon_builtin u8_ge a b
+
+public def extension to_s (n: U8)(): String = extern u8_to_s
+public inline def extension to_i (n: U8): Int = __argon_builtin u8_to_int n
+
+

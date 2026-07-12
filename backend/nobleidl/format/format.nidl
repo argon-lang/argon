@@ -849,6 +849,7 @@ enum builtin {
 
     int-negate { integer-type: integer-type; value: expr; },
     int-bit-not { integer-type: integer-type; value: expr; },
+    int-convert { source-type: integer-type; dest-type: integer-type; value: expr; },
     int-add { integer-type: integer-type; lhs: expr; rhs: expr; },
     int-sub { integer-type: integer-type; lhs: expr; rhs: expr; },
     int-mul { integer-type: integer-type; lhs: expr; rhs: expr; },

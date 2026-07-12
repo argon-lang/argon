@@ -1859,6 +1859,23 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             };
         }
 
+        macro_rules! int_convert_builtin {
+            ($source_type:expr => $dest_type:expr) => {
+                self.infer_fixed_builtin(
+                    location,
+                    builtin_name,
+                    args,
+                    || [Expr::integer_type($source_type)],
+                    || Expr::integer_type($dest_type),
+                    |[value]| Builtin::IntConvert {
+                        source_type: $source_type,
+                        dest_type: $dest_type,
+                        value: Box::new(value),
+                    },
+                )
+            };
+        }
+
         macro_rules! int_to_bool_binary_builtin {
             ($variant:ident, $integer_type:expr) => {
                 fixed_integer_builtin!(
@@ -1950,12 +1967,6 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 [Expr::int_type()] => Expr::int_type(),
                 { value }
             ),
-            "u8_negate" => fixed_integer_builtin!(
-                IntNegate,
-                IntegerType::U8,
-                [Expr::u8_type()] => Expr::u8_type(),
-                { value }
-            ),
             "int_bitnot" => fixed_integer_builtin!(
                 IntBitNot,
                 IntegerType::Int,
@@ -1968,6 +1979,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 [Expr::u8_type()] => Expr::u8_type(),
                 { value }
             ),
+
+            "int_to_u8" => int_convert_builtin!(IntegerType::Int => IntegerType::U8),
+            "u8_to_int" => int_convert_builtin!(IntegerType::U8 => IntegerType::Int),
 
             "int_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::Int),
             "u8_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::U8),

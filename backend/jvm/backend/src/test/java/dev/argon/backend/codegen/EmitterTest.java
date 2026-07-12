@@ -72,7 +72,10 @@ final class EmitterTest {
 				case BuiltinType.Bool() -> ClassDesc.ofDescriptor("Z");
 				case BuiltinType.Conjunction _ -> throw new RuntimeException("Conjunction not implemented");
 				case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
-				case BuiltinType.Int() -> ClassDesc.of("java.math.BigInteger");
+				case BuiltinType.Int(var integerType) -> switch(integerType) {
+					case INT -> ClassDesc.of("java.math.BigInteger");
+					case U8 -> ClassDesc.ofDescriptor("I");
+				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
 				case BuiltinType.String() -> ClassDesc.of("java.lang.String");
 			};
@@ -404,7 +407,7 @@ final class EmitterTest {
 			Optional.of(List.of(new ModuleMetadata(modulePath, Optional.of("test.functions")))),
 			Optional.empty()
 		);
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var signature = new FunctionSignature(
 			List.of(),
 			List.of(new SignatureParameter(Optional.empty(), intType)),
@@ -490,7 +493,7 @@ final class EmitterTest {
 			Optional.of(List.of(new ModuleMetadata(modulePath, Optional.of("test.functions")))),
 			Optional.empty()
 		);
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var signature = new FunctionSignature(
 			List.of(),
 			List.of(new SignatureParameter(Optional.empty(), intType)),
@@ -584,7 +587,7 @@ final class EmitterTest {
 
 	@Test
 	void emitFunctionObjectCallInstruction() throws Exception {
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var functionRegister = new RegisterId(UnsignedBigInteger.ZERO);
 		var argumentRegister = new RegisterId(UnsignedBigInteger.ONE);
 		var resultRegister = new RegisterId(UnsignedBigInteger.valueOf(2));
@@ -634,7 +637,7 @@ final class EmitterTest {
 
 	@Test
 	void emitFunctionObjectTokenCallInstruction() throws Exception {
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var functionRegister = new RegisterId(UnsignedBigInteger.ZERO);
 		var resultRegister = new RegisterId(UnsignedBigInteger.ONE);
 		var caller = functionDefinition(
@@ -678,7 +681,7 @@ final class EmitterTest {
 
 	@Test
 	void emitFunctionObjectErasedCallReturnValueInstructionCreatesThunk() throws Exception {
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var functionRegister = new RegisterId(UnsignedBigInteger.ZERO);
 		var caller = functionDefinition(
 			0,
@@ -728,7 +731,7 @@ final class EmitterTest {
 
 	@Test
 	void emitPartiallyAppliedFunctionInstructions() throws Exception {
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var concrete = functionDefinition(
 			0,
 			"concrete",
@@ -969,7 +972,7 @@ final class EmitterTest {
 
 	@Test
 	void emitReferenceInstructions() throws Exception {
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var valueRegister = new RegisterId(UnsignedBigInteger.ZERO);
 		var refRegister = new RegisterId(UnsignedBigInteger.ONE);
 		var loadedRegister = new RegisterId(UnsignedBigInteger.valueOf(2));
@@ -1098,7 +1101,7 @@ final class EmitterTest {
 			Optional.empty()
 		);
 		var boolType = new Token.Builtin(new BuiltinType.Bool());
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var recordType = new Token.Record(
 			UnsignedBigInteger.ZERO,
 			List.of(new Token.TokenParameter(UnsignedBigInteger.ZERO))
@@ -1237,7 +1240,7 @@ final class EmitterTest {
 			Optional.empty()
 		);
 		var boolType = new Token.Builtin(new BuiltinType.Bool());
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var tokenParam = new Token.TokenParameter(UnsignedBigInteger.ZERO);
 		var enumType = new Token.Enum(UnsignedBigInteger.ZERO, List.of(tokenParam));
 		var enumImport = new ImportSpecifier.Global(
@@ -1339,7 +1342,7 @@ final class EmitterTest {
 			Optional.empty()
 		);
 		var boolType = new Token.Builtin(new BuiltinType.Bool());
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var enumType = new Token.Enum(
 			UnsignedBigInteger.ZERO,
 			List.of(new Token.TokenParameter(UnsignedBigInteger.ZERO))
@@ -1552,10 +1555,10 @@ final class EmitterTest {
 					UnsignedBigInteger.ZERO,
 					new Identifier.Named("compare"),
 					compareSignature,
-					true,
+					new MethodFlags(true, false),
 					new FunctionSignature(
 						List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
-						List.of(new SignatureParameter(Optional.empty(), new Token.Builtin(new BuiltinType.Int()))),
+						List.of(new SignatureParameter(Optional.empty(), new Token.Builtin(new BuiltinType.Int(IntegerType.INT)))),
 						new Token.Builtin(new BuiltinType.Bool())
 					),
 					Optional.empty()
@@ -1564,17 +1567,17 @@ final class EmitterTest {
 					UnsignedBigInteger.ONE,
 					new Identifier.Named("answer"),
 					answerSignature,
-					false,
+					new MethodFlags(false, false),
 					new FunctionSignature(
 						List.of(),
 						List.of(new SignatureParameter(Optional.empty(), new Token.FunctionToken(
 							new Token.Boxed(),
-							new Token.Builtin(new BuiltinType.Int())
+							new Token.Builtin(new BuiltinType.Int(IntegerType.INT))
 						))),
-						new Token.Builtin(new BuiltinType.Int())
+						new Token.Builtin(new BuiltinType.Int(IntegerType.INT))
 					),
 					Optional.of(new FunctionImplementation.VmIr(new FunctionBody(
-						new VariableDeclarations(List.of(new VariableDeclaration(new Token.Builtin(new BuiltinType.Int())))),
+						new VariableDeclarations(List.of(new VariableDeclaration(new Token.Builtin(new BuiltinType.Int(IntegerType.INT))))),
 						basicBlock(List.of(
 							new Instruction.FunctionObjectTokenCall(
 								new FunctionResult.Discard(),
@@ -1665,7 +1668,7 @@ final class EmitterTest {
 			Optional.of(List.of(new ModuleMetadata(modulePath, Optional.of("test.instances")))),
 			Optional.empty()
 		);
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var instanceImport = new ImportSpecifier.Global(
 			UnsignedBigInteger.ZERO,
 			new Identifier.Named("ShowInt"),
@@ -1702,7 +1705,7 @@ final class EmitterTest {
 				UnsignedBigInteger.ZERO,
 				new Identifier.Named("show"),
 				methodSignature,
-				false,
+				new MethodFlags(false, false),
 				new FunctionSignature(
 					List.of(),
 					List.of(new SignatureParameter(Optional.empty(), new Token.FunctionToken(
@@ -1995,7 +1998,7 @@ final class EmitterTest {
 
 	@Test
 	void emitTupleInstructions() throws Exception {
-		var intType = new Token.Builtin(new BuiltinType.Int());
+		var intType = new Token.Builtin(new BuiltinType.Int(IntegerType.INT));
 		var boolType = new Token.Builtin(new BuiltinType.Bool());
 		var tupleType = new Token.Tuple(List.of(intType, boolType));
 		var countRegister = new RegisterId(UnsignedBigInteger.ZERO);
@@ -2180,6 +2183,7 @@ final class EmitterTest {
 				new Identifier.Named(name),
 				new ErasedSignature(List.of(), new ErasedSignatureType.Int())
 			),
+			new FunctionFlags(false),
 			signature,
 			Optional.of(new FunctionImplementation.VmIr(body))
 		);

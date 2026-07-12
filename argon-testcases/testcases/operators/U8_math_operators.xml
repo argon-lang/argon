@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>U8 math operators</Name>
+
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc main(): () do
+            puts ((99u8 + 2u8).to_s())
+            puts ((99u8 - 2u8).to_s())
+            puts ((99u8 * 2u8).to_s())
+            puts ((+99u8).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        101
+        97
+        198
+        99
+    </ExpectedOutput>
+
+</ArgonTest>

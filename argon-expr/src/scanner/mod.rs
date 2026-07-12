@@ -203,7 +203,9 @@ where
             true
         }
         Builtin::ArrayType { element_type } => scanner.scan(element_type),
-        Builtin::IntNegate { value, .. } | Builtin::IntBitNot { value, .. } => scanner.scan(value),
+        Builtin::IntNegate { value, .. }
+        | Builtin::IntBitNot { value, .. }
+        | Builtin::IntConvert { value, .. } => scanner.scan(value),
         Builtin::IntAdd { lhs, rhs, .. }
         | Builtin::IntSub { lhs, rhs, .. }
         | Builtin::IntMul { lhs, rhs, .. }
@@ -523,7 +525,9 @@ where
             true
         }
         Builtin::ArrayType { element_type } => scanner.scan(element_type),
-        Builtin::IntNegate { value, .. } | Builtin::IntBitNot { value, .. } => scanner.scan(value),
+        Builtin::IntNegate { value, .. }
+        | Builtin::IntBitNot { value, .. }
+        | Builtin::IntConvert { value, .. } => scanner.scan(value),
         Builtin::IntAdd { lhs, rhs, .. }
         | Builtin::IntSub { lhs, rhs, .. }
         | Builtin::IntMul { lhs, rhs, .. }

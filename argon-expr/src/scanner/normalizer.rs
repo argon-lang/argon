@@ -169,6 +169,29 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             }),
         },
 
+        Builtin::IntConvert {
+            source_type,
+            dest_type,
+            value,
+        } => match (source_type, dest_type, *value) {
+            (IntegerType::Int, IntegerType::Int, value) => value,
+            (IntegerType::U8, IntegerType::U8, value) => value,
+            (IntegerType::Int, IntegerType::U8, Expr::IntLiteral(value)) => {
+                Expr::U8Literal(value.to_u8().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    bytes.first().copied().unwrap_or(0)
+                }))
+            }
+            (IntegerType::U8, IntegerType::Int, Expr::U8Literal(value)) => {
+                Expr::IntLiteral(value.into())
+            }
+            (source_type, dest_type, value) => Expr::Builtin(Builtin::IntConvert {
+                source_type,
+                dest_type,
+                value: Box::new(value),
+            }),
+        },
+
         Builtin::IntAdd {
             integer_type,
             lhs,

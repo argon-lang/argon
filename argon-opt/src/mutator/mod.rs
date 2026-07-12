@@ -224,6 +224,7 @@ fn visit_builtin(
     match op {
         vf::BuiltinOp::IntNegate { dest, value, .. }
         | vf::BuiltinOp::IntBitNot { dest, value, .. }
+        | vf::BuiltinOp::IntConvert { dest, value, .. }
         | vf::BuiltinOp::BoolNot { dest, value }
         | vf::BuiltinOp::ArrayCreateUnsafeUninitialized {
             dest,

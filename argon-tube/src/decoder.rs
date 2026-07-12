@@ -1469,6 +1469,15 @@ impl TubeDecoder {
                 integer_type: decode_format_integer_type(integer_type),
                 value: Box::new(self.decode_expr(*value)),
             },
+            tf::Builtin::IntConvert {
+                source_type,
+                dest_type,
+                value,
+            } => Builtin::IntConvert {
+                source_type: decode_format_integer_type(source_type),
+                dest_type: decode_format_integer_type(dest_type),
+                value: Box::new(self.decode_expr(*value)),
+            },
             tf::Builtin::IntAdd {
                 integer_type,
                 lhs,

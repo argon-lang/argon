@@ -1334,6 +1334,17 @@ impl TubeModel {
                 dest: dest.clone(),
                 value: value.clone(),
             }),
+            vf::BuiltinOp::IntConvert {
+                source_type,
+                dest_type,
+                dest,
+                value,
+            } => Some(vf::BuiltinOp::IntConvert {
+                source_type: source_type.clone(),
+                dest_type: dest_type.clone(),
+                dest: dest.clone(),
+                value: value.clone(),
+            }),
             vf::BuiltinOp::IntAdd {
                 integer_type,
                 dest,
@@ -1405,27 +1416,23 @@ impl TubeModel {
                 dest,
                 lhs,
                 rhs,
-            } => {
-                Some(vf::BuiltinOp::IntBitShiftLeft {
-                    integer_type: integer_type.clone(),
-                    dest: dest.clone(),
-                    lhs: lhs.clone(),
-                    rhs: rhs.clone(),
-                })
-            }
+            } => Some(vf::BuiltinOp::IntBitShiftLeft {
+                integer_type: integer_type.clone(),
+                dest: dest.clone(),
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            }),
             vf::BuiltinOp::IntBitShiftRight {
                 integer_type,
                 dest,
                 lhs,
                 rhs,
-            } => {
-                Some(vf::BuiltinOp::IntBitShiftRight {
-                    integer_type: integer_type.clone(),
-                    dest: dest.clone(),
-                    lhs: lhs.clone(),
-                    rhs: rhs.clone(),
-                })
-            }
+            } => Some(vf::BuiltinOp::IntBitShiftRight {
+                integer_type: integer_type.clone(),
+                dest: dest.clone(),
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            }),
             vf::BuiltinOp::IntEq {
                 integer_type,
                 dest,
@@ -2541,6 +2548,17 @@ fn prepare_builtin_op_for_inline(
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: Box::new(remap_register(value, register_replacements)?),
         }),
+        vf::BuiltinOp::IntConvert {
+            source_type,
+            dest_type,
+            dest,
+            value,
+        } => Some(vf::BuiltinOp::IntConvert {
+            source_type: source_type.clone(),
+            dest_type: dest_type.clone(),
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: Box::new(remap_register(value, register_replacements)?),
+        }),
         vf::BuiltinOp::IntAdd {
             integer_type,
             dest,
@@ -2623,14 +2641,12 @@ fn prepare_builtin_op_for_inline(
             dest,
             lhs,
             rhs,
-        } => {
-            Some(vf::BuiltinOp::IntBitShiftRight {
-                integer_type: integer_type.clone(),
-                dest: Box::new(remap_register(dest, register_replacements)?),
-                lhs: Box::new(remap_register(lhs, register_replacements)?),
-                rhs: Box::new(remap_register(rhs, register_replacements)?),
-            })
-        }
+        } => Some(vf::BuiltinOp::IntBitShiftRight {
+            integer_type: integer_type.clone(),
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            lhs: Box::new(remap_register(lhs, register_replacements)?),
+            rhs: Box::new(remap_register(rhs, register_replacements)?),
+        }),
         vf::BuiltinOp::IntEq {
             integer_type,
             dest,

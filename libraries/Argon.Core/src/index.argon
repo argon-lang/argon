@@ -3,6 +3,7 @@ module _
 export ::Bool::*
 export ::String::*
 export ::Int::*
+export ::U8::*
 export ::Exception::*
 export ::Array::*
 export ::Puts::*

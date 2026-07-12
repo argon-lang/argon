@@ -725,6 +725,29 @@ impl<
                     let value = self.u8_literal_value(&value).bvnot();
                     Some(self.wrap_u8_literal(&value))
                 }
+                Builtin::IntConvert {
+                    dest_type,
+                    source_type,
+                    value
+                } => {
+                    match (dest_type, source_type) {
+                        (IntegerType::U8, IntegerType::U8) | (IntegerType::Int, IntegerType::Int) => {
+                            self.expr_to_z3_value(value)
+                        }
+
+                        (IntegerType::U8, IntegerType::Int) => {
+                            let value = self.expr_to_z3(value);
+                            let value = self.int_literal_value(&value);
+                            Some(self.wrap_u8_literal(&BV::from_int(&value, 8)))
+                        }
+
+                        (IntegerType::Int, IntegerType::U8) => {
+                            let value = self.expr_to_z3(value);
+                            let value = self.u8_literal_value(&value);
+                            Some(self.wrap_int_literal(&Int::from_bv(&value, false)))
+                        }
+                    }
+                },
                 Builtin::IntAdd {
                     integer_type,
                     lhs,
