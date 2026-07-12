@@ -1977,44 +1977,7 @@ class BlockEmitter extends EmitterBase {
                             },
                         });
 
-                        assign(op.dest, {
-                            type: "NewExpression",
-                            callee: {
-                                type: "MemberExpression",
-                                computed: false,
-                                optional: false,
-                                object: {
-                                    type: "Identifier",
-                                    name: "globalThis",
-                                },
-                                property: {
-                                    type: "Identifier",
-                                    name: "Array",
-                                },
-                            },
-                            arguments: [
-                                {
-                                    type: "CallExpression",
-                                    optional: false,
-                                    callee: {
-                                        type: "MemberExpression",
-                                        computed: false,
-                                        optional: false,
-                                        object: {
-                                            type: "Identifier",
-                                            name: "globalThis",
-                                        },
-                                        property: {
-                                            type: "Identifier",
-                                            name: "Number",
-                                        },
-                                    },
-                                    arguments: [
-                                        this.getReg(op.length),
-                                    ],
-                                },
-                            ],
-                        });
+                        assign(op.dest, this.createArray(op.elementType, this.getReg(op.length)));
                         break;
                     }
 
@@ -2707,6 +2670,81 @@ class BlockEmitter extends EmitterBase {
             type: "Identifier",
             name: `r${reg.id}`,
         };
+    }
+
+    private createArray(elementType: ir.Token, length: estree.Expression): estree.Expression {
+        const numberLength: estree.Expression = {
+            type: "CallExpression",
+            optional: false,
+            callee: {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+                object: {
+                    type: "Identifier",
+                    name: "globalThis",
+                },
+                property: {
+                    type: "Identifier",
+                    name: "Number",
+                },
+            },
+            arguments: [length],
+        };
+
+        if(elementType.$type === "token-parameter" || elementType.$type === "parent-token-parameter") {
+            return {
+                type: "CallExpression",
+                optional: false,
+                callee: this.moduleEmitter.getArgonRuntimeExport("createArray"),
+                arguments: [
+                    this.buildTokenValue(elementType),
+                    numberLength,
+                ],
+            };
+        }
+
+        const typedArrayName = this.typedArrayName(elementType);
+        return {
+            type: "NewExpression",
+            callee: {
+                type: "MemberExpression",
+                computed: false,
+                optional: false,
+                object: {
+                    type: "Identifier",
+                    name: "globalThis",
+                },
+                property: {
+                    type: "Identifier",
+                    name: typedArrayName ?? "Array",
+                },
+            },
+            arguments: [numberLength],
+        };
+    }
+
+    private typedArrayName(elementType: ir.Token): string | undefined {
+        if(elementType.$type !== "builtin" || elementType.b.$type !== "int") {
+            return undefined;
+        }
+
+        switch(elementType.b.integerType) {
+            case "i8":
+                return "Int8Array";
+
+            case "u8":
+                return "Uint8Array";
+
+            case "i16":
+                return "Int16Array";
+
+            case "u16":
+                return "Uint16Array";
+
+            case "int":
+                return undefined;
+        }
     }
 
     private wrapInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {

@@ -46,6 +46,16 @@ export class RefCell {
     }
 }
 
+export function createArray(t, length) {
+    switch(t) {
+        case "i8": return new Int8Array(length);
+        case "u8": return new Uint8Array(length);
+        case "i16": return new Int16Array(length);
+        case "u16": return new Uint16Array(length);
+        default: return new Array(length);
+    }
+}
+
 
 
 function isSameType(a, b) {
