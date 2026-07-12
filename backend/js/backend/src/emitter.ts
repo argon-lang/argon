@@ -1746,28 +1746,37 @@ class BlockEmitter extends EmitterBase {
             case "builtin": {
                 const op = insn.op;
 
-                const unary = (operator: estree.UnaryOperator, op: ir.BuiltinOp & { readonly value: ir.RegisterId, readonly dest: ir.RegisterId }) => {
+                const unary = (operator: estree.UnaryOperator, op: ir.BuiltinOp & { readonly value: ir.RegisterId, readonly dest: ir.RegisterId, readonly integerType?: ir.IntegerType }) => {
+                    const value = op.integerType === undefined
+                        ? this.getReg(op.value)
+                        : this.coerceInteger(op.integerType, this.getReg(op.value));
                     const expr: estree.Expression = {
                         type: "UnaryExpression",
                         prefix: true,
                         operator,
-                        argument: this.getReg(op.value),
+                        argument: value,
                     };
-                    assign(op.dest, "integerType" in op ? this.wrapInteger(op.integerType, expr) : expr);
+                    assign(op.dest, op.integerType === undefined ? expr : this.wrapInteger(op.integerType, expr));
                 };
 
                 const binary = (
                     operator: estree.BinaryOperator,
-                    op: ir.BuiltinOp & { readonly lhs: ir.RegisterId, readonly rhs: ir.RegisterId, readonly dest: ir.RegisterId },
-                    wrapIntegerResult: boolean = true,
+                    op: ir.BuiltinOp & { readonly lhs: ir.RegisterId, readonly rhs: ir.RegisterId, readonly dest: ir.RegisterId, readonly integerType?: ir.IntegerType },
+                    isComparison: boolean = false,
                 ) => {
+                    const left = op.integerType === undefined
+                        ? this.getReg(op.lhs)
+                        : this.coerceInteger(op.integerType, this.getReg(op.lhs));
+                    const right = op.integerType === undefined
+                        ? this.getReg(op.rhs)
+                        : this.coerceInteger(op.integerType, this.getReg(op.rhs));
                     const expr: estree.Expression = {
                         type: "BinaryExpression",
-                        left: this.getReg(op.lhs),
+                        left,
                         operator,
-                        right: this.getReg(op.rhs)
+                        right,
                     };
-                    assign(op.dest, wrapIntegerResult && "integerType" in op ? this.wrapInteger(op.integerType, expr) : expr);
+                    assign(op.dest, isComparison || op.integerType === undefined ? expr : this.wrapInteger(op.integerType, expr));
                 };
 
                 switch(op.$type) {
@@ -1780,7 +1789,7 @@ class BlockEmitter extends EmitterBase {
                         break;
 
                     case "int-convert": {
-                        const value = this.getReg(op.value);
+                        const value = this.coerceInteger(op.sourceType, this.getReg(op.value));
 
                         if(op.sourceType === op.destType) {
                             assign(op.dest, value);
@@ -2701,46 +2710,41 @@ class BlockEmitter extends EmitterBase {
             return value;
         }
 
-        return {
-            type: "CallExpression",
-            optional: false,
-            callee: {
-                type: "Identifier",
-                name: "Number",
+        const byteValue: estree.Expression = {
+            type: "BinaryExpression",
+            left: value,
+            operator: "&",
+            right: {
+                type: "Literal",
+                value: 0xFF,
             },
-            arguments: [{
-                type: "CallExpression",
-                optional: false,
-                callee: {
-                    type: "MemberExpression",
-                    computed: false,
-                    optional: false,
-                    object: {
-                        type: "Identifier",
-                        name: "BigInt",
-                    },
-                    property: {
-                        type: "Identifier",
-                        name: integerType === "i8" ? "asIntN" : "asUintN",
-                    },
-                },
-                arguments: [
-                    {
-                        type: "Literal",
-                        value: 8,
-                    },
-                    {
-                        type: "CallExpression",
-                        optional: false,
-                        callee: {
-                            type: "Identifier",
-                            name: "BigInt",
-                        },
-                        arguments: [value],
-                    },
-                ],
-            }],
         };
+
+        if(integerType === "u8") {
+            return byteValue;
+        }
+
+        return {
+            type: "BinaryExpression",
+            left: {
+                type: "BinaryExpression",
+                left: byteValue,
+                operator: "<<",
+                right: {
+                    type: "Literal",
+                    value: 24,
+                },
+            },
+            operator: ">>",
+            right: {
+                type: "Literal",
+                value: 24,
+            },
+        };
+    }
+
+    private coerceInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
+        return this.wrapInteger(integerType, value);
     }
 
     private getLabel(label: ir.BlockId): estree.Identifier {
