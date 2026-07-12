@@ -32,12 +32,21 @@ pub trait Scope {
     fn latest_loop_labels(&self) -> Option<LoopLabels<Self::ExprContext>>;
     fn latest_block_label(&self) -> Option<BlockLabel<Self::ExprContext>>;
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>>;
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>>;
 }
 
 pub trait LocalScope: Scope {
     fn add_variable(&mut self, variable: Variable<Self::ExprContext>);
 
     fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool;
+
+    fn set_known_variable_value(
+        &mut self,
+        variable: Variable<Self::ExprContext>,
+        value: Expr<Self::ExprContext>,
+    );
 
     fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>);
 }
@@ -105,6 +114,12 @@ impl<EC: ExprContext + ?Sized> Scope for &dyn Scope<ExprContext = EC> {
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
         (**self).function_result_value_type()
     }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        (**self).known_variable_values()
+    }
 }
 
 impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
@@ -143,6 +158,12 @@ impl<EC: ExprContext + ?Sized> Scope for &mut dyn Scope<ExprContext = EC> {
 
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
         (**self).function_result_value_type()
+    }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        (**self).known_variable_values()
     }
 }
 
@@ -196,6 +217,12 @@ impl<Sc: Scope> Scope for FunctionResultValueScope<Sc> {
 
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
         Some(self.result_value_type.clone())
+    }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        self.parent.known_variable_values()
     }
 }
 
@@ -360,6 +387,12 @@ impl<Sc: Scope> Scope for ParameterScope<Sc> {
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
         self.parent.function_result_value_type()
     }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        self.parent.known_variable_values()
+    }
 }
 
 pub struct InstanceParameterScope<Sc: Scope> {
@@ -424,6 +457,12 @@ impl<Sc: Scope> Scope for InstanceParameterScope<Sc> {
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
         self.parent.function_result_value_type()
     }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        self.parent.known_variable_values()
+    }
 }
 
 pub struct LocalVariableScope<Sc: Scope> {
@@ -433,6 +472,7 @@ pub struct LocalVariableScope<Sc: Scope> {
     block_labels: HashMap<Identifier, BlockLabelDeclaration<Sc::ExprContext>>,
     latest_loop_labels: Option<LoopLabels<Sc::ExprContext>>,
     latest_block_label: Option<BlockLabel<Sc::ExprContext>>,
+    known_variable_values: HashMap<Variable<Sc::ExprContext>, Expr<Sc::ExprContext>>,
 }
 
 impl<Sc: Scope> LocalVariableScope<Sc> {
@@ -444,6 +484,7 @@ impl<Sc: Scope> LocalVariableScope<Sc> {
             block_labels: HashMap::new(),
             latest_loop_labels: None,
             latest_block_label: None,
+            known_variable_values: HashMap::new(),
         }
     }
 
@@ -506,6 +547,14 @@ impl<Sc: Scope> Scope for LocalVariableScope<Sc> {
     fn function_result_value_type(&self) -> Option<Expr<Self::ExprContext>> {
         self.parent.function_result_value_type()
     }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        let mut values = self.parent.known_variable_values();
+        values.extend(self.known_variable_values.clone());
+        values
+    }
 }
 
 impl<Sc: Scope> LocalScope for LocalVariableScope<Sc> {
@@ -520,6 +569,14 @@ impl<Sc: Scope> LocalScope for LocalVariableScope<Sc> {
 
     fn has_variable(&self, variable: &Variable<Self::ExprContext>) -> bool {
         self.variables.contains(variable)
+    }
+
+    fn set_known_variable_value(
+        &mut self,
+        variable: Variable<Self::ExprContext>,
+        value: Expr<Self::ExprContext>,
+    ) {
+        self.known_variable_values.insert(variable, value);
     }
 
     fn add_block_label(&mut self, label: BlockLabelDeclaration<Self::ExprContext>) {
@@ -671,6 +728,19 @@ where
             let mut shifter = self.shifter;
             shifter.shift(result_type)
         })
+    }
+
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        self.inner
+            .known_variable_values()
+            .into_iter()
+            .map(|(variable, value)| {
+                let mut shifter = self.shifter;
+                (shifter.shift_variable(variable), shifter.shift(value))
+            })
+            .collect()
     }
 }
 

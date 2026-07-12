@@ -6,7 +6,7 @@ use crate::{
     EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName, Unload, erased_sig,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
-use argon_expr::{BlockLabel, BlockLabelDeclaration, Expr, LoopLabels};
+use argon_expr::{BlockLabel, BlockLabelDeclaration, Expr, LoopLabels, Variable};
 use argon_parser::ast::Identifier;
 use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
@@ -192,5 +192,10 @@ impl Scope for TestScope {
     }
     fn function_result_value_type(&self) -> Option<argon_expr::Expr<Self::ExprContext>> {
         None
+    }
+    fn known_variable_values(
+        &self,
+    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+        HashMap::new()
     }
 }

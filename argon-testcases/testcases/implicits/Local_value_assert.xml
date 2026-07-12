@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Local value assert</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let answer = 42
+            assert answer == 42
+            puts "Local value asserted"
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Local value asserted
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -37,6 +37,7 @@ impl<'a> ImplicitResolverInput<'a> {
             context: self.context,
             location: self.resolve_location,
             given_assertions: &self.given_assertions,
+            known_var_values: &self.known_var_values,
         }
         .try_resolve_implicit(t, self.model)
     }

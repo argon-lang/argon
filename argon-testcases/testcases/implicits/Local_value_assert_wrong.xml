@@ -1,0 +1,21 @@
+<ArgonTest>
+
+    <Name>Local value assert wrong</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let answer = 42
+            assert answer == 43
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>AR0015</ExpectedError>
+
+</ArgonTest>

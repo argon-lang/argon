@@ -1795,7 +1795,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     is_mutable: v.is_mutable,
                 });
 
-                self.scope.add_variable(Variable::Local(v.clone()));
+                let variable = Variable::Local(v.clone());
+                self.scope.add_variable(variable.clone());
+
+                if !v.is_mutable && !PurityScanner::contains_impure_function_call(&variable_value) {
+                    self.scope
+                        .set_known_variable_value(variable, variable_value.clone());
+                }
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::VariableBinding(v, Box::new(variable_value)),
@@ -3979,7 +3985,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             resolve_location: location,
             model: &mut self.model,
             given_assertions,
-            known_var_values: HashMap::new(),
+            known_var_values: self.scope.known_variable_values(),
         }
         .try_resolve_implicit(t)
         .unwrap_or_else(|| {

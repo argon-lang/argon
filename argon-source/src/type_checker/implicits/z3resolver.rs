@@ -9,6 +9,7 @@ use argon_expr::{
     Builtin, Expr, ExprScannerMut, ExpressionOwner, FullNormalizer, SubstScanner, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
+use hashbrown::HashMap;
 use parse18_runtime::Location;
 use z3::ast::{self, Bool, Dynamic};
 
@@ -16,9 +17,30 @@ pub struct Z3ImplicitResolver<'a> {
     pub context: Context,
     pub location: &'a Location,
     pub given_assertions: &'a [ImplicitValue<TypeCheckExprContext>],
+    pub known_var_values: &'a HashMap<Variable<TypeCheckExprContext>, Expr<TypeCheckExprContext>>,
 }
 
 impl Z3ImplicitResolver<'_> {
+    fn add_known_var_value_assertions(
+        &self,
+        z3expr: &mut Z3Expr<TypeCheckExprContext>,
+        model: &mut Model,
+    ) {
+        for (variable, value) in self.known_var_values {
+            let mut variable = Expr::Variable(variable.clone());
+            let mut value = value.clone();
+
+            let mut norm =
+                FullNormalizer::new(self.context.normalize_fuel(), ExprNormalizer { model });
+            norm.normalize(&mut variable);
+            norm.normalize(&mut value);
+
+            let variable = z3expr.expr_to_z3(&variable);
+            let value = z3expr.expr_to_z3(&value);
+            z3expr.solver().assert(variable.eq(&value));
+        }
+    }
+
     fn add_given_assertion(
         &self,
         z3expr: &mut Z3Expr<TypeCheckExprContext>,
@@ -111,6 +133,8 @@ impl ImplicitResolver for Z3ImplicitResolver<'_> {
         model: &mut Model,
     ) -> Option<Expr<TypeCheckExprContext>> {
         let mut z3expr = Z3Expr::new(self.context.clone());
+
+        self.add_known_var_value_assertions(&mut z3expr, model);
 
         for assertion in self.given_assertions {
             self.add_given_assertion(&mut z3expr, assertion, model);
