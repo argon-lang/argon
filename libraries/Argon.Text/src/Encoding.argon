@@ -1,0 +1,17 @@
+module Encoding
+
+import Argon.Core::*
+
+public trait TextDecoder
+    public proc _.decode(input: Array U8): String = abstract
+    public proc _.finish(): String = abstract
+end
+
+public trait TextEncoder
+    public proc _.encode(input: String): Array U8 = abstract
+end
+
+public proc utf8_encoder(): TextEncoder = extern "utf8_encoder"
+public proc utf8_decoder(): TextDecoder = extern "utf8_decoder"
+
+
