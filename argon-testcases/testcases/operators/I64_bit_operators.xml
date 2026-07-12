@@ -1,0 +1,39 @@
+<ArgonTest>
+
+    <Name>I64 bit operators</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ((0b1000i64 ||| 0b1i64).to_s())
+            puts ((0b1000i64 ||| 0b1000i64).to_s())
+            puts ((0b1000i64 &&& 0b1i64).to_s())
+            puts ((0b1000i64 &&& 0b1000i64).to_s())
+            puts ((0b1000i64 ^^^ 0b1i64).to_s())
+            puts ((0b1000i64 ^^^ 0b1000i64).to_s())
+            puts ((0b1000i64 <<< 0b11i64).to_s())
+            puts (((-0b1000i64) >>> 0b1i64).to_s())
+            puts ((~~~0b1000i64).to_s())
+            puts ((~~~(-0b1i64)).to_s())
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        9
+        8
+        0
+        8
+        9
+        0
+        64
+        -4
+        -9
+        0
+    </ExpectedOutput>
+
+</ArgonTest>

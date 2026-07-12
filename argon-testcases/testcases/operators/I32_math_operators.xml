@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>I32 math operators</Name>
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc main(): () do
+            puts ((999i32 + 2i32).to_s())
+            puts ((999i32 - 2i32).to_s())
+            puts ((100i32 * 2i32).to_s())
+            puts ((+999i32).to_s())
+            puts ((-999i32).to_s())
+        end
+        
+    </InputSource>
+
+    <ExpectedOutput>
+        1001
+        997
+        200
+        999
+        -999
+    </ExpectedOutput>
+
+</ArgonTest>

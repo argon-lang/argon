@@ -131,6 +131,10 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     U8Literal(u8),
     I16Literal(i16),
     U16Literal(u16),
+    I32Literal(i32),
+    U32Literal(u32),
+    I64Literal(i64),
+    U64Literal(u64),
     Is {
         value: Box<Expr<EC>>,
         pattern: Box<Pattern<EC>>,
@@ -223,6 +227,22 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
 
     pub fn u16_type() -> Expr<EC> {
         Expr::integer_type(IntegerType::U16)
+    }
+
+    pub fn i32_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::I32)
+    }
+
+    pub fn u32_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::U32)
+    }
+
+    pub fn i64_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::I64)
+    }
+
+    pub fn u64_type() -> Expr<EC> {
+        Expr::integer_type(IntegerType::U64)
     }
 
     pub fn integer_type(integer_type: IntegerType) -> Expr<EC> {
@@ -392,6 +412,10 @@ pub enum IntegerType {
     U8,
     I16,
     U16,
+    I32,
+    U32,
+    I64,
+    U64,
 }
 
 impl IntegerType {
@@ -402,6 +426,10 @@ impl IntegerType {
             IntegerType::U8 => "u8_type",
             IntegerType::I16 => "i16_type",
             IntegerType::U16 => "u16_type",
+            IntegerType::I32 => "i32_type",
+            IntegerType::U32 => "u32_type",
+            IntegerType::I64 => "i64_type",
+            IntegerType::U64 => "u64_type",
         }
     }
 }
@@ -420,6 +448,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_negate",
                 IntegerType::I16 => "i16_negate",
                 IntegerType::U16 => "u16_negate",
+                IntegerType::I32 => "i32_negate",
+                IntegerType::U32 => "u32_negate",
+                IntegerType::I64 => "i64_negate",
+                IntegerType::U64 => "u64_negate",
             },
             Builtin::IntBitNot { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitnot",
@@ -427,6 +459,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_bitnot",
                 IntegerType::I16 => "i16_bitnot",
                 IntegerType::U16 => "u16_bitnot",
+                IntegerType::I32 => "i32_bitnot",
+                IntegerType::U32 => "u32_bitnot",
+                IntegerType::I64 => "i64_bitnot",
+                IntegerType::U64 => "u64_bitnot",
             },
             Builtin::IntConvert {
                 source_type,
@@ -438,26 +474,82 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 (IntegerType::Int, IntegerType::U8) => "int_to_u8",
                 (IntegerType::Int, IntegerType::I16) => "int_to_i16",
                 (IntegerType::Int, IntegerType::U16) => "int_to_u16",
+                (IntegerType::Int, IntegerType::I32) => "int_to_i32",
+                (IntegerType::Int, IntegerType::U32) => "int_to_u32",
+                (IntegerType::Int, IntegerType::I64) => "int_to_i64",
+                (IntegerType::Int, IntegerType::U64) => "int_to_u64",
                 (IntegerType::I8, IntegerType::Int) => "i8_to_int",
                 (IntegerType::I8, IntegerType::I8) => "i8_to_i8",
                 (IntegerType::I8, IntegerType::U8) => "i8_to_u8",
                 (IntegerType::I8, IntegerType::I16) => "i8_to_i16",
                 (IntegerType::I8, IntegerType::U16) => "i8_to_u16",
+                (IntegerType::I8, IntegerType::I32) => "i8_to_i32",
+                (IntegerType::I8, IntegerType::U32) => "i8_to_u32",
+                (IntegerType::I8, IntegerType::I64) => "i8_to_i64",
+                (IntegerType::I8, IntegerType::U64) => "i8_to_u64",
                 (IntegerType::U8, IntegerType::Int) => "u8_to_int",
                 (IntegerType::U8, IntegerType::I8) => "u8_to_i8",
                 (IntegerType::U8, IntegerType::U8) => "u8_to_u8",
                 (IntegerType::U8, IntegerType::I16) => "u8_to_i16",
                 (IntegerType::U8, IntegerType::U16) => "u8_to_u16",
+                (IntegerType::U8, IntegerType::I32) => "u8_to_i32",
+                (IntegerType::U8, IntegerType::U32) => "u8_to_u32",
+                (IntegerType::U8, IntegerType::I64) => "u8_to_i64",
+                (IntegerType::U8, IntegerType::U64) => "u8_to_u64",
                 (IntegerType::I16, IntegerType::Int) => "i16_to_int",
                 (IntegerType::I16, IntegerType::I8) => "i16_to_i8",
                 (IntegerType::I16, IntegerType::U8) => "i16_to_u8",
                 (IntegerType::I16, IntegerType::I16) => "i16_to_i16",
                 (IntegerType::I16, IntegerType::U16) => "i16_to_u16",
+                (IntegerType::I16, IntegerType::I32) => "i16_to_i32",
+                (IntegerType::I16, IntegerType::U32) => "i16_to_u32",
+                (IntegerType::I16, IntegerType::I64) => "i16_to_i64",
+                (IntegerType::I16, IntegerType::U64) => "i16_to_u64",
                 (IntegerType::U16, IntegerType::Int) => "u16_to_int",
                 (IntegerType::U16, IntegerType::I8) => "u16_to_i8",
                 (IntegerType::U16, IntegerType::U8) => "u16_to_u8",
                 (IntegerType::U16, IntegerType::I16) => "u16_to_i16",
                 (IntegerType::U16, IntegerType::U16) => "u16_to_u16",
+                (IntegerType::U16, IntegerType::I32) => "u16_to_i32",
+                (IntegerType::U16, IntegerType::U32) => "u16_to_u32",
+                (IntegerType::U16, IntegerType::I64) => "u16_to_i64",
+                (IntegerType::U16, IntegerType::U64) => "u16_to_u64",
+                (IntegerType::I32, IntegerType::Int) => "i32_to_int",
+                (IntegerType::I32, IntegerType::I8) => "i32_to_i8",
+                (IntegerType::I32, IntegerType::U8) => "i32_to_u8",
+                (IntegerType::I32, IntegerType::I16) => "i32_to_i16",
+                (IntegerType::I32, IntegerType::U16) => "i32_to_u16",
+                (IntegerType::I32, IntegerType::I32) => "i32_to_i32",
+                (IntegerType::I32, IntegerType::U32) => "i32_to_u32",
+                (IntegerType::I32, IntegerType::I64) => "i32_to_i64",
+                (IntegerType::I32, IntegerType::U64) => "i32_to_u64",
+                (IntegerType::U32, IntegerType::Int) => "u32_to_int",
+                (IntegerType::U32, IntegerType::I8) => "u32_to_i8",
+                (IntegerType::U32, IntegerType::U8) => "u32_to_u8",
+                (IntegerType::U32, IntegerType::I16) => "u32_to_i16",
+                (IntegerType::U32, IntegerType::U16) => "u32_to_u16",
+                (IntegerType::U32, IntegerType::I32) => "u32_to_i32",
+                (IntegerType::U32, IntegerType::U32) => "u32_to_u32",
+                (IntegerType::U32, IntegerType::I64) => "u32_to_i64",
+                (IntegerType::U32, IntegerType::U64) => "u32_to_u64",
+                (IntegerType::I64, IntegerType::Int) => "i64_to_int",
+                (IntegerType::I64, IntegerType::I8) => "i64_to_i8",
+                (IntegerType::I64, IntegerType::U8) => "i64_to_u8",
+                (IntegerType::I64, IntegerType::I16) => "i64_to_i16",
+                (IntegerType::I64, IntegerType::U16) => "i64_to_u16",
+                (IntegerType::I64, IntegerType::I32) => "i64_to_i32",
+                (IntegerType::I64, IntegerType::U32) => "i64_to_u32",
+                (IntegerType::I64, IntegerType::I64) => "i64_to_i64",
+                (IntegerType::I64, IntegerType::U64) => "i64_to_u64",
+                (IntegerType::U64, IntegerType::Int) => "u64_to_int",
+                (IntegerType::U64, IntegerType::I8) => "u64_to_i8",
+                (IntegerType::U64, IntegerType::U8) => "u64_to_u8",
+                (IntegerType::U64, IntegerType::I16) => "u64_to_i16",
+                (IntegerType::U64, IntegerType::U16) => "u64_to_u16",
+                (IntegerType::U64, IntegerType::I32) => "u64_to_i32",
+                (IntegerType::U64, IntegerType::U32) => "u64_to_u32",
+                (IntegerType::U64, IntegerType::I64) => "u64_to_i64",
+                (IntegerType::U64, IntegerType::U64) => "u64_to_u64",
             },
             Builtin::IntAdd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_add",
@@ -465,6 +557,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_add",
                 IntegerType::I16 => "i16_add",
                 IntegerType::U16 => "u16_add",
+                IntegerType::I32 => "i32_add",
+                IntegerType::U32 => "u32_add",
+                IntegerType::I64 => "i64_add",
+                IntegerType::U64 => "u64_add",
             },
             Builtin::IntSub { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_sub",
@@ -472,6 +568,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_sub",
                 IntegerType::I16 => "i16_sub",
                 IntegerType::U16 => "u16_sub",
+                IntegerType::I32 => "i32_sub",
+                IntegerType::U32 => "u32_sub",
+                IntegerType::I64 => "i64_sub",
+                IntegerType::U64 => "u64_sub",
             },
             Builtin::IntMul { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_mul",
@@ -479,6 +579,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_mul",
                 IntegerType::I16 => "i16_mul",
                 IntegerType::U16 => "u16_mul",
+                IntegerType::I32 => "i32_mul",
+                IntegerType::U32 => "u32_mul",
+                IntegerType::I64 => "i64_mul",
+                IntegerType::U64 => "u64_mul",
             },
             Builtin::IntBitAnd { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitand",
@@ -486,6 +590,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_bitand",
                 IntegerType::I16 => "i16_bitand",
                 IntegerType::U16 => "u16_bitand",
+                IntegerType::I32 => "i32_bitand",
+                IntegerType::U32 => "u32_bitand",
+                IntegerType::I64 => "i64_bitand",
+                IntegerType::U64 => "u64_bitand",
             },
             Builtin::IntBitOr { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitor",
@@ -493,6 +601,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_bitor",
                 IntegerType::I16 => "i16_bitor",
                 IntegerType::U16 => "u16_bitor",
+                IntegerType::I32 => "i32_bitor",
+                IntegerType::U32 => "u32_bitor",
+                IntegerType::I64 => "i64_bitor",
+                IntegerType::U64 => "u64_bitor",
             },
             Builtin::IntBitXor { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitxor",
@@ -500,6 +612,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_bitxor",
                 IntegerType::I16 => "i16_bitxor",
                 IntegerType::U16 => "u16_bitxor",
+                IntegerType::I32 => "i32_bitxor",
+                IntegerType::U32 => "u32_bitxor",
+                IntegerType::I64 => "i64_bitxor",
+                IntegerType::U64 => "u64_bitxor",
             },
             Builtin::IntBitShiftLeft { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitshiftleft",
@@ -507,6 +623,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_bitshiftleft",
                 IntegerType::I16 => "i16_bitshiftleft",
                 IntegerType::U16 => "u16_bitshiftleft",
+                IntegerType::I32 => "i32_bitshiftleft",
+                IntegerType::U32 => "u32_bitshiftleft",
+                IntegerType::I64 => "i64_bitshiftleft",
+                IntegerType::U64 => "u64_bitshiftleft",
             },
             Builtin::IntBitShiftRight { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_bitshiftright",
@@ -514,6 +634,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_bitshiftright",
                 IntegerType::I16 => "i16_bitshiftright",
                 IntegerType::U16 => "u16_bitshiftright",
+                IntegerType::I32 => "i32_bitshiftright",
+                IntegerType::U32 => "u32_bitshiftright",
+                IntegerType::I64 => "i64_bitshiftright",
+                IntegerType::U64 => "u64_bitshiftright",
             },
             Builtin::IntEq { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_eq",
@@ -521,6 +645,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_eq",
                 IntegerType::I16 => "i16_eq",
                 IntegerType::U16 => "u16_eq",
+                IntegerType::I32 => "i32_eq",
+                IntegerType::U32 => "u32_eq",
+                IntegerType::I64 => "i64_eq",
+                IntegerType::U64 => "u64_eq",
             },
             Builtin::IntLt { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_lt",
@@ -528,6 +656,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_lt",
                 IntegerType::I16 => "i16_lt",
                 IntegerType::U16 => "u16_lt",
+                IntegerType::I32 => "i32_lt",
+                IntegerType::U32 => "u32_lt",
+                IntegerType::I64 => "i64_lt",
+                IntegerType::U64 => "u64_lt",
             },
             Builtin::IntLe { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_le",
@@ -535,6 +667,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_le",
                 IntegerType::I16 => "i16_le",
                 IntegerType::U16 => "u16_le",
+                IntegerType::I32 => "i32_le",
+                IntegerType::U32 => "u32_le",
+                IntegerType::I64 => "i64_le",
+                IntegerType::U64 => "u64_le",
             },
             Builtin::IntGt { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_gt",
@@ -542,6 +678,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_gt",
                 IntegerType::I16 => "i16_gt",
                 IntegerType::U16 => "u16_gt",
+                IntegerType::I32 => "i32_gt",
+                IntegerType::U32 => "u32_gt",
+                IntegerType::I64 => "i64_gt",
+                IntegerType::U64 => "u64_gt",
             },
             Builtin::IntGe { integer_type, .. } => match integer_type {
                 IntegerType::Int => "int_ge",
@@ -549,6 +689,10 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
                 IntegerType::U8 => "u8_ge",
                 IntegerType::I16 => "i16_ge",
                 IntegerType::U16 => "u16_ge",
+                IntegerType::I32 => "i32_ge",
+                IntegerType::U32 => "u32_ge",
+                IntegerType::I64 => "i64_ge",
+                IntegerType::U64 => "u64_ge",
             },
             Builtin::StringConcat { .. } => "string_concat",
             Builtin::StringEq { .. } => "string_eq",

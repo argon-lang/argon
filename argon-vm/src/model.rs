@@ -841,6 +841,10 @@ impl TubeModel {
             vf::ErasedSignatureType::U8 {} => Some(vf::ErasedSignatureType::U8 {}),
             vf::ErasedSignatureType::I16 {} => Some(vf::ErasedSignatureType::I16 {}),
             vf::ErasedSignatureType::U16 {} => Some(vf::ErasedSignatureType::U16 {}),
+            vf::ErasedSignatureType::I32 {} => Some(vf::ErasedSignatureType::I32 {}),
+            vf::ErasedSignatureType::U32 {} => Some(vf::ErasedSignatureType::U32 {}),
+            vf::ErasedSignatureType::I64 {} => Some(vf::ErasedSignatureType::I64 {}),
+            vf::ErasedSignatureType::U64 {} => Some(vf::ErasedSignatureType::U64 {}),
             vf::ErasedSignatureType::Bool {} => Some(vf::ErasedSignatureType::Bool {}),
             vf::ErasedSignatureType::String {} => Some(vf::ErasedSignatureType::String {}),
             vf::ErasedSignatureType::Never {} => Some(vf::ErasedSignatureType::Never {}),
@@ -1096,6 +1100,22 @@ impl TubeModel {
                 value: *value,
             }),
             vf::Instruction::ConstU16 { dest, value } => Some(vf::Instruction::ConstU16 {
+                dest: dest.clone(),
+                value: *value,
+            }),
+            vf::Instruction::ConstI32 { dest, value } => Some(vf::Instruction::ConstI32 {
+                dest: dest.clone(),
+                value: *value,
+            }),
+            vf::Instruction::ConstU32 { dest, value } => Some(vf::Instruction::ConstU32 {
+                dest: dest.clone(),
+                value: *value,
+            }),
+            vf::Instruction::ConstI64 { dest, value } => Some(vf::Instruction::ConstI64 {
+                dest: dest.clone(),
+                value: *value,
+            }),
+            vf::Instruction::ConstU64 { dest, value } => Some(vf::Instruction::ConstU64 {
                 dest: dest.clone(),
                 value: *value,
             }),
@@ -2293,6 +2313,22 @@ fn prepare_instruction_for_inline(
             value: *value,
         }),
         vf::Instruction::ConstU16 { dest, value } => Some(vf::Instruction::ConstU16 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
+        }),
+        vf::Instruction::ConstI32 { dest, value } => Some(vf::Instruction::ConstI32 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
+        }),
+        vf::Instruction::ConstU32 { dest, value } => Some(vf::Instruction::ConstU32 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
+        }),
+        vf::Instruction::ConstI64 { dest, value } => Some(vf::Instruction::ConstI64 {
+            dest: Box::new(remap_register(dest, register_replacements)?),
+            value: *value,
+        }),
+        vf::Instruction::ConstU64 { dest, value } => Some(vf::Instruction::ConstU64 {
             dest: Box::new(remap_register(dest, register_replacements)?),
             value: *value,
         }),

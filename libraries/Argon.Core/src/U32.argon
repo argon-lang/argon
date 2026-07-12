@@ -1,0 +1,30 @@
+module U32
+
+import ::Int::*
+import ::Bool::*
+import ::String::*
+
+public token inline def U32: type = __argon_builtin u32_type
+
+public inline def unary operator + (a: U32): U32 = a
+public inline def unary operator ~~~ (a: U32): U32 = __argon_builtin u32_bitnot a
+
+public inline def operator + (a: U32) (b: U32) (requires erased ev: (((__argon_builtin int_add a.to_i b.to_i) >= 0 && (__argon_builtin int_add a.to_i b.to_i) <= 4294967295) == true)): U32 = __argon_builtin u32_add a b
+public inline def operator - (a: U32) (b: U32) (requires erased ev: (((__argon_builtin int_sub a.to_i b.to_i) >= 0 && (__argon_builtin int_sub a.to_i b.to_i) <= 4294967295) == true)): U32 = __argon_builtin u32_sub a b
+public inline def operator * (a: U32) (b: U32) (requires erased ev: (((__argon_builtin int_mul a.to_i b.to_i) >= 0 && (__argon_builtin int_mul a.to_i b.to_i) <= 4294967295) == true)): U32 = __argon_builtin u32_mul a b
+
+public inline def operator &&& (a: U32) (b: U32): U32 = __argon_builtin u32_bitand a b
+public inline def operator ||| (a: U32) (b: U32): U32 = __argon_builtin u32_bitor a b
+public inline def operator ^^^ (a: U32) (b: U32): U32 = __argon_builtin u32_bitxor a b
+public inline def operator <<< (a: U32) (b: U32) (requires erased ev: ((b < 32u32) == true)): U32 = __argon_builtin u32_bitshiftleft a b
+public inline def operator >>> (a: U32) (b: U32) (requires erased ev: ((b < 32u32) == true)): U32 = __argon_builtin u32_bitshiftright a b
+
+public inline def operator = (a: U32) (b: U32): Bool = __argon_builtin u32_eq a b
+public inline def operator != (a: U32) (b: U32): Bool = !(__argon_builtin u32_eq a b)
+public inline def operator < (a: U32) (b: U32): Bool = __argon_builtin u32_lt a b
+public inline def operator <= (a: U32) (b: U32): Bool = __argon_builtin u32_le a b
+public inline def operator > (a: U32) (b: U32): Bool = __argon_builtin u32_gt a b
+public inline def operator >= (a: U32) (b: U32): Bool = __argon_builtin u32_ge a b
+
+public def extension to_s (n: U32)(): String = extern u32_to_s
+public inline def extension to_i (n: U32): Int = __argon_builtin u32_to_int n

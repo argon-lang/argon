@@ -5,6 +5,7 @@ use crate::{
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use argon_util::Fuel;
+use num_bigint::ToBigInt;
 use num_traits::ToPrimitive;
 use std::mem;
 
@@ -154,6 +155,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::U8, Expr::U8Literal(value)) => Expr::U8Literal(value.wrapping_neg()),
             (IntegerType::I16, Expr::I16Literal(value)) => Expr::I16Literal(value.wrapping_neg()),
             (IntegerType::U16, Expr::U16Literal(value)) => Expr::U16Literal(value.wrapping_neg()),
+            (IntegerType::I32, Expr::I32Literal(value)) => Expr::I32Literal(value.wrapping_neg()),
+            (IntegerType::U32, Expr::U32Literal(value)) => Expr::U32Literal(value.wrapping_neg()),
+            (IntegerType::I64, Expr::I64Literal(value)) => Expr::I64Literal(value.wrapping_neg()),
+            (IntegerType::U64, Expr::U64Literal(value)) => Expr::U64Literal(value.wrapping_neg()),
             (integer_type, value) => Expr::Builtin(Builtin::IntNegate {
                 integer_type,
                 value: Box::new(value),
@@ -169,6 +174,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::U8, Expr::U8Literal(value)) => Expr::U8Literal(!value),
             (IntegerType::I16, Expr::I16Literal(value)) => Expr::I16Literal(!value),
             (IntegerType::U16, Expr::U16Literal(value)) => Expr::U16Literal(!value),
+            (IntegerType::I32, Expr::I32Literal(value)) => Expr::I32Literal(!value),
+            (IntegerType::U32, Expr::U32Literal(value)) => Expr::U32Literal(!value),
+            (IntegerType::I64, Expr::I64Literal(value)) => Expr::I64Literal(!value),
+            (IntegerType::U64, Expr::U64Literal(value)) => Expr::U64Literal(!value),
             (integer_type, value) => Expr::Builtin(Builtin::IntBitNot {
                 integer_type,
                 value: Box::new(value),
@@ -185,6 +194,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::U8, IntegerType::U8, value) => value,
             (IntegerType::I16, IntegerType::I16, value) => value,
             (IntegerType::U16, IntegerType::U16, value) => value,
+            (IntegerType::I32, IntegerType::I32, value) => value,
+            (IntegerType::U32, IntegerType::U32, value) => value,
+            (IntegerType::I64, IntegerType::I64, value) => value,
+            (IntegerType::U64, IntegerType::U64, value) => value,
             (IntegerType::Int, IntegerType::I8, Expr::IntLiteral(value)) => {
                 Expr::I8Literal(value.to_i8().unwrap_or_else(|| {
                     let bytes = value.to_signed_bytes_le();
@@ -215,6 +228,58 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     ])
                 }))
             }
+            (IntegerType::Int, IntegerType::I32, Expr::IntLiteral(value)) => {
+                Expr::I32Literal(value.to_i32().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    i32::from_le_bytes([
+                        bytes.first().copied().unwrap_or(0),
+                        bytes.get(1).copied().unwrap_or(0),
+                        bytes.get(2).copied().unwrap_or(0),
+                        bytes.get(3).copied().unwrap_or(0),
+                    ])
+                }))
+            }
+            (IntegerType::Int, IntegerType::U32, Expr::IntLiteral(value)) => {
+                Expr::U32Literal(value.to_u32().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    u32::from_le_bytes([
+                        bytes.first().copied().unwrap_or(0),
+                        bytes.get(1).copied().unwrap_or(0),
+                        bytes.get(2).copied().unwrap_or(0),
+                        bytes.get(3).copied().unwrap_or(0),
+                    ])
+                }))
+            }
+            (IntegerType::Int, IntegerType::I64, Expr::IntLiteral(value)) => {
+                Expr::I64Literal(value.to_i64().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    i64::from_le_bytes([
+                        bytes.first().copied().unwrap_or(0),
+                        bytes.get(1).copied().unwrap_or(0),
+                        bytes.get(2).copied().unwrap_or(0),
+                        bytes.get(3).copied().unwrap_or(0),
+                        bytes.get(4).copied().unwrap_or(0),
+                        bytes.get(5).copied().unwrap_or(0),
+                        bytes.get(6).copied().unwrap_or(0),
+                        bytes.get(7).copied().unwrap_or(0),
+                    ])
+                }))
+            }
+            (IntegerType::Int, IntegerType::U64, Expr::IntLiteral(value)) => {
+                Expr::U64Literal(value.to_u64().unwrap_or_else(|| {
+                    let bytes = value.to_signed_bytes_le();
+                    u64::from_le_bytes([
+                        bytes.first().copied().unwrap_or(0),
+                        bytes.get(1).copied().unwrap_or(0),
+                        bytes.get(2).copied().unwrap_or(0),
+                        bytes.get(3).copied().unwrap_or(0),
+                        bytes.get(4).copied().unwrap_or(0),
+                        bytes.get(5).copied().unwrap_or(0),
+                        bytes.get(6).copied().unwrap_or(0),
+                        bytes.get(7).copied().unwrap_or(0),
+                    ])
+                }))
+            }
             (IntegerType::I8, IntegerType::Int, Expr::I8Literal(value)) => {
                 Expr::IntLiteral(value.into())
             }
@@ -226,6 +291,18 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             }
             (IntegerType::I8, IntegerType::U16, Expr::I8Literal(value)) => {
                 Expr::U16Literal((value as i16) as u16)
+            }
+            (IntegerType::I8, IntegerType::I32, Expr::I8Literal(value)) => {
+                Expr::I32Literal(value.into())
+            }
+            (IntegerType::I8, IntegerType::U32, Expr::I8Literal(value)) => {
+                Expr::U32Literal((value as i32) as u32)
+            }
+            (IntegerType::I8, IntegerType::I64, Expr::I8Literal(value)) => {
+                Expr::I64Literal(value.into())
+            }
+            (IntegerType::I8, IntegerType::U64, Expr::I8Literal(value)) => {
+                Expr::U64Literal((value as i64) as u64)
             }
             (IntegerType::U8, IntegerType::I8, Expr::U8Literal(value)) => {
                 Expr::I8Literal(i8::from_le_bytes([value]))
@@ -239,6 +316,18 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::U8, IntegerType::U16, Expr::U8Literal(value)) => {
                 Expr::U16Literal(value.into())
             }
+            (IntegerType::U8, IntegerType::I32, Expr::U8Literal(value)) => {
+                Expr::I32Literal(value.into())
+            }
+            (IntegerType::U8, IntegerType::U32, Expr::U8Literal(value)) => {
+                Expr::U32Literal(value.into())
+            }
+            (IntegerType::U8, IntegerType::I64, Expr::U8Literal(value)) => {
+                Expr::I64Literal(value.into())
+            }
+            (IntegerType::U8, IntegerType::U64, Expr::U8Literal(value)) => {
+                Expr::U64Literal(value.into())
+            }
             (IntegerType::I16, IntegerType::Int, Expr::I16Literal(value)) => {
                 Expr::IntLiteral(value.into())
             }
@@ -251,6 +340,18 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             (IntegerType::I16, IntegerType::U16, Expr::I16Literal(value)) => {
                 Expr::U16Literal(value as u16)
             }
+            (IntegerType::I16, IntegerType::I32, Expr::I16Literal(value)) => {
+                Expr::I32Literal(value.into())
+            }
+            (IntegerType::I16, IntegerType::U32, Expr::I16Literal(value)) => {
+                Expr::U32Literal((value as i32) as u32)
+            }
+            (IntegerType::I16, IntegerType::I64, Expr::I16Literal(value)) => {
+                Expr::I64Literal(value.into())
+            }
+            (IntegerType::I16, IntegerType::U64, Expr::I16Literal(value)) => {
+                Expr::U64Literal((value as i64) as u64)
+            }
             (IntegerType::U16, IntegerType::Int, Expr::U16Literal(value)) => {
                 Expr::IntLiteral(value.into())
             }
@@ -262,6 +363,114 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             }
             (IntegerType::U16, IntegerType::I16, Expr::U16Literal(value)) => {
                 Expr::I16Literal(value as i16)
+            }
+            (IntegerType::U16, IntegerType::I32, Expr::U16Literal(value)) => {
+                Expr::I32Literal(value.into())
+            }
+            (IntegerType::U16, IntegerType::U32, Expr::U16Literal(value)) => {
+                Expr::U32Literal(value.into())
+            }
+            (IntegerType::U16, IntegerType::I64, Expr::U16Literal(value)) => {
+                Expr::I64Literal(value.into())
+            }
+            (IntegerType::U16, IntegerType::U64, Expr::U16Literal(value)) => {
+                Expr::U64Literal(value.into())
+            }
+            (IntegerType::I32, IntegerType::Int, Expr::I32Literal(value)) => {
+                Expr::IntLiteral(value.into())
+            }
+            (IntegerType::I32, IntegerType::I8, Expr::I32Literal(value)) => {
+                Expr::I8Literal(value as i8)
+            }
+            (IntegerType::I32, IntegerType::U8, Expr::I32Literal(value)) => {
+                Expr::U8Literal(value as u8)
+            }
+            (IntegerType::I32, IntegerType::I16, Expr::I32Literal(value)) => {
+                Expr::I16Literal(value as i16)
+            }
+            (IntegerType::I32, IntegerType::U16, Expr::I32Literal(value)) => {
+                Expr::U16Literal(value as u16)
+            }
+            (IntegerType::I32, IntegerType::U32, Expr::I32Literal(value)) => {
+                Expr::U32Literal(value as u32)
+            }
+            (IntegerType::I32, IntegerType::I64, Expr::I32Literal(value)) => {
+                Expr::I64Literal(value.into())
+            }
+            (IntegerType::I32, IntegerType::U64, Expr::I32Literal(value)) => {
+                Expr::U64Literal((value as i64) as u64)
+            }
+            (IntegerType::U32, IntegerType::Int, Expr::U32Literal(value)) => {
+                Expr::IntLiteral(value.into())
+            }
+            (IntegerType::U32, IntegerType::I8, Expr::U32Literal(value)) => {
+                Expr::I8Literal(value as i8)
+            }
+            (IntegerType::U32, IntegerType::U8, Expr::U32Literal(value)) => {
+                Expr::U8Literal(value as u8)
+            }
+            (IntegerType::U32, IntegerType::I16, Expr::U32Literal(value)) => {
+                Expr::I16Literal(value as i16)
+            }
+            (IntegerType::U32, IntegerType::U16, Expr::U32Literal(value)) => {
+                Expr::U16Literal(value as u16)
+            }
+            (IntegerType::U32, IntegerType::I32, Expr::U32Literal(value)) => {
+                Expr::I32Literal(value as i32)
+            }
+            (IntegerType::U32, IntegerType::I64, Expr::U32Literal(value)) => {
+                Expr::I64Literal(value.into())
+            }
+            (IntegerType::U32, IntegerType::U64, Expr::U32Literal(value)) => {
+                Expr::U64Literal(value.into())
+            }
+            (IntegerType::I64, IntegerType::Int, Expr::I64Literal(value)) => {
+                Expr::IntLiteral(value.into())
+            }
+            (IntegerType::I64, IntegerType::I8, Expr::I64Literal(value)) => {
+                Expr::I8Literal(value as i8)
+            }
+            (IntegerType::I64, IntegerType::U8, Expr::I64Literal(value)) => {
+                Expr::U8Literal(value as u8)
+            }
+            (IntegerType::I64, IntegerType::I16, Expr::I64Literal(value)) => {
+                Expr::I16Literal(value as i16)
+            }
+            (IntegerType::I64, IntegerType::U16, Expr::I64Literal(value)) => {
+                Expr::U16Literal(value as u16)
+            }
+            (IntegerType::I64, IntegerType::I32, Expr::I64Literal(value)) => {
+                Expr::I32Literal(value as i32)
+            }
+            (IntegerType::I64, IntegerType::U32, Expr::I64Literal(value)) => {
+                Expr::U32Literal(value as u32)
+            }
+            (IntegerType::I64, IntegerType::U64, Expr::I64Literal(value)) => {
+                Expr::U64Literal(value as u64)
+            }
+            (IntegerType::U64, IntegerType::Int, Expr::U64Literal(value)) => {
+                Expr::IntLiteral(value.to_bigint().unwrap())
+            }
+            (IntegerType::U64, IntegerType::I8, Expr::U64Literal(value)) => {
+                Expr::I8Literal(value as i8)
+            }
+            (IntegerType::U64, IntegerType::U8, Expr::U64Literal(value)) => {
+                Expr::U8Literal(value as u8)
+            }
+            (IntegerType::U64, IntegerType::I16, Expr::U64Literal(value)) => {
+                Expr::I16Literal(value as i16)
+            }
+            (IntegerType::U64, IntegerType::U16, Expr::U64Literal(value)) => {
+                Expr::U16Literal(value as u16)
+            }
+            (IntegerType::U64, IntegerType::I32, Expr::U64Literal(value)) => {
+                Expr::I32Literal(value as i32)
+            }
+            (IntegerType::U64, IntegerType::U32, Expr::U64Literal(value)) => {
+                Expr::U32Literal(value as u32)
+            }
+            (IntegerType::U64, IntegerType::I64, Expr::U64Literal(value)) => {
+                Expr::I64Literal(value as i64)
             }
             (source_type, dest_type, value) => Expr::Builtin(Builtin::IntConvert {
                 source_type,
@@ -283,6 +492,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::U8Literal(lhs.wrapping_add(rhs)),
             |lhs, rhs| Expr::I16Literal(lhs.wrapping_add(rhs)),
             |lhs, rhs| Expr::U16Literal(lhs.wrapping_add(rhs)),
+            |lhs, rhs| Expr::I32Literal(lhs.wrapping_add(rhs)),
+            |lhs, rhs| Expr::U32Literal(lhs.wrapping_add(rhs)),
+            |lhs, rhs| Expr::I64Literal(lhs.wrapping_add(rhs)),
+            |lhs, rhs| Expr::U64Literal(lhs.wrapping_add(rhs)),
             |integer_type, lhs, rhs| Builtin::IntAdd {
                 integer_type,
                 lhs,
@@ -303,6 +516,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::U8Literal(lhs.wrapping_sub(rhs)),
             |lhs, rhs| Expr::I16Literal(lhs.wrapping_sub(rhs)),
             |lhs, rhs| Expr::U16Literal(lhs.wrapping_sub(rhs)),
+            |lhs, rhs| Expr::I32Literal(lhs.wrapping_sub(rhs)),
+            |lhs, rhs| Expr::U32Literal(lhs.wrapping_sub(rhs)),
+            |lhs, rhs| Expr::I64Literal(lhs.wrapping_sub(rhs)),
+            |lhs, rhs| Expr::U64Literal(lhs.wrapping_sub(rhs)),
             |integer_type, lhs, rhs| Builtin::IntSub {
                 integer_type,
                 lhs,
@@ -323,6 +540,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::U8Literal(lhs.wrapping_mul(rhs)),
             |lhs, rhs| Expr::I16Literal(lhs.wrapping_mul(rhs)),
             |lhs, rhs| Expr::U16Literal(lhs.wrapping_mul(rhs)),
+            |lhs, rhs| Expr::I32Literal(lhs.wrapping_mul(rhs)),
+            |lhs, rhs| Expr::U32Literal(lhs.wrapping_mul(rhs)),
+            |lhs, rhs| Expr::I64Literal(lhs.wrapping_mul(rhs)),
+            |lhs, rhs| Expr::U64Literal(lhs.wrapping_mul(rhs)),
             |integer_type, lhs, rhs| Builtin::IntMul {
                 integer_type,
                 lhs,
@@ -343,6 +564,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::U8Literal(lhs & rhs),
             |lhs, rhs| Expr::I16Literal(lhs & rhs),
             |lhs, rhs| Expr::U16Literal(lhs & rhs),
+            |lhs, rhs| Expr::I32Literal(lhs & rhs),
+            |lhs, rhs| Expr::U32Literal(lhs & rhs),
+            |lhs, rhs| Expr::I64Literal(lhs & rhs),
+            |lhs, rhs| Expr::U64Literal(lhs & rhs),
             |integer_type, lhs, rhs| Builtin::IntBitAnd {
                 integer_type,
                 lhs,
@@ -363,6 +588,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::U8Literal(lhs | rhs),
             |lhs, rhs| Expr::I16Literal(lhs | rhs),
             |lhs, rhs| Expr::U16Literal(lhs | rhs),
+            |lhs, rhs| Expr::I32Literal(lhs | rhs),
+            |lhs, rhs| Expr::U32Literal(lhs | rhs),
+            |lhs, rhs| Expr::I64Literal(lhs | rhs),
+            |lhs, rhs| Expr::U64Literal(lhs | rhs),
             |integer_type, lhs, rhs| Builtin::IntBitOr {
                 integer_type,
                 lhs,
@@ -383,6 +612,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::U8Literal(lhs ^ rhs),
             |lhs, rhs| Expr::I16Literal(lhs ^ rhs),
             |lhs, rhs| Expr::U16Literal(lhs ^ rhs),
+            |lhs, rhs| Expr::I32Literal(lhs ^ rhs),
+            |lhs, rhs| Expr::U32Literal(lhs ^ rhs),
+            |lhs, rhs| Expr::I64Literal(lhs ^ rhs),
+            |lhs, rhs| Expr::U64Literal(lhs ^ rhs),
             |integer_type, lhs, rhs| Builtin::IntBitXor {
                 integer_type,
                 lhs,
@@ -432,6 +665,34 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     0
                 } else {
                     lhs.wrapping_shl(rhs.into())
+                })
+            },
+            |lhs, rhs| {
+                Expr::I32Literal(if !(0..32).contains(&rhs) {
+                    0
+                } else {
+                    lhs.wrapping_shl(rhs as u32)
+                })
+            },
+            |lhs, rhs| {
+                Expr::U32Literal(if rhs >= 32 {
+                    0
+                } else {
+                    lhs.wrapping_shl(rhs)
+                })
+            },
+            |lhs, rhs| {
+                Expr::I64Literal(if !(0..64).contains(&rhs) {
+                    0
+                } else {
+                    lhs.wrapping_shl(rhs as u32)
+                })
+            },
+            |lhs, rhs| {
+                Expr::U64Literal(if rhs >= 64 {
+                    0
+                } else {
+                    lhs.wrapping_shl(rhs as u32)
                 })
             },
             |integer_type, lhs, rhs| Builtin::IntBitShiftLeft {
@@ -485,6 +746,34 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
                     lhs.wrapping_shr(rhs.into())
                 })
             },
+            |lhs, rhs| {
+                Expr::I32Literal(if !(0..32).contains(&rhs) {
+                    if lhs < 0 { -1 } else { 0 }
+                } else {
+                    lhs.wrapping_shr(rhs as u32)
+                })
+            },
+            |lhs, rhs| {
+                Expr::U32Literal(if rhs >= 32 {
+                    0
+                } else {
+                    lhs.wrapping_shr(rhs)
+                })
+            },
+            |lhs, rhs| {
+                Expr::I64Literal(if !(0..64).contains(&rhs) {
+                    if lhs < 0 { -1 } else { 0 }
+                } else {
+                    lhs.wrapping_shr(rhs as u32)
+                })
+            },
+            |lhs, rhs| {
+                Expr::U64Literal(if rhs >= 64 {
+                    0
+                } else {
+                    lhs.wrapping_shr(rhs as u32)
+                })
+            },
             |integer_type, lhs, rhs| Builtin::IntBitShiftRight {
                 integer_type,
                 lhs,
@@ -500,6 +789,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             integer_type,
             *lhs,
             *rhs,
+            |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs == rhs),
@@ -525,6 +818,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs < rhs),
             |integer_type, lhs, rhs| Builtin::IntLt {
                 integer_type,
                 lhs,
@@ -540,6 +837,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             integer_type,
             *lhs,
             *rhs,
+            |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs <= rhs),
@@ -565,6 +866,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs > rhs),
             |integer_type, lhs, rhs| Builtin::IntGt {
                 integer_type,
                 lhs,
@@ -580,6 +885,10 @@ fn normalize_builtin<EC: ExprContext + ?Sized>(builtin: Builtin<EC>) -> Expr<EC>
             integer_type,
             *lhs,
             *rhs,
+            |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
+            |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
             |lhs, rhs| Expr::BoolLiteral(lhs >= rhs),
@@ -605,6 +914,10 @@ fn normalize_integer_binary_op<EC: ExprContext + ?Sized>(
     u8_op: impl FnOnce(u8, u8) -> Expr<EC>,
     i16_op: impl FnOnce(i16, i16) -> Expr<EC>,
     u16_op: impl FnOnce(u16, u16) -> Expr<EC>,
+    i32_op: impl FnOnce(i32, i32) -> Expr<EC>,
+    u32_op: impl FnOnce(u32, u32) -> Expr<EC>,
+    i64_op: impl FnOnce(i64, i64) -> Expr<EC>,
+    u64_op: impl FnOnce(u64, u64) -> Expr<EC>,
     rebuild: impl FnOnce(IntegerType, Box<Expr<EC>>, Box<Expr<EC>>) -> Builtin<EC>,
 ) -> Expr<EC> {
     match (integer_type, lhs, rhs) {
@@ -613,6 +926,10 @@ fn normalize_integer_binary_op<EC: ExprContext + ?Sized>(
         (IntegerType::U8, Expr::U8Literal(lhs), Expr::U8Literal(rhs)) => u8_op(lhs, rhs),
         (IntegerType::I16, Expr::I16Literal(lhs), Expr::I16Literal(rhs)) => i16_op(lhs, rhs),
         (IntegerType::U16, Expr::U16Literal(lhs), Expr::U16Literal(rhs)) => u16_op(lhs, rhs),
+        (IntegerType::I32, Expr::I32Literal(lhs), Expr::I32Literal(rhs)) => i32_op(lhs, rhs),
+        (IntegerType::U32, Expr::U32Literal(lhs), Expr::U32Literal(rhs)) => u32_op(lhs, rhs),
+        (IntegerType::I64, Expr::I64Literal(lhs), Expr::I64Literal(rhs)) => i64_op(lhs, rhs),
+        (IntegerType::U64, Expr::U64Literal(lhs), Expr::U64Literal(rhs)) => u64_op(lhs, rhs),
         (integer_type, lhs, rhs) => {
             Expr::Builtin(rebuild(integer_type, Box::new(lhs), Box::new(rhs)))
         }

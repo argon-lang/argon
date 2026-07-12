@@ -81,6 +81,10 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
         Expr::U8Literal(_) => Expr::u8_type(),
         Expr::I16Literal(_) => Expr::i16_type(),
         Expr::U16Literal(_) => Expr::u16_type(),
+        Expr::I32Literal(_) => Expr::i32_type(),
+        Expr::U32Literal(_) => Expr::u32_type(),
+        Expr::I64Literal(_) => Expr::i64_type(),
+        Expr::U64Literal(_) => Expr::u64_type(),
 
         Expr::Match { .. } => todo!(),
 

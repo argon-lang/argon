@@ -778,6 +778,10 @@ impl VmEncoder {
             ErasedSignatureType::U8 => vf::ErasedSignatureType::U8 {},
             ErasedSignatureType::I16 => vf::ErasedSignatureType::I16 {},
             ErasedSignatureType::U16 => vf::ErasedSignatureType::U16 {},
+            ErasedSignatureType::I32 => vf::ErasedSignatureType::I32 {},
+            ErasedSignatureType::U32 => vf::ErasedSignatureType::U32 {},
+            ErasedSignatureType::I64 => vf::ErasedSignatureType::I64 {},
+            ErasedSignatureType::U64 => vf::ErasedSignatureType::U64 {},
             ErasedSignatureType::Bool => vf::ErasedSignatureType::Bool {},
             ErasedSignatureType::String => vf::ErasedSignatureType::String {},
             ErasedSignatureType::Never => vf::ErasedSignatureType::Never {},
@@ -2375,6 +2379,46 @@ impl<'a> ExprEmitter<'a> {
                 rb.into_result(self)?
             }
 
+            Expr::I32Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstI32 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
+            Expr::U32Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstU32 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
+            Expr::I64Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstI64 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
+            Expr::U64Literal(value) => {
+                let rb = output.output_register(self, e)?;
+                self.emit(vf::Instruction::ConstU64 {
+                    dest: Box::new(rb.register().clone()),
+                    value: *value,
+                });
+
+                rb.into_result(self)?
+            }
+
             Expr::Match { value, cases } => {
                 let (result, output) = output.into_known_location(self, e)?;
                 let value_reg = self.expr(value, AnyRegister)?;
@@ -3286,6 +3330,10 @@ fn encode_vm_integer_type(integer_type: IntegerType) -> vf::IntegerType {
         IntegerType::U8 => vf::IntegerType::U8 {},
         IntegerType::I16 => vf::IntegerType::I16 {},
         IntegerType::U16 => vf::IntegerType::U16 {},
+        IntegerType::I32 => vf::IntegerType::I32 {},
+        IntegerType::U32 => vf::IntegerType::U32 {},
+        IntegerType::I64 => vf::IntegerType::I64 {},
+        IntegerType::U64 => vf::IntegerType::U64 {},
     }
 }
 

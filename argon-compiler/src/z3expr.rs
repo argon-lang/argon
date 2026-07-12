@@ -257,6 +257,10 @@ impl<
                     IntegerType::U8 => &self.argon_value_sort.value_testers.u8_literal,
                     IntegerType::I16 => &self.argon_value_sort.value_testers.i16_literal,
                     IntegerType::U16 => &self.argon_value_sort.value_testers.u16_literal,
+                    IntegerType::I32 => &self.argon_value_sort.value_testers.i32_literal,
+                    IntegerType::U32 => &self.argon_value_sort.value_testers.u32_literal,
+                    IntegerType::I64 => &self.argon_value_sort.value_testers.i64_literal,
+                    IntegerType::U64 => &self.argon_value_sort.value_testers.u64_literal,
                 };
                 self.solver.assert(dynamic_to_bool(tester.apply(&[c])));
             }
@@ -468,6 +472,46 @@ impl<
                 name: "value",
                 sort: Sort::bitvector(16),
                 accessor: Some(&sort.value_accessors.i16_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "u32_literal",
+            &sort.value_constructors.u32_literal,
+            &sort.value_testers.u32_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::bitvector(32),
+                accessor: Some(&sort.value_accessors.u32_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "i32_literal",
+            &sort.value_constructors.i32_literal,
+            &sort.value_testers.i32_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::bitvector(32),
+                accessor: Some(&sort.value_accessors.i32_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "u64_literal",
+            &sort.value_constructors.u64_literal,
+            &sort.value_testers.u64_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::bitvector(64),
+                accessor: Some(&sort.value_accessors.u64_literal_value),
+            }],
+        );
+        self.assert_value_constructor_axiom(
+            "i64_literal",
+            &sort.value_constructors.i64_literal,
+            &sort.value_testers.i64_literal,
+            &[ConstructorAxiomArg {
+                name: "value",
+                sort: Sort::bitvector(64),
+                accessor: Some(&sort.value_accessors.i64_literal_value),
             }],
         );
         self.assert_value_constructor_axiom(
@@ -760,6 +804,22 @@ impl<
                             let value = self.u16_literal_value(&value).bvneg();
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self.i32_literal_value(&value).bvneg();
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self.u32_literal_value(&value).bvneg();
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self.i64_literal_value(&value).bvneg();
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self.u64_literal_value(&value).bvneg();
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntBitNot {
@@ -785,6 +845,22 @@ impl<
                             let value = self.u16_literal_value(&value).bvnot();
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self.i32_literal_value(&value).bvnot();
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self.u32_literal_value(&value).bvnot();
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self.i64_literal_value(&value).bvnot();
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self.u64_literal_value(&value).bvnot();
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntConvert {
@@ -799,7 +875,14 @@ impl<
                         (IntegerType::Int, IntegerType::Int) => self.expr_to_z3_value(value),
 
                         (
-                            IntegerType::I8 | IntegerType::U8 | IntegerType::I16 | IntegerType::U16,
+                            IntegerType::I8
+                            | IntegerType::U8
+                            | IntegerType::I16
+                            | IntegerType::U16
+                            | IntegerType::I32
+                            | IntegerType::U32
+                            | IntegerType::I64
+                            | IntegerType::U64,
                             IntegerType::Int,
                         ) => {
                             let value = self.expr_to_z3(value);
@@ -813,7 +896,14 @@ impl<
 
                         (
                             IntegerType::Int,
-                            IntegerType::I8 | IntegerType::U8 | IntegerType::I16 | IntegerType::U16,
+                            IntegerType::I8
+                            | IntegerType::U8
+                            | IntegerType::I16
+                            | IntegerType::U16
+                            | IntegerType::I32
+                            | IntegerType::U32
+                            | IntegerType::I64
+                            | IntegerType::U64,
                         ) => {
                             let value = self.expr_to_z3(value);
                             let value = self.fixed_integer_literal_value(*source_type, &value);
@@ -824,8 +914,22 @@ impl<
                         }
 
                         (
-                            IntegerType::I8 | IntegerType::U8 | IntegerType::I16 | IntegerType::U16,
-                            IntegerType::I8 | IntegerType::U8 | IntegerType::I16 | IntegerType::U16,
+                            IntegerType::I8
+                            | IntegerType::U8
+                            | IntegerType::I16
+                            | IntegerType::U16
+                            | IntegerType::I32
+                            | IntegerType::U32
+                            | IntegerType::I64
+                            | IntegerType::U64,
+                            IntegerType::I8
+                            | IntegerType::U8
+                            | IntegerType::I16
+                            | IntegerType::U16
+                            | IntegerType::I32
+                            | IntegerType::U32
+                            | IntegerType::I64
+                            | IntegerType::U64,
                         ) => {
                             let value = self.expr_to_z3(value);
                             let value = self.fixed_integer_literal_value(*source_type, &value);
@@ -874,6 +978,30 @@ impl<
                                 .bvadd(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvadd(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvadd(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvadd(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvadd(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntSub {
@@ -913,6 +1041,30 @@ impl<
                                 .u16_literal_value(&lhs)
                                 .bvsub(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
+                        }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvsub(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvsub(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvsub(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvsub(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
                         }
                     }
                 }
@@ -954,6 +1106,30 @@ impl<
                                 .bvmul(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvmul(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvmul(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvmul(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvmul(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntBitAnd {
@@ -988,6 +1164,30 @@ impl<
                                 .u16_literal_value(&lhs)
                                 .bvand(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
+                        }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvand(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvand(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvand(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvand(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
                         }
                     }
                 }
@@ -1024,6 +1224,30 @@ impl<
                                 .bvor(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvor(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvor(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvor(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvor(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntBitXor {
@@ -1058,6 +1282,30 @@ impl<
                                 .u16_literal_value(&lhs)
                                 .bvxor(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
+                        }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvxor(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvxor(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvxor(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvxor(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
                         }
                     }
                 }
@@ -1094,6 +1342,30 @@ impl<
                                 .bvshl(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvshl(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvshl(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvshl(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvshl(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntBitShiftRight {
@@ -1129,6 +1401,30 @@ impl<
                                 .bvlshr(&self.u16_literal_value(&rhs));
                             Some(self.wrap_u16_literal(&value))
                         }
+                        IntegerType::I32 => {
+                            let value = self
+                                .i32_literal_value(&lhs)
+                                .bvashr(&self.i32_literal_value(&rhs));
+                            Some(self.wrap_i32_literal(&value))
+                        }
+                        IntegerType::U32 => {
+                            let value = self
+                                .u32_literal_value(&lhs)
+                                .bvlshr(&self.u32_literal_value(&rhs));
+                            Some(self.wrap_u32_literal(&value))
+                        }
+                        IntegerType::I64 => {
+                            let value = self
+                                .i64_literal_value(&lhs)
+                                .bvashr(&self.i64_literal_value(&rhs));
+                            Some(self.wrap_i64_literal(&value))
+                        }
+                        IntegerType::U64 => {
+                            let value = self
+                                .u64_literal_value(&lhs)
+                                .bvlshr(&self.u64_literal_value(&rhs));
+                            Some(self.wrap_u64_literal(&value))
+                        }
                     }
                 }
                 Builtin::IntEq {
@@ -1154,6 +1450,18 @@ impl<
                         IntegerType::U16 => self
                             .u16_literal_value(&lhs)
                             .eq(&self.u16_literal_value(&rhs)),
+                        IntegerType::I32 => self
+                            .i32_literal_value(&lhs)
+                            .eq(&self.i32_literal_value(&rhs)),
+                        IntegerType::U32 => self
+                            .u32_literal_value(&lhs)
+                            .eq(&self.u32_literal_value(&rhs)),
+                        IntegerType::I64 => self
+                            .i64_literal_value(&lhs)
+                            .eq(&self.i64_literal_value(&rhs)),
+                        IntegerType::U64 => self
+                            .u64_literal_value(&lhs)
+                            .eq(&self.u64_literal_value(&rhs)),
                     };
                     Some(self.wrap_bool_literal(&value))
                 }
@@ -1180,6 +1488,18 @@ impl<
                         IntegerType::U16 => self
                             .u16_literal_value(&lhs)
                             .bvult(&self.u16_literal_value(&rhs)),
+                        IntegerType::I32 => self
+                            .i32_literal_value(&lhs)
+                            .bvslt(&self.i32_literal_value(&rhs)),
+                        IntegerType::U32 => self
+                            .u32_literal_value(&lhs)
+                            .bvult(&self.u32_literal_value(&rhs)),
+                        IntegerType::I64 => self
+                            .i64_literal_value(&lhs)
+                            .bvslt(&self.i64_literal_value(&rhs)),
+                        IntegerType::U64 => self
+                            .u64_literal_value(&lhs)
+                            .bvult(&self.u64_literal_value(&rhs)),
                     };
                     Some(self.wrap_bool_literal(&value))
                 }
@@ -1206,6 +1526,18 @@ impl<
                         IntegerType::U16 => self
                             .u16_literal_value(&lhs)
                             .bvule(&self.u16_literal_value(&rhs)),
+                        IntegerType::I32 => self
+                            .i32_literal_value(&lhs)
+                            .bvsle(&self.i32_literal_value(&rhs)),
+                        IntegerType::U32 => self
+                            .u32_literal_value(&lhs)
+                            .bvule(&self.u32_literal_value(&rhs)),
+                        IntegerType::I64 => self
+                            .i64_literal_value(&lhs)
+                            .bvsle(&self.i64_literal_value(&rhs)),
+                        IntegerType::U64 => self
+                            .u64_literal_value(&lhs)
+                            .bvule(&self.u64_literal_value(&rhs)),
                     };
                     Some(self.wrap_bool_literal(&value))
                 }
@@ -1232,6 +1564,18 @@ impl<
                         IntegerType::U16 => self
                             .u16_literal_value(&lhs)
                             .bvugt(&self.u16_literal_value(&rhs)),
+                        IntegerType::I32 => self
+                            .i32_literal_value(&lhs)
+                            .bvsgt(&self.i32_literal_value(&rhs)),
+                        IntegerType::U32 => self
+                            .u32_literal_value(&lhs)
+                            .bvugt(&self.u32_literal_value(&rhs)),
+                        IntegerType::I64 => self
+                            .i64_literal_value(&lhs)
+                            .bvsgt(&self.i64_literal_value(&rhs)),
+                        IntegerType::U64 => self
+                            .u64_literal_value(&lhs)
+                            .bvugt(&self.u64_literal_value(&rhs)),
                     };
                     Some(self.wrap_bool_literal(&value))
                 }
@@ -1258,6 +1602,18 @@ impl<
                         IntegerType::U16 => self
                             .u16_literal_value(&lhs)
                             .bvuge(&self.u16_literal_value(&rhs)),
+                        IntegerType::I32 => self
+                            .i32_literal_value(&lhs)
+                            .bvsge(&self.i32_literal_value(&rhs)),
+                        IntegerType::U32 => self
+                            .u32_literal_value(&lhs)
+                            .bvuge(&self.u32_literal_value(&rhs)),
+                        IntegerType::I64 => self
+                            .i64_literal_value(&lhs)
+                            .bvsge(&self.i64_literal_value(&rhs)),
+                        IntegerType::U64 => self
+                            .u64_literal_value(&lhs)
+                            .bvuge(&self.u64_literal_value(&rhs)),
                     };
                     Some(self.wrap_bool_literal(&value))
                 }
@@ -1315,6 +1671,22 @@ impl<
             Expr::U16Literal(value) => {
                 let value = BV::from_u64((*value).into(), 16);
                 Some(self.wrap_u16_literal(&value))
+            }
+            Expr::I32Literal(value) => {
+                let value = BV::from_i64((*value).into(), 32);
+                Some(self.wrap_i32_literal(&value))
+            }
+            Expr::U32Literal(value) => {
+                let value = BV::from_u64((*value).into(), 32);
+                Some(self.wrap_u32_literal(&value))
+            }
+            Expr::I64Literal(value) => {
+                let value = BV::from_i64(*value, 64);
+                Some(self.wrap_i64_literal(&value))
+            }
+            Expr::U64Literal(value) => {
+                let value = BV::from_u64(*value, 64);
+                Some(self.wrap_u64_literal(&value))
             }
             Expr::StringLiteral(value) => match Z3String::from_str(value) {
                 Ok(value) => Some(self.wrap_string_literal(&value)),
@@ -1500,12 +1872,52 @@ impl<
             .expect("i16 literal accessor must return a Z3 bitvector")
     }
 
+    fn u32_literal_value(&self, value: &impl Ast) -> BV {
+        self.argon_value_sort
+            .value_accessors
+            .u32_literal_value
+            .apply(&[value])
+            .as_bv()
+            .expect("u32 literal accessor must return a Z3 bitvector")
+    }
+
+    fn i32_literal_value(&self, value: &impl Ast) -> BV {
+        self.argon_value_sort
+            .value_accessors
+            .i32_literal_value
+            .apply(&[value])
+            .as_bv()
+            .expect("i32 literal accessor must return a Z3 bitvector")
+    }
+
+    fn u64_literal_value(&self, value: &impl Ast) -> BV {
+        self.argon_value_sort
+            .value_accessors
+            .u64_literal_value
+            .apply(&[value])
+            .as_bv()
+            .expect("u64 literal accessor must return a Z3 bitvector")
+    }
+
+    fn i64_literal_value(&self, value: &impl Ast) -> BV {
+        self.argon_value_sort
+            .value_accessors
+            .i64_literal_value
+            .apply(&[value])
+            .as_bv()
+            .expect("i64 literal accessor must return a Z3 bitvector")
+    }
+
     fn fixed_integer_literal_value(&self, integer_type: IntegerType, value: &impl Ast) -> BV {
         match integer_type {
             IntegerType::I8 => self.i8_literal_value(value),
             IntegerType::U8 => self.u8_literal_value(value),
             IntegerType::I16 => self.i16_literal_value(value),
             IntegerType::U16 => self.u16_literal_value(value),
+            IntegerType::I32 => self.i32_literal_value(value),
+            IntegerType::U32 => self.u32_literal_value(value),
+            IntegerType::I64 => self.i64_literal_value(value),
+            IntegerType::U64 => self.u64_literal_value(value),
             IntegerType::Int => panic!("int is not a fixed-width integer"),
         }
     }
@@ -1514,6 +1926,8 @@ impl<
         match integer_type {
             IntegerType::I8 | IntegerType::U8 => 8,
             IntegerType::I16 | IntegerType::U16 => 16,
+            IntegerType::I32 | IntegerType::U32 => 32,
+            IntegerType::I64 | IntegerType::U64 => 64,
             IntegerType::Int => panic!("int is not a fixed-width integer"),
         }
     }
@@ -1522,6 +1936,8 @@ impl<
         match integer_type {
             IntegerType::I8 | IntegerType::I16 => true,
             IntegerType::U8 | IntegerType::U16 => false,
+            IntegerType::I32 | IntegerType::I64 => true,
+            IntegerType::U32 | IntegerType::U64 => false,
             IntegerType::Int => panic!("int is not a fixed-width integer"),
         }
     }
@@ -1595,12 +2011,44 @@ impl<
         )
     }
 
+    fn wrap_u32_literal(&self, value: &BV) -> Dynamic {
+        self.construct_value(
+            &self.argon_value_sort.value_constructors.u32_literal,
+            &[value],
+        )
+    }
+
+    fn wrap_i32_literal(&self, value: &BV) -> Dynamic {
+        self.construct_value(
+            &self.argon_value_sort.value_constructors.i32_literal,
+            &[value],
+        )
+    }
+
+    fn wrap_u64_literal(&self, value: &BV) -> Dynamic {
+        self.construct_value(
+            &self.argon_value_sort.value_constructors.u64_literal,
+            &[value],
+        )
+    }
+
+    fn wrap_i64_literal(&self, value: &BV) -> Dynamic {
+        self.construct_value(
+            &self.argon_value_sort.value_constructors.i64_literal,
+            &[value],
+        )
+    }
+
     fn wrap_fixed_integer_literal(&self, integer_type: IntegerType, value: &BV) -> Dynamic {
         match integer_type {
             IntegerType::I8 => self.wrap_i8_literal(value),
             IntegerType::U8 => self.wrap_u8_literal(value),
             IntegerType::I16 => self.wrap_i16_literal(value),
             IntegerType::U16 => self.wrap_u16_literal(value),
+            IntegerType::I32 => self.wrap_i32_literal(value),
+            IntegerType::U32 => self.wrap_u32_literal(value),
+            IntegerType::I64 => self.wrap_i64_literal(value),
+            IntegerType::U64 => self.wrap_u64_literal(value),
             IntegerType::Int => panic!("int is not a fixed-width integer"),
         }
     }
@@ -1646,6 +2094,10 @@ pub struct ArgonValueConstructors {
     pub u8_literal: FuncDecl,
     pub i16_literal: FuncDecl,
     pub u16_literal: FuncDecl,
+    pub i32_literal: FuncDecl,
+    pub u32_literal: FuncDecl,
+    pub i64_literal: FuncDecl,
+    pub u64_literal: FuncDecl,
     pub string_literal: FuncDecl,
     pub record_literal: FuncDecl,
     pub enum_variant_literal: FuncDecl,
@@ -1663,6 +2115,10 @@ pub struct ArgonValueTesters {
     pub u8_literal: FuncDecl,
     pub i16_literal: FuncDecl,
     pub u16_literal: FuncDecl,
+    pub i32_literal: FuncDecl,
+    pub u32_literal: FuncDecl,
+    pub i64_literal: FuncDecl,
+    pub u64_literal: FuncDecl,
     pub string_literal: FuncDecl,
     pub record_literal: FuncDecl,
     pub enum_variant_literal: FuncDecl,
@@ -1680,6 +2136,10 @@ pub struct ArgonValueAccessors {
     pub u8_literal_value: FuncDecl,
     pub i16_literal_value: FuncDecl,
     pub u16_literal_value: FuncDecl,
+    pub i32_literal_value: FuncDecl,
+    pub u32_literal_value: FuncDecl,
+    pub i64_literal_value: FuncDecl,
+    pub u64_literal_value: FuncDecl,
     pub string_literal_value: FuncDecl,
     pub record_literal_record: FuncDecl,
     pub record_literal_fields: FuncDecl,
@@ -1734,6 +2194,10 @@ impl ArgonValueSort {
             u8_literal: FuncDecl::new("argon_value_u8_literal", &[&Sort::bitvector(8)], &value),
             i16_literal: FuncDecl::new("argon_value_i16_literal", &[&Sort::bitvector(16)], &value),
             u16_literal: FuncDecl::new("argon_value_u16_literal", &[&Sort::bitvector(16)], &value),
+            i32_literal: FuncDecl::new("argon_value_i32_literal", &[&Sort::bitvector(32)], &value),
+            u32_literal: FuncDecl::new("argon_value_u32_literal", &[&Sort::bitvector(32)], &value),
+            i64_literal: FuncDecl::new("argon_value_i64_literal", &[&Sort::bitvector(64)], &value),
+            u64_literal: FuncDecl::new("argon_value_u64_literal", &[&Sort::bitvector(64)], &value),
             string_literal: FuncDecl::new("argon_value_string_literal", &[&Sort::string()], &value),
             record_literal: FuncDecl::new(
                 "argon_value_record_literal",
@@ -1763,6 +2227,10 @@ impl ArgonValueSort {
             u8_literal: tester("argon_value_is_u8_literal", &value),
             i16_literal: tester("argon_value_is_i16_literal", &value),
             u16_literal: tester("argon_value_is_u16_literal", &value),
+            i32_literal: tester("argon_value_is_i32_literal", &value),
+            u32_literal: tester("argon_value_is_u32_literal", &value),
+            i64_literal: tester("argon_value_is_i64_literal", &value),
+            u64_literal: tester("argon_value_is_u64_literal", &value),
             string_literal: tester("argon_value_is_string_literal", &value),
             record_literal: tester("argon_value_is_record_literal", &value),
             enum_variant_literal: tester("argon_value_is_enum_variant_literal", &value),
@@ -1787,6 +2255,26 @@ impl ArgonValueSort {
                 "argon_value_u16_literal_value",
                 &value,
                 &Sort::bitvector(16),
+            ),
+            i32_literal_value: accessor(
+                "argon_value_i32_literal_value",
+                &value,
+                &Sort::bitvector(32),
+            ),
+            u32_literal_value: accessor(
+                "argon_value_u32_literal_value",
+                &value,
+                &Sort::bitvector(32),
+            ),
+            i64_literal_value: accessor(
+                "argon_value_i64_literal_value",
+                &value,
+                &Sort::bitvector(64),
+            ),
+            u64_literal_value: accessor(
+                "argon_value_u64_literal_value",
+                &value,
+                &Sort::bitvector(64),
             ),
             string_literal_value: accessor(
                 "argon_value_string_literal_value",
@@ -1861,6 +2349,10 @@ impl ArgonValueSort {
             &self.value_testers.u8_literal,
             &self.value_testers.i16_literal,
             &self.value_testers.u16_literal,
+            &self.value_testers.i32_literal,
+            &self.value_testers.u32_literal,
+            &self.value_testers.i64_literal,
+            &self.value_testers.u64_literal,
             &self.value_testers.string_literal,
             &self.value_testers.record_literal,
             &self.value_testers.enum_variant_literal,

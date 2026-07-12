@@ -54,6 +54,10 @@ fn visit_instruction(
         | vf::Instruction::ConstU8 { dest, .. }
         | vf::Instruction::ConstI16 { dest, .. }
         | vf::Instruction::ConstU16 { dest, .. }
+        | vf::Instruction::ConstI32 { dest, .. }
+        | vf::Instruction::ConstU32 { dest, .. }
+        | vf::Instruction::ConstI64 { dest, .. }
+        | vf::Instruction::ConstU64 { dest, .. }
         | vf::Instruction::ConstString { dest, .. }
         | vf::Instruction::LoadToken { dest, .. } => {
             visit_register(dest, InstructionRegisterType::Def, register_type, mutate);

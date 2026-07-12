@@ -1,0 +1,45 @@
+<ArgonTest>
+
+    <Name>U64 comparison operators</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ((999u64 = 2u64).to_s())
+            puts ((999u64 = 999u64).to_s())
+            puts ((999u64 != 2u64).to_s())
+            puts ((999u64 != 999u64).to_s())
+            puts ((999u64 < 2u64).to_s())
+            puts ((999u64 < 999u64).to_s())
+            puts ((999u64 <= 2u64).to_s())
+            puts ((999u64 <= 999u64).to_s())
+            puts ((999u64 > 2u64).to_s())
+            puts ((999u64 > 999u64).to_s())
+            puts ((999u64 >= 2u64).to_s())
+            puts ((999u64 >= 999u64).to_s())
+            puts ((18446744073709551615u64 > 0u64).to_s())
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        false
+        true
+        true
+        false
+        false
+        false
+        false
+        true
+        true
+        false
+        true
+        true
+        true
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -1977,6 +1977,46 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     integer_type: IntegerType::I16,
                 },
             ),
+            "u32_type" => self.infer_fixed_builtin(
+                location,
+                builtin_name,
+                args,
+                || [],
+                || Expr::type_n(0),
+                |[]| Builtin::IntType {
+                    integer_type: IntegerType::U32,
+                },
+            ),
+            "i32_type" => self.infer_fixed_builtin(
+                location,
+                builtin_name,
+                args,
+                || [],
+                || Expr::type_n(0),
+                |[]| Builtin::IntType {
+                    integer_type: IntegerType::I32,
+                },
+            ),
+            "u64_type" => self.infer_fixed_builtin(
+                location,
+                builtin_name,
+                args,
+                || [],
+                || Expr::type_n(0),
+                |[]| Builtin::IntType {
+                    integer_type: IntegerType::U64,
+                },
+            ),
+            "i64_type" => self.infer_fixed_builtin(
+                location,
+                builtin_name,
+                args,
+                || [],
+                || Expr::type_n(0),
+                |[]| Builtin::IntType {
+                    integer_type: IntegerType::I64,
+                },
+            ),
             "bool_type" => nullary_builtin!(BoolType),
             "string_type" => nullary_builtin!(StringType),
             "never_type" => nullary_builtin!(NeverType),
@@ -2027,6 +2067,30 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 [Expr::i16_type()] => Expr::i16_type(),
                 { value }
             ),
+            "i32_negate" => fixed_integer_builtin!(
+                IntNegate,
+                IntegerType::I32,
+                [Expr::i32_type()] => Expr::i32_type(),
+                { value }
+            ),
+            "i32_bitnot" => fixed_integer_builtin!(
+                IntBitNot,
+                IntegerType::I32,
+                [Expr::i32_type()] => Expr::i32_type(),
+                { value }
+            ),
+            "i64_negate" => fixed_integer_builtin!(
+                IntNegate,
+                IntegerType::I64,
+                [Expr::i64_type()] => Expr::i64_type(),
+                { value }
+            ),
+            "i64_bitnot" => fixed_integer_builtin!(
+                IntBitNot,
+                IntegerType::I64,
+                [Expr::i64_type()] => Expr::i64_type(),
+                { value }
+            ),
             "u8_bitnot" => fixed_integer_builtin!(
                 IntBitNot,
                 IntegerType::U8,
@@ -2039,94 +2103,210 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 [Expr::u16_type()] => Expr::u16_type(),
                 { value }
             ),
+            "u32_bitnot" => fixed_integer_builtin!(
+                IntBitNot,
+                IntegerType::U32,
+                [Expr::u32_type()] => Expr::u32_type(),
+                { value }
+            ),
+            "u64_bitnot" => fixed_integer_builtin!(
+                IntBitNot,
+                IntegerType::U64,
+                [Expr::u64_type()] => Expr::u64_type(),
+                { value }
+            ),
 
             "int_to_i8" => int_convert_builtin!(IntegerType::Int => IntegerType::I8),
             "int_to_u8" => int_convert_builtin!(IntegerType::Int => IntegerType::U8),
             "int_to_i16" => int_convert_builtin!(IntegerType::Int => IntegerType::I16),
             "int_to_u16" => int_convert_builtin!(IntegerType::Int => IntegerType::U16),
+            "int_to_i32" => int_convert_builtin!(IntegerType::Int => IntegerType::I32),
+            "int_to_u32" => int_convert_builtin!(IntegerType::Int => IntegerType::U32),
+            "int_to_i64" => int_convert_builtin!(IntegerType::Int => IntegerType::I64),
+            "int_to_u64" => int_convert_builtin!(IntegerType::Int => IntegerType::U64),
             "i8_to_int" => int_convert_builtin!(IntegerType::I8 => IntegerType::Int),
             "i8_to_u8" => int_convert_builtin!(IntegerType::I8 => IntegerType::U8),
             "i8_to_i16" => int_convert_builtin!(IntegerType::I8 => IntegerType::I16),
             "i8_to_u16" => int_convert_builtin!(IntegerType::I8 => IntegerType::U16),
+            "i8_to_i32" => int_convert_builtin!(IntegerType::I8 => IntegerType::I32),
+            "i8_to_u32" => int_convert_builtin!(IntegerType::I8 => IntegerType::U32),
+            "i8_to_i64" => int_convert_builtin!(IntegerType::I8 => IntegerType::I64),
+            "i8_to_u64" => int_convert_builtin!(IntegerType::I8 => IntegerType::U64),
             "u8_to_int" => int_convert_builtin!(IntegerType::U8 => IntegerType::Int),
             "u8_to_i8" => int_convert_builtin!(IntegerType::U8 => IntegerType::I8),
             "u8_to_i16" => int_convert_builtin!(IntegerType::U8 => IntegerType::I16),
             "u8_to_u16" => int_convert_builtin!(IntegerType::U8 => IntegerType::U16),
+            "u8_to_i32" => int_convert_builtin!(IntegerType::U8 => IntegerType::I32),
+            "u8_to_u32" => int_convert_builtin!(IntegerType::U8 => IntegerType::U32),
+            "u8_to_i64" => int_convert_builtin!(IntegerType::U8 => IntegerType::I64),
+            "u8_to_u64" => int_convert_builtin!(IntegerType::U8 => IntegerType::U64),
             "i16_to_int" => int_convert_builtin!(IntegerType::I16 => IntegerType::Int),
             "i16_to_i8" => int_convert_builtin!(IntegerType::I16 => IntegerType::I8),
             "i16_to_u8" => int_convert_builtin!(IntegerType::I16 => IntegerType::U8),
             "i16_to_u16" => int_convert_builtin!(IntegerType::I16 => IntegerType::U16),
+            "i16_to_i32" => int_convert_builtin!(IntegerType::I16 => IntegerType::I32),
+            "i16_to_u32" => int_convert_builtin!(IntegerType::I16 => IntegerType::U32),
+            "i16_to_i64" => int_convert_builtin!(IntegerType::I16 => IntegerType::I64),
+            "i16_to_u64" => int_convert_builtin!(IntegerType::I16 => IntegerType::U64),
             "u16_to_int" => int_convert_builtin!(IntegerType::U16 => IntegerType::Int),
             "u16_to_i8" => int_convert_builtin!(IntegerType::U16 => IntegerType::I8),
             "u16_to_u8" => int_convert_builtin!(IntegerType::U16 => IntegerType::U8),
             "u16_to_i16" => int_convert_builtin!(IntegerType::U16 => IntegerType::I16),
+            "u16_to_i32" => int_convert_builtin!(IntegerType::U16 => IntegerType::I32),
+            "u16_to_u32" => int_convert_builtin!(IntegerType::U16 => IntegerType::U32),
+            "u16_to_i64" => int_convert_builtin!(IntegerType::U16 => IntegerType::I64),
+            "u16_to_u64" => int_convert_builtin!(IntegerType::U16 => IntegerType::U64),
+            "i32_to_int" => int_convert_builtin!(IntegerType::I32 => IntegerType::Int),
+            "i32_to_i8" => int_convert_builtin!(IntegerType::I32 => IntegerType::I8),
+            "i32_to_u8" => int_convert_builtin!(IntegerType::I32 => IntegerType::U8),
+            "i32_to_i16" => int_convert_builtin!(IntegerType::I32 => IntegerType::I16),
+            "i32_to_u16" => int_convert_builtin!(IntegerType::I32 => IntegerType::U16),
+            "i32_to_u32" => int_convert_builtin!(IntegerType::I32 => IntegerType::U32),
+            "i32_to_i64" => int_convert_builtin!(IntegerType::I32 => IntegerType::I64),
+            "i32_to_u64" => int_convert_builtin!(IntegerType::I32 => IntegerType::U64),
+            "u32_to_int" => int_convert_builtin!(IntegerType::U32 => IntegerType::Int),
+            "u32_to_i8" => int_convert_builtin!(IntegerType::U32 => IntegerType::I8),
+            "u32_to_u8" => int_convert_builtin!(IntegerType::U32 => IntegerType::U8),
+            "u32_to_i16" => int_convert_builtin!(IntegerType::U32 => IntegerType::I16),
+            "u32_to_u16" => int_convert_builtin!(IntegerType::U32 => IntegerType::U16),
+            "u32_to_i32" => int_convert_builtin!(IntegerType::U32 => IntegerType::I32),
+            "u32_to_i64" => int_convert_builtin!(IntegerType::U32 => IntegerType::I64),
+            "u32_to_u64" => int_convert_builtin!(IntegerType::U32 => IntegerType::U64),
+            "i64_to_int" => int_convert_builtin!(IntegerType::I64 => IntegerType::Int),
+            "i64_to_i8" => int_convert_builtin!(IntegerType::I64 => IntegerType::I8),
+            "i64_to_u8" => int_convert_builtin!(IntegerType::I64 => IntegerType::U8),
+            "i64_to_i16" => int_convert_builtin!(IntegerType::I64 => IntegerType::I16),
+            "i64_to_u16" => int_convert_builtin!(IntegerType::I64 => IntegerType::U16),
+            "i64_to_i32" => int_convert_builtin!(IntegerType::I64 => IntegerType::I32),
+            "i64_to_u32" => int_convert_builtin!(IntegerType::I64 => IntegerType::U32),
+            "i64_to_u64" => int_convert_builtin!(IntegerType::I64 => IntegerType::U64),
+            "u64_to_int" => int_convert_builtin!(IntegerType::U64 => IntegerType::Int),
+            "u64_to_i8" => int_convert_builtin!(IntegerType::U64 => IntegerType::I8),
+            "u64_to_u8" => int_convert_builtin!(IntegerType::U64 => IntegerType::U8),
+            "u64_to_i16" => int_convert_builtin!(IntegerType::U64 => IntegerType::I16),
+            "u64_to_u16" => int_convert_builtin!(IntegerType::U64 => IntegerType::U16),
+            "u64_to_i32" => int_convert_builtin!(IntegerType::U64 => IntegerType::I32),
+            "u64_to_u32" => int_convert_builtin!(IntegerType::U64 => IntegerType::U32),
+            "u64_to_i64" => int_convert_builtin!(IntegerType::U64 => IntegerType::I64),
 
             "int_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::Int),
             "i8_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::I8),
             "u8_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::U8),
             "i16_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::I16),
             "u16_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::U16),
+            "i32_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::I32),
+            "u32_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::U32),
+            "i64_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::I64),
+            "u64_add" => int_to_int_binary_builtin!(IntAdd, IntegerType::U64),
             "int_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::Int),
             "i8_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::I8),
             "u8_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::U8),
             "i16_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::I16),
             "u16_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::U16),
+            "i32_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::I32),
+            "u32_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::U32),
+            "i64_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::I64),
+            "u64_sub" => int_to_int_binary_builtin!(IntSub, IntegerType::U64),
             "int_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::Int),
             "i8_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::I8),
             "u8_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::U8),
             "i16_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::I16),
             "u16_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::U16),
+            "i32_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::I32),
+            "u32_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::U32),
+            "i64_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::I64),
+            "u64_mul" => int_to_int_binary_builtin!(IntMul, IntegerType::U64),
             "int_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::Int),
             "i8_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::I8),
             "u8_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::U8),
             "i16_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::I16),
             "u16_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::U16),
+            "i32_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::I32),
+            "u32_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::U32),
+            "i64_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::I64),
+            "u64_bitand" => int_to_int_binary_builtin!(IntBitAnd, IntegerType::U64),
             "int_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::Int),
             "i8_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::I8),
             "u8_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::U8),
             "i16_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::I16),
             "u16_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::U16),
+            "i32_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::I32),
+            "u32_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::U32),
+            "i64_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::I64),
+            "u64_bitor" => int_to_int_binary_builtin!(IntBitOr, IntegerType::U64),
             "int_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::Int),
             "i8_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::I8),
             "u8_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::U8),
             "i16_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::I16),
             "u16_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::U16),
+            "i32_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::I32),
+            "u32_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::U32),
+            "i64_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::I64),
+            "u64_bitxor" => int_to_int_binary_builtin!(IntBitXor, IntegerType::U64),
             "int_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::Int),
             "i8_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::I8),
             "u8_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::U8),
             "i16_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::I16),
             "u16_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::U16),
+            "i32_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::I32),
+            "u32_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::U32),
+            "i64_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::I64),
+            "u64_bitshiftleft" => int_to_int_binary_builtin!(IntBitShiftLeft, IntegerType::U64),
             "int_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::Int),
             "i8_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::I8),
             "u8_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::U8),
             "i16_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::I16),
             "u16_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::U16),
+            "i32_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::I32),
+            "u32_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::U32),
+            "i64_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::I64),
+            "u64_bitshiftright" => int_to_int_binary_builtin!(IntBitShiftRight, IntegerType::U64),
 
             "int_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::Int),
             "i8_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::I8),
             "u8_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::U8),
             "i16_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::I16),
             "u16_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::U16),
+            "i32_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::I32),
+            "u32_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::U32),
+            "i64_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::I64),
+            "u64_eq" => int_to_bool_binary_builtin!(IntEq, IntegerType::U64),
             "int_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::Int),
             "i8_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::I8),
             "u8_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::U8),
             "i16_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::I16),
             "u16_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::U16),
+            "i32_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::I32),
+            "u32_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::U32),
+            "i64_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::I64),
+            "u64_lt" => int_to_bool_binary_builtin!(IntLt, IntegerType::U64),
             "int_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::Int),
             "i8_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::I8),
             "u8_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::U8),
             "i16_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::I16),
             "u16_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::U16),
+            "i32_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::I32),
+            "u32_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::U32),
+            "i64_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::I64),
+            "u64_le" => int_to_bool_binary_builtin!(IntLe, IntegerType::U64),
             "int_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::Int),
             "i8_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::I8),
             "u8_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::U8),
             "i16_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::I16),
             "u16_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::U16),
+            "i32_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::I32),
+            "u32_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::U32),
+            "i64_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::I64),
+            "u64_gt" => int_to_bool_binary_builtin!(IntGt, IntegerType::U64),
             "int_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::Int),
             "i8_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::I8),
             "u8_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::U8),
             "i16_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::I16),
             "u16_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::U16),
+            "i32_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::I32),
+            "u32_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::U32),
+            "i64_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::I64),
+            "u64_ge" => int_to_bool_binary_builtin!(IntGe, IntegerType::U64),
 
             "string_concat" => self.infer_variadic_builtin(
                 location,
@@ -2339,6 +2519,54 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     inferred_type: Expr::i16_type(),
                 }
             }
+            ast::IntLiteralSuffix::Signed(32) => {
+                let int_value: i32 = match i32::try_from(&value) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        self.context.reporter().report_error(
+                            CompileError::integer_literal_out_of_range(
+                                location.clone(),
+                                "i32",
+                                "-2147483648-2147483647",
+                                &format!("{}", value),
+                            ),
+                        );
+                        return InferredType {
+                            checked_expr: Expr::Error,
+                            inferred_type: Expr::i32_type(),
+                        };
+                    }
+                };
+
+                InferredType {
+                    checked_expr: Expr::I32Literal(int_value),
+                    inferred_type: Expr::i32_type(),
+                }
+            }
+            ast::IntLiteralSuffix::Signed(64) => {
+                let int_value: i64 = match i64::try_from(&value) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        self.context.reporter().report_error(
+                            CompileError::integer_literal_out_of_range(
+                                location.clone(),
+                                "i64",
+                                "-9223372036854775808-9223372036854775807",
+                                &format!("{}", value),
+                            ),
+                        );
+                        return InferredType {
+                            checked_expr: Expr::Error,
+                            inferred_type: Expr::i64_type(),
+                        };
+                    }
+                };
+
+                InferredType {
+                    checked_expr: Expr::I64Literal(int_value),
+                    inferred_type: Expr::i64_type(),
+                }
+            }
             ast::IntLiteralSuffix::Unsigned(8) => {
                 let byte_value: u8 = match u8::try_from(&value) {
                     Ok(value) => value,
@@ -2385,6 +2613,54 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 InferredType {
                     checked_expr: Expr::U16Literal(short_value),
                     inferred_type: Expr::u16_type(),
+                }
+            }
+            ast::IntLiteralSuffix::Unsigned(32) => {
+                let int_value: u32 = match u32::try_from(&value) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        self.context.reporter().report_error(
+                            CompileError::integer_literal_out_of_range(
+                                location.clone(),
+                                "u32",
+                                "0-4294967295",
+                                &format!("{}", value),
+                            ),
+                        );
+                        return InferredType {
+                            checked_expr: Expr::Error,
+                            inferred_type: Expr::u32_type(),
+                        };
+                    }
+                };
+
+                InferredType {
+                    checked_expr: Expr::U32Literal(int_value),
+                    inferred_type: Expr::u32_type(),
+                }
+            }
+            ast::IntLiteralSuffix::Unsigned(64) => {
+                let int_value: u64 = match u64::try_from(&value) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        self.context.reporter().report_error(
+                            CompileError::integer_literal_out_of_range(
+                                location.clone(),
+                                "u64",
+                                "0-18446744073709551615",
+                                &format!("{}", value),
+                            ),
+                        );
+                        return InferredType {
+                            checked_expr: Expr::Error,
+                            inferred_type: Expr::u64_type(),
+                        };
+                    }
+                };
+
+                InferredType {
+                    checked_expr: Expr::U64Literal(int_value),
+                    inferred_type: Expr::u64_type(),
                 }
             }
             ast::IntLiteralSuffix::Signed(bits) => {

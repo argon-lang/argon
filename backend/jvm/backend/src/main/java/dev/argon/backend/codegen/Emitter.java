@@ -1491,6 +1491,26 @@ final class Emitter {
 					storeRegister(constU16.dest());
 				}
 
+				case Instruction.ConstI32 constI32 -> {
+					cb.ldc(constI32.value());
+					storeRegister(constI32.dest());
+				}
+
+				case Instruction.ConstU32 constU32 -> {
+					cb.ldc((int) constU32.value());
+					storeRegister(constU32.dest());
+				}
+
+				case Instruction.ConstI64 constI64 -> {
+					cb.ldc(constI64.value());
+					storeRegister(constI64.dest());
+				}
+
+				case Instruction.ConstU64 constU64 -> {
+					cb.ldc(constU64.value());
+					storeRegister(constU64.dest());
+				}
+
 				case Instruction.ConstBool constBool -> {
 					if(constBool.value()) {
 						cb.iconst_1();
@@ -2435,7 +2455,11 @@ final class Emitter {
 						() -> {
 							cb.iadd();
 							maskU16();
-						}
+						},
+						cb::iadd,
+						cb::iadd,
+						cb::ladd,
+						cb::ladd
 					);
 
 				case BuiltinOp.IntBitAnd intBitAnd ->
@@ -2448,7 +2472,11 @@ final class Emitter {
 						cb::iand,
 						cb::iand,
 						cb::iand,
-						cb::iand
+						cb::iand,
+						cb::iand,
+						cb::iand,
+						cb::land,
+						cb::land
 					);
 
 				case BuiltinOp.IntBitNot intBitNot ->
@@ -2472,6 +2500,22 @@ final class Emitter {
 						() -> {
 							cb.loadConstant(0xFFFF);
 							cb.ixor();
+						},
+						() -> {
+							cb.loadConstant(-1);
+							cb.ixor();
+						},
+						() -> {
+							cb.loadConstant(-1);
+							cb.ixor();
+						},
+						() -> {
+							cb.loadConstant(-1L);
+							cb.lxor();
+						},
+						() -> {
+							cb.loadConstant(-1L);
+							cb.lxor();
 						}
 					);
 
@@ -2488,7 +2532,11 @@ final class Emitter {
 						cb::ior,
 						cb::ior,
 						cb::ior,
-						cb::ior
+						cb::ior,
+						cb::ior,
+						cb::ior,
+						cb::lor,
+						cb::lor
 					);
 
 				case BuiltinOp.IntBitShiftLeft intShiftLeft ->
@@ -2507,7 +2555,11 @@ final class Emitter {
 						cb::ixor,
 						cb::ixor,
 						cb::ixor,
-						cb::ixor
+						cb::ixor,
+						cb::ixor,
+						cb::ixor,
+						cb::lxor,
+						cb::lxor
 					);
 
 				case BuiltinOp.IntEq intEq ->
@@ -2547,7 +2599,11 @@ final class Emitter {
 						() -> {
 							cb.imul();
 							maskU16();
-						}
+						},
+						cb::imul,
+						cb::imul,
+						cb::lmul,
+						cb::lmul
 					);
 
 				case BuiltinOp.IntNegate intNegate ->
@@ -2567,6 +2623,14 @@ final class Emitter {
 							cb.ineg();
 							cb.i2s();
 						},
+						() -> {
+							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
+						},
+						cb::ineg,
+						() -> {
+							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
+						},
+						cb::lneg,
 						() -> {
 							throw new UnsupportedOperationException("Negation not supported for unsigned integers");
 						}
@@ -2594,7 +2658,11 @@ final class Emitter {
 						() -> {
 							cb.isub();
 							maskU16();
-						}
+						},
+						cb::isub,
+						cb::isub,
+						cb::lsub,
+						cb::lsub
 					);
 
 				case BuiltinOp.StringConcat stringConcat -> {
@@ -2653,7 +2721,11 @@ final class Emitter {
 			Runnable i8Op,
 			Runnable u8Op,
 			Runnable i16Op,
-			Runnable u16Op
+			Runnable u16Op,
+			Runnable i32Op,
+			Runnable u32Op,
+			Runnable i64Op,
+			Runnable u64Op
 		) {
 			switch(integerType) {
 				case INT -> {
@@ -2685,6 +2757,26 @@ final class Emitter {
 					u16Op.run();
 					storeRegister(dest);
 				}
+				case I32 -> {
+					loadRegister(value);
+					i32Op.run();
+					storeRegister(dest);
+				}
+				case U32 -> {
+					loadRegister(value);
+					u32Op.run();
+					storeRegister(dest);
+				}
+				case I64 -> {
+					loadRegister(value);
+					i64Op.run();
+					storeRegister(dest);
+				}
+				case U64 -> {
+					loadRegister(value);
+					u64Op.run();
+					storeRegister(dest);
+				}
 			}
 		}
 
@@ -2697,7 +2789,11 @@ final class Emitter {
 			Runnable i8Op,
 			Runnable u8Op,
 			Runnable i16Op,
-			Runnable u16Op
+			Runnable u16Op,
+			Runnable i32Op,
+			Runnable u32Op,
+			Runnable i64Op,
+			Runnable u64Op
 		) {
 			switch(integerType) {
 				case INT -> {
@@ -2732,6 +2828,30 @@ final class Emitter {
 					loadRegister(lhs);
 					loadRegister(rhs);
 					u16Op.run();
+					storeRegister(dest);
+				}
+				case I32 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					i32Op.run();
+					storeRegister(dest);
+				}
+				case U32 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					u32Op.run();
+					storeRegister(dest);
+				}
+				case I64 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					i64Op.run();
+					storeRegister(dest);
+				}
+				case U64 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					u64Op.run();
 					storeRegister(dest);
 				}
 			}
@@ -2775,6 +2895,16 @@ final class Emitter {
 							);
 							maskU16();
 						}
+						case I32, U32 -> cb.invokevirtual(
+							CD_BIG_INTEGER,
+							"intValue",
+							MethodTypeDesc.of(ConstantDescs.CD_int)
+						);
+						case I64, U64 -> cb.invokevirtual(
+							CD_BIG_INTEGER,
+							"longValue",
+							MethodTypeDesc.of(ConstantDescs.CD_long)
+						);
 					}
 				}
 				case I8 -> {
@@ -2784,6 +2914,10 @@ final class Emitter {
 						case U8 -> maskU8();
 						case I16 -> {}
 						case U16 -> maskU16();
+						case I32 -> {}
+						case U32 -> {}
+						case I64 -> cb.i2l();
+						case U64 -> cb.i2l();
 					}
 				}
 				case U8 -> {
@@ -2793,6 +2927,10 @@ final class Emitter {
 						case U8 -> {}
 						case I16 -> {}
 						case U16 -> {}
+						case I32 -> {}
+						case U32 -> {}
+						case I64 -> cb.i2l();
+						case U64 -> cb.i2l();
 					}
 				}
 				case I16 -> {
@@ -2802,6 +2940,10 @@ final class Emitter {
 						case U8 -> maskU8();
 						case I16 -> {}
 						case U16 -> maskU16();
+						case I32 -> {}
+						case U32 -> {}
+						case I64 -> cb.i2l();
+						case U64 -> cb.i2l();
 					}
 				}
 				case U16 -> {
@@ -2811,6 +2953,86 @@ final class Emitter {
 						case U8 -> maskU8();
 						case I16 -> cb.i2s();
 						case U16 -> {}
+						case I32 -> {}
+						case U32 -> {}
+						case I64 -> cb.i2l();
+						case U64 -> cb.i2l();
+					}
+				}
+				case I32 -> {
+					switch(destType) {
+						case INT -> intToBigInteger();
+						case I8 -> cb.i2b();
+						case U8 -> maskU8();
+						case I16 -> cb.i2s();
+						case U16 -> maskU16();
+						case I32 -> {}
+						case U32 -> {}
+						case I64 -> cb.i2l();
+						case U64 -> cb.i2l();
+					}
+				}
+				case U32 -> {
+					switch(destType) {
+						case INT -> unsignedIntToBigInteger();
+						case I8 -> cb.i2b();
+						case U8 -> maskU8();
+						case I16 -> cb.i2s();
+						case U16 -> maskU16();
+						case I32 -> {}
+						case U32 -> {}
+						case I64 -> unsignedIntToLong();
+						case U64 -> unsignedIntToLong();
+					}
+				}
+				case I64 -> {
+					switch(destType) {
+						case INT -> longToBigInteger();
+						case I8 -> {
+							cb.l2i();
+							cb.i2b();
+						}
+						case U8 -> {
+							cb.l2i();
+							maskU8();
+						}
+						case I16 -> {
+							cb.l2i();
+							cb.i2s();
+						}
+						case U16 -> {
+							cb.l2i();
+							maskU16();
+						}
+						case I32 -> cb.l2i();
+						case U32 -> cb.l2i();
+						case I64 -> {}
+						case U64 -> {}
+					}
+				}
+				case U64 -> {
+					switch(destType) {
+						case INT -> unsignedLongToBigInteger();
+						case I8 -> {
+							cb.l2i();
+							cb.i2b();
+						}
+						case U8 -> {
+							cb.l2i();
+							maskU8();
+						}
+						case I16 -> {
+							cb.l2i();
+							cb.i2s();
+						}
+						case U16 -> {
+							cb.l2i();
+							maskU16();
+						}
+						case I32 -> cb.l2i();
+						case U32 -> cb.l2i();
+						case I64 -> {}
+						case U64 -> {}
 					}
 				}
 			}
@@ -2931,6 +3153,102 @@ final class Emitter {
 					cb.labelBinding(endLabel);
 					storeRegister(dest);
 				}
+				case I32 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.sipush(32);
+					cb.if_icmpge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					if(left) {
+						cb.ishl();
+					}
+					else {
+						cb.ishr();
+					}
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.iconst_0();
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
+				case U32 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.sipush(32);
+					cb.if_icmpge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					if(left) {
+						cb.ishl();
+					}
+					else {
+						cb.iushr();
+					}
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.iconst_0();
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
+				case I64 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.ldc(64L);
+					cb.lcmp();
+					cb.ifge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.l2i();
+					if(left) {
+						cb.lshl();
+					}
+					else {
+						cb.lshr();
+					}
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.ldc(0L);
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
+				case U64 -> {
+					var zeroLabel = cb.newLabel();
+					var endLabel = cb.newLabel();
+
+					loadRegister(rhs);
+					cb.ldc(64L);
+					cb.lcmp();
+					cb.ifge(zeroLabel);
+
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.l2i();
+					if(left) {
+						cb.lshl();
+					}
+					else {
+						cb.lushr();
+					}
+					cb.goto_(endLabel);
+
+					cb.labelBinding(zeroLabel);
+					cb.ldc(0L);
+					cb.labelBinding(endLabel);
+					storeRegister(dest);
+				}
 			}
 		}
 
@@ -2978,6 +3296,41 @@ final class Emitter {
 					emitBooleanFromBranch(u8Branch);
 					storeRegister(dest);
 				}
+				case I32 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					emitBooleanFromBranch(u8Branch);
+					storeRegister(dest);
+				}
+				case U32 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.invokestatic(
+						ConstantDescs.CD_Integer,
+						"compareUnsigned",
+						MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_int, ConstantDescs.CD_int)
+					);
+					emitBooleanFromBranch(bigIntegerBranch);
+					storeRegister(dest);
+				}
+				case I64 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.lcmp();
+					emitBooleanFromBranch(bigIntegerBranch);
+					storeRegister(dest);
+				}
+				case U64 -> {
+					loadRegister(lhs);
+					loadRegister(rhs);
+					cb.invokestatic(
+						ConstantDescs.CD_Long,
+						"compareUnsigned",
+						MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_long, ConstantDescs.CD_long)
+					);
+					emitBooleanFromBranch(bigIntegerBranch);
+					storeRegister(dest);
+				}
 			}
 		}
 
@@ -2997,6 +3350,55 @@ final class Emitter {
 					CD_BIG_INTEGER,
 					"valueOf",
 					MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_long)
+				);
+		}
+
+		private void unsignedIntToLong() {
+			cb.invokestatic(
+				ConstantDescs.CD_Integer,
+				"toUnsignedLong",
+				MethodTypeDesc.of(ConstantDescs.CD_long, ConstantDescs.CD_int)
+			);
+		}
+
+		private void longToBigInteger() {
+			cb.invokestatic(
+				CD_BIG_INTEGER,
+				"valueOf",
+				MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_long)
+			);
+		}
+
+		private void unsignedIntToBigInteger() {
+			cb
+				.invokestatic(
+					ConstantDescs.CD_Integer,
+					"toUnsignedLong",
+					MethodTypeDesc.of(ConstantDescs.CD_long, ConstantDescs.CD_int)
+				)
+				.invokestatic(
+					CD_BIG_INTEGER,
+					"valueOf",
+					MethodTypeDesc.of(CD_BIG_INTEGER, ConstantDescs.CD_long)
+				);
+		}
+
+		private void unsignedLongToBigInteger() {
+			var stringSlot = cb.allocateLocal(TypeKind.REFERENCE);
+			cb
+				.invokestatic(
+					ConstantDescs.CD_Long,
+					"toUnsignedString",
+					MethodTypeDesc.of(ConstantDescs.CD_String, ConstantDescs.CD_long)
+				)
+				.storeLocal(TypeKind.REFERENCE, stringSlot)
+				.new_(CD_BIG_INTEGER)
+				.dup()
+				.loadLocal(TypeKind.REFERENCE, stringSlot)
+				.invokespecial(
+					CD_BIG_INTEGER,
+					ConstantDescs.INIT_NAME,
+					MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_String)
 				);
 		}
 

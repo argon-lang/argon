@@ -118,6 +118,10 @@ public class ClassNaming {
 			case ErasedSignatureType.U8 _ -> builder.append("$bu8$a$e");
 			case ErasedSignatureType.I16 _ -> builder.append("$bi16$a$e");
 			case ErasedSignatureType.U16 _ -> builder.append("$bu16$a$e");
+			case ErasedSignatureType.I32 _ -> builder.append("$bi32$a$e");
+			case ErasedSignatureType.U32 _ -> builder.append("$bu32$a$e");
+			case ErasedSignatureType.I64 _ -> builder.append("$bi64$a$e");
+			case ErasedSignatureType.U64 _ -> builder.append("$bu64$a$e");
 			case ErasedSignatureType.Bool _ -> builder.append("$bbool$a$e");
 			case ErasedSignatureType.String _ -> builder.append("$bstring$a$e");
 			case ErasedSignatureType.Never _ -> builder.append("$bnever$a$e");

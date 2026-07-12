@@ -52,6 +52,10 @@ export function createArray(t, length) {
         case "u8": return new Uint8Array(length);
         case "i16": return new Int16Array(length);
         case "u16": return new Uint16Array(length);
+        case "i32": return new Int32Array(length);
+        case "u32": return new Uint32Array(length);
+        case "i64": return new BigInt64Array(length);
+        case "u64": return new BigUint64Array(length);
         default: return new Array(length);
     }
 }
@@ -451,5 +455,3 @@ export function resolve(value) {
     }
     return value;
 }
-
-

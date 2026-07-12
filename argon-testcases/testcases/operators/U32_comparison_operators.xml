@@ -1,0 +1,45 @@
+<ArgonTest>
+
+    <Name>U32 comparison operators</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ((999u32 = 2u32).to_s())
+            puts ((999u32 = 999u32).to_s())
+            puts ((999u32 != 2u32).to_s())
+            puts ((999u32 != 999u32).to_s())
+            puts ((999u32 < 2u32).to_s())
+            puts ((999u32 < 999u32).to_s())
+            puts ((999u32 <= 2u32).to_s())
+            puts ((999u32 <= 999u32).to_s())
+            puts ((999u32 > 2u32).to_s())
+            puts ((999u32 > 999u32).to_s())
+            puts ((999u32 >= 2u32).to_s())
+            puts ((999u32 >= 999u32).to_s())
+            puts ((4294967295u32 > 0u32).to_s())
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        false
+        true
+        true
+        false
+        false
+        false
+        false
+        true
+        true
+        false
+        true
+        true
+        true
+    </ExpectedOutput>
+
+</ArgonTest>

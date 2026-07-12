@@ -121,7 +121,11 @@ where
         | Expr::I8Literal(_)
         | Expr::U8Literal(_)
         | Expr::I16Literal(_)
-        | Expr::U16Literal(_) => true,
+        | Expr::U16Literal(_)
+        | Expr::I32Literal(_)
+        | Expr::U32Literal(_)
+        | Expr::I64Literal(_)
+        | Expr::U64Literal(_) => true,
         Expr::Is { value, pattern } => scanner.scan(value) && scanner.scan_pattern(pattern),
         Expr::Match { value, cases } => {
             scanner.scan(value)
@@ -442,7 +446,11 @@ where
         | Expr::I8Literal(_)
         | Expr::U8Literal(_)
         | Expr::I16Literal(_)
-        | Expr::U16Literal(_) => true,
+        | Expr::U16Literal(_)
+        | Expr::I32Literal(_)
+        | Expr::U32Literal(_)
+        | Expr::I64Literal(_)
+        | Expr::U64Literal(_) => true,
         Expr::Is { value, pattern } => {
             scanner.scan(value.as_mut()) && scanner.scan_pattern(pattern.as_mut())
         }

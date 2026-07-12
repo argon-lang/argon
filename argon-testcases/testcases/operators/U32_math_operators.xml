@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>U32 math operators</Name>
+
+    <InputSource name="index.argon">
+            
+        module _
+
+        import Argon.Core::*
+        
+        proc main(): () do
+            puts ((999u32 + 2u32).to_s())
+            puts ((999u32 - 2u32).to_s())
+            puts ((100u32 * 2u32).to_s())
+            puts ((+999u32).to_s())
+        end
+        
+    </InputSource>
+
+    <ExpectedOutput>
+        1001
+        997
+        200
+        999
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -225,6 +225,10 @@ enum erased-signature-type derives eq, hash {
     u8,
     i16,
     u16,
+    i32,
+    u32,
+    i64,
+    u64,
     bool,
     string,
     never,
@@ -276,6 +280,10 @@ simple enum integer-type derives eq, hash {
     u8,
     i16,
     u16,
+    i32,
+    u32,
+    i64,
+    u64,
 }
 
 @esexpr:(derive-codec)
@@ -655,6 +663,26 @@ enum instruction {
     const-u16 {
         dest: register-id;
         value: u16;
+    },
+
+    const-i32 {
+        dest: register-id;
+        value: i32;
+    },
+
+    const-u32 {
+        dest: register-id;
+        value: u32;
+    },
+
+    const-i64 {
+        dest: register-id;
+        value: i64;
+    },
+
+    const-u64 {
+        dest: register-id;
+        value: u64;
     },
 
     const-string {

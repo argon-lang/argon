@@ -1,0 +1,43 @@
+<ArgonTest>
+
+    <Name>I64 comparison operators</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ((999i64 = 2i64).to_s())
+            puts ((999i64 = 999i64).to_s())
+            puts ((999i64 != 2i64).to_s())
+            puts ((999i64 != 999i64).to_s())
+            puts ((-2i64 < 999i64).to_s())
+            puts ((999i64 < 999i64).to_s())
+            puts ((-2i64 <= 999i64).to_s())
+            puts ((999i64 <= 999i64).to_s())
+            puts ((999i64 > -2i64).to_s())
+            puts ((999i64 > 999i64).to_s())
+            puts ((999i64 >= -2i64).to_s())
+            puts ((999i64 >= 999i64).to_s())
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        false
+        true
+        true
+        false
+        true
+        false
+        true
+        true
+        true
+        false
+        true
+        true
+    </ExpectedOutput>
+
+</ArgonTest>

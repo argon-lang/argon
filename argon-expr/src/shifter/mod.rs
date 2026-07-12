@@ -150,6 +150,10 @@ where
         Expr::U8Literal(value) => Expr::U8Literal(value),
         Expr::I16Literal(value) => Expr::I16Literal(value),
         Expr::U16Literal(value) => Expr::U16Literal(value),
+        Expr::I32Literal(value) => Expr::I32Literal(value),
+        Expr::U32Literal(value) => Expr::U32Literal(value),
+        Expr::I64Literal(value) => Expr::I64Literal(value),
+        Expr::U64Literal(value) => Expr::U64Literal(value),
         Expr::Is { value, pattern } => Expr::Is {
             value: Box::new(shifter.shift(*value)),
             pattern: Box::new(default_shift_pattern(shifter, *pattern)),

@@ -19,6 +19,22 @@ externFunction("i16_to_s", function i16_to_s(i16) {
     return i16.toString();
 })
 
+externFunction("u32_to_s", function u32_to_s(u32) {
+    return (u32 >>> 0).toString();
+})
+
+externFunction("i32_to_s", function i32_to_s(i32) {
+    return (i32 | 0).toString();
+})
+
+externFunction("u64_to_s", function u64_to_s(u64) {
+    return BigInt.asUintN(64, u64).toString();
+})
+
+externFunction("i64_to_s", function i64_to_s(i64) {
+    return BigInt.asIntN(64, i64).toString();
+})
+
 externFunction("puts", function puts(s) {
     console.log(s);
 });

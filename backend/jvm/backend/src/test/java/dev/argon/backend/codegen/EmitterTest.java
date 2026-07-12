@@ -78,6 +78,10 @@ final class EmitterTest {
 					case U8 -> ClassDesc.ofDescriptor("I");
 					case I16 -> ClassDesc.ofDescriptor("I");
 					case U16 -> ClassDesc.ofDescriptor("I");
+					case I32 -> ClassDesc.ofDescriptor("I");
+					case U32 -> ClassDesc.ofDescriptor("I");
+					case I64 -> ClassDesc.ofDescriptor("J");
+					case U64 -> ClassDesc.ofDescriptor("J");
 				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
 				case BuiltinType.String() -> ClassDesc.of("java.lang.String");

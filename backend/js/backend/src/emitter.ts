@@ -482,6 +482,10 @@ abstract class EmitterBase {
             case "u8":
             case "i16":
             case "u16":
+            case "i32":
+            case "u32":
+            case "i64":
+            case "u64":
             case "bool":
             case "string":
             case "never":
@@ -2053,9 +2057,20 @@ class BlockEmitter extends EmitterBase {
             case "const-u8":
             case "const-i16":
             case "const-u16":
+            case "const-i32":
+            case "const-u32":
                 assign(insn.dest, {
                     type: "Literal",
                     value: insn.value,
+                });
+                break;
+
+            case "const-i64":
+            case "const-u64":
+                assign(insn.dest, {
+                    type: "Literal",
+                    value: BigInt(insn.value),
+                    bigint: insn.value.toString(),
                 });
                 break;
 
@@ -2742,6 +2757,18 @@ class BlockEmitter extends EmitterBase {
             case "u16":
                 return "Uint16Array";
 
+            case "i32":
+                return "Int32Array";
+
+            case "u32":
+                return "Uint32Array";
+
+            case "i64":
+                return "BigInt64Array";
+
+            case "u64":
+                return "BigUint64Array";
+
             case "int":
                 return undefined;
         }
@@ -2750,6 +2777,45 @@ class BlockEmitter extends EmitterBase {
     private wrapInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
         if(integerType === "int") {
             return value;
+        }
+
+        if(integerType === "i32" || integerType === "u32") {
+            return {
+                type: "BinaryExpression",
+                left: value,
+                operator: integerType === "i32" ? "|" : ">>>",
+                right: {
+                    type: "Literal",
+                    value: 0,
+                },
+            };
+        }
+
+        if(integerType === "i64" || integerType === "u64") {
+            return {
+                type: "CallExpression",
+                optional: false,
+                callee: {
+                    type: "MemberExpression",
+                    optional: false,
+                    computed: false,
+                    object: {
+                        type: "Identifier",
+                        name: "BigInt",
+                    },
+                    property: {
+                        type: "Identifier",
+                        name: integerType === "i64" ? "asIntN" : "asUintN",
+                    },
+                },
+                arguments: [
+                    {
+                        type: "Literal",
+                        value: 64,
+                    },
+                    value,
+                ],
+            };
         }
 
         const is16Bit = integerType === "i16" || integerType === "u16";

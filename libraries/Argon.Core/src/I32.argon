@@ -1,0 +1,31 @@
+module I32
+
+import ::Int::*
+import ::Bool::*
+import ::String::*
+
+public token inline def I32: type = __argon_builtin i32_type
+
+public inline def unary operator + (a: I32): I32 = a
+public inline def unary operator - (a: I32): I32 = __argon_builtin i32_negate a
+public inline def unary operator ~~~ (a: I32): I32 = __argon_builtin i32_bitnot a
+
+public inline def operator + (a: I32) (b: I32) (requires erased ev: (((__argon_builtin int_add a.to_i b.to_i) >= (-2147483648) && (__argon_builtin int_add a.to_i b.to_i) <= 2147483647) == true)): I32 = __argon_builtin i32_add a b
+public inline def operator - (a: I32) (b: I32) (requires erased ev: (((__argon_builtin int_sub a.to_i b.to_i) >= (-2147483648) && (__argon_builtin int_sub a.to_i b.to_i) <= 2147483647) == true)): I32 = __argon_builtin i32_sub a b
+public inline def operator * (a: I32) (b: I32) (requires erased ev: (((__argon_builtin int_mul a.to_i b.to_i) >= (-2147483648) && (__argon_builtin int_mul a.to_i b.to_i) <= 2147483647) == true)): I32 = __argon_builtin i32_mul a b
+
+public inline def operator &&& (a: I32) (b: I32): I32 = __argon_builtin i32_bitand a b
+public inline def operator ||| (a: I32) (b: I32): I32 = __argon_builtin i32_bitor a b
+public inline def operator ^^^ (a: I32) (b: I32): I32 = __argon_builtin i32_bitxor a b
+public inline def operator <<< (a: I32) (b: I32) (requires erased ev: ((b >= 0i32 && b < 32i32) == true)): I32 = __argon_builtin i32_bitshiftleft a b
+public inline def operator >>> (a: I32) (b: I32) (requires erased ev: ((b >= 0i32 && b < 32i32) == true)): I32 = __argon_builtin i32_bitshiftright a b
+
+public inline def operator = (a: I32) (b: I32): Bool = __argon_builtin i32_eq a b
+public inline def operator != (a: I32) (b: I32): Bool = !(__argon_builtin i32_eq a b)
+public inline def operator < (a: I32) (b: I32): Bool = __argon_builtin i32_lt a b
+public inline def operator <= (a: I32) (b: I32): Bool = __argon_builtin i32_le a b
+public inline def operator > (a: I32) (b: I32): Bool = __argon_builtin i32_gt a b
+public inline def operator >= (a: I32) (b: I32): Bool = __argon_builtin i32_ge a b
+
+public def extension to_s (n: I32)(): String = extern i32_to_s
+public inline def extension to_i (n: I32): Int = __argon_builtin i32_to_int n

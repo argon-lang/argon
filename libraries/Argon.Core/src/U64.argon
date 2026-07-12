@@ -1,0 +1,30 @@
+module U64
+
+import ::Int::*
+import ::Bool::*
+import ::String::*
+
+public token inline def U64: type = __argon_builtin u64_type
+
+public inline def unary operator + (a: U64): U64 = a
+public inline def unary operator ~~~ (a: U64): U64 = __argon_builtin u64_bitnot a
+
+public inline def operator + (a: U64) (b: U64) (requires erased ev: (((__argon_builtin int_add a.to_i b.to_i) >= 0 && (__argon_builtin int_add a.to_i b.to_i) <= 18446744073709551615) == true)): U64 = __argon_builtin u64_add a b
+public inline def operator - (a: U64) (b: U64) (requires erased ev: (((__argon_builtin int_sub a.to_i b.to_i) >= 0 && (__argon_builtin int_sub a.to_i b.to_i) <= 18446744073709551615) == true)): U64 = __argon_builtin u64_sub a b
+public inline def operator * (a: U64) (b: U64) (requires erased ev: (((__argon_builtin int_mul a.to_i b.to_i) >= 0 && (__argon_builtin int_mul a.to_i b.to_i) <= 18446744073709551615) == true)): U64 = __argon_builtin u64_mul a b
+
+public inline def operator &&& (a: U64) (b: U64): U64 = __argon_builtin u64_bitand a b
+public inline def operator ||| (a: U64) (b: U64): U64 = __argon_builtin u64_bitor a b
+public inline def operator ^^^ (a: U64) (b: U64): U64 = __argon_builtin u64_bitxor a b
+public inline def operator <<< (a: U64) (b: U64) (requires erased ev: ((b < 64u64) == true)): U64 = __argon_builtin u64_bitshiftleft a b
+public inline def operator >>> (a: U64) (b: U64) (requires erased ev: ((b < 64u64) == true)): U64 = __argon_builtin u64_bitshiftright a b
+
+public inline def operator = (a: U64) (b: U64): Bool = __argon_builtin u64_eq a b
+public inline def operator != (a: U64) (b: U64): Bool = !(__argon_builtin u64_eq a b)
+public inline def operator < (a: U64) (b: U64): Bool = __argon_builtin u64_lt a b
+public inline def operator <= (a: U64) (b: U64): Bool = __argon_builtin u64_le a b
+public inline def operator > (a: U64) (b: U64): Bool = __argon_builtin u64_gt a b
+public inline def operator >= (a: U64) (b: U64): Bool = __argon_builtin u64_ge a b
+
+public def extension to_s (n: U64)(): String = extern u64_to_s
+public inline def extension to_i (n: U64): Int = __argon_builtin u64_to_int n

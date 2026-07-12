@@ -1079,6 +1079,10 @@ impl TubeDecoder {
             tf::ErasedSignatureType::U8 {} => ErasedSignatureType::U8,
             tf::ErasedSignatureType::I16 {} => ErasedSignatureType::I16,
             tf::ErasedSignatureType::U16 {} => ErasedSignatureType::U16,
+            tf::ErasedSignatureType::I32 {} => ErasedSignatureType::I32,
+            tf::ErasedSignatureType::U32 {} => ErasedSignatureType::U32,
+            tf::ErasedSignatureType::I64 {} => ErasedSignatureType::I64,
+            tf::ErasedSignatureType::U64 {} => ErasedSignatureType::U64,
             tf::ErasedSignatureType::Bool {} => ErasedSignatureType::Bool,
             tf::ErasedSignatureType::String {} => ErasedSignatureType::String,
             tf::ErasedSignatureType::Never {} => ErasedSignatureType::Never,
@@ -1319,6 +1323,10 @@ impl TubeDecoder {
             tf::Expr::U8Literal { value } => Expr::U8Literal(value),
             tf::Expr::I16Literal { value } => Expr::I16Literal(value),
             tf::Expr::U16Literal { value } => Expr::U16Literal(value),
+            tf::Expr::I32Literal { value } => Expr::I32Literal(value),
+            tf::Expr::U32Literal { value } => Expr::U32Literal(value),
+            tf::Expr::I64Literal { value } => Expr::I64Literal(value),
+            tf::Expr::U64Literal { value } => Expr::U64Literal(value),
             tf::Expr::Is { value, pattern } => Expr::Is {
                 value: Box::new(self.decode_expr(*value)),
                 pattern: Box::new(self.decode_pattern(*pattern)),
@@ -2748,5 +2756,9 @@ fn decode_format_integer_type(integer_type: tf::IntegerType) -> IntegerType {
         tf::IntegerType::U8 {} => IntegerType::U8,
         tf::IntegerType::I16 {} => IntegerType::I16,
         tf::IntegerType::U16 {} => IntegerType::U16,
+        tf::IntegerType::I32 {} => IntegerType::I32,
+        tf::IntegerType::U32 {} => IntegerType::U32,
+        tf::IntegerType::I64 {} => IntegerType::I64,
+        tf::IntegerType::U64 {} => IntegerType::U64,
     }
 }

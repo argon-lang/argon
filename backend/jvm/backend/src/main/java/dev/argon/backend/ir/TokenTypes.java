@@ -35,6 +35,10 @@ public final class TokenTypes {
 					case U8 -> ConstantDescs.CD_byte;
 					case I16 -> ConstantDescs.CD_short;
 					case U16 -> ConstantDescs.CD_short;
+					case I32 -> ConstantDescs.CD_int;
+					case U32 -> ConstantDescs.CD_int;
+					case I64 -> ConstantDescs.CD_long;
+					case U64 -> ConstantDescs.CD_long;
 				};
 				case BuiltinType.Never() -> ClassDesc.of("dev.argon.runtime.Never");
 				case BuiltinType.String() -> ConstantDescs.CD_String;

@@ -1,0 +1,39 @@
+<ArgonTest>
+
+    <Name>U64 bit operators</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ((0b1000u64 ||| 0b1u64).to_s())
+            puts ((0b1000u64 ||| 0b1000u64).to_s())
+            puts ((0b1000u64 &&& 0b1u64).to_s())
+            puts ((0b1000u64 &&& 0b1000u64).to_s())
+            puts ((0b1000u64 ^^^ 0b1u64).to_s())
+            puts ((0b1000u64 ^^^ 0b1000u64).to_s())
+            puts ((0b1000u64 <<< 0b11u64).to_s())
+            puts ((0b1000u64 >>> 0b11u64).to_s())
+            puts ((~~~0b1000u64).to_s())
+            puts ((~~~0b1u64).to_s())
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        9
+        8
+        0
+        8
+        9
+        0
+        64
+        1
+        18446744073709551607
+        18446744073709551614
+    </ExpectedOutput>
+
+</ArgonTest>
