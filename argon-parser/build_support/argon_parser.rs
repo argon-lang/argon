@@ -280,7 +280,7 @@ impl TerminalInfo for Token {
     fn payload_type(self) -> Option<&'static str> {
         match self {
             Token::StringText | Token::IdentifierToken => Some("Box<str>"),
-            Token::IntToken => Some("BigUint"),
+            Token::IntToken => Some("IntTokenPayload"),
             _ => None,
         }
     }

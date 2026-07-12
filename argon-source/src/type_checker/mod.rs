@@ -30,6 +30,7 @@ use core::{mem, ptr};
 use hashbrown::{HashMap, HashSet, hash_map};
 use mitsein::vec1;
 use mitsein::vec1::Vec1;
+use num_bigint::BigInt;
 use parse18_runtime::{Location, WithLocation};
 
 mod exhaustive;
@@ -529,10 +530,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 checked_expr: Expr::BoolLiteral(*value),
                 inferred_type: Expr::bool_type(),
             }),
-            ast::Expr::IntLiteral(value) => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::IntLiteral(value.clone()),
-                inferred_type: Expr::int_type(),
-            }),
+            ast::Expr::IntLiteral { value, suffix } => TypeInferResult::Complete(
+                self.infer_integer_literal(&expr.location, value.clone(), suffix),
+            ),
 
             ast::Expr::Break { label, value } => {
                 let block_label = match label {
@@ -780,6 +780,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             ast::Expr::UnaryOperation { op, a } => {
+                if let ast::UnaryOperator::Minus = op.value
+                    && let ast::Expr::IntLiteral { value, suffix } = &a.value
+                {
+                    return TypeInferResult::Complete(self.infer_integer_literal(
+                        &expr.location,
+                        -value.clone(),
+                        suffix,
+                    ));
+                }
+
                 let op_id = match op.value {
                     ast::UnaryOperator::LogicalNot => {
                         let value = self.check_condition_expr(a);
@@ -2137,6 +2147,68 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             checked_expr: Expr::Builtin(create_builtin(element_type.clone(), checked_args)),
             inferred_type: create_result_type(&element_type, element_type_type),
         })
+    }
+
+    fn infer_integer_literal(
+        &mut self,
+        location: &Location,
+        value: BigInt,
+        suffix: &ast::IntLiteralSuffix,
+    ) -> InferredType {
+        match suffix {
+            ast::IntLiteralSuffix::None => InferredType {
+                checked_expr: Expr::IntLiteral(value),
+                inferred_type: Expr::int_type(),
+            },
+            ast::IntLiteralSuffix::Unsigned(8) => {
+                let byte_value: u8 = match u8::try_from(&value) {
+                    Ok(value) => value,
+                    Err(_) => {
+                        self.context.reporter().report_error(
+                            CompileError::integer_literal_out_of_range(
+                                location.clone(),
+                                "u8",
+                                "0-255",
+                                &format!("{}", value),
+                            ),
+                        );
+                        return InferredType {
+                            checked_expr: Expr::Error,
+                            inferred_type: Expr::u8_type(),
+                        };
+                    }
+                };
+
+                InferredType {
+                    checked_expr: Expr::U8Literal(byte_value),
+                    inferred_type: Expr::u8_type(),
+                }
+            }
+            ast::IntLiteralSuffix::Signed(bits) => {
+                self.context
+                    .reporter()
+                    .report_error(CompileError::unknown_integer_suffix(
+                        location.clone(),
+                        format!("i{}", bits),
+                    ));
+                InferredType {
+                    checked_expr: Expr::Error,
+                    inferred_type: Expr::int_type(),
+                }
+            }
+            ast::IntLiteralSuffix::Unsigned(bits) => {
+                self.context
+                    .reporter()
+                    .report_error(CompileError::unknown_integer_suffix(
+                        location.clone(),
+                        format!("u{}", bits),
+                    ));
+                InferredType {
+                    checked_expr: Expr::Error,
+                    inferred_type: Expr::int_type(),
+                }
+            }
+        }
     }
 
     fn infer_variable<'e>(

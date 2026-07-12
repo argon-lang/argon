@@ -1,4 +1,5 @@
-use crate::token::{StringTokenType, Token, TokenType};
+use crate::ast::IntLiteralSuffix;
+use crate::token::{IntTokenPayload, StringTokenType, Token, TokenType};
 use alloc::borrow::ToOwned;
 use alloc::{boxed::Box, collections::VecDeque, string::String};
 use argon_util::{CompileError, ErrorReporter};
@@ -164,6 +165,40 @@ trait TokenProcessor {
     }
 }
 
+fn parse_int_suffix(text: &str) -> IntLiteralSuffix {
+    // Find the suffix part (starts with 'i' or 'u')
+    let suffix_start = text.find(|c| c == 'i' || c == 'u');
+
+    if let Some(start) = suffix_start {
+        let suffix = &text[start..];
+        let signed = suffix.starts_with('i');
+        let bits_str = &suffix[1..];
+
+        if bits_str.is_empty() {
+            IntLiteralSuffix::None
+        } else if let Some(bits) = bits_str.parse::<u32>().ok() {
+            if signed {
+                IntLiteralSuffix::Signed(bits)
+            } else {
+                IntLiteralSuffix::Unsigned(bits)
+            }
+        } else {
+            IntLiteralSuffix::None
+        }
+    } else {
+        IntLiteralSuffix::None
+    }
+}
+
+fn strip_suffix(text: &str) -> &str {
+    // Find where the suffix starts
+    if let Some(pos) = text.find(|c| c == 'i' || c == 'u') {
+        &text[..pos]
+    } else {
+        text
+    }
+}
+
 struct NormalTokenProcessor;
 
 impl TokenProcessor for NormalTokenProcessor {
@@ -180,36 +215,44 @@ impl TokenProcessor for NormalTokenProcessor {
             TokenType::DecInteger => {
                 lexer.text_buffer.clear();
                 lexer.text_buffer.extend(lexer.acc_text.iter().copied());
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 10)
+                let suffix = parse_int_suffix(&lexer.text_buffer);
+                let num_str = strip_suffix(&lexer.text_buffer);
+                let value = BigUint::from_str_radix(num_str, 10)
                     .expect("Lexer produced token with invalid decimal integer value");
-                Some(Token::IntToken(n))
+                Some(Token::IntToken(IntTokenPayload { value, suffix }))
             }
             TokenType::BinInteger => {
                 lexer.text_buffer.clear();
                 lexer
                     .text_buffer
                     .extend(lexer.acc_text.iter().copied().skip(2));
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 2)
+                let suffix = parse_int_suffix(&lexer.text_buffer);
+                let num_str = strip_suffix(&lexer.text_buffer);
+                let value = BigUint::from_str_radix(num_str, 2)
                     .expect("Lexer produced token with invalid binary integer value");
-                Some(Token::IntToken(n))
+                Some(Token::IntToken(IntTokenPayload { value, suffix }))
             }
             TokenType::OctInteger => {
                 lexer.text_buffer.clear();
                 lexer
                     .text_buffer
                     .extend(lexer.acc_text.iter().copied().skip(2));
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 8)
+                let suffix = parse_int_suffix(&lexer.text_buffer);
+                let num_str = strip_suffix(&lexer.text_buffer);
+                let value = BigUint::from_str_radix(num_str, 8)
                     .expect("Lexer produced token with invalid octal integer value");
-                Some(Token::IntToken(n))
+                Some(Token::IntToken(IntTokenPayload { value, suffix }))
             }
             TokenType::HexInteger => {
                 lexer.text_buffer.clear();
                 lexer
                     .text_buffer
                     .extend(lexer.acc_text.iter().copied().skip(2));
-                let n = BigUint::from_str_radix(&lexer.text_buffer, 16)
+                let suffix = parse_int_suffix(&lexer.text_buffer);
+                let num_str = strip_suffix(&lexer.text_buffer);
+                let value = BigUint::from_str_radix(num_str, 16)
                     .expect("Lexer produced token with invalid hexadecimal integer value");
-                Some(Token::IntToken(n))
+                Some(Token::IntToken(IntTokenPayload { value, suffix }))
             }
             TokenType::Identifier => {
                 lexer.text_buffer.clear();
@@ -497,7 +540,7 @@ mod tests {
     fn simple_decimal_integer() {
         assert_eq!(
             lex_normal("123"),
-            vec![Token::IntToken(BigUint::from(123u32))]
+            vec![Token::IntToken(BigUint::from(123u32), IntTokenSuffix { signed: true, bits: None })]
         );
     }
 
@@ -505,7 +548,7 @@ mod tests {
     fn decimal_integer_with_leading_zero() {
         assert_eq!(
             lex_normal("0123"),
-            vec![Token::IntToken(BigUint::from(123u32))]
+            vec![Token::IntToken(BigUint::from(123u32), IntTokenSuffix { signed: true, bits: None })]
         );
     }
 
@@ -513,7 +556,7 @@ mod tests {
     fn negative_decimal_integer() {
         assert_eq!(
             lex_normal("-123"),
-            vec![Token::OpMinus, Token::IntToken(BigUint::from(123u32))]
+            vec![Token::OpMinus, Token::IntToken(BigUint::from(123u32), IntTokenSuffix { signed: true, bits: None })]
         );
     }
 

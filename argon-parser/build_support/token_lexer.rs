@@ -28,17 +28,17 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
         "TokenType::InvalidInteger",
     );
 
-    b.add(Regex::pattern(r"[0-9]+(_[0-9]+)*"), "TokenType::DecInteger");
+    b.add(Regex::pattern(r"[0-9]+(_[0-9]+)*([iu][0-9]+)?"), "TokenType::DecInteger");
     b.add(
-        Regex::pattern(r"0[xX][[:xdigit:]]+(_[[:xdigit:]]+)*"),
+        Regex::pattern(r"0[xX][[:xdigit:]]+(_[[:xdigit:]]+)*([iu][0-9]+)?"),
         "TokenType::HexInteger",
     );
     b.add(
-        Regex::pattern(r"0[bB][01]+(_[01]+)*"),
+        Regex::pattern(r"0[bB][01]+(_[01]+)*([iu][0-9]+)?"),
         "TokenType::BinInteger",
     );
     b.add(
-        Regex::pattern(r"0o[0-7]+(_[0-7]+)*"),
+        Regex::pattern(r"0o[0-7]+(_[0-7]+)*([iu][0-9]+)?"),
         "TokenType::OctInteger",
     );
 

@@ -1,5 +1,12 @@
 use alloc::boxed::Box;
 use num_bigint::BigUint;
+use crate::ast::IntLiteralSuffix;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct IntTokenPayload {
+    pub value: BigUint,
+    pub suffix: IntLiteralSuffix,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TokenCategory {
@@ -181,7 +188,7 @@ pub enum Token {
     StringEnd,
     StringText(Box<str>),
     StringInterpolationStart,
-    IntToken(BigUint),
+    IntToken(IntTokenPayload),
     Identifier(Box<str>),
     NewLine,
     Semicolon,

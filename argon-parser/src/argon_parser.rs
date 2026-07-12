@@ -226,12 +226,15 @@ fn string_fragment_text_token(text: Box<str>) -> StringFragment {
     string_fragment_text(token_string_text(text))
 }
 
-fn expr_int_literal_token(value: BigUint) -> Expr {
-    expr_int_literal(token_int_bigint(value))
+fn expr_int_literal_token(payload: crate::token::IntTokenPayload) -> Expr {
+    expr_int_literal(token_int_bigint(payload.value), payload.suffix)
 }
 
-fn expr_big_type_token(value: BigUint) -> Expr {
-    expr_big_type(token_int_bigint(value))
+fn expr_big_type_token(payload: crate::token::IntTokenPayload) -> Expr {
+    if !matches!(payload.suffix, ast::IntLiteralSuffix::None) {
+        todo!("Integer suffix in BigType not yet supported");
+    }
+    expr_big_type(token_int_bigint(payload.value))
 }
 
 fn expr_builtin_token(name: Box<str>) -> Expr {
@@ -247,8 +250,8 @@ fn enclosed_arg_list_paren_empty(
     )
 }
 
-fn pattern_int_token(value: BigUint) -> Pattern {
-    pattern_int(token_int_bigint(value))
+fn pattern_int_token(payload: crate::token::IntTokenPayload) -> Pattern {
+    pattern_int(token_int_bigint(payload.value), payload.suffix)
 }
 
 fn pattern_binding_discard(mut_spec: bool, id: WithLocation<Identifier>) -> Pattern {
@@ -587,11 +590,14 @@ fn expr_if_else(
     }
 }
 
-fn expr_int_literal<T>(value: T) -> Expr
+fn expr_int_literal<T>(value: T, suffix: ast::IntLiteralSuffix) -> Expr
 where
     T: Into<BigInt>,
 {
-    Expr::IntLiteral(value.into())
+    Expr::IntLiteral {
+        value: value.into(),
+        suffix,
+    }
 }
 
 fn expr_is(value: WithLocation<Expr>, pattern: WithLocation<Pattern>) -> Expr {
@@ -791,10 +797,13 @@ fn pattern_string(value: StringLiteral) -> Pattern {
     Pattern::String(value)
 }
 
-fn pattern_int<T>(value: T) -> Pattern
+fn pattern_int<T>(value: T, suffix: ast::IntLiteralSuffix) -> Pattern
 where
     T: Into<BigInt>,
 {
+    if !matches!(suffix, ast::IntLiteralSuffix::None) {
+        todo!("Integer suffix in pattern not yet supported");
+    }
     Pattern::Int(value.into())
 }
 

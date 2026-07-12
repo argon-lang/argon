@@ -55,6 +55,8 @@ pub enum ErrorCode {
     MutableErasedLocalVariable = 0x002A,
     ImpureErasedFunction = 0x002B,
     UnknownOptimization = 0x002C,
+    UnknownIntegerSuffix = 0x002D,
+    IntegerLiteralOutOfRange = 0x002E,
 }
 
 impl ErrorCode {
@@ -469,6 +471,32 @@ impl CompileError {
             ErrorCode::UnknownOptimization,
             format!("Unknown optimization: {}", name.as_ref()),
             None,
+        )
+    }
+
+    pub fn unknown_integer_suffix(loc: Location, suffix: impl AsRef<str>) -> Self {
+        Self::new(
+            ErrorCode::UnknownIntegerSuffix,
+            format!("Unknown integer suffix: {}", suffix.as_ref()),
+            Some(loc),
+        )
+    }
+
+    pub fn integer_literal_out_of_range(
+        loc: Location,
+        type_name: impl AsRef<str>,
+        range: impl AsRef<str>,
+        value: impl AsRef<str>,
+    ) -> Self {
+        Self::new(
+            ErrorCode::IntegerLiteralOutOfRange,
+            format!(
+                "Integer literal out of range for {}: expected {}, found {}",
+                type_name.as_ref(),
+                range.as_ref(),
+                value.as_ref()
+            ),
+            Some(loc),
         )
     }
 }

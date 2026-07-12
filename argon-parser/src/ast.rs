@@ -333,7 +333,10 @@ pub enum Expr {
         obj: Box<WithLocation<Expr>>,
         index: Box<WithLocation<Expr>>,
     },
-    IntLiteral(BigInt),
+    IntLiteral {
+        value: BigInt,
+        suffix: IntLiteralSuffix,
+    },
     Is {
         value: Box<WithLocation<Expr>>,
         pattern: WithLocation<Pattern>,
@@ -438,6 +441,13 @@ pub struct RecordFieldLiteral {
 pub struct FunctionLiteral {
     pub parameter_name: Option<Identifier>,
     pub body: Box<WithLocation<Expr>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum IntLiteralSuffix {
+    None,
+    Signed(u32),
+    Unsigned(u32),
 }
 
 #[derive(Debug, Clone)]
