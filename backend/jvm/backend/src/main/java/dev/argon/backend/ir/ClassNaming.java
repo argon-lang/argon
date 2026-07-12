@@ -83,7 +83,7 @@ public class ClassNaming {
 
 	static String functionName(ImportSpecifier importSpecifier) {
 		return switch(importSpecifier) {
-			case ImportSpecifier.Global global -> identifierToName(global.name());
+			case ImportSpecifier.Global global -> identifierToName(global.name()) + erasedSignatureSuffix(global.sig());
 			case ImportSpecifier.Local local -> functionName(local.parent()) + ":k" + local.index();
 		};
 	}

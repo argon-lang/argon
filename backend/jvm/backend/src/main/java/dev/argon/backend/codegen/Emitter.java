@@ -321,7 +321,10 @@ final class Emitter {
 			})
 			.filter(function -> {
 				var functionInfo = program.getFunctionInfo(function.functionId());
-				return functionInfo.name().equals("main") && isExecutableMainDescriptor(functionInfo.descriptor());
+				return function._import() instanceof ImportSpecifier.Global global &&
+					global.name() instanceof Identifier.Named(var name) &&
+					name.equals("main") &&
+					isExecutableMainDescriptor(functionInfo.descriptor());
 			})
 			.findAny()
 			.orElseThrow(() -> new IllegalArgumentException(

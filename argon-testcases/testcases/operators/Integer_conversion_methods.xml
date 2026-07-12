@@ -1,0 +1,102 @@
+<ArgonTest>
+
+    <Name>Integer conversion methods</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            let int_i8 = 42.to_i8
+            let int_u8 = 42.to_u8
+            let int_i16 = 42.to_i16
+            let int_u16 = 42.to_u16
+            let int_i32 = 42.to_i32
+            let int_u32 = 42.to_u32
+            let int_i64 = 42.to_i64
+            let int_u64 = 42.to_u64
+
+            let i8_u8 = 42i8.to_u8
+            let i8_i16 = 42i8.to_i16
+            let i8_u16 = 42i8.to_u16
+            let i8_i32 = 42i8.to_i32
+            let i8_u32 = 42i8.to_u32
+            let i8_i64 = 42i8.to_i64
+            let i8_u64 = 42i8.to_u64
+
+            let u8_i8 = 42u8.to_i8
+            let u8_i16 = 42u8.to_i16
+            let u8_u16 = 42u8.to_u16
+            let u8_i32 = 42u8.to_i32
+            let u8_u32 = 42u8.to_u32
+            let u8_i64 = 42u8.to_i64
+            let u8_u64 = 42u8.to_u64
+
+            let i16_i8 = 42i16.to_i8
+            let i16_u8 = 42i16.to_u8
+            let i16_u16 = 42i16.to_u16
+            let i16_i32 = 42i16.to_i32
+            let i16_u32 = 42i16.to_u32
+            let i16_i64 = 42i16.to_i64
+            let i16_u64 = 42i16.to_u64
+
+            let u16_i8 = 42u16.to_i8
+            let u16_u8 = 42u16.to_u8
+            let u16_i16 = 42u16.to_i16
+            let u16_i32 = 42u16.to_i32
+            let u16_u32 = 42u16.to_u32
+            let u16_i64 = 42u16.to_i64
+            let u16_u64 = 42u16.to_u64
+
+            let i32_i8 = 42i32.to_i8
+            let i32_u8 = 42i32.to_u8
+            let i32_i16 = 42i32.to_i16
+            let i32_u16 = 42i32.to_u16
+            let i32_u32 = 42i32.to_u32
+            let i32_i64 = 42i32.to_i64
+            let i32_u64 = 42i32.to_u64
+
+            let u32_i8 = 42u32.to_i8
+            let u32_u8 = 42u32.to_u8
+            let u32_i16 = 42u32.to_i16
+            let u32_u16 = 42u32.to_u16
+            let u32_i32 = 42u32.to_i32
+            let u32_i64 = 42u32.to_i64
+            let u32_u64 = 42u32.to_u64
+
+            let i64_i8 = 42i64.to_i8
+            let i64_u8 = 42i64.to_u8
+            let i64_i16 = 42i64.to_i16
+            let i64_u16 = 42i64.to_u16
+            let i64_i32 = 42i64.to_i32
+            let i64_u32 = 42i64.to_u32
+            let i64_u64 = 42i64.to_u64
+
+            let u64_i8 = 42u64.to_i8
+            let u64_u8 = 42u64.to_u8
+            let u64_i16 = 42u64.to_i16
+            let u64_u16 = 42u64.to_u16
+            let u64_i32 = 42u64.to_i32
+            let u64_u32 = 42u64.to_u32
+            let u64_i64 = 42u64.to_i64
+
+            puts (((-1i8).to_i16).to_s())
+            puts ((255u8.to_i16).to_s())
+            puts ((65535u16.to_i32).to_s())
+            puts ((4294967295u32.to_i64).to_s())
+            puts (u64_i64.to_s())
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>
+        -1
+        255
+        65535
+        4294967295
+        42
+    </ExpectedOutput>
+
+</ArgonTest>

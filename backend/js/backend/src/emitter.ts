@@ -1794,28 +1794,10 @@ class BlockEmitter extends EmitterBase {
                         unary("~", op);
                         break;
 
-                    case "int-convert": {
-                        const value = this.coerceInteger(op.sourceType, this.getReg(op.value));
-
-                        if(op.sourceType === op.destType) {
-                            assign(op.dest, value);
-                        }
-                        else if(op.sourceType === "int" && op.destType !== "int") {
-                            assign(op.dest, this.wrapInteger(op.destType, value));
-                        }
-                        else {
-                            assign(op.dest, {
-                                type: "CallExpression",
-                                optional: false,
-                                callee: {
-                                    type: "Identifier",
-                                    name: "BigInt",
-                                },
-                                arguments: [value],
-                            });
-                        }
-                        break;
-                    }
+					case "int-convert": {
+						assign(op.dest, this.convertInteger(op.sourceType, op.destType, this.getReg(op.value)));
+						break;
+					}
 
                     case "bool-not":
                         unary("!", op);
@@ -2774,10 +2756,10 @@ class BlockEmitter extends EmitterBase {
         }
     }
 
-    private wrapInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
-        if(integerType === "int") {
-            return value;
-        }
+	private wrapInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
+		if(integerType === "int") {
+			return value;
+		}
 
         if(integerType === "i32" || integerType === "u32") {
             return {
@@ -2855,11 +2837,69 @@ class BlockEmitter extends EmitterBase {
         };
     }
 
-    private coerceInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
-        return this.wrapInteger(integerType, value);
-    }
+	private coerceInteger(integerType: ir.IntegerType, value: estree.Expression): estree.Expression {
+		return this.wrapInteger(integerType, value);
+	}
 
-    private getLabel(label: ir.BlockId): estree.Identifier {
+	private convertInteger(sourceType: ir.IntegerType, destType: ir.IntegerType, value: estree.Expression): estree.Expression {
+		if(sourceType === destType) {
+			return this.coerceInteger(destType, value);
+		}
+
+		if(destType === "int") {
+			if(this.isBigIntIntegerType(sourceType)) {
+				return value;
+			}
+
+			return this.bigInt(value);
+		}
+
+		if(this.isNumberIntegerType(destType)) {
+			const numberValue = this.isNumberIntegerType(sourceType)
+				? value
+				: this.number(value);
+			return this.wrapInteger(destType, numberValue);
+		}
+
+		const bigIntValue = this.isBigIntIntegerType(sourceType)
+			? value
+			: this.bigInt(value);
+		return this.wrapInteger(destType, bigIntValue);
+	}
+
+	private isNumberIntegerType(integerType: ir.IntegerType): boolean {
+		return integerType !== "int" && integerType !== "i64" && integerType !== "u64";
+	}
+
+	private isBigIntIntegerType(integerType: ir.IntegerType): boolean {
+		return integerType === "int" || integerType === "i64" || integerType === "u64";
+	}
+
+	private number(value: estree.Expression): estree.Expression {
+		return {
+			type: "CallExpression",
+			optional: false,
+			callee: {
+				type: "Identifier",
+				name: "Number",
+			},
+			arguments: [value],
+		};
+	}
+
+	private bigInt(value: estree.Expression): estree.Expression {
+		return {
+			type: "CallExpression",
+			optional: false,
+			callee: {
+				type: "Identifier",
+				name: "BigInt",
+			},
+			arguments: [value],
+		};
+	}
+
+	private getLabel(label: ir.BlockId): estree.Identifier {
         return {
             type: "Identifier",
             name: `block_${label.id}`,

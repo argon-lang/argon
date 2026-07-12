@@ -28,3 +28,11 @@ public inline def operator >= (a: U32) (b: U32): Bool = __argon_builtin u32_ge a
 
 public def extension to_s (n: U32)(): String = extern u32_to_s
 public inline def extension to_i (n: U32): Int = __argon_builtin u32_to_int n
+
+public inline def extension to_i8 (n: U32) (requires erased ev: ((n.to_i <= 127) == true)): __argon_builtin i8_type = __argon_builtin u32_to_i8 n
+public inline def extension to_u8 (n: U32) (requires erased ev: ((n.to_i <= 255) == true)): __argon_builtin u8_type = __argon_builtin u32_to_u8 n
+public inline def extension to_i16 (n: U32) (requires erased ev: ((n.to_i <= 32767) == true)): __argon_builtin i16_type = __argon_builtin u32_to_i16 n
+public inline def extension to_u16 (n: U32) (requires erased ev: ((n.to_i <= 65535) == true)): __argon_builtin u16_type = __argon_builtin u32_to_u16 n
+public inline def extension to_i32 (n: U32) (requires erased ev: ((n.to_i <= 2147483647) == true)): __argon_builtin i32_type = __argon_builtin u32_to_i32 n
+public inline def extension to_i64 (n: U32): __argon_builtin i64_type = __argon_builtin u32_to_i64 n
+public inline def extension to_u64 (n: U32): __argon_builtin u64_type = __argon_builtin u32_to_u64 n
