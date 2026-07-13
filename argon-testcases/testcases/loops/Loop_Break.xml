@@ -8,7 +8,7 @@
         import Argon.Core::*
 
         proc main(): () do
-            loop
+            loop do
                 break
                 puts "A"
             end

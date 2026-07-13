@@ -210,18 +210,6 @@ fn if_expr_after_then_elsif(
     })
 }
 
-fn expr_while_no_body(
-    label: Option<WithLocation<Identifier>>,
-    cond: WithLocation<VecDeque<WithLocation<Stmt>>>,
-    end_keyword: WithLocation<Token>,
-) -> Expr {
-    expr_while(
-        label,
-        cond,
-        WithLocation::new(empty_seq(), end_keyword.location),
-    )
-}
-
 fn string_fragment_text_token(text: Box<str>) -> StringFragment {
     string_fragment_text(token_string_text(text))
 }
@@ -456,6 +444,10 @@ fn stmt_import(import_stmt: ImportStmt) -> Stmt {
 
 fn stmt_export(export_stmt: ExportStmt) -> Stmt {
     Stmt::Export(Box::new(export_stmt))
+}
+
+fn stmt_label(name: WithLocation<Identifier>) -> Stmt {
+    Stmt::Label(Box::new(LabelStmt { name }))
 }
 
 fn statement_apply_builder(
@@ -694,12 +686,12 @@ where
 
 fn expr_while(
     label: Option<WithLocation<Identifier>>,
-    condition: WithLocation<VecDeque<WithLocation<Stmt>>>,
+    condition: WithLocation<Expr>,
     body: WithLocation<VecDeque<WithLocation<Stmt>>>,
 ) -> Expr {
     Expr::While {
         label,
-        condition: condition.map(vec_deque_to_vec),
+        condition: Box::new(condition),
         body: body.map(vec_deque_to_vec),
     }
 }

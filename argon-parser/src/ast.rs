@@ -29,6 +29,7 @@ pub enum Stmt {
     Import(Box<ImportStmt>),
     Export(Box<ExportStmt>),
     Assert(Box<AssertStmt>),
+    Label(Box<LabelStmt>),
     Expr(WithLocation<Expr>),
 }
 
@@ -285,6 +286,11 @@ pub struct AssertStmt {
 }
 
 #[derive(Debug, Clone)]
+pub struct LabelStmt {
+    pub name: WithLocation<Identifier>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     Error,
     As {
@@ -385,7 +391,7 @@ pub enum Expr {
     },
     While {
         label: Option<WithLocation<Identifier>>,
-        condition: WithLocation<Vec<WithLocation<Stmt>>>,
+        condition: Box<WithLocation<Expr>>,
         body: WithLocation<Vec<WithLocation<Stmt>>>,
     },
     BoxedType {

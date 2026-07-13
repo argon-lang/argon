@@ -1588,7 +1588,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         block_label.clone(),
                     )));
 
-                let cond = checker.check_block(condition, &Expr::bool_type());
+                let cond = checker.check(condition, &Expr::bool_type());
 
                 let inner_label = BlockLabel {
                     id: UniqueIdentifier::new(),
@@ -1762,6 +1762,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn infer_stmt<'e>(&mut self, stmt: &'e WithLocation<ast::Stmt>) -> TypeInferResult<'e> {
         match &stmt.value {
             ast::Stmt::Expr(expr) => self.infer(expr),
+            ast::Stmt::Label(_) => TypeInferResult::Complete(InferredType {
+                checked_expr: Expr::unit(),
+                inferred_type: Expr::unit(),
+            }),
             ast::Stmt::VariableDeclaration(v) => {
                 let variable_value: Expr<TypeCheckExprContext>;
                 let var_type: Expr<TypeCheckExprContext>;

@@ -8,10 +8,12 @@
         import Argon.Core::*
 
         proc main(): () do
-            while
+            while begin
                 break
                 puts "A"
                 true
+            end
+            do
             end
             
             puts "Hello World"

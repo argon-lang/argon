@@ -836,6 +836,8 @@ impl<'a> SourceFileProcessor<'a> {
             // Ignore errors because it is due to an already reported syntax error.
             Stmt::Error => {}
 
+            Stmt::Label(_) => {}
+
             Stmt::Import(import) => {
                 if self.current_scope.is_some() {
                     self.parent_scope = self.current_scope.take();

@@ -310,6 +310,7 @@ enum Rule {
     LoopExpr,
     WhileExpr,
     LoopLabel,
+    BranchLabel,
     BreakExpr,
     ReturnExpr,
     NextExpr,
@@ -615,23 +616,30 @@ impl GrammarFactory for ParserFactory {
             LoopExpr => ruleset(
                 "Expr",
                 [
-                    rule([ term(KwLoop).discard(), nonterm(LoopLabel), nonterm(StatementList).with_location(), term(KwEnd).discard() ], "expr_loop"),
+                    rule([ term(KwLoop).discard(), nonterm(LoopLabel), term(KwDo).discard(), nonterm(StatementList).with_location(), term(KwEnd).discard() ], "(move |label, body| expr_loop(Some(label), body))"),
+                    rule([ term(KwLoop).discard(), term(KwDo).discard(), nonterm(StatementList).with_location(), term(KwEnd).discard() ], "(move |body| expr_loop(None, body))"),
                 ],
             ),
 
             WhileExpr => ruleset(
                 "Expr",
                 [
-                    rule([ term(KwWhile).discard(), nonterm(LoopLabel), nonterm(StatementList).with_location(), term(KwDo).discard(), nonterm(StatementList).with_location(), term(KwEnd).discard() ], "expr_while"),
-                    rule([ term(KwWhile).discard(), nonterm(LoopLabel), nonterm(StatementList).with_location(), term(KwEnd).with_location() ], "expr_while_no_body"),
+                    rule([ term(KwWhile).discard(), nonterm(LoopLabel), nonterm(Expression).with_location(), nonterm(NewLines).discard(), term(KwDo).discard(), nonterm(StatementList).with_location(), term(KwEnd).discard() ], "(move |label, condition, body| expr_while(Some(label), condition, body))"),
+                    rule([ term(KwWhile).discard(), nonterm(Expression).with_location(), nonterm(NewLines).discard(), term(KwDo).discard(), nonterm(StatementList).with_location(), term(KwEnd).discard() ], "(move |condition, body| expr_while(None, condition, body))"),
                 ],
             ),
 
             LoopLabel => ruleset(
-                "Option<WithLocation<Identifier>>",
+                "WithLocation<Identifier>",
                 [
-                    rule([ term(SymSingleQuote).discard(), nonterm(Identifier).with_location() ], "Some"),
-                    rule([], "(|| None)"),
+                    rule([ term(SymAt).discard(), nonterm(Identifier).with_location() ], "identity"),
+                ],
+            ),
+
+            BranchLabel => ruleset(
+                "WithLocation<Identifier>",
+                [
+                    rule([ term(SymAt).discard(), nonterm(Identifier).with_location() ], "identity"),
                 ],
             ),
 
@@ -1186,8 +1194,10 @@ impl GrammarFactory for ParserFactory {
             BreakExpr => ruleset(
                 "Expr",
                 [
-                    rule([ term(KwBreak).discard(), nonterm(LoopLabel) ], "expr_break_no_arg"),
-                    rule([ term(KwBreak).discard(), nonterm(LoopLabel), nonterm(TupleExpr).with_location() ], "expr_break"),
+                    rule([ term(KwBreak).discard(), nonterm(BranchLabel) ], "(move |label| expr_break_no_arg(Some(label)))"),
+                    rule([ term(KwBreak).discard(), nonterm(BranchLabel), nonterm(TupleExpr).with_location() ], "(move |label, value| expr_break(Some(label), value))"),
+                    rule([ term(KwBreak).discard(), nonterm(TupleExpr).with_location() ], "(move |value| expr_break(None, value))"),
+                    rule([ term(KwBreak).discard() ], "(|| expr_break_no_arg(None))"),
                 ]
             ),
             ReturnExpr => ruleset(
@@ -1199,19 +1209,22 @@ impl GrammarFactory for ParserFactory {
             NextExpr => ruleset(
                 "Expr",
                 [
-                    rule([ term(KwNext).discard(), nonterm(LoopLabel) ], "expr_next"),
+                    rule([ term(KwNext).discard(), nonterm(BranchLabel) ], "(move |label| expr_next(Some(label)))"),
+                    rule([ term(KwNext).discard() ], "(|| expr_next(None))"),
                 ]
             ),
             RedoExpr => ruleset(
                 "Expr",
                 [
-                    rule([ term(KwRedo).discard(), nonterm(LoopLabel) ], "expr_redo"),
+                    rule([ term(KwRedo).discard(), nonterm(BranchLabel) ], "(move |label| expr_redo(Some(label)))"),
+                    rule([ term(KwRedo).discard() ], "(|| expr_redo(None))"),
                 ]
             ),
             RetryExpr => ruleset(
                 "Expr",
                 [
-                    rule([ term(KwRetry).discard(), nonterm(LoopLabel) ], "expr_retry"),
+                    rule([ term(KwRetry).discard(), nonterm(BranchLabel) ], "(move |label| expr_retry(Some(label)))"),
+                    rule([ term(KwRetry).discard() ], "(|| expr_retry(None))"),
                 ]
             ),
             ControlExpr => ruleset(
@@ -1881,6 +1894,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(Expression).with_location() ], "stmt_expr"),
                     rule([ nonterm(ImportStmt) ], "stmt_import"),
                     rule([ nonterm(ExportStmt) ], "stmt_export"),
+                    rule([ term(SymAt).discard(), nonterm(Identifier).with_location(), term(SymColon).discard() ], "stmt_label"),
                     rule([ nonterm(Modifiers), nonterm(VariableDeclarationRest) ], "statement_apply_builder"),
                     rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "statement_declaration_builder"),
                     rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "statement_record_builder"),

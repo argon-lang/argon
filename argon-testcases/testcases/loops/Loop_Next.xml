@@ -9,7 +9,7 @@
 
         proc main(): () do
             let mut i = 1
-            loop
+            loop do
                 let s = i.to_s()
                 i := i + 1
 
