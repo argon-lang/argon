@@ -125,6 +125,64 @@ fn parses_labeled_break_with_value() {
     ));
 }
 
+#[test]
+fn parses_ownership_prefix_expressions() {
+    let reporter = TestErrorReporter::default();
+    let file_name = PathBuf::from("index.argon");
+    let source = r#"
+        module _
+
+        proc main(): () do
+            let x = 1
+            let a = use x
+            let b = use mut x
+            let c = shared x
+        end
+    "#;
+
+    let module = argon_parser::parse(source.as_bytes(), &file_name, &reporter);
+
+    assert!(reporter.internal_errors.borrow().is_empty());
+    assert!(
+        reporter.parse_errors.borrow().is_empty(),
+        "parse errors: {:?}",
+        reporter.parse_errors.borrow()
+    );
+
+    let Stmt::FunctionDeclaration(function) = &module.stmts[0].value else {
+        panic!("expected function declaration");
+    };
+    let FunctionBody::ExprBody(body) = &function.body else {
+        panic!("expected expression function body");
+    };
+    let Expr::Block { body, .. } = &body.value else {
+        panic!("expected block function body");
+    };
+
+    let variable_value = |index: usize| {
+        let Stmt::VariableDeclaration(variable) = &body.value[index].value else {
+            panic!("expected variable declaration");
+        };
+        &variable.value.value
+    };
+
+    assert!(matches!(
+        variable_value(1),
+        Expr::Use {
+            is_mutable: false,
+            ..
+        }
+    ));
+    assert!(matches!(
+        variable_value(2),
+        Expr::Use {
+            is_mutable: true,
+            ..
+        }
+    ));
+    assert!(matches!(variable_value(3), Expr::Shared { .. }));
+}
+
 mod testcases {
     use super::*;
 

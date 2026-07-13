@@ -1,6 +1,6 @@
 use crate::{
     Builtin, Expr, ExprContext, ExprScannerMut, IntegerType, SubstScanner, Variable,
-    default_scan_mut,
+    default_scan_mut, ownership::is_shared_type,
 };
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
@@ -129,6 +129,103 @@ impl<EC: ExprContext + ?Sized, S: Normalizer<EC = EC>> NormalizerScanner<S> {
                         if !matches!(expr, Expr::Builtin(_)) {
                             continue 'updated_no_growth;
                         }
+                    }
+
+                    Expr::Use {
+                        is_mutable,
+                        inner: value,
+                    } => {
+                        match *value {
+                            Expr::Use {
+                                inner: value,
+                                is_mutable: is_mutable2,
+                            } => {
+                                expr = Expr::Use {
+                                    is_mutable: is_mutable && is_mutable2,
+                                    inner: value,
+                                };
+                                continue 'updated_no_growth;
+                            }
+
+                            inner if !is_mutable && is_shared_type(&inner) => {
+                                expr = inner;
+                                continue 'updated_no_growth;
+                            }
+
+                            _ => {}
+                        }
+
+                        expr = Expr::Use {
+                            is_mutable,
+                            inner: value,
+                        };
+                    }
+
+                    Expr::Shared { inner: value } => {
+                        match *value {
+                            Expr::Shared { inner: value } => {
+                                expr = Expr::Shared { inner: value };
+                                continue 'updated_no_growth;
+                            }
+
+                            inner if is_shared_type(&inner) => {
+                                expr = inner;
+                                continue 'updated_no_growth;
+                            }
+
+                            _ => {}
+                        }
+
+                        expr = Expr::Shared { inner: value };
+                    }
+
+                    Expr::Share { value } => {
+                        match *value {
+                            Expr::Share { value } => {
+                                expr = Expr::Share { value };
+                                continue 'updated_no_growth;
+                            }
+
+                            inner if is_shared_type(&inner) => {
+                                expr = inner;
+                                continue 'updated_no_growth;
+                            }
+
+                            _ => {}
+                        }
+
+                        expr = Expr::Share { value };
+                    }
+
+                    Expr::Borrow { value } => {
+                        match *value {
+                            Expr::Borrow { value } => {
+                                expr = Expr::Borrow { value };
+                                continue 'updated_no_growth;
+                            }
+
+                            inner if is_shared_type(&inner) => {
+                                expr = inner;
+                                continue 'updated_no_growth;
+                            }
+
+                            _ => {}
+                        }
+
+                        expr = Expr::Borrow { value };
+                    }
+
+                    Expr::BorrowMut { value } => {
+                        match *value {
+                            Expr::BorrowMut { value } => {
+                                expr = Expr::BorrowMut { value };
+                                continue 'updated_no_growth;
+                            }
+
+                            _ => {}
+                        }
+
+                        expr = Expr::BorrowMut { value };
                     }
 
                     _ => {}

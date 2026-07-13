@@ -55,6 +55,12 @@ pub fn get_expr_type<EC: ExprTypeContext + ?Sized>(expr: &Expr<EC>) -> Expr<EC> 
             get_expr_type(value)
         }
 
+        Expr::Use { inner: value, .. }
+        | Expr::Shared { inner: value }
+        | Expr::Share { value }
+        | Expr::Borrow { value }
+        | Expr::BorrowMut { value } => get_expr_type(value),
+
         Expr::Builtin(builtin) => get_builtin_type(builtin),
 
         Expr::Finally { block_body, .. } => get_expr_type(&**block_body),

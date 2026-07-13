@@ -7,10 +7,12 @@ use crate::{
 mod function_result;
 mod normalizer;
 mod subst;
+mod use_expr;
 
 pub use function_result::FunctionResultValueSubstScanner;
 pub use normalizer::{FullNormalizer, Normalizer, NormalizerScanner};
 pub use subst::SubstScanner;
+pub use use_expr::UseExprScanner;
 
 pub trait ExprScanner {
     type EC: ExprContext + ?Sized;
@@ -192,6 +194,11 @@ where
                     .iter()
                     .all(|field: &RecordFieldLiteral<S::EC>| scanner.scan(&field.value))
         }
+        Expr::Use { inner: value, .. }
+        | Expr::Shared { inner: value }
+        | Expr::Share { value }
+        | Expr::Borrow { value }
+        | Expr::BorrowMut { value } => scanner.scan(value),
         Expr::RecordType(record_type) => default_scan_record_type(scanner, record_type),
         Expr::Retry { label } => default_scan_label(scanner, label),
         Expr::Sequence(exprs) => exprs.iter().all(|expr| scanner.scan(expr)),
@@ -539,6 +546,11 @@ where
                     .iter_mut()
                     .all(|field: &mut RecordFieldLiteral<S::EC>| scanner.scan(&mut field.value))
         }
+        Expr::Use { inner: value, .. }
+        | Expr::Shared { inner: value }
+        | Expr::Share { value }
+        | Expr::Borrow { value }
+        | Expr::BorrowMut { value } => scanner.scan(value.as_mut()),
         Expr::RecordType(record_type) => default_scan_record_type_mut(scanner, record_type),
         Expr::Retry { label } => default_scan_label_mut(scanner, label),
         Expr::Sequence(exprs) => exprs.iter_mut().all(|expr| scanner.scan(expr)),

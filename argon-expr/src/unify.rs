@@ -96,6 +96,24 @@ pub trait Unify {
                 },
             ) => self.unify(*a_type, *b_type) && self.unify(*a_value, *b_value),
             (
+                Expr::Use {
+                    is_mutable: a_mutable,
+                    inner: a_value,
+                },
+                Expr::Use {
+                    is_mutable: b_mutable,
+                    inner: b_value,
+                },
+            ) => a_mutable == b_mutable && self.unify(*a_value, *b_value),
+            (Expr::Shared { inner: a_value }, Expr::Shared { inner: b_value }) => {
+                self.unify(*a_value, *b_value)
+            }
+            (Expr::Share { value: a_value }, Expr::Share { value: b_value })
+            | (Expr::Borrow { value: a_value }, Expr::Borrow { value: b_value })
+            | (Expr::BorrowMut { value: a_value }, Expr::BorrowMut { value: b_value }) => {
+                self.unify(*a_value, *b_value)
+            }
+            (
                 Expr::ConjunctionType {
                     lhs: a_lhs,
                     rhs: a_rhs,

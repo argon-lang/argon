@@ -214,6 +214,15 @@ where
                     ErasureMode::Concrete => self.prohibit_for_token(),
                 },
 
+                Expr::Use { inner: value, .. }
+                | Expr::Shared { inner: value }
+                | Expr::Share { value }
+                | Expr::Borrow { value }
+                | Expr::BorrowMut { value } => {
+                    self.prohibit_for_token();
+                    self.scan(value);
+                }
+
                 Expr::BoxedType(t) => self.scan_erased(t),
 
                 Expr::Box { t, value } => {

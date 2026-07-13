@@ -143,6 +143,11 @@ impl<
             Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
                 self.inhabited(value)
             }
+            Expr::Use { inner: value, .. }
+            | Expr::Shared { inner: value }
+            | Expr::Share { value }
+            | Expr::Borrow { value }
+            | Expr::BorrowMut { value } => self.inhabited(value),
             _ => {
                 let value = self.expr_to_z3(expr);
                 dynamic_to_bool(self.inhabited.apply(&[&value]))
@@ -1779,6 +1784,11 @@ impl<
             Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
                 Some(self.expr_to_z3(value))
             }
+            Expr::Use { inner: value, .. }
+            | Expr::Shared { inner: value }
+            | Expr::Share { value }
+            | Expr::Borrow { value }
+            | Expr::BorrowMut { value } => Some(self.expr_to_z3(value)),
             Expr::Box { t, value } => {
                 let t = self.expr_to_z3(t);
                 let value = self.expr_to_z3(value);

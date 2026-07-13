@@ -521,6 +521,16 @@ mod tests {
     }
 
     #[test]
+    fn use_keyword() {
+        assert_eq!(lex_normal("use"), vec![Token::KwUse]);
+    }
+
+    #[test]
+    fn shared_keyword() {
+        assert_eq!(lex_normal("shared"), vec![Token::KwShared]);
+    }
+
+    #[test]
     fn box_keyword() {
         assert_eq!(lex_normal("box"), vec![Token::KwBox]);
     }

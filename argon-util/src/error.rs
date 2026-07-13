@@ -57,6 +57,11 @@ pub enum ErrorCode {
     UnknownOptimization = 0x002C,
     UnknownIntegerSuffix = 0x002D,
     IntegerLiteralOutOfRange = 0x002E,
+    UseAfterMove = 0x002F,
+    MoveWhileBorrowed = 0x0030,
+    BorrowAfterMove = 0x0031,
+    MutableBorrowConflict = 0x0032,
+    AssignToShared = 0x0033,
 }
 
 impl ErrorCode {
@@ -498,6 +503,30 @@ impl CompileError {
             ),
             Some(loc),
         )
+    }
+
+    pub fn use_after_move() -> Self {
+        Self::new(ErrorCode::UseAfterMove, "Use after move", None)
+    }
+
+    pub fn move_while_borrowed() -> Self {
+        Self::new(ErrorCode::MoveWhileBorrowed, "Move while borrowed", None)
+    }
+
+    pub fn borrow_after_move() -> Self {
+        Self::new(ErrorCode::BorrowAfterMove, "Borrow after move", None)
+    }
+
+    pub fn mutable_borrow_conflict() -> Self {
+        Self::new(
+            ErrorCode::MutableBorrowConflict,
+            "Mutable borrow conflict",
+            None,
+        )
+    }
+
+    pub fn assign_to_shared() -> Self {
+        Self::new(ErrorCode::AssignToShared, "Assign to shared variable", None)
     }
 }
 

@@ -51,6 +51,10 @@ pub enum Token {
     KwVal,
     #[strum(serialize = "KwMut")]
     KwMut,
+    #[strum(serialize = "KwUse")]
+    KwUse,
+    #[strum(serialize = "KwShared")]
+    KwShared,
     #[strum(serialize = "KwModule")]
     KwModule,
     #[strum(serialize = "KwRecord")]
@@ -346,6 +350,7 @@ enum Rule {
     RecordLiteralFields,
     RecordLiteralField,
     UnaryExpr,
+    UseMutability,
     TypeExpr,
     MultiplicativeExpr,
     AdditiveExpr,
@@ -963,7 +968,16 @@ impl GrammarFactory for ParserFactory {
                     unary_operator_expr_rule(OpLogicalNot, "LogicalNot"),
                     unary_operator_expr_rule(OpPlus, "Plus"),
                     unary_operator_expr_rule(OpMinus, "Minus"),
+                    rule([ term(KwUse).discard(), nonterm(NewLines).discard(), nonterm(UseMutability), nonterm(UnaryExpr).with_location() ], "expr_use"),
+                    rule([ term(KwShared).discard(), nonterm(NewLines).discard(), nonterm(UnaryExpr).with_location() ], "expr_shared"),
                     expr_error(),
+                ],
+            ),
+            UseMutability => ruleset(
+                "bool",
+                [
+                    rule([ term(KwMut).discard(), nonterm(NewLines).discard() ], "(|| true)"),
+                    rule([], "(|| false)"),
                 ],
             ),
             TypeExpr => ruleset(

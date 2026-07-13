@@ -36,6 +36,7 @@ use parse18_runtime::{Location, WithLocation};
 mod exhaustive;
 mod implicits;
 mod overload;
+mod ownership;
 
 use crate::type_checker::exhaustive::ExhaustiveChecker;
 use overload::{OverloadResolver, Overloadable, substitute_arg_in_param_types};
@@ -1646,6 +1647,26 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 TypeInferResult::Complete(InferredType {
                     checked_expr: while_loop,
                     inferred_type: Expr::unit(),
+                })
+            }
+
+            ast::Expr::Use { is_mutable, value } => {
+                let value = self.infer(value).infer_fully();
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Use {
+                        is_mutable: *is_mutable,
+                        inner: Box::new(value.checked_expr),
+                    },
+                    inferred_type: value.inferred_type,
+                })
+            }
+            ast::Expr::Shared { value } => {
+                let value = self.infer(value).infer_fully();
+                TypeInferResult::Complete(InferredType {
+                    checked_expr: Expr::Shared {
+                        inner: Box::new(value.checked_expr),
+                    },
+                    inferred_type: value.inferred_type,
                 })
             }
 

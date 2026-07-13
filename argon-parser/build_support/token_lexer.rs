@@ -61,6 +61,8 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("let"), "TokenType::Token(Token::KwLet)");
     b.add(Regex::str("val"), "TokenType::Token(Token::KwVal)");
     b.add(Regex::str("mut"), "TokenType::Token(Token::KwMut)");
+    b.add(Regex::str("use"), "TokenType::Token(Token::KwUse)");
+    b.add(Regex::str("shared"), "TokenType::Token(Token::KwShared)");
     b.add(Regex::str("module"), "TokenType::Token(Token::KwModule)");
     b.add(Regex::str("record"), "TokenType::Token(Token::KwRecord)");
     b.add(Regex::str("enum"), "TokenType::Token(Token::KwEnum)");

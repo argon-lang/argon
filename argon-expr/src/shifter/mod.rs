@@ -249,6 +249,25 @@ where
                 })
                 .collect(),
         },
+        Expr::Use {
+            is_mutable,
+            inner: value,
+        } => Expr::Use {
+            is_mutable,
+            inner: Box::new(shifter.shift(*value)),
+        },
+        Expr::Shared { inner: value } => Expr::Shared {
+            inner: Box::new(shifter.shift(*value)),
+        },
+        Expr::Share { value } => Expr::Share {
+            value: Box::new(shifter.shift(*value)),
+        },
+        Expr::Borrow { value } => Expr::Borrow {
+            value: Box::new(shifter.shift(*value)),
+        },
+        Expr::BorrowMut { value } => Expr::BorrowMut {
+            value: Box::new(shifter.shift(*value)),
+        },
         Expr::RecordType(record_type) => {
             Expr::RecordType(default_shift_record_type(shifter, record_type))
         }

@@ -651,6 +651,19 @@ fn expr_index(obj: WithLocation<Expr>, index: WithLocation<Expr>) -> Expr {
     }
 }
 
+fn expr_use(is_mutable: bool, value: WithLocation<Expr>) -> Expr {
+    Expr::Use {
+        is_mutable,
+        value: Box::new(value),
+    }
+}
+
+fn expr_shared(value: WithLocation<Expr>) -> Expr {
+    Expr::Shared {
+        value: Box::new(value),
+    }
+}
+
 fn expr_redo(label: Option<WithLocation<Identifier>>) -> Expr {
     Expr::Redo { label }
 }

@@ -339,6 +339,13 @@ pub enum Expr {
         obj: Box<WithLocation<Expr>>,
         index: Box<WithLocation<Expr>>,
     },
+    Use {
+        is_mutable: bool,
+        value: Box<WithLocation<Expr>>,
+    },
+    Shared {
+        value: Box<WithLocation<Expr>>,
+    },
     IntLiteral {
         value: BigInt,
         suffix: IntLiteralSuffix,

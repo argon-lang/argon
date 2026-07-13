@@ -21,6 +21,9 @@ impl<EC: ExprContext + ?Sized> Copy for ExpectedType<'_, EC> {}
 pub enum TypeCompareTransformation<EC: ExprContext + ?Sized> {
     Box(Expr<EC>),
     Unbox(Expr<EC>),
+    Share,
+    Borrow,
+    BorrowMut,
 }
 
 impl<EC: ExprContext + ?Sized> TypeCompareTransformation<EC> {
@@ -44,6 +47,41 @@ impl<EC: ExprContext + ?Sized> TypeCompareTransformation<EC> {
                     value: Box::new(e2),
                 };
                 *t = box_type;
+            }
+            TypeCompareTransformation::Share => {
+                let e2 = mem::replace(e, Expr::Error);
+                let t2 = mem::replace(t, Expr::Error);
+
+                *e = Expr::Share {
+                    value: Box::new(e2),
+                };
+                *t = Expr::Shared {
+                    inner: Box::new(t2),
+                };
+            }
+            TypeCompareTransformation::Borrow => {
+                let e2 = mem::replace(e, Expr::Error);
+                let t2 = mem::replace(t, Expr::Error);
+
+                *e = Expr::Borrow {
+                    value: Box::new(e2),
+                };
+                *t = Expr::Use {
+                    is_mutable: false,
+                    inner: Box::new(t2),
+                };
+            }
+            TypeCompareTransformation::BorrowMut => {
+                let e2 = mem::replace(e, Expr::Error);
+                let t2 = mem::replace(t, Expr::Error);
+
+                *e = Expr::BorrowMut {
+                    value: Box::new(e2),
+                };
+                *t = Expr::Use {
+                    is_mutable: true,
+                    inner: Box::new(t2),
+                };
             }
         }
     }
@@ -134,6 +172,55 @@ pub trait TypeComparer: Unify {
                                 .push(TypeCompareTransformation::Box((*expected_unboxed).clone()));
                             expected_type = *expected_unboxed;
                             continue;
+                        }
+
+                        Expr::Use {
+                            is_mutable: false,
+                            inner: inner_expected,
+                        } => {
+                            if let Expr::Use {
+                                is_mutable: false,
+                                inner: inner_actual,
+                            } = actual_type
+                            {
+                                actual_type = *inner_actual;
+                            } else {
+                                transformations.push(TypeCompareTransformation::Borrow);
+                            }
+
+                            expected_type = *inner_expected;
+                        }
+
+                        Expr::Use {
+                            is_mutable: true,
+                            inner: inner_expected,
+                        } => {
+                            if let Expr::Use {
+                                is_mutable: true,
+                                inner: inner_actual,
+                            } = actual_type
+                            {
+                                actual_type = *inner_actual;
+                            } else {
+                                transformations.push(TypeCompareTransformation::BorrowMut);
+                            }
+
+                            expected_type = *inner_expected;
+                        }
+
+                        Expr::Shared {
+                            inner: inner_expected,
+                        } => {
+                            if let Expr::Shared {
+                                inner: inner_actual,
+                            } = actual_type
+                            {
+                                actual_type = *inner_actual;
+                            } else {
+                                transformations.push(TypeCompareTransformation::Share);
+                            }
+
+                            expected_type = *inner_expected;
                         }
 
                         _ => {}

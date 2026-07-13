@@ -184,6 +184,22 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         record_type: RecordType<EC>,
         fields: Vec<RecordFieldLiteral<EC>>,
     },
+    Use {
+        is_mutable: bool,
+        inner: Box<Expr<EC>>,
+    },
+    Shared {
+        inner: Box<Expr<EC>>,
+    },
+    Share {
+        value: Box<Expr<EC>>,
+    },
+    Borrow {
+        value: Box<Expr<EC>>,
+    },
+    BorrowMut {
+        value: Box<Expr<EC>>,
+    },
     RecordType(RecordType<EC>),
     Retry {
         label: Box<BlockLabel<EC>>,
