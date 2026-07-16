@@ -5,7 +5,7 @@ use argon_compiler::access::AccessToken;
 use argon_compiler::scope::{FunctionResultValueScope, ParameterScope, Scope};
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
 use argon_compiler::{Context, DefaultExprContext};
-use argon_expr::{ErasureMode, Expr, ExpressionOwner, ParameterVariable};
+use argon_expr::{ErasureMode, Expr, ExprLocationExt, ExpressionOwner, ParameterVariable};
 use argon_parser::ast;
 use argon_util::{CompileError, MultiSlice};
 use parse18_runtime::WithLocation;
@@ -90,7 +90,8 @@ impl<'a> SignatureParser<'a> {
                             .iter()
                             .map(|binding| binding.param_type.clone())
                             .collect::<Vec<_>>(),
-                    };
+                    }
+                    .with_location(param.location.clone());
                 }
             }
 

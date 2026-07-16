@@ -1,12 +1,79 @@
-use crate::{BlockLabel, Pattern};
+use crate::{BlockLabel, LocatedPattern};
 use alloc::{boxed::Box, vec, vec::Vec};
 use argon_parser::ast::Identifier;
 use argon_util::{UniqueIdentifier, Unload};
-use core::fmt::Debug;
+use core::fmt::{self, Debug};
 use core::hash::{Hash, Hasher};
 use derivative::Derivative;
 use mitsein::vec1::Vec1;
 use num_bigint::BigInt;
+use parse18_runtime::Location;
+
+#[derive(Derivative)]
+#[derivative(Clone(bound = ""))]
+pub struct LocatedExpr<EC: ExprContext + ?Sized> {
+    pub value: Expr<EC>,
+    pub location: Location,
+}
+
+impl<EC: ExprContext + ?Sized> LocatedExpr<EC> {
+    pub fn new(value: Expr<EC>, location: Location) -> Self {
+        LocatedExpr { value, location }
+    }
+
+    pub fn map<EC2: ExprContext + ?Sized>(
+        self,
+        f: impl FnOnce(Expr<EC>) -> Expr<EC2>,
+    ) -> LocatedExpr<EC2> {
+        LocatedExpr {
+            value: f(self.value),
+            location: self.location,
+        }
+    }
+
+    pub fn error(location: Location) -> Self {
+        LocatedExpr {
+            value: Expr::Error,
+            location,
+        }
+    }
+}
+
+impl<EC: ExprContext + ?Sized> Debug for LocatedExpr<EC>
+where
+    Expr<EC>: Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LocatedExpr")
+            .field("value", &self.value)
+            .field("location", &self.location)
+            .finish()
+    }
+}
+
+impl<EC: ExprContext + ?Sized> PartialEq for LocatedExpr<EC> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl<EC: ExprContext + ?Sized> Eq for LocatedExpr<EC> {}
+
+impl<EC: ExprContext + ?Sized> Hash for LocatedExpr<EC> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.value.hash(state);
+    }
+}
+
+pub trait ExprLocationExt<EC: ExprContext + ?Sized>: Sized {
+    fn with_location(self, location: Location) -> LocatedExpr<EC>;
+}
+
+impl<EC: ExprContext + ?Sized> ExprLocationExt<EC> for Expr<EC> {
+    fn with_location(self, location: Location) -> LocatedExpr<EC> {
+        LocatedExpr::new(self, location)
+    }
+}
 
 pub trait ExprContext {
     type Hole: Clone + Debug + Eq + Hash;
@@ -62,46 +129,46 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
 pub enum Expr<EC: ExprContext + ?Sized> {
     Error,
     Hole(EC::Hole),
-    And(Box<Expr<EC>>, Box<Expr<EC>>),
+    And(Box<LocatedExpr<EC>>, Box<LocatedExpr<EC>>),
     BoolLiteral(bool),
     Block {
         label: Box<BlockLabel<EC>>,
-        body: Box<Expr<EC>>,
+        body: Box<LocatedExpr<EC>>,
     },
     Break {
         label: Box<BlockLabel<EC>>,
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     Builtin(Builtin<EC>),
     BindEnsures {
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
         variables: Vec<Box<LocalVariable<EC>>>,
     },
     BindErasedAlias {
         variable: Box<LocalVariable<EC>>,
         equality_witness: Option<Box<LocalVariable<EC>>>,
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     ConjunctionType {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     Closure {
         v: Box<ClosureParameterVariable<EC>>,
-        return_type: Box<Expr<EC>>,
-        body: Box<Expr<EC>>,
+        return_type: Box<LocatedExpr<EC>>,
+        body: Box<LocatedExpr<EC>>,
     },
     DisjunctionType {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     EqualToType {
-        r#type: Box<Expr<EC>>,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        r#type: Box<LocatedExpr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     Condition {
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
         when_true_witness: Option<Box<LocalVariable<EC>>>,
         when_false_witness: Option<Box<LocalVariable<EC>>>,
     },
@@ -109,32 +176,32 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     EnumVariantLiteral {
         enum_type: EnumType<EC>,
         variant: EC::EnumVariant,
-        arguments: Vec<Expr<EC>>,
+        arguments: Vec<LocatedExpr<EC>>,
         fields: Vec<RecordFieldLiteral<EC>>,
     },
     Finally {
-        block_body: Box<Expr<EC>>,
-        finally_body: Box<Expr<EC>>,
+        block_body: Box<LocatedExpr<EC>>,
+        finally_body: Box<LocatedExpr<EC>>,
     },
     FunctionCall {
         function: EC::Function,
-        arguments: Vec<Expr<EC>>,
+        arguments: Vec<LocatedExpr<EC>>,
     },
     FunctionObjectCall {
-        function: Box<Expr<EC>>,
-        argument: Box<Expr<EC>>,
+        function: Box<LocatedExpr<EC>>,
+        argument: Box<LocatedExpr<EC>>,
     },
     FunctionResultValue {
-        result_type: Box<Expr<EC>>,
+        result_type: Box<LocatedExpr<EC>>,
     },
     FunctionType {
         a: Box<ClosureParameterVariable<EC>>,
-        r: Box<Expr<EC>>,
+        r: Box<LocatedExpr<EC>>,
     },
     IfElse {
-        condition: Box<Expr<EC>>,
-        when_true: Box<Expr<EC>>,
-        when_false: Box<Expr<EC>>,
+        condition: Box<LocatedExpr<EC>>,
+        when_true: Box<LocatedExpr<EC>>,
+        when_false: Box<LocatedExpr<EC>>,
     },
     InstanceType(InstanceType<EC>),
     IntLiteral(BigInt),
@@ -147,38 +214,38 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     I64Literal(i64),
     U64Literal(u64),
     Is {
-        value: Box<Expr<EC>>,
-        pattern: Box<Pattern<EC>>,
+        value: Box<LocatedExpr<EC>>,
+        pattern: Box<LocatedPattern<EC>>,
     },
     Match {
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
         cases: Vec<MatchCase<EC>>,
     },
     MethodCall {
         method: EC::Method,
         instance_type: MethodInstanceType<EC>,
-        receiver: Box<Expr<EC>>,
-        arguments: Vec<Expr<EC>>,
+        receiver: Box<LocatedExpr<EC>>,
+        arguments: Vec<LocatedExpr<EC>>,
     },
     NewInstance {
         instance: EC::Instance,
-        arguments: Vec<Expr<EC>>,
+        arguments: Vec<LocatedExpr<EC>>,
     },
-    Not(Box<Expr<EC>>),
-    Or(Box<Expr<EC>>, Box<Expr<EC>>),
+    Not(Box<LocatedExpr<EC>>),
+    Or(Box<LocatedExpr<EC>>, Box<LocatedExpr<EC>>),
     Raise {
-        ex: Box<Expr<EC>>,
+        ex: Box<LocatedExpr<EC>>,
     },
     RecordFieldLoad {
         record_type: Box<RecordType<EC>>,
         field: EC::RecordField,
-        record_value: Box<Expr<EC>>,
+        record_value: Box<LocatedExpr<EC>>,
     },
     RecordFieldStore {
         record_type: Box<RecordType<EC>>,
         field: EC::RecordField,
-        record_value: Box<Expr<EC>>,
-        new_value: Box<Expr<EC>>,
+        record_value: Box<LocatedExpr<EC>>,
+        new_value: Box<LocatedExpr<EC>>,
     },
     RecordLiteral {
         record_type: RecordType<EC>,
@@ -186,48 +253,52 @@ pub enum Expr<EC: ExprContext + ?Sized> {
     },
     Use {
         is_mutable: bool,
-        inner: Box<Expr<EC>>,
+        inner: Box<LocatedExpr<EC>>,
     },
     Shared {
-        inner: Box<Expr<EC>>,
+        inner: Box<LocatedExpr<EC>>,
     },
     Share {
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     Borrow {
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     BorrowMut {
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     RecordType(RecordType<EC>),
     Retry {
         label: Box<BlockLabel<EC>>,
     },
-    Sequence(Vec1<Expr<EC>>),
+    Sequence(Vec1<LocatedExpr<EC>>),
     StringLiteral(Box<str>),
     TraitType(TraitType<EC>),
     Tuple {
-        items: Vec<Expr<EC>>,
+        items: Vec<LocatedExpr<EC>>,
     },
-    TupleElement(Box<Expr<EC>>, usize),
-    Type(Box<Expr<EC>>),
+    TupleElement(Box<LocatedExpr<EC>>, usize),
+    Type(Box<LocatedExpr<EC>>),
     BigType(BigInt),
     Variable(Variable<EC>),
-    VariableBinding(Box<LocalVariable<EC>>, Box<Expr<EC>>),
-    VariableStore(Variable<EC>, Box<Expr<EC>>),
-    BoxedType(Box<Expr<EC>>),
+    VariableBinding(Box<LocalVariable<EC>>, Box<LocatedExpr<EC>>),
+    VariableStore(Variable<EC>, Box<LocatedExpr<EC>>),
+    BoxedType(Box<LocatedExpr<EC>>),
     Box {
-        t: Box<Expr<EC>>,
-        value: Box<Expr<EC>>,
+        t: Box<LocatedExpr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     Unbox {
-        t: Box<Expr<EC>>,
-        value: Box<Expr<EC>>,
+        t: Box<LocatedExpr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
 }
 
 impl<EC: ExprContext + ?Sized> Unload for Expr<EC> {
+    fn unload(&self) {}
+}
+
+impl<EC: ExprContext + ?Sized> Unload for LocatedExpr<EC> {
     fn unload(&self) {}
 }
 
@@ -284,7 +355,7 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
         Expr::Builtin(Builtin::NeverType)
     }
 
-    pub fn array_type(element_type: Expr<EC>) -> Expr<EC> {
+    pub fn array_type(element_type: LocatedExpr<EC>) -> Expr<EC> {
         Expr::Builtin(Builtin::ArrayType {
             element_type: Box::new(element_type),
         })
@@ -295,7 +366,7 @@ impl<EC: ExprContext + ?Sized> Expr<EC> {
     }
 
     pub fn type_n(level: impl Into<BigInt>) -> Expr<EC> {
-        Expr::Type(Box::new(Expr::IntLiteral(level.into())))
+        Expr::BigType(level.into())
     }
 }
 
@@ -313,122 +384,122 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
     StringType,
     NeverType,
     ArrayType {
-        element_type: Box<Expr<EC>>,
+        element_type: Box<LocatedExpr<EC>>,
     },
     IntNegate {
         integer_type: IntegerType,
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     IntBitNot {
         integer_type: IntegerType,
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     IntConvert {
         source_type: IntegerType,
         dest_type: IntegerType,
-        value: Box<Expr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     IntAdd {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntSub {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntMul {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntBitAnd {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntBitOr {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntBitXor {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntBitShiftLeft {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntBitShiftRight {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntEq {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntLt {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntLe {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntGt {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     IntGe {
         integer_type: IntegerType,
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     StringConcat {
-        values: Vec<Expr<EC>>,
+        values: Vec<LocatedExpr<EC>>,
     },
     StringEq {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     BoolEq {
-        lhs: Box<Expr<EC>>,
-        rhs: Box<Expr<EC>>,
+        lhs: Box<LocatedExpr<EC>>,
+        rhs: Box<LocatedExpr<EC>>,
     },
     ArrayCreateUnsafeUninitialized {
-        element_type: Box<Expr<EC>>,
-        length: Box<Expr<EC>>,
+        element_type: Box<LocatedExpr<EC>>,
+        length: Box<LocatedExpr<EC>>,
     },
     ArrayLength {
-        element_type: Box<Expr<EC>>,
-        array: Box<Expr<EC>>,
+        element_type: Box<LocatedExpr<EC>>,
+        array: Box<LocatedExpr<EC>>,
     },
     ArrayGet {
-        element_type: Box<Expr<EC>>,
-        array: Box<Expr<EC>>,
-        index: Box<Expr<EC>>,
+        element_type: Box<LocatedExpr<EC>>,
+        array: Box<LocatedExpr<EC>>,
+        index: Box<LocatedExpr<EC>>,
     },
     ArraySet {
-        element_type: Box<Expr<EC>>,
-        array: Box<Expr<EC>>,
-        index: Box<Expr<EC>>,
-        value: Box<Expr<EC>>,
+        element_type: Box<LocatedExpr<EC>>,
+        array: Box<LocatedExpr<EC>>,
+        index: Box<LocatedExpr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     EqualToRefl {
-        r#type: Box<Expr<EC>>,
-        value: Box<Expr<EC>>,
+        r#type: Box<LocatedExpr<EC>>,
+        value: Box<LocatedExpr<EC>>,
     },
     UnsafeAssumeErased {
-        r#type: Box<Expr<EC>>,
+        r#type: Box<LocatedExpr<EC>>,
     },
 }
 
@@ -740,8 +811,8 @@ impl<EC: ExprContext + ?Sized> Builtin<EC> {
 #[derivative(Eq(bound = ""))]
 #[derivative(Hash(bound = ""))]
 pub struct MatchCase<EC: ExprContext + ?Sized> {
-    pub pattern: Pattern<EC>,
-    pub body: Expr<EC>,
+    pub pattern: LocatedPattern<EC>,
+    pub body: LocatedExpr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> Clone for MatchCase<EC> {
@@ -760,7 +831,7 @@ impl<EC: ExprContext + ?Sized> Clone for MatchCase<EC> {
 #[derivative(Hash(bound = ""))]
 pub struct RecordFieldLiteral<EC: ExprContext + ?Sized> {
     pub field: EC::RecordField,
-    pub value: Expr<EC>,
+    pub value: LocatedExpr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> Clone for RecordFieldLiteral<EC> {
@@ -787,7 +858,7 @@ pub enum ErasureMode {
 #[derivative(Hash(bound = ""))]
 pub struct RecordType<EC: ExprContext + ?Sized> {
     pub record: EC::Record,
-    pub arguments: Vec<Expr<EC>>,
+    pub arguments: Vec<LocatedExpr<EC>>,
 }
 
 #[derive(Derivative)]
@@ -798,7 +869,7 @@ pub struct RecordType<EC: ExprContext + ?Sized> {
 #[derivative(Hash(bound = ""))]
 pub struct EnumType<EC: ExprContext + ?Sized> {
     pub enum_: EC::Enum,
-    pub arguments: Vec<Expr<EC>>,
+    pub arguments: Vec<LocatedExpr<EC>>,
 }
 
 #[derive(Derivative)]
@@ -809,7 +880,7 @@ pub struct EnumType<EC: ExprContext + ?Sized> {
 #[derivative(Hash(bound = ""))]
 pub struct TraitType<EC: ExprContext + ?Sized> {
     pub trait_: EC::Trait,
-    pub arguments: Vec<Expr<EC>>,
+    pub arguments: Vec<LocatedExpr<EC>>,
 }
 
 #[derive(Derivative)]
@@ -820,7 +891,7 @@ pub struct TraitType<EC: ExprContext + ?Sized> {
 #[derivative(Hash(bound = ""))]
 pub struct InstanceType<EC: ExprContext + ?Sized> {
     pub instance: EC::Instance,
-    pub arguments: Vec<Expr<EC>>,
+    pub arguments: Vec<LocatedExpr<EC>>,
 }
 
 #[derive(Derivative)]
@@ -864,7 +935,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
         }
     }
 
-    pub fn var_type(&self) -> &Expr<EC> {
+    pub fn var_type(&self) -> &LocatedExpr<EC> {
         match self {
             Variable::Local(variable) => &variable.var_type,
             Variable::Parameter(variable) => &variable.var_type,
@@ -904,7 +975,7 @@ impl<EC: ExprContext + ?Sized> Variable<EC> {
 pub struct VariableTupleElement<EC: ExprContext + ?Sized> {
     pub variable: Variable<EC>,
     pub index: usize,
-    pub binding_type: Expr<EC>,
+    pub binding_type: LocatedExpr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
@@ -923,7 +994,7 @@ impl<EC: ExprContext + ?Sized> Clone for VariableTupleElement<EC> {
 pub struct LocalVariable<EC: ExprContext + ?Sized> {
     pub id: UniqueIdentifier,
     pub name: Option<Identifier>,
-    pub var_type: Expr<EC>,
+    pub var_type: LocatedExpr<EC>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
     pub is_mutable: bool,
@@ -949,7 +1020,7 @@ impl<EC: ExprContext + ?Sized> Hash for LocalVariable<EC> {
 pub struct ParameterVariable<EC: ExprContext + ?Sized> {
     pub owner: ExpressionOwner<EC>,
     pub parameter_index: usize,
-    pub var_type: Expr<EC>,
+    pub var_type: LocatedExpr<EC>,
     pub name: Option<Identifier>,
     pub erasure_mode: ErasureMode,
     pub is_witness: bool,
@@ -975,7 +1046,7 @@ impl<EC: ExprContext + ?Sized> Hash for ParameterVariable<EC> {
 #[derivative(Clone(bound = ""))]
 pub struct InstanceParameterVariable<EC: ExprContext + ?Sized> {
     pub owner: ExpressionOwner<EC>,
-    pub var_type: Expr<EC>,
+    pub var_type: LocatedExpr<EC>,
     pub name: Option<Identifier>,
 }
 
@@ -998,7 +1069,7 @@ impl<EC: ExprContext + ?Sized> Hash for InstanceParameterVariable<EC> {
 #[derivative(Clone(bound = ""))]
 pub struct ClosureParameterVariable<EC: ExprContext + ?Sized> {
     pub id: UniqueIdentifier,
-    pub var_type: Expr<EC>,
+    pub var_type: LocatedExpr<EC>,
     pub name: Option<Identifier>,
     pub is_mutable: bool,
     pub erasure_mode: ErasureMode,

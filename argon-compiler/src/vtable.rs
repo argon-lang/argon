@@ -7,8 +7,11 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use argon_expr::{Expr, ExpressionOwner, InstanceType, SubstScanner, TraitType};
-use argon_expr::{ExprScannerMut, Unify, Variable};
+use argon_expr::{
+    Expr, ExprLocationExt, ExpressionOwner, InstanceType, LocatedExpr, SubstScanner, TraitType,
+    Unify,
+};
+use argon_expr::{ExprScannerMut, Variable};
 use argon_parser::Location;
 use argon_util::{CompileError, Unload};
 use hashbrown::{HashMap, HashSet};
@@ -60,7 +63,7 @@ impl PartialEq for VTableSlot {
 #[derive(Clone)]
 pub struct VTableSlotValue {
     signature: Arc<FunctionSignature<DefaultExprContext>>,
-    slot_instance_type: Expr<DefaultExprContext>,
+    slot_instance_type: LocatedExpr<DefaultExprContext>,
     slot_access: AccessModifier,
     target: VTableTarget,
 }
@@ -90,7 +93,7 @@ pub fn build_vtable(
     context: Context,
     method_owner: MethodOwner,
     access_token: AccessToken,
-    location: Option<Location>,
+    location: Location,
 ) -> VTable {
     let parent;
     let is_concrete;
@@ -104,7 +107,7 @@ pub fn build_vtable(
         }
         MethodOwner::Instance(i) => {
             is_concrete = true;
-            parent = match &i.clone().signature().return_type {
+            parent = match &i.clone().signature().return_type.value {
                 Expr::TraitType(tt) => {
                     let mut parent = tt.trait_.clone().vtable().as_ref().clone();
                     let mut subst = SubstScanner::new();
@@ -147,7 +150,7 @@ struct VTableBuilder {
     parent: VTable,
     current: VTable,
     access_token: AccessToken,
-    concrete_location: Option<Location>,
+    concrete_location: Location,
 }
 
 impl VTableBuilder {
@@ -165,9 +168,9 @@ impl VTableBuilder {
                 VTableTarget::Abstract | VTableTarget::Ambiguous(_) => self
                     .context
                     .reporter()
-                    .report_error(CompileError::abstract_method_error(
+                    .report_error(CompileError::abstract_method_error(Some(
                         self.concrete_location.clone(),
-                    )),
+                    ))),
 
                 VTableTarget::Implementation(_) => {}
             })
@@ -224,10 +227,11 @@ impl VTableBuilder {
         );
     }
 
-    fn build_slot_instance_type(&self, method: Arc<dyn Method>) -> Expr<DefaultExprContext> {
-        let method_owner = method.owner();
+    fn build_slot_instance_type(&self, method: Arc<dyn Method>) -> LocatedExpr<DefaultExprContext> {
+        let method_owner = method.clone().owner();
         let sig = method_owner.signature().as_ref().clone();
         let owner = method_owner.clone().into_expression_owner();
+        let location = self.concrete_location.clone();
 
         let arguments = sig
             .parameters
@@ -236,6 +240,7 @@ impl VTableBuilder {
             .map(|(i, param)| {
                 let param_var = param.to_parameter_var(owner.clone(), i);
                 Expr::Variable(Variable::Parameter(Box::new(param_var)))
+                    .with_location(location.clone())
             })
             .collect::<Vec<_>>();
 
@@ -249,6 +254,7 @@ impl VTableBuilder {
                 arguments,
             }),
         }
+        .with_location(location)
     }
 
     fn override_matching_slots(
@@ -308,7 +314,7 @@ impl VTableBuilder {
                 self.context
                     .reporter()
                     .report_error(CompileError::override_access_narrowing(
-                        self.concrete_location.clone(),
+                        Some(self.concrete_location.clone()),
                         slot_value.slot_access.display(),
                         method_access.display(),
                     ));
@@ -332,9 +338,9 @@ impl VTableBuilder {
         if !found_override {
             self.context
                 .reporter()
-                .report_error(CompileError::invalid_override(
+                .report_error(CompileError::invalid_override(Some(
                     self.concrete_location.clone(),
-                ))
+                )))
         }
     }
 
@@ -371,18 +377,25 @@ impl VTableBuilder {
                         .clone()
                         .to_parameter_var(parent_owner.clone(), index),
                 )),
-                Cow::Owned(Expr::Variable(Variable::Parameter(Box::new(
-                    child_param
-                        .clone()
-                        .to_parameter_var(child_owner.clone(), index),
-                )))),
+                Cow::Owned(
+                    Expr::Variable(Variable::Parameter(Box::new(
+                        child_param
+                            .clone()
+                            .to_parameter_var(child_owner.clone(), index),
+                    )))
+                    .with_location(self.concrete_location.clone()),
+                ),
             );
         }
 
         true
     }
 
-    fn type_matches(&self, a: Expr<DefaultExprContext>, b: Expr<DefaultExprContext>) -> bool {
+    fn type_matches(
+        &self,
+        a: LocatedExpr<DefaultExprContext>,
+        b: LocatedExpr<DefaultExprContext>,
+    ) -> bool {
         let mut unify = DefaultExprComparer::new(self.context.clone());
 
         unify.unify(a, b)

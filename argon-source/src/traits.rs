@@ -79,6 +79,10 @@ impl Trait for SourceTrait {
             .import_specifier(self.decl.name.value.clone(), signature)
     }
 
+    fn location(&self) -> parse18_runtime::Location {
+        self.decl.name.location.clone()
+    }
+
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
         self.signature.initialize(|| {
             let scope = self.closure.scope();
@@ -138,7 +142,7 @@ impl Trait for SourceTrait {
                 self.context.clone(),
                 MethodOwner::Trait(trait_ref),
                 self.access_token(),
-                Some(self.decl.name.location.clone()),
+                self.location(),
             ))
         })
     }

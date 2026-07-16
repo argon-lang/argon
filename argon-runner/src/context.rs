@@ -103,7 +103,7 @@ impl ContextObject for RunnerContext {
     }
 
     fn z3_rlimit(&self) -> u32 {
-        20000
+        100000
     }
 }
 

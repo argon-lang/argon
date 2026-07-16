@@ -14,10 +14,11 @@ use num_bigint::{BigInt, BigUint};
 use crate::ids::TubeIdProvider;
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, IntegerType,
-    LocalVariable, MatchCase, MethodInstanceType, Pattern, RecordFieldPattern, RecordType,
-    TraitType, Variable,
+    LocalVariable, LocatedExpr, MatchCase, MethodInstanceType, Pattern, RecordFieldPattern,
+    RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
+use parse18_runtime::{FilePosition, Location};
 
 use argon_compiler::erased_sig::{
     ErasedSignature, ErasedSignatureType, ImportSpecifier, erase_signature,
@@ -209,7 +210,7 @@ impl TubeEncoder {
                 .map(|name| encode_identifier(name).map(Box::new))
                 .transpose()?,
             kind: encode_block_label_kind(label.kind),
-            block_result_type: Box::new(self.emit_expr(&label.block_result_type)?),
+            block_result_type: Box::new(self.emit_expr(&label.block_result_type.value)?),
         })
     }
 
@@ -345,7 +346,9 @@ impl TubeEncoder {
                             Ok(Box::new(tf::RecordFieldDefinition {
                                 field_id: BigUint::from(field_id),
                                 name: Box::new(encode_identifier(&metadata.name)?),
-                                field_type: Box::new(self.emit_expr(&field.clone().field_type())?),
+                                field_type: Box::new(
+                                    self.emit_expr(&field.clone().field_type().value)?,
+                                ),
                                 mutable: metadata.is_mutable,
                             }))
                         })
@@ -424,7 +427,7 @@ impl TubeEncoder {
                                         field_id: BigUint::from(field_id),
                                         name: Box::new(encode_identifier(&metadata.name)?),
                                         field_type: Box::new(
-                                            self.emit_expr(&field.clone().field_type())?,
+                                            self.emit_expr(&field.clone().field_type().value)?,
                                         ),
                                         mutable: metadata.is_mutable,
                                     }))
@@ -497,6 +500,7 @@ impl TubeEncoder {
                         definition: Box::new(tf::TraitDefinition {
                             trait_id,
                             import: Box::new(import),
+                            location: Box::new(Self::emit_location(&trait_.location())),
                             signature: Box::new(self.emit_function_signature(&trait_.signature())?),
                             methods,
                         }),
@@ -529,6 +533,7 @@ impl TubeEncoder {
                         definition: Box::new(tf::InstanceDefinition {
                             instance_id,
                             import: Box::new(import),
+                            location: Box::new(Self::emit_location(&instance.location())),
                             erasure: Box::new(encode_erasure_mode(instance.erasure_mode())),
                             signature: Box::new(
                                 self.emit_function_signature(&instance.signature())?,
@@ -780,7 +785,9 @@ impl TubeEncoder {
                                         .as_ref()
                                         .map(|name| encode_identifier(name).map(Box::new))
                                         .transpose()?,
-                                    param_type: Box::new(self.emit_expr(&binding.param_type)?),
+                                    param_type: Box::new(
+                                        self.emit_expr(&binding.param_type.value)?,
+                                    ),
                                 }))
                             })
                             .collect::<Result<Vec<_>, InternalCompilerError>>()?,
@@ -789,15 +796,15 @@ impl TubeEncoder {
                             .as_ref()
                             .map(|name| encode_identifier(name).map(Box::new))
                             .transpose()?,
-                        param_type: Box::new(self.emit_expr(&param.param_type)?),
+                        param_type: Box::new(self.emit_expr(&param.param_type.value)?),
                     }))
                 })
                 .collect::<Result<Vec<_>, InternalCompilerError>>()?,
-            return_type: Box::new(self.emit_expr(&sig.return_type)?),
+            return_type: Box::new(self.emit_expr(&sig.return_type.value)?),
             ensures_clauses: sig
                 .ensures_clauses
                 .iter()
-                .map(|clause| self.emit_expr(clause).map(Box::new))
+                .map(|clause| self.emit_expr(&clause.value).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?,
         })
     }
@@ -808,7 +815,7 @@ impl TubeEncoder {
     ) -> Result<tf::FunctionImplementation, InternalCompilerError> {
         Ok(match implementation {
             FunctionImplementation::Expr(expr) => tf::FunctionImplementation::Expr {
-                body: Box::new(self.emit_expr(expr)?),
+                body: Box::new(self.emit_expr(&expr.value)?),
             },
 
             FunctionImplementation::Extern(externs) => tf::FunctionImplementation::Extern {
@@ -866,7 +873,7 @@ impl TubeEncoder {
     ) -> Result<tf::MethodImplementation, InternalCompilerError> {
         Ok(match implementation {
             FunctionImplementation::Expr(expr) => tf::MethodImplementation::Expr {
-                body: Box::new(self.emit_expr(expr)?),
+                body: Box::new(self.emit_expr(&expr.value)?),
             },
 
             FunctionImplementation::Extern(externs) => tf::MethodImplementation::Extern {
@@ -902,8 +909,33 @@ impl TubeEncoder {
             args: trait_type
                 .arguments
                 .iter()
-                .map(|arg| self.emit_expr(arg).map(Box::new))
+                .map(|arg| self.emit_located_expr(arg).map(Box::new))
                 .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+
+    fn emit_file_position(position: &FilePosition) -> tf::FilePosition {
+        tf::FilePosition {
+            line: BigUint::from(position.line),
+            column: BigUint::from(position.column),
+        }
+    }
+
+    fn emit_location(location: &Location) -> tf::Location {
+        tf::Location {
+            file: location.file.to_string_lossy().into_owned(),
+            start: Box::new(Self::emit_file_position(&location.start)),
+            end: Box::new(Self::emit_file_position(&location.end)),
+        }
+    }
+
+    fn emit_located_expr(
+        &mut self,
+        expr: &LocatedExpr<argon_compiler::DefaultExprContext>,
+    ) -> Result<tf::LocatedExpr, InternalCompilerError> {
+        Ok(tf::LocatedExpr {
+            location: Box::new(Self::emit_location(&expr.location)),
+            value: Box::new(self.emit_expr(&expr.value)?),
         })
     }
 
@@ -914,11 +946,11 @@ impl TubeEncoder {
         Ok(match expr {
             Expr::Error => tf::Expr::Error {},
             Expr::FunctionResultValue { result_type } => tf::Expr::ErasedValue {
-                r#type: Box::new(self.emit_expr(result_type)?),
+                r#type: Box::new(self.emit_located_expr(result_type)?),
             },
             Expr::And(a, b) => tf::Expr::And {
-                a: Box::new(self.emit_expr(a)?),
-                b: Box::new(self.emit_expr(b)?),
+                a: Box::new(self.emit_located_expr(a)?),
+                b: Box::new(self.emit_located_expr(b)?),
             },
             Expr::BoolLiteral(value) => tf::Expr::BoolLiteral { value: *value },
             Expr::IntLiteral(i) => tf::Expr::IntLiteral { i: i.clone() },
@@ -934,28 +966,28 @@ impl TubeEncoder {
             Expr::Tuple { items } => tf::Expr::Tuple {
                 items: items
                     .iter()
-                    .map(|item| self.emit_expr(item).map(Box::new))
+                    .map(|item| self.emit_located_expr(item).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::TupleElement(tuple, index) => tf::Expr::TupleElement {
                 index: BigUint::from(*index),
-                tuple: Box::new(self.emit_expr(tuple)?),
+                tuple: Box::new(self.emit_located_expr(tuple)?),
             },
             Expr::Builtin(builtin) => tf::Expr::Builtin {
                 builtin: Box::new(self.encode_builtin(builtin)?),
             },
             Expr::ConjunctionType { lhs, rhs } => tf::Expr::ConjunctionType {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Expr::DisjunctionType { lhs, rhs } => tf::Expr::DisjunctionType {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Expr::EqualToType { r#type, lhs, rhs } => tf::Expr::EqualToType {
-                r#type: Box::new(self.emit_expr(r#type)?),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                r#type: Box::new(self.emit_located_expr(r#type)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Expr::FunctionCall {
                 function,
@@ -964,7 +996,7 @@ impl TubeEncoder {
                 id: self.get_function_id(function.clone()).into(),
                 args: arguments
                     .iter()
-                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .map(|arg| self.emit_located_expr(arg).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::MethodCall {
@@ -975,10 +1007,10 @@ impl TubeEncoder {
             } => tf::Expr::InstanceMethodCall {
                 method_id: self.get_method_id(method.clone()).into(),
                 instance_type: Box::new(self.emit_method_instance_type(instance_type)?),
-                instance: Box::new(self.emit_expr(receiver)?),
+                instance: Box::new(self.emit_located_expr(receiver)?),
                 args: arguments
                     .iter()
-                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .map(|arg| self.emit_located_expr(arg).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::NewInstance {
@@ -988,12 +1020,12 @@ impl TubeEncoder {
                 instance_id: self.get_instance_id(instance.clone()).into(),
                 args: arguments
                     .iter()
-                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .map(|arg| self.emit_located_expr(arg).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::FunctionObjectCall { function, argument } => tf::Expr::FunctionObjectCall {
-                f: Box::new(self.emit_expr(function)?),
-                a: Box::new(self.emit_expr(argument)?),
+                f: Box::new(self.emit_located_expr(function)?),
+                a: Box::new(self.emit_located_expr(argument)?),
             },
             Expr::Closure {
                 v,
@@ -1001,44 +1033,44 @@ impl TubeEncoder {
                 body,
             } => tf::Expr::Closure {
                 v: Box::new(self.emit_closure_parameter_var(v)?),
-                return_type: Box::new(self.emit_expr(return_type)?),
-                body: Box::new(self.emit_expr(body)?),
+                return_type: Box::new(self.emit_located_expr(return_type)?),
+                body: Box::new(self.emit_located_expr(body)?),
             },
             Expr::FunctionType { a, r } => tf::Expr::FunctionType {
                 a: Box::new(self.emit_closure_parameter_var(a)?),
-                r: Box::new(self.emit_expr(r)?),
+                r: Box::new(self.emit_located_expr(r)?),
             },
             Expr::Type(t) => tf::Expr::TypeN {
-                n: Box::new(self.emit_expr(t)?),
+                n: Box::new(self.emit_located_expr(t)?),
             },
             Expr::BigType(n) => tf::Expr::TypeBigN {
                 n: n.to_biguint().unwrap_or_default(),
             },
             Expr::BoxedType(t) => tf::Expr::Boxed {
-                t: Box::new(self.emit_expr(t)?),
+                t: Box::new(self.emit_located_expr(t)?),
             },
             Expr::Box { t, value } => tf::Expr::Box {
-                t: Box::new(self.emit_expr(t)?),
-                value: Box::new(self.emit_expr(value)?),
+                t: Box::new(self.emit_located_expr(t)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Expr::Block { label, body } => tf::Expr::Block {
                 label: Box::new(self.emit_block_label(label)?),
-                body: Box::new(self.emit_expr(body)?),
+                body: Box::new(self.emit_located_expr(body)?),
             },
             Expr::Break { label, value } => tf::Expr::Break {
                 block_id: Box::new(self.emit_block_id(label)),
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Expr::Unbox { t, value } => tf::Expr::Unbox {
-                t: Box::new(self.emit_expr(t)?),
-                value: Box::new(self.emit_expr(value)?),
+                t: Box::new(self.emit_located_expr(t)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Expr::Sequence(exprs) => tf::Expr::Sequence {
-                head: Box::new(self.emit_expr(exprs.first())?),
+                head: Box::new(self.emit_located_expr(exprs.first())?),
                 tail: exprs
                     .iter()
                     .skip(1)
-                    .map(|expr| self.emit_expr(expr).map(Box::new))
+                    .map(|expr| self.emit_located_expr(expr).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::Condition {
@@ -1046,7 +1078,7 @@ impl TubeEncoder {
                 when_true_witness,
                 when_false_witness,
             } => tf::Expr::Condition {
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
                 when_true_witness: when_true_witness
                     .as_ref()
                     .map(|variable| self.emit_local_var(variable).map(Box::new))
@@ -1061,33 +1093,33 @@ impl TubeEncoder {
                 when_true,
                 when_false,
             } => tf::Expr::IfElse {
-                condition: Box::new(self.emit_expr(condition)?),
-                true_body: Box::new(self.emit_expr(when_true)?),
-                false_body: Box::new(self.emit_expr(when_false)?),
+                condition: Box::new(self.emit_located_expr(condition)?),
+                true_body: Box::new(self.emit_located_expr(when_true)?),
+                false_body: Box::new(self.emit_located_expr(when_false)?),
             },
             Expr::Is { value, pattern } => tf::Expr::Is {
-                value: Box::new(self.emit_expr(value)?),
-                pattern: Box::new(self.emit_pattern(pattern)?),
+                value: Box::new(self.emit_located_expr(value)?),
+                pattern: Box::new(self.emit_pattern(&pattern.value)?),
             },
             Expr::Match { value, cases } => tf::Expr::Match {
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
                 cases: cases
                     .iter()
                     .map(|case| self.emit_match_case(case).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Expr::Or(a, b) => tf::Expr::Or {
-                a: Box::new(self.emit_expr(a)?),
-                b: Box::new(self.emit_expr(b)?),
+                a: Box::new(self.emit_located_expr(a)?),
+                b: Box::new(self.emit_located_expr(b)?),
             },
             Expr::Not(value) => tf::Expr::Not {
-                a: Box::new(self.emit_expr(value)?),
+                a: Box::new(self.emit_located_expr(value)?),
             },
             Expr::Retry { label } => tf::Expr::Retry {
                 block_id: Box::new(self.emit_block_id(label)),
             },
             Expr::Raise { ex } => tf::Expr::Raise {
-                ex: Box::new(self.emit_expr(ex)?),
+                ex: Box::new(self.emit_located_expr(ex)?),
             },
             Expr::RecordFieldLoad {
                 record_type,
@@ -1099,11 +1131,11 @@ impl TubeEncoder {
                     args: record_type
                         .arguments
                         .iter()
-                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .map(|arg| self.emit_located_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
                 field_id: BigUint::from(self.get_record_field_id(field.clone())),
-                record_value: Box::new(self.emit_expr(record_value)?),
+                record_value: Box::new(self.emit_located_expr(record_value)?),
             },
             Expr::RecordFieldStore {
                 record_type,
@@ -1116,12 +1148,12 @@ impl TubeEncoder {
                     args: record_type
                         .arguments
                         .iter()
-                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .map(|arg| self.emit_located_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
                 field_id: BigUint::from(self.get_record_field_id(field.clone())),
-                record_value: Box::new(self.emit_expr(record_value)?),
-                field_value: Box::new(self.emit_expr(new_value)?),
+                record_value: Box::new(self.emit_located_expr(record_value)?),
+                field_value: Box::new(self.emit_located_expr(new_value)?),
             },
             Expr::RecordLiteral {
                 record_type,
@@ -1133,7 +1165,7 @@ impl TubeEncoder {
                         id: BigUint::from(self.get_record_id(record.clone())),
                         args: arguments
                             .iter()
-                            .map(|arg| self.emit_expr(arg).map(Box::new))
+                            .map(|arg| self.emit_located_expr(arg).map(Box::new))
                             .collect::<Result<Vec<_>, _>>()?,
                     }),
                     fields: fields
@@ -1143,7 +1175,7 @@ impl TubeEncoder {
                                 field_id: BigUint::from(
                                     self.get_record_field_id(field.field.clone()),
                                 ),
-                                value: Box::new(self.emit_expr(&field.value)?),
+                                value: Box::new(self.emit_located_expr(&field.value)?),
                             }))
                         })
                         .collect::<Result<Vec<_>, InternalCompilerError>>()?,
@@ -1155,7 +1187,7 @@ impl TubeEncoder {
                     args: record_type
                         .arguments
                         .iter()
-                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .map(|arg| self.emit_located_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
             },
@@ -1165,7 +1197,7 @@ impl TubeEncoder {
                     args: enum_type
                         .arguments
                         .iter()
-                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .map(|arg| self.emit_located_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
             },
@@ -1183,20 +1215,20 @@ impl TubeEncoder {
                     args: enum_type
                         .arguments
                         .iter()
-                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .map(|arg| self.emit_located_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
                 variant_id: BigUint::from(self.get_enum_variant_id(variant.clone())),
                 args: arguments
                     .iter()
-                    .map(|arg| self.emit_expr(arg).map(Box::new))
+                    .map(|arg| self.emit_located_expr(arg).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
                 fields: fields
                     .iter()
                     .map(|field| {
                         Ok(Box::new(tf::RecordFieldLiteral {
                             field_id: BigUint::from(self.get_record_field_id(field.field.clone())),
-                            value: Box::new(self.emit_expr(&field.value)?),
+                            value: Box::new(self.emit_located_expr(&field.value)?),
                         }))
                     })
                     .collect::<Result<Vec<_>, InternalCompilerError>>()?,
@@ -1205,14 +1237,14 @@ impl TubeEncoder {
                 block_body,
                 finally_body,
             } => tf::Expr::Finally {
-                action: Box::new(self.emit_expr(block_body)?),
-                ensuring: Box::new(self.emit_expr(finally_body)?),
+                action: Box::new(self.emit_located_expr(block_body)?),
+                ensuring: Box::new(self.emit_located_expr(finally_body)?),
             },
             Expr::Variable(variable) => tf::Expr::Variable {
                 v: Box::new(self.emit_var(variable)?),
             },
             Expr::VariableBinding(variable, value) => tf::Expr::BindVariable {
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
                 v: Box::new(self.emit_local_var(variable)?),
             },
             Expr::BindErasedAlias {
@@ -1220,7 +1252,7 @@ impl TubeEncoder {
                 equality_witness,
                 value,
             } => tf::Expr::BindErasedAlias {
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
                 v: Box::new(self.emit_local_var(variable)?),
                 equality_witness: equality_witness
                     .as_ref()
@@ -1228,7 +1260,7 @@ impl TubeEncoder {
                     .transpose()?,
             },
             Expr::BindEnsures { value, variables } => tf::Expr::BindEnsures {
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
                 variables: variables
                     .iter()
                     .map(|variable| self.emit_local_var(variable).map(Box::new))
@@ -1236,7 +1268,7 @@ impl TubeEncoder {
             },
             Expr::VariableStore(variable, value) => tf::Expr::VariableStore {
                 v: Box::new(self.emit_var(variable)?),
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             _ => todo!("Unimplement emit_expr for {:?}", expr),
         })
@@ -1254,21 +1286,21 @@ impl TubeEncoder {
             Builtin::StringType => tf::Builtin::StringType {},
             Builtin::NeverType => tf::Builtin::NeverType {},
             Builtin::ArrayType { element_type } => tf::Builtin::ArrayType {
-                element_type: Box::new(self.emit_expr(element_type)?),
+                element_type: Box::new(self.emit_located_expr(element_type)?),
             },
             Builtin::IntNegate {
                 integer_type,
                 value,
             } => tf::Builtin::IntNegate {
                 integer_type: encode_format_integer_type(*integer_type),
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Builtin::IntBitNot {
                 integer_type,
                 value,
             } => tf::Builtin::IntBitNot {
                 integer_type: encode_format_integer_type(*integer_type),
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Builtin::IntConvert {
                 source_type,
@@ -1277,7 +1309,7 @@ impl TubeEncoder {
             } => tf::Builtin::IntConvert {
                 source_type: encode_format_integer_type(*source_type),
                 dest_type: encode_format_integer_type(*dest_type),
-                value: Box::new(self.emit_expr(value)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Builtin::IntAdd {
                 integer_type,
@@ -1285,8 +1317,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntAdd {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntSub {
                 integer_type,
@@ -1294,8 +1326,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntSub {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntMul {
                 integer_type,
@@ -1303,8 +1335,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntMul {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntBitAnd {
                 integer_type,
@@ -1312,8 +1344,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntBitAnd {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntBitOr {
                 integer_type,
@@ -1321,8 +1353,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntBitOr {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntBitXor {
                 integer_type,
@@ -1330,8 +1362,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntBitXor {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntBitShiftLeft {
                 integer_type,
@@ -1339,8 +1371,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntBitShiftLeft {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntBitShiftRight {
                 integer_type,
@@ -1348,8 +1380,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntBitShiftRight {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntEq {
                 integer_type,
@@ -1357,8 +1389,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntEq {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntLt {
                 integer_type,
@@ -1366,8 +1398,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntLt {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntLe {
                 integer_type,
@@ -1375,8 +1407,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntLe {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntGt {
                 integer_type,
@@ -1384,8 +1416,8 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntGt {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::IntGe {
                 integer_type,
@@ -1393,45 +1425,45 @@ impl TubeEncoder {
                 rhs,
             } => tf::Builtin::IntGe {
                 integer_type: encode_format_integer_type(*integer_type),
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::StringConcat { values } => tf::Builtin::StringConcat {
                 values: values
                     .iter()
-                    .map(|value| self.emit_expr(value).map(Box::new))
+                    .map(|value| self.emit_located_expr(value).map(Box::new))
                     .collect::<Result<_, _>>()?,
             },
             Builtin::StringEq { lhs, rhs } => tf::Builtin::StringEq {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::BoolEq { lhs, rhs } => tf::Builtin::BoolEq {
-                lhs: Box::new(self.emit_expr(lhs)?),
-                rhs: Box::new(self.emit_expr(rhs)?),
+                lhs: Box::new(self.emit_located_expr(lhs)?),
+                rhs: Box::new(self.emit_located_expr(rhs)?),
             },
             Builtin::ArrayCreateUnsafeUninitialized {
                 element_type,
                 length,
             } => tf::Builtin::ArrayCreateUnsafeUninitialized {
-                element_type: Box::new(self.emit_expr(element_type)?),
-                length: Box::new(self.emit_expr(length)?),
+                element_type: Box::new(self.emit_located_expr(element_type)?),
+                length: Box::new(self.emit_located_expr(length)?),
             },
             Builtin::ArrayLength {
                 element_type,
                 array,
             } => tf::Builtin::ArrayLength {
-                element_type: Box::new(self.emit_expr(element_type)?),
-                array: Box::new(self.emit_expr(array)?),
+                element_type: Box::new(self.emit_located_expr(element_type)?),
+                array: Box::new(self.emit_located_expr(array)?),
             },
             Builtin::ArrayGet {
                 element_type,
                 array,
                 index,
             } => tf::Builtin::ArrayGet {
-                element_type: Box::new(self.emit_expr(element_type)?),
-                array: Box::new(self.emit_expr(array)?),
-                index: Box::new(self.emit_expr(index)?),
+                element_type: Box::new(self.emit_located_expr(element_type)?),
+                array: Box::new(self.emit_located_expr(array)?),
+                index: Box::new(self.emit_located_expr(index)?),
             },
             Builtin::ArraySet {
                 element_type,
@@ -1439,17 +1471,17 @@ impl TubeEncoder {
                 index,
                 value,
             } => tf::Builtin::ArraySet {
-                element_type: Box::new(self.emit_expr(element_type)?),
-                array: Box::new(self.emit_expr(array)?),
-                index: Box::new(self.emit_expr(index)?),
-                value: Box::new(self.emit_expr(value)?),
+                element_type: Box::new(self.emit_located_expr(element_type)?),
+                array: Box::new(self.emit_located_expr(array)?),
+                index: Box::new(self.emit_located_expr(index)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Builtin::EqualToRefl { r#type, value } => tf::Builtin::EqualToRefl {
-                r#type: Box::new(self.emit_expr(r#type)?),
-                value: Box::new(self.emit_expr(value)?),
+                r#type: Box::new(self.emit_located_expr(r#type)?),
+                value: Box::new(self.emit_located_expr(value)?),
             },
             Builtin::UnsafeAssumeErased { r#type } => tf::Builtin::UnsafeAssumeErased {
-                r#type: Box::new(self.emit_expr(r#type)?),
+                r#type: Box::new(self.emit_located_expr(r#type)?),
             },
         })
     }
@@ -1461,17 +1493,17 @@ impl TubeEncoder {
         Ok(match pattern {
             Pattern::Error => tf::Pattern::Error {},
             Pattern::Discard { t } => tf::Pattern::Discard {
-                t: Box::new(self.emit_expr(t)?),
+                t: Box::new(self.emit_expr(&t.value)?),
             },
             Pattern::Tuple(items) => tf::Pattern::Tuple {
                 items: items
                     .iter()
-                    .map(|item| self.emit_pattern(item).map(Box::new))
+                    .map(|item| self.emit_pattern(&item.value).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
             },
             Pattern::Binding(variable, pattern) => tf::Pattern::Binding {
                 v: Box::new(self.emit_local_var(variable)?),
-                pattern: Box::new(self.emit_pattern(pattern)?),
+                pattern: Box::new(self.emit_pattern(&pattern.value)?),
             },
             Pattern::EnumVariant {
                 enum_type,
@@ -1484,13 +1516,13 @@ impl TubeEncoder {
                     args: enum_type
                         .arguments
                         .iter()
-                        .map(|arg| self.emit_expr(arg).map(Box::new))
+                        .map(|arg| self.emit_located_expr(arg).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?,
                 }),
                 variant_id: BigUint::from(self.get_enum_variant_id(variant.clone())),
                 args: args
                     .iter()
-                    .map(|arg| self.emit_pattern(arg).map(Box::new))
+                    .map(|arg| self.emit_pattern(&arg.value).map(Box::new))
                     .collect::<Result<Vec<_>, _>>()?,
                 fields: fields
                     .iter()
@@ -1508,8 +1540,8 @@ impl TubeEncoder {
         case: &MatchCase<argon_compiler::DefaultExprContext>,
     ) -> Result<tf::MatchCase, InternalCompilerError> {
         Ok(tf::MatchCase {
-            pattern: Box::new(self.emit_pattern(&case.pattern)?),
-            body: Box::new(self.emit_expr(&case.body)?),
+            pattern: Box::new(self.emit_pattern(&case.pattern.value)?),
+            body: Box::new(self.emit_located_expr(&case.body)?),
         })
     }
 
@@ -1519,7 +1551,7 @@ impl TubeEncoder {
     ) -> Result<tf::RecordFieldPattern, InternalCompilerError> {
         Ok(tf::RecordFieldPattern {
             field_id: BigUint::from(self.get_record_field_id(field.field.clone())),
-            pattern: Box::new(self.emit_pattern(&field.pattern)?),
+            pattern: Box::new(self.emit_pattern(&field.pattern.value)?),
         })
     }
 
@@ -1536,7 +1568,7 @@ impl TubeEncoder {
                     .as_ref()
                     .map(|name| encode_identifier(name).map(Box::new))
                     .transpose()?,
-                var_type: Box::new(self.emit_expr(&variable.var_type)?),
+                var_type: Box::new(self.emit_expr(&variable.var_type.value)?),
                 erasure: Box::new(encode_erasure_mode(variable.erasure_mode)),
                 witness: variable.is_witness,
             },
@@ -1550,7 +1582,7 @@ impl TubeEncoder {
                     .as_ref()
                     .map(|name| encode_identifier(name).map(Box::new))
                     .transpose()?,
-                var_type: Box::new(self.emit_expr(&variable.var_type)?),
+                var_type: Box::new(self.emit_expr(&variable.var_type.value)?),
             },
             Variable::ClosureParameter(variable) => tf::Var::ClosureParameterVar {
                 id: self
@@ -1604,7 +1636,7 @@ impl TubeEncoder {
                 .closure_parameter_ids
                 .get(variable.id.clone())
                 .into(),
-            var_type: Box::new(self.emit_expr(&variable.var_type)?),
+            var_type: Box::new(self.emit_expr(&variable.var_type.value)?),
             name: variable
                 .name
                 .as_ref()
@@ -1622,7 +1654,7 @@ impl TubeEncoder {
     ) -> Result<tf::LocalVar, InternalCompilerError> {
         Ok(tf::LocalVar {
             id: self.ids.local_variable_ids.get(variable.id.clone()).into(),
-            var_type: Box::new(self.emit_expr(&variable.var_type)?),
+            var_type: Box::new(self.emit_expr(&variable.var_type.value)?),
             name: variable
                 .name
                 .as_ref()

@@ -2,7 +2,7 @@ use crate::{
     EffectInfo, Enum, EnumVariant, Function, Instance, Method, Record, RecordField, Trait,
 };
 use alloc::sync::Arc;
-use argon_expr::{Expr, ExprContext, ExprScanner};
+use argon_expr::{Expr, ExprContext, ExprScanner, LocatedExpr};
 use core::marker::PhantomData;
 
 pub struct PurityScanner<EC: ?Sized> {
@@ -30,7 +30,7 @@ where
         }
     }
 
-    pub fn contains_impure_function_call(expr: &Expr<EC>) -> bool {
+    pub fn contains_impure_function_call(expr: &LocatedExpr<EC>) -> bool {
         let mut scanner = Self::new();
         scanner.scan(expr);
         scanner.found_impure()
@@ -56,7 +56,7 @@ where
 {
     type EC = EC;
 
-    fn scan(&mut self, expr: &Expr<Self::EC>) -> bool {
+    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
         match expr {
             Expr::FunctionCall { function, .. } => {
                 if function.metadata().effect_info == EffectInfo::Effectful {
@@ -96,6 +96,6 @@ where
             _ => {}
         }
 
-        argon_expr::default_scan(self, expr)
+        argon_expr::default_scan_expr(self, expr)
     }
 }

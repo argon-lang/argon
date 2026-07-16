@@ -229,6 +229,18 @@ record module-name {
     path: module-path;
 }
 
+@esexpr:(derive-codec)
+record file-position {
+    line: nat;
+    column: nat;
+}
+
+@esexpr:(derive-codec)
+record location {
+    file: string;
+    start: file-position;
+    end: file-position;
+}
 
 @esexpr:(derive-codec)
 enum identifier {
@@ -488,6 +500,7 @@ record enum-variant-definition {
 record trait-definition {
     trait-id: nat;
     import: import-specifier;
+    location: location;
 
     @esexpr:(keyword)
     signature: function-signature;
@@ -542,6 +555,7 @@ record method-definition {
 record instance-definition {
     instance-id: nat;
     import: import-specifier;
+    location: location;
 
     @esexpr:(keyword)
     erasure: erasure-mode;
@@ -579,18 +593,24 @@ enum method-implementation {
 }
 
 @esexpr:(derive-codec)
+record located-expr {
+    location: location;
+    value: expr;
+}
+
+@esexpr:(derive-codec)
 enum expr {
     error,
     erased-value {
-        type: expr;
+        type: located-expr;
     },
     and {
-        a: expr;
-        b: expr;
+        a: located-expr;
+        b: located-expr;
     },
     bind-variable {
         v: local-var;
-        value: expr;
+        value: located-expr;
     },
     bind-erased-alias {
         v: local-var;
@@ -599,10 +619,10 @@ enum expr {
         @esexpr:(optional)
         equality-witness: optional-field[local-var];
 
-        value: expr;
+        value: located-expr;
     },
     bind-ensures {
-        value: expr;
+        value: located-expr;
 
         @esexpr:(vararg)
         variables: list[local-var];
@@ -611,43 +631,43 @@ enum expr {
         value: bool;
     },
     box {
-        t: expr;
-        value: expr;
+        t: located-expr;
+        value: located-expr;
     },
     builtin {
         builtin: builtin;
     },
     boxed {
-        t: expr;
+        t: located-expr;
     },
     block {
         label: block-label;
-        body: expr;
+        body: located-expr;
     },
     break {
         block-id: block-id;
-        value: expr;
+        value: located-expr;
     },
     conjunction-type {
-        lhs: expr;
-        rhs: expr;
+        lhs: located-expr;
+        rhs: located-expr;
     },
     closure {
         v: closure-parameter-var;
-        return-type: expr;
-        body: expr;
+        return-type: located-expr;
+        body: located-expr;
     },
     disjunction-type {
-        lhs: expr;
-        rhs: expr;
+        lhs: located-expr;
+        rhs: located-expr;
     },
     equal-to-type {
-        type: expr;
-        lhs: expr;
-        rhs: expr;
+        type: located-expr;
+        lhs: located-expr;
+        rhs: located-expr;
     },
     condition {
-        value: expr;
+        value: located-expr;
 
         @esexpr:(keyword)
         @esexpr:(optional)
@@ -666,41 +686,41 @@ enum expr {
         variant-id: nat;
 
         @esexpr:(vararg)
-        args: list[expr];
+        args: list[located-expr];
 
         @esexpr:(vararg)
         fields: list[record-field-literal];
     },
     finally {
-        action: expr;
-        ensuring: expr;
+        action: located-expr;
+        ensuring: located-expr;
     },
     function-call {
         id: nat;
 
         @esexpr:(vararg)
-        args: list[expr];
+        args: list[located-expr];
     },
     function-object-call {
-        f: expr;
-        a: expr;
+        f: located-expr;
+        a: located-expr;
     },
     function-type {
         a: closure-parameter-var;
-        r: expr;
+        r: located-expr;
     },
     if-else {
-        condition: expr;
-        true-body: expr;
-        false-body: expr;
+        condition: located-expr;
+        true-body: located-expr;
+        false-body: located-expr;
     },
     instance-method-call {
         method-id: nat;
         instance-type: method-instance-type;
-        instance: expr;
+        instance: located-expr;
 
         @esexpr:(vararg)
-        args: list[expr];
+        args: list[located-expr];
     },
     @esexpr:(inline-value)
     instance-singleton-type {
@@ -734,26 +754,26 @@ enum expr {
         value: u64;
     },
     is {
-        value: expr;
+        value: located-expr;
         pattern: pattern;
     },
     match {
-        value: expr;
+        value: located-expr;
         cases: list[match-case];
     },
     new-instance {
         instance-id: nat;
-        args: list[expr];
+        args: list[located-expr];
     },
     not {
-        a: expr;
+        a: located-expr;
     },
     or {
-        a: expr;
-        b: expr;
+        a: located-expr;
+        b: located-expr;
     },
     raise {
-        ex: expr;
+        ex: located-expr;
     },
     @esexpr:(inline-value)
     record-type {
@@ -762,13 +782,13 @@ enum expr {
     record-field-load {
         record: record-type;
         field-id: nat;
-        record-value: expr;
+        record-value: located-expr;
     },
     record-field-store {
         record: record-type;
         field-id: nat;
-        record-value: expr;
-        field-value: expr;
+        record-value: located-expr;
+        field-value: located-expr;
     },
     record-literal {
         record: record-type;
@@ -780,24 +800,24 @@ enum expr {
         block-id: block-id;
     },
     ref-cell-type {
-        element-type: expr;
+        element-type: located-expr;
     },
     ref-cell-create {
-        element-type: expr;
-        value: expr;
+        element-type: located-expr;
+        value: located-expr;
     },
     ref-cell-load {
-        cell: expr;
+        cell: located-expr;
     },
     ref-cell-store {
-        cell: expr;
-        value: expr;
+        cell: located-expr;
+        value: located-expr;
     },
     sequence {
-        head: expr;
+        head: located-expr;
 
         @esexpr:(vararg)
-        tail: list[expr];
+        tail: list[located-expr];
     },
     string-literal {
         s: string;
@@ -807,28 +827,28 @@ enum expr {
         trait-type: trait-type;
     },
     tuple {
-        items: list[expr];
+        items: list[located-expr];
     },
     tuple-element {
         index: nat;
-        tuple: expr;
+        tuple: located-expr;
     },
     type-n {
-        n: expr;
+        n: located-expr;
     },
     type-big-n {
         n: nat;
     },
     unbox {
-        t: expr;
-        value: expr;
+        t: located-expr;
+        value: located-expr;
     },
     variable {
         v: var;
     },
     variable-store {
         v: var;
-        value: expr;
+        value: located-expr;
     },
 }
 
@@ -870,7 +890,7 @@ enum pattern {
 @esexpr:(derive-codec)
 record match-case {
     pattern: pattern;
-    body: expr;
+    body: located-expr;
 }
 
 @esexpr:(derive-codec)
@@ -889,59 +909,59 @@ enum builtin {
     string-type,
     never-type,
     array-type {
-        element-type: expr;
+        element-type: located-expr;
     },
 
-    int-negate { integer-type: integer-type; value: expr; },
-    int-bit-not { integer-type: integer-type; value: expr; },
-    int-convert { source-type: integer-type; dest-type: integer-type; value: expr; },
-    int-add { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-sub { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-mul { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-bit-and { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-bit-or { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-bit-xor { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-bit-shift-left { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-bit-shift-right { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-eq { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-lt { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-le { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-gt { integer-type: integer-type; lhs: expr; rhs: expr; },
-    int-ge { integer-type: integer-type; lhs: expr; rhs: expr; },
+    int-negate { integer-type: integer-type; value: located-expr; },
+    int-bit-not { integer-type: integer-type; value: located-expr; },
+    int-convert { source-type: integer-type; dest-type: integer-type; value: located-expr; },
+    int-add { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-sub { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-mul { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-bit-and { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-bit-or { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-bit-xor { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-bit-shift-left { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-bit-shift-right { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-eq { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-lt { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-le { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-gt { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
+    int-ge { integer-type: integer-type; lhs: located-expr; rhs: located-expr; },
     
     string-concat {
         @esexpr:(vararg)
-        values: list[expr];
+        values: list[located-expr];
     },
-    string-eq { lhs: expr; rhs: expr; },
+    string-eq { lhs: located-expr; rhs: located-expr; },
 
-    bool-eq { lhs: expr; rhs: expr; },
+    bool-eq { lhs: located-expr; rhs: located-expr; },
     
     array-create-unsafe-uninitialized {
-        element-type: expr;
-        length: expr;
+        element-type: located-expr;
+        length: located-expr;
     },
     array-length {
-        element-type: expr;
-        array: expr;
+        element-type: located-expr;
+        array: located-expr;
     },
     array-get {
-        element-type: expr;
-        array: expr;
-        index: expr;
+        element-type: located-expr;
+        array: located-expr;
+        index: located-expr;
     },
     array-set {
-        element-type: expr;
-        array: expr;
-        index: expr;
-        value: expr;
+        element-type: located-expr;
+        array: located-expr;
+        index: located-expr;
+        value: located-expr;
     },
     equal-to-refl {
-        type: expr;
-        value: expr;
+        type: located-expr;
+        value: located-expr;
     },
     unsafe-assume-erased {
-        type: expr;
+        type: located-expr;
     },
 }
 
@@ -1000,7 +1020,7 @@ record record-type {
     id: nat;
 
     @esexpr:(vararg)
-    args: list[expr];
+    args: list[located-expr];
 }
 
 @esexpr:(derive-codec)
@@ -1008,7 +1028,7 @@ record trait-type {
     id: nat;
 
     @esexpr:(vararg)
-    args: list[expr];
+    args: list[located-expr];
 }
 
 @esexpr:(derive-codec)
@@ -1016,7 +1036,7 @@ record instance-singleton-type {
     id: nat;
 
     @esexpr:(vararg)
-    args: list[expr];
+    args: list[located-expr];
 }
 
 @esexpr:(derive-codec)
@@ -1035,7 +1055,7 @@ enum method-instance-type {
 @esexpr:(derive-codec)
 record record-field-literal {
     field-id: nat;
-    value: expr;
+    value: located-expr;
 }
 
 @esexpr:(derive-codec)
@@ -1043,7 +1063,7 @@ record enum-type {
     id: nat;
 
     @esexpr:(vararg)
-    args: list[expr];
+    args: list[located-expr];
 }
 
 @esexpr:(derive-codec)

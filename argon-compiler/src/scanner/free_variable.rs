@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use argon_expr::{Expr, ExprContext, ExprScanner, Pattern, Variable};
+use argon_expr::{Expr, ExprContext, ExprScanner, LocatedExpr, Pattern, Variable};
 use hashbrown::HashSet;
 
 pub struct FreeVariableScanner<EC: ExprContext + ?Sized> {
@@ -18,7 +18,7 @@ where
         }
     }
 
-    pub fn scan_free_variables(expr: &Expr<EC>) -> HashSet<Variable<EC>> {
+    pub fn scan_free_variables(expr: &LocatedExpr<EC>) -> HashSet<Variable<EC>> {
         let mut scanner = Self::new();
         scanner.scan(expr);
         scanner.into_free_variables()
@@ -50,7 +50,7 @@ where
 {
     type EC = EC;
 
-    fn scan(&mut self, expr: &Expr<Self::EC>) -> bool {
+    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
         match expr {
             Expr::Closure { v, .. } => {
                 self.bind_variable(Variable::ClosureParameter(v.clone()));
@@ -97,7 +97,7 @@ where
             _ => {}
         }
 
-        argon_expr::default_scan(self, expr)
+        argon_expr::default_scan_expr(self, expr)
     }
 
     fn scan_variable(&mut self, v: &Variable<Self::EC>) -> bool {
@@ -106,7 +106,7 @@ where
         argon_expr::default_scan_variable(self, v)
     }
 
-    fn scan_pattern(&mut self, pattern: &Pattern<Self::EC>) -> bool {
+    fn scan_pattern_value(&mut self, pattern: &Pattern<Self::EC>) -> bool {
         match pattern {
             Pattern::Binding(variable, pattern) => {
                 self.scan(&variable.var_type) && self.scan_pattern(pattern) && {
@@ -114,7 +114,7 @@ where
                     true
                 }
             }
-            _ => argon_expr::default_scan_pattern(self, pattern),
+            _ => argon_expr::default_scan_pattern_value(self, pattern),
         }
     }
 }
@@ -125,11 +125,12 @@ mod tests {
     use alloc::boxed::Box;
     use alloc::vec;
     use argon_expr::{
-        ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprScanner, LocalVariable,
-        Variable,
+        ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprLocationExt, ExprScanner,
+        LocalVariable, Variable,
     };
     use argon_util::UniqueIdentifier;
     use mitsein::vec1::Vec1;
+    use parse18_runtime::{FilePosition, Location};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -146,11 +147,19 @@ mod tests {
         type Instance = ();
     }
 
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
+    }
+
     fn local_variable() -> Box<LocalVariable<TestContext>> {
         Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
-            var_type: Expr::int_type(),
+            var_type: Expr::int_type().with_location(location()),
             erasure_mode: ErasureMode::Concrete,
             is_witness: false,
             is_mutable: false,
@@ -160,7 +169,7 @@ mod tests {
     fn closure_parameter() -> Box<ClosureParameterVariable<TestContext>> {
         Box::new(ClosureParameterVariable {
             id: UniqueIdentifier::new(),
-            var_type: Expr::int_type(),
+            var_type: Expr::int_type().with_location(location()),
             name: None,
             is_mutable: false,
             erasure_mode: ErasureMode::Concrete,
@@ -174,13 +183,18 @@ mod tests {
         let free = Variable::Local(local_variable());
         let expr = Expr::Sequence(
             Vec1::try_from(vec![
-                Expr::VariableBinding(bound.clone(), Box::new(Expr::IntLiteral(1.into()))),
-                Expr::Variable(Variable::Local(bound.clone())),
-                Expr::Variable(free.clone()),
+                Expr::VariableBinding(
+                    bound.clone(),
+                    Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+                )
+                .with_location(location()),
+                Expr::Variable(Variable::Local(bound.clone())).with_location(location()),
+                Expr::Variable(free.clone()).with_location(location()),
             ])
             .ok()
             .unwrap(),
-        );
+        )
+        .with_location(location());
 
         let free_variables = FreeVariableScanner::scan_free_variables(&expr);
 
@@ -195,11 +209,18 @@ mod tests {
         let free = Variable::Local(local_variable());
         let expr = Expr::Closure {
             v: parameter.clone(),
-            return_type: Box::new(Expr::Variable(bound.clone())),
-            body: Box::new(Expr::Tuple {
-                items: vec![Expr::Variable(bound.clone()), Expr::Variable(free.clone())],
-            }),
-        };
+            return_type: Box::new(Expr::Variable(bound.clone()).with_location(location())),
+            body: Box::new(
+                Expr::Tuple {
+                    items: vec![
+                        Expr::Variable(bound.clone()).with_location(location()),
+                        Expr::Variable(free.clone()).with_location(location()),
+                    ],
+                }
+                .with_location(location()),
+            ),
+        }
+        .with_location(location());
 
         let mut scanner = FreeVariableScanner::new();
         scanner.scan(&expr);

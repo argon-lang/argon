@@ -12,7 +12,7 @@ use argon_compiler::{
     Context, DefaultExprContext, EnumVariant, Record, RecordField, RecordFieldMetadata,
     RecordFieldOwner, TypeDeclaration, Unload,
 };
-use argon_expr::{ErasureMode, Expr, ExpressionOwner};
+use argon_expr::{ErasureMode, Expr, ExpressionOwner, LocatedExpr};
 use argon_parser::ast;
 use argon_util::{MultiSlice, UnloadCell};
 use core::fmt::Debug;
@@ -184,7 +184,7 @@ pub struct SourceRecordField {
     pub owner: SourceRecordFieldOwner,
     pub field: ast::RecordField,
     pub metadata: RecordFieldMetadata,
-    pub field_type: UnloadCell<Arc<Expr<DefaultExprContext>>>,
+    pub field_type: UnloadCell<Arc<LocatedExpr<DefaultExprContext>>>,
 }
 
 impl SourceRecordField {
@@ -224,7 +224,7 @@ impl RecordField for SourceRecordField {
         &self.metadata
     }
 
-    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
+    fn field_type(self: Arc<Self>) -> Arc<LocatedExpr<DefaultExprContext>> {
         let access_token = self.owner.access_token();
 
         self.field_type.initialize(|| {

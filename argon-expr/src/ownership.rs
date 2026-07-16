@@ -1,7 +1,7 @@
-use crate::{Builtin, Expr, ExprContext};
+use crate::{Builtin, Expr, ExprContext, LocatedExpr};
 
-pub fn is_shared_type<EC: ExprContext + ?Sized>(t: &Expr<EC>) -> bool {
-    match t {
+pub fn is_shared_type<EC: ExprContext + ?Sized>(t: &LocatedExpr<EC>) -> bool {
+    match &t.value {
         Expr::Shared { .. } | Expr::Share { .. } => true,
         Expr::Builtin(Builtin::IntType { .. }) => true,
         Expr::Builtin(Builtin::BoolType) => true,

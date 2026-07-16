@@ -49,19 +49,19 @@ pub trait Lexer {
     fn step(state: Self::State, c: char) -> Self::State;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FilePosition {
     pub line: usize,
     pub column: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FilePositionRange {
     pub start: FilePosition,
     pub end: FilePosition,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Location {
     pub file: LocationFile,
     pub start: FilePosition,
@@ -106,7 +106,7 @@ impl<T> WithRange<T> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct WithLocation<T> {
     pub value: T,
     pub location: Location,
@@ -129,6 +129,20 @@ impl<T> WithLocation<T> {
             value: range.value,
             location: Location::from_range(file_name, range.range),
         }
+    }
+}
+
+impl<T> core::ops::Deref for WithLocation<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> core::ops::DerefMut for WithLocation<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 

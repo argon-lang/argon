@@ -11,7 +11,7 @@ use argon_compiler::{
     Context, Declaration, DefaultExprContext, Module, ModuleBuilder, ModuleExportBinding,
     ModuleExportEntry, ModulePath, Tube, TubeBuilder, TubeCollection, TubeName, Unload,
 };
-use argon_expr::{BlockLabel, BlockLabelDeclaration, Expr, LoopLabels, Variable};
+use argon_expr::{BlockLabel, BlockLabelDeclaration, LocatedExpr, LoopLabels, Variable};
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::sync::ThreadSafe;
@@ -191,13 +191,13 @@ impl Scope for GlobalScope {
         None
     }
 
-    fn function_result_value_type(&self) -> Option<argon_expr::Expr<Self::ExprContext>> {
+    fn function_result_value_type(&self) -> Option<LocatedExpr<Self::ExprContext>> {
         None
     }
 
     fn known_variable_values(
         &self,
-    ) -> HashMap<Variable<Self::ExprContext>, Expr<Self::ExprContext>> {
+    ) -> HashMap<Variable<Self::ExprContext>, LocatedExpr<Self::ExprContext>> {
         HashMap::new()
     }
 }

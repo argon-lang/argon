@@ -2,7 +2,7 @@ use crate::shifter::{DefaultExprAssociatedTypes, DefaultToExprTypeContextShifter
 use alloc::borrow::Cow;
 use alloc::{boxed::Box, vec::Vec};
 use argon_expr::{
-    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner,
+    ErasureMode, ExprContext, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocatedExpr,
     MethodInstanceType, ParameterVariable, SubstScanner, Variable,
 };
 use argon_parser::ast::{FunctionParameterListType, Identifier};
@@ -13,8 +13,8 @@ use derivative::Derivative;
 #[derivative(Clone(bound = ""))]
 pub struct FunctionSignature<EC: ExprContext + ?Sized> {
     pub parameters: Vec<SignatureParameter<EC>>,
-    pub return_type: Expr<EC>,
-    pub ensures_clauses: Vec<Expr<EC>>,
+    pub return_type: LocatedExpr<EC>,
+    pub ensures_clauses: Vec<LocatedExpr<EC>>,
 }
 
 impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
@@ -88,7 +88,7 @@ pub trait SubstFunctionSignature<'a, EC: ExprContext + ?Sized> {
         &mut self,
         owner: ExpressionOwner<EC>,
         signature: &FunctionSignature<EC>,
-        arguments: &'a [Expr<EC>],
+        arguments: &'a [LocatedExpr<EC>],
     );
 }
 
@@ -97,7 +97,7 @@ impl<'a, EC: ExprContext + ?Sized> SubstFunctionSignature<'a, EC> for SubstScann
         &mut self,
         owner: ExpressionOwner<EC>,
         signature: &FunctionSignature<EC>,
-        arguments: &'a [Expr<EC>],
+        arguments: &'a [LocatedExpr<EC>],
     ) {
         debug_assert_eq!(signature.parameters.len(), arguments.len());
 
@@ -122,7 +122,7 @@ pub struct SignatureParameter<EC: ExprContext + ?Sized> {
     pub erasure_mode: ErasureMode,
     pub bindings: Vec<ParameterBinding<EC>>,
     pub name: Option<Identifier>,
-    pub param_type: Expr<EC>,
+    pub param_type: LocatedExpr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> SignatureParameter<EC> {
@@ -173,7 +173,7 @@ impl<EC: ExprContext + ?Sized> SignatureParameter<EC> {
 #[derivative(Clone(bound = ""))]
 pub struct ParameterBinding<EC: ExprContext + ?Sized> {
     pub name: Option<Identifier>,
-    pub param_type: Expr<EC>,
+    pub param_type: LocatedExpr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> ParameterBinding<EC> {

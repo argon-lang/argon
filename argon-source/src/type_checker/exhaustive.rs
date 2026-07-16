@@ -7,8 +7,8 @@ use alloc::{sync::Arc, vec, vec::Vec};
 use argon_compiler::Context;
 use argon_compiler::{Enum, EnumVariant, z3expr::Z3Expr};
 use argon_expr::{
-    Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, NormalizerScanner, Pattern,
-    SubstScanner,
+    Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocatedExpr,
+    LocatedPattern, NormalizerScanner, Pattern, SubstScanner,
 };
 use core::str::FromStr;
 use num_bigint::BigInt;
@@ -24,8 +24,8 @@ pub(super) struct ExhaustiveChecker<'a, 'access, 'scope, 'model> {
 impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model> {
     pub(super) fn check<'b>(
         &mut self,
-        value_type: &Expr<TypeCheckExprContext>,
-        patterns: impl IntoIterator<Item = &'b Pattern<TypeCheckExprContext>>,
+        value_type: &LocatedExpr<TypeCheckExprContext>,
+        patterns: impl IntoIterator<Item = &'b LocatedPattern<TypeCheckExprContext>>,
     ) -> bool {
         let mut z3expr = Z3Expr::<TypeCheckExprContext>::new(self.tc.context.clone());
         let value = Dynamic::fresh_const("argon_match_value", &z3expr.argon_value_sort().value);
@@ -47,7 +47,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
         &mut self,
         z3expr: &mut Z3Expr<TypeCheckExprContext>,
         value: &Dynamic,
-        value_type: &Expr<TypeCheckExprContext>,
+        value_type: &LocatedExpr<TypeCheckExprContext>,
     ) -> Bool {
         let mut value_type = value_type.clone();
         {
@@ -60,7 +60,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
             norm.normalize(&mut value_type);
         }
 
-        match value_type {
+        match value_type.value {
             Expr::Builtin(Builtin::BoolType) => tester(
                 z3expr,
                 &z3expr.argon_value_sort().value_testers.bool_literal,
@@ -165,9 +165,9 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
         &mut self,
         z3expr: &mut Z3Expr<TypeCheckExprContext>,
         value: &Dynamic,
-        pattern: &Pattern<TypeCheckExprContext>,
+        pattern: &LocatedPattern<TypeCheckExprContext>,
     ) -> Bool {
-        match pattern {
+        match &pattern.value {
             Pattern::Error => Bool::from_bool(false),
 
             Pattern::Discard { .. } => Bool::from_bool(true),
@@ -400,8 +400,25 @@ mod tests {
     use argon_compiler::scope::ShiftedScope;
     use argon_compiler::test_utils::TestScope;
     use argon_compiler::{ModulePath, TubeName};
-    use argon_expr::{EnumType, ErasureMode};
+    use argon_expr::{EnumType, ErasureMode, ExprLocationExt};
     use mitsein::vec1;
+
+    fn test_location() -> Location {
+        Location {
+            file: std::path::PathBuf::from("test"),
+            start: parse18_runtime::FilePosition { line: 0, column: 0 },
+            end: parse18_runtime::FilePosition { line: 0, column: 0 },
+        }
+    }
+
+    fn located_pattern(
+        pattern: Pattern<TypeCheckExprContext>,
+    ) -> LocatedPattern<TypeCheckExprContext> {
+        LocatedPattern {
+            value: pattern,
+            location: test_location(),
+        }
+    }
 
     #[test]
     fn bool_patterns_are_exhaustive_when_both_literals_are_present() {
@@ -420,20 +437,21 @@ mod tests {
             scope: &mut local_scope,
             model: &mut model,
             erasure_check_mode: ErasureMode::Concrete,
+            ensures_clauses: Vec::new(),
+            return_position: false,
         };
-        let location = Location {
-            file: std::path::PathBuf::from("test"),
-            start: parse18_runtime::FilePosition { line: 0, column: 0 },
-            end: parse18_runtime::FilePosition { line: 0, column: 0 },
-        };
+        let location = test_location();
         let mut checker = ExhaustiveChecker {
             tc: &mut tc,
             location: &location,
         };
 
         assert!(checker.check(
-            &Expr::bool_type(),
-            &[Pattern::Bool(true), Pattern::Bool(false)],
+            &Expr::bool_type().with_location(location.clone()),
+            &[
+                located_pattern(Pattern::Bool(true)),
+                located_pattern(Pattern::Bool(false))
+            ],
         ));
     }
 
@@ -454,18 +472,19 @@ mod tests {
             scope: &mut local_scope,
             model: &mut model,
             erasure_check_mode: ErasureMode::Concrete,
+            ensures_clauses: Vec::new(),
+            return_position: false,
         };
-        let location = Location {
-            file: std::path::PathBuf::from("test"),
-            start: parse18_runtime::FilePosition { line: 0, column: 0 },
-            end: parse18_runtime::FilePosition { line: 0, column: 0 },
-        };
+        let location = test_location();
         let mut checker = ExhaustiveChecker {
             tc: &mut tc,
             location: &location,
         };
 
-        assert!(!checker.check(&Expr::bool_type(), &[Pattern::Bool(true)],));
+        assert!(!checker.check(
+            &Expr::bool_type().with_location(location.clone()),
+            &[located_pattern(Pattern::Bool(true))],
+        ));
     }
 
     #[test]
@@ -498,32 +517,30 @@ mod tests {
             scope: &mut local_scope,
             model: &mut model,
             erasure_check_mode: ErasureMode::Concrete,
+            ensures_clauses: Vec::new(),
+            return_position: false,
         };
-        let location = Location {
-            file: std::path::PathBuf::from("test"),
-            start: parse18_runtime::FilePosition { line: 0, column: 0 },
-            end: parse18_runtime::FilePosition { line: 0, column: 0 },
-        };
+        let location = test_location();
         let mut checker = ExhaustiveChecker {
             tc: &mut tc,
             location: &location,
         };
 
         assert!(checker.check(
-            &Expr::EnumType(enum_type.clone()),
+            &Expr::EnumType(enum_type.clone()).with_location(location.clone()),
             &[
-                Pattern::EnumVariant {
+                located_pattern(Pattern::EnumVariant {
                     enum_type: enum_type.clone(),
                     variant: variant_a,
                     args: vec![],
                     fields: vec![],
-                },
-                Pattern::EnumVariant {
+                }),
+                located_pattern(Pattern::EnumVariant {
                     enum_type,
                     variant: variant_b,
                     args: vec![],
                     fields: vec![],
-                },
+                }),
             ],
         ));
     }

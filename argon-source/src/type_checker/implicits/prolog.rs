@@ -7,8 +7,8 @@ use alloc::borrow::Cow;
 use alloc::rc::Rc;
 use argon_compiler::ImplicitValue;
 use argon_expr::{
-    Builtin, ClosureParameterVariable, Expr, ExprContext, ExprScannerMut, ExpressionOwner,
-    NormalizerScanner, SubstScanner, Unify, Variable,
+    Builtin, ClosureParameterVariable, Expr, ExprContext, ExprLocationExt, ExprScannerMut,
+    ExpressionOwner, LocatedExpr, NormalizerScanner, SubstScanner, Unify, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
 use argon_prover::{
@@ -26,9 +26,13 @@ pub(super) struct PrologImplicitResolver<'a> {
 }
 
 impl PrologImplicitResolver<'_> {
+    fn located(&self, expr: Expr<TypeCheckExprContext>) -> LocatedExpr<TypeCheckExprContext> {
+        expr.with_location(self.location.clone())
+    }
+
     fn expr_to_predicate(
         &self,
-        mut expr: Expr<TypeCheckExprContext>,
+        mut expr: LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
     ) -> Rc<Predicate<ExprProverSyntax>> {
         {
@@ -37,7 +41,7 @@ impl PrologImplicitResolver<'_> {
             norm.normalize(&mut expr);
         }
 
-        match expr {
+        match expr.value {
             Expr::ConjunctionType { lhs, rhs } => {
                 return Rc::new(Predicate::And(
                     self.expr_to_predicate(*lhs, model),
@@ -71,10 +75,10 @@ impl PrologImplicitResolver<'_> {
                     norm.normalize(&mut t);
                 }
 
-                match t.as_ref() {
+                match &t.value {
                     Expr::Builtin(Builtin::BoolType) => {
-                        let a = self.expr_to_predicate_bool(*lhs);
-                        let b = self.expr_to_predicate_bool(*rhs);
+                        let a = self.expr_to_predicate_bool(lhs.value);
+                        let b = self.expr_to_predicate_bool(rhs.value);
 
                         return match (a.as_ref(), b.as_ref()) {
                             (Predicate::True, Predicate::True) => Rc::new(Predicate::True),
@@ -92,7 +96,7 @@ impl PrologImplicitResolver<'_> {
                         };
                     }
                     _ => {
-                        expr = Expr::EqualToType {
+                        expr.value = Expr::EqualToType {
                             r#type: t,
                             lhs,
                             rhs,
@@ -106,7 +110,7 @@ impl PrologImplicitResolver<'_> {
 
         Rc::new(Predicate::PredicateExpression(ExprWithExprType(
             ExprType::InhabitedType,
-            expr,
+            expr.value,
         )))
     }
 
@@ -118,13 +122,13 @@ impl PrologImplicitResolver<'_> {
             Expr::BoolLiteral(true) => Rc::new(Predicate::True),
             Expr::BoolLiteral(false) => Rc::new(Predicate::False),
             Expr::And(a, b) => Rc::new(Predicate::And(
-                self.expr_to_predicate_bool(*a),
-                self.expr_to_predicate_bool(*b),
+                self.expr_to_predicate_bool(a.value),
+                self.expr_to_predicate_bool(b.value),
             )),
 
             Expr::Or(a, b) => Rc::new(Predicate::Or(
-                self.expr_to_predicate_bool(*a),
-                self.expr_to_predicate_bool(*b),
+                self.expr_to_predicate_bool(a.value),
+                self.expr_to_predicate_bool(b.value),
             )),
 
             _ => Rc::new(Predicate::PredicateExpression(ExprWithExprType(
@@ -138,9 +142,9 @@ impl PrologImplicitResolver<'_> {
 impl ImplicitResolver for PrologImplicitResolver<'_> {
     fn try_resolve_implicit(
         self,
-        t: &Expr<TypeCheckExprContext>,
+        t: &LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
-    ) -> Option<Expr<TypeCheckExprContext>> {
+    ) -> Option<LocatedExpr<TypeCheckExprContext>> {
         let prover = PrologProver::new(&self, self.fuel.clone());
 
         let goal = self.expr_to_predicate(t.clone(), model);
@@ -149,10 +153,11 @@ impl ImplicitResolver for PrologImplicitResolver<'_> {
 
         match proof_result {
             ProofResult::Yes(proof) => {
-                let e = proof_to_expr(proof).unwrap_or_else(|| {
+                let e = proof_to_expr(proof, self.location).unwrap_or_else(|| {
                     Expr::Builtin(Builtin::UnsafeAssumeErased {
                         r#type: Box::new(t.clone()),
                     })
+                    .with_location(self.location.clone())
                 });
                 Some(e)
             }
@@ -178,25 +183,29 @@ impl ProverContext for PrologImplicitResolver<'_> {
             // TODO: Pick better type for t
             let t = Hole::new(
                 self.location.clone(),
-                Expr::Type(Box::new(Expr::IntLiteral(BigInt::ZERO))),
+                self.located(Expr::Type(Box::new(
+                    self.located(Expr::IntLiteral(BigInt::ZERO)),
+                ))),
             );
             let a = Hole::new(
                 self.location.clone(),
-                Expr::Type(Box::new(Expr::IntLiteral(BigInt::ZERO))),
+                self.located(Expr::Type(Box::new(
+                    self.located(Expr::IntLiteral(BigInt::ZERO)),
+                ))),
             );
             assertions.push((
-                Proof::Atomic(TCAtomicProof::ExprProof(Expr::Builtin(
+                Proof::Atomic(TCAtomicProof::ExprProof(self.located(Expr::Builtin(
                     Builtin::EqualToRefl {
-                        r#type: Box::new(Expr::Hole(t.clone())),
-                        value: Box::new(Expr::Hole(a.clone())),
+                        r#type: Box::new(self.located(Expr::Hole(t.clone()))),
+                        value: Box::new(self.located(Expr::Hole(a.clone()))),
                     },
-                ))),
+                )))),
                 Predicate::PredicateExpression(ExprWithExprType(
                     ExprType::InhabitedType,
                     Expr::EqualToType {
-                        r#type: Box::new(Expr::Hole(t)),
-                        lhs: Box::new(Expr::Hole(a.clone())),
-                        rhs: Box::new(Expr::Hole(a)),
+                        r#type: Box::new(self.located(Expr::Hole(t))),
+                        lhs: Box::new(self.located(Expr::Hole(a.clone()))),
+                        rhs: Box::new(self.located(Expr::Hole(a))),
                     },
                 )),
             ));
@@ -211,7 +220,7 @@ impl ProverContext for PrologImplicitResolver<'_> {
 
             match v {
                 ImplicitValue::OfVar(v) => {
-                    proof_expr = Expr::Variable(v.clone());
+                    proof_expr = Expr::Variable(v.clone()).with_location(self.location.clone());
                     predicate_expr = v.var_type().clone();
                 }
                 ImplicitValue::OfFunction(f) => {
@@ -229,7 +238,7 @@ impl ProverContext for PrologImplicitResolver<'_> {
                             FunctionParameterListType::InferrableList(_) => {
                                 let hole =
                                     Hole::new(self.location.clone(), param.param_type.clone());
-                                arg = Expr::Hole(hole);
+                                arg = self.located(Expr::Hole(hole));
                             }
                             FunctionParameterListType::RequiresList => {
                                 let var_id = UniqueIdentifier::new();
@@ -242,8 +251,8 @@ impl ProverContext for PrologImplicitResolver<'_> {
                                     is_witness: false,
                                 };
                                 closure_params.push(closure_param.clone());
-                                arg = Expr::Variable(Variable::ClosureParameter(Box::new(
-                                    closure_param,
+                                arg = self.located(Expr::Variable(Variable::ClosureParameter(
+                                    Box::new(closure_param),
                                 )));
                             }
 
@@ -260,25 +269,25 @@ impl ProverContext for PrologImplicitResolver<'_> {
                         arguments.push(arg);
                     }
 
-                    let mut witness = Expr::FunctionCall {
+                    let mut witness = self.located(Expr::FunctionCall {
                         function: f.clone(),
                         arguments,
-                    };
+                    });
 
                     let mut assertion_type = sig.return_type;
                     subst.scan(&mut assertion_type);
 
                     for param in closure_params.into_iter().rev() {
-                        witness = Expr::Closure {
+                        witness = self.located(Expr::Closure {
                             v: Box::new(param.clone()),
                             return_type: Box::new(assertion_type.clone()),
                             body: Box::new(witness),
-                        };
+                        });
 
-                        assertion_type = Expr::FunctionType {
+                        assertion_type = self.located(Expr::FunctionType {
                             a: Box::new(param),
                             r: Box::new(assertion_type),
-                        };
+                        });
                     }
 
                     proof_expr = witness;
@@ -314,7 +323,10 @@ impl ProverContext for PrologImplicitResolver<'_> {
             model: Rc::make_mut(model),
         };
 
-        unify.unify(f1.1.clone(), f2.1.clone())
+        unify.unify(
+            f1.1.clone().with_location(self.location.clone()),
+            f2.1.clone().with_location(self.location.clone()),
+        )
     }
 }
 
@@ -340,7 +352,7 @@ pub(super) struct ExprWithExprType(pub ExprType, pub Expr<TypeCheckExprContext>)
 
 #[derive(Debug, Clone)]
 pub(super) enum TCAtomicProof {
-    ExprProof(Expr<TypeCheckExprContext>),
+    ExprProof(LocatedExpr<TypeCheckExprContext>),
 }
 
 pub(super) struct ExprProverSyntax;
@@ -350,19 +362,23 @@ impl ProverSyntax for ExprProverSyntax {
     type PredicateExpr = ExprWithExprType;
 }
 
-fn proof_to_expr(p: Proof<TCAtomicProof>) -> Option<Expr<TypeCheckExprContext>> {
+fn proof_to_expr(
+    p: Proof<TCAtomicProof>,
+    location: &Location,
+) -> Option<LocatedExpr<TypeCheckExprContext>> {
     Some(match p {
         Proof::Atomic(TCAtomicProof::ExprProof(expr)) => expr,
         Proof::ModusPonens {
             premise,
             implication,
         } => {
-            let premise = proof_to_expr(*premise)?;
-            let implication = proof_to_expr(*implication)?;
+            let premise = proof_to_expr(*premise, location)?;
+            let implication = proof_to_expr(*implication, location)?;
             Expr::FunctionObjectCall {
                 function: Box::new(implication),
                 argument: Box::new(premise),
             }
+            .with_location(location.clone())
         }
         _ => return None,
     })
@@ -400,7 +416,7 @@ impl Unify for PrologUnify<'_> {
         ExprNormalizer { model }
     }
 
-    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: Expr<Self::EC>) -> bool {
+    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: LocatedExpr<Self::EC>) -> bool {
         unify_hole_impl(self, a, b)
     }
 }

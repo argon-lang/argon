@@ -1,8 +1,8 @@
 use crate::{
     BlockLabel, Builtin, ClosureParameterVariable, EnumType, Expr, ExprContext, ExpressionOwner,
-    InstanceParameterVariable, InstanceType, LocalVariable, LoopLabels, MatchCase,
-    MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern,
-    RecordType, TraitType, Variable,
+    InstanceParameterVariable, InstanceType, LocalVariable, LocatedExpr, LocatedPattern,
+    LoopLabels, MatchCase, MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral,
+    RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use alloc::{boxed::Box, vec::Vec};
 use mitsein::vec1::Vec1;
@@ -26,8 +26,15 @@ pub trait ExprContextShifter {
 
     fn shift_hole(&mut self, hole: <Self::EC1 as ExprContext>::Hole) -> Expr<Self::EC2>;
 
-    fn shift(&mut self, expr: Expr<Self::EC1>) -> Expr<Self::EC2> {
-        default_shift(self, expr)
+    fn shift(&mut self, expr: LocatedExpr<Self::EC1>) -> LocatedExpr<Self::EC2> {
+        LocatedExpr {
+            value: self.shift_expr(expr.value),
+            location: expr.location,
+        }
+    }
+
+    fn shift_expr(&mut self, expr: Expr<Self::EC1>) -> Expr<Self::EC2> {
+        default_shift_expr(self, expr)
     }
 
     fn shift_variable(&mut self, v: Variable<Self::EC1>) -> Variable<Self::EC2> {
@@ -35,7 +42,7 @@ pub trait ExprContextShifter {
     }
 }
 
-pub fn default_shift<S>(shifter: &mut S, expr: Expr<S::EC1>) -> Expr<S::EC2>
+pub fn default_shift_expr<S>(shifter: &mut S, expr: Expr<S::EC1>) -> Expr<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
 {
@@ -175,14 +182,14 @@ where
         Expr::U64Literal(value) => Expr::U64Literal(value),
         Expr::Is { value, pattern } => Expr::Is {
             value: Box::new(shifter.shift(*value)),
-            pattern: Box::new(default_shift_pattern(shifter, *pattern)),
+            pattern: Box::new(default_shift_located_pattern(shifter, *pattern)),
         },
         Expr::Match { value, cases } => Expr::Match {
             value: Box::new(shifter.shift(*value)),
             cases: cases
                 .into_iter()
                 .map(|case| MatchCase {
-                    pattern: default_shift_pattern(shifter, case.pattern),
+                    pattern: default_shift_located_pattern(shifter, case.pattern),
                     body: shifter.shift(case.body),
                 })
                 .collect(),
@@ -630,7 +637,20 @@ where
     }
 }
 
-fn default_shift_pattern<S>(shifter: &mut S, pattern: Pattern<S::EC1>) -> Pattern<S::EC2>
+fn default_shift_located_pattern<S>(
+    shifter: &mut S,
+    pattern: LocatedPattern<S::EC1>,
+) -> LocatedPattern<S::EC2>
+where
+    S: ExprContextShifter + ?Sized,
+{
+    LocatedPattern {
+        value: default_shift_pattern_value(shifter, pattern.value),
+        location: pattern.location,
+    }
+}
+
+fn default_shift_pattern_value<S>(shifter: &mut S, pattern: Pattern<S::EC1>) -> Pattern<S::EC2>
 where
     S: ExprContextShifter + ?Sized,
 {
@@ -642,12 +662,12 @@ where
         Pattern::Tuple(items) => Pattern::Tuple(
             items
                 .into_iter()
-                .map(|item| default_shift_pattern(shifter, item))
+                .map(|item| default_shift_located_pattern(shifter, item))
                 .collect(),
         ),
         Pattern::Binding(variable, pattern) => Pattern::Binding(
             default_shift_local_variable(shifter, variable),
-            Box::new(default_shift_pattern(shifter, *pattern)),
+            Box::new(default_shift_located_pattern(shifter, *pattern)),
         ),
         Pattern::EnumVariant {
             enum_type,
@@ -659,13 +679,13 @@ where
             variant,
             args: args
                 .into_iter()
-                .map(|arg| default_shift_pattern(shifter, arg))
+                .map(|arg| default_shift_located_pattern(shifter, arg))
                 .collect(),
             fields: fields
                 .into_iter()
                 .map(|field| RecordFieldPattern {
                     field: field.field,
-                    pattern: default_shift_pattern(shifter, field.pattern),
+                    pattern: default_shift_located_pattern(shifter, field.pattern),
                 })
                 .collect(),
         },

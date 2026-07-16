@@ -12,7 +12,7 @@ use argon_compiler::{
     Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
     TypeDeclaration, Unload,
 };
-use argon_expr::{EnumType, Expr, ExpressionOwner, SubstScanner, Variable};
+use argon_expr::{EnumType, Expr, ExprLocationExt, ExpressionOwner, SubstScanner, Variable};
 use argon_parser::ast;
 use argon_parser::ast::FunctionParameterListType;
 use argon_util::{MultiSlice, UnloadCell};
@@ -284,7 +284,10 @@ impl EnumVariant for SourceEnumVariant {
 
                         subst.add_substitution(
                             Variable::Parameter(Box::new(orig_param_var)),
-                            Cow::Owned(Expr::Variable(Variable::Parameter(Box::new(param_var)))),
+                            Cow::Owned(
+                                Expr::Variable(Variable::Parameter(Box::new(param_var)))
+                                    .with_location(self.owner.decl.name.location.clone()),
+                            ),
                         );
 
                         parameters.push(param);
@@ -292,13 +295,18 @@ impl EnumVariant for SourceEnumVariant {
 
                     let return_type = Expr::<DefaultExprContext>::EnumType(EnumType {
                         enum_: self.owner.clone(),
-                        arguments: SignatureParser::get_parameter_variables(
-                            &param_owner,
-                            &parameters,
-                        )
-                        .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
-                        .collect(),
-                    });
+                        arguments: parameters
+                            .iter()
+                            .enumerate()
+                            .map(|(i, param)| {
+                                Expr::Variable(Variable::Parameter(Box::new(
+                                    param.clone().to_parameter_var(param_owner.clone(), i),
+                                )))
+                                .with_location(self.owner.decl.name.location.clone())
+                            })
+                            .collect(),
+                    })
+                    .with_location(self.owner.decl.name.location.clone());
 
                     let scope = ParameterScope::new(scope, owner, &parameters);
 

@@ -100,6 +100,10 @@ impl Instance for SourceInstance {
             .import_specifier(self.decl.name.value.clone(), signature)
     }
 
+    fn location(&self) -> parse18_runtime::Location {
+        self.decl.name.location.clone()
+    }
+
     fn erasure_mode(&self) -> ErasureMode {
         self.erasure_mode
     }
@@ -162,7 +166,7 @@ impl Instance for SourceInstance {
                 self.context.clone(),
                 MethodOwner::Instance(instance_ref),
                 self.access_token(),
-                Some(self.decl.name.location.clone()),
+                self.location(),
             ))
         })
     }

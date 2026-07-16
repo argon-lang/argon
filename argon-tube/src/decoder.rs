@@ -18,8 +18,9 @@ use argon_compiler::{
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
-    IntegerType, LocalVariable, MatchCase, MethodInstanceType, ParameterVariable, Pattern,
-    RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType, Variable,
+    IntegerType, LocalVariable, LocatedExpr, LocatedPattern, MatchCase, MethodInstanceType,
+    ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType,
+    Variable,
 };
 use argon_format::tube as tf;
 use argon_util::sync::{RwLock, rwlock_read, rwlock_write};
@@ -29,6 +30,7 @@ use core::iter;
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
 use num_bigint::{BigInt, BigUint};
+use parse18_runtime::{FilePosition, Location};
 
 pub fn decode_tube(
     context: Context,
@@ -1122,11 +1124,11 @@ impl TubeDecoder {
                 .into_iter()
                 .map(|param| self.decode_signature_parameter(*param))
                 .collect(),
-            return_type: self.decode_expr(*sig.return_type),
+            return_type: self.decode_expr_default_location(*sig.return_type),
             ensures_clauses: sig
                 .ensures_clauses
                 .into_iter()
-                .map(|clause| self.decode_expr(*clause))
+                .map(|clause| self.decode_expr_default_location(*clause))
                 .collect(),
         }
     }
@@ -1143,11 +1145,11 @@ impl TubeDecoder {
                 .into_iter()
                 .map(|binding| ParameterBinding {
                     name: binding.name.map(|name| decode_identifier(*name)),
-                    param_type: self.decode_expr(*binding.param_type),
+                    param_type: self.decode_expr_default_location(*binding.param_type),
                 })
                 .collect(),
             name: param.name.map(|name| decode_identifier(*name)),
-            param_type: self.decode_expr(*param.param_type),
+            param_type: self.decode_expr_default_location(*param.param_type),
         }
     }
 
@@ -1157,7 +1159,7 @@ impl TubeDecoder {
     ) -> FunctionImplementation {
         match implementation {
             tf::FunctionImplementation::Expr { body } => {
-                FunctionImplementation::Expr(self.decode_expr(*body))
+                FunctionImplementation::Expr(self.decode_expr_default_location(*body))
             }
             tf::FunctionImplementation::Extern { externs } => {
                 FunctionImplementation::Extern(PlatformExtern {
@@ -1176,9 +1178,11 @@ impl TubeDecoder {
         implementation: tf::MethodImplementation,
     ) -> FunctionImplementation {
         match implementation {
-            tf::MethodImplementation::Abstract {} => FunctionImplementation::Expr(Expr::Error),
+            tf::MethodImplementation::Abstract {} => {
+                FunctionImplementation::Expr(LocatedExpr::error(Self::default_location()))
+            }
             tf::MethodImplementation::Expr { body } => {
-                FunctionImplementation::Expr(self.decode_expr(*body))
+                FunctionImplementation::Expr(self.decode_expr_default_location(*body))
             }
             tf::MethodImplementation::Extern { externs } => {
                 FunctionImplementation::Extern(PlatformExtern {
@@ -1192,18 +1196,58 @@ impl TubeDecoder {
         }
     }
 
+    fn decode_file_position(position: tf::FilePosition) -> FilePosition {
+        FilePosition {
+            line: to_usize_index(position.line),
+            column: to_usize_index(position.column),
+        }
+    }
+
+    fn decode_location(location: tf::Location) -> Location {
+        Location {
+            file: location.file.into(),
+            start: Self::decode_file_position(*location.start),
+            end: Self::decode_file_position(*location.end),
+        }
+    }
+
+    fn default_location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
+    }
+
+    fn decode_located_expr(
+        self: &Arc<Self>,
+        expr: tf::LocatedExpr,
+    ) -> LocatedExpr<DefaultExprContext> {
+        LocatedExpr::new(
+            self.decode_expr(*expr.value),
+            Self::decode_location(*expr.location),
+        )
+    }
+
+    fn decode_expr_default_location(
+        self: &Arc<Self>,
+        expr: tf::Expr,
+    ) -> LocatedExpr<DefaultExprContext> {
+        LocatedExpr::new(self.decode_expr(expr), Self::default_location())
+    }
+
     fn decode_expr(self: &Arc<Self>, expr: tf::Expr) -> Expr<DefaultExprContext> {
         match expr {
             tf::Expr::Error {} => Expr::Error,
             tf::Expr::ErasedValue { r#type } => Expr::FunctionResultValue {
-                result_type: Box::new(self.decode_expr(*r#type)),
+                result_type: Box::new(self.decode_located_expr(*r#type)),
             },
             tf::Expr::And { a, b } => Expr::And(
-                Box::new(self.decode_expr(*a)),
-                Box::new(self.decode_expr(*b)),
+                Box::new(self.decode_located_expr(*a)),
+                Box::new(self.decode_located_expr(*b)),
             ),
             tf::Expr::BindVariable { v, value } => {
-                let value = self.decode_expr(*value);
+                let value = self.decode_located_expr(*value);
                 let variable = self.decode_local_var(*v);
                 Expr::VariableBinding(variable, Box::new(value))
             }
@@ -1215,7 +1259,7 @@ impl TubeDecoder {
                 let variable = self.decode_local_var(*v);
                 let equality_witness =
                     equality_witness.map(|witness| self.decode_local_var(*witness));
-                let value = self.decode_expr(*value);
+                let value = self.decode_located_expr(*value);
                 Expr::BindErasedAlias {
                     variable,
                     equality_witness,
@@ -1223,7 +1267,7 @@ impl TubeDecoder {
                 }
             }
             tf::Expr::BindEnsures { value, variables } => Expr::BindEnsures {
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
                 variables: variables
                     .into_iter()
                     .map(|variable| self.decode_local_var(*variable))
@@ -1231,38 +1275,38 @@ impl TubeDecoder {
             },
             tf::Expr::BoolLiteral { value } => Expr::BoolLiteral(value),
             tf::Expr::Box { t, value } => Expr::Box {
-                t: Box::new(self.decode_expr(*t)),
-                value: Box::new(self.decode_expr(*value)),
+                t: Box::new(self.decode_located_expr(*t)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Expr::Builtin { builtin } => Expr::Builtin(self.decode_builtin(*builtin)),
-            tf::Expr::Boxed { t } => Expr::BoxedType(Box::new(self.decode_expr(*t))),
+            tf::Expr::Boxed { t } => Expr::BoxedType(Box::new(self.decode_located_expr(*t))),
             tf::Expr::Block { label, body } => Expr::Block {
                 label: self.decode_block_label(*label),
-                body: Box::new(self.decode_expr(*body)),
+                body: Box::new(self.decode_located_expr(*body)),
             },
             tf::Expr::Break { block_id, value } => Expr::Break {
                 label: self.decode_block_id(*block_id),
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Expr::ConjunctionType { lhs, rhs } => Expr::ConjunctionType {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Expr::DisjunctionType { lhs, rhs } => Expr::DisjunctionType {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Expr::EqualToType { r#type, lhs, rhs } => Expr::EqualToType {
-                r#type: Box::new(self.decode_expr(*r#type)),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                r#type: Box::new(self.decode_located_expr(*r#type)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Expr::EnumType { enum_type } => Expr::EnumType(EnumType {
                 enum_: self.enum_decl(enum_type.id),
                 arguments: enum_type
                     .args
                     .into_iter()
-                    .map(|arg| self.decode_expr(*arg))
+                    .map(|arg| self.decode_located_expr(*arg))
                     .collect(),
             }),
             tf::Expr::EnumVariantLiteral {
@@ -1276,44 +1320,50 @@ impl TubeDecoder {
                     arguments: enum_type
                         .args
                         .into_iter()
-                        .map(|arg| self.decode_expr(*arg))
+                        .map(|arg| self.decode_located_expr(*arg))
                         .collect(),
                 },
                 variant: self.enum_variant(variant_id),
-                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+                arguments: args
+                    .into_iter()
+                    .map(|arg| self.decode_located_expr(*arg))
+                    .collect(),
                 fields: fields
                     .into_iter()
                     .map(|field| {
                         let record_field = self.record_field(field.field_id);
                         RecordFieldLiteral {
                             field: record_field,
-                            value: self.decode_expr(*field.value),
+                            value: self.decode_located_expr(*field.value),
                         }
                     })
                     .collect(),
             },
             tf::Expr::Finally { action, ensuring } => Expr::Finally {
-                block_body: Box::new(self.decode_expr(*action)),
-                finally_body: Box::new(self.decode_expr(*ensuring)),
+                block_body: Box::new(self.decode_located_expr(*action)),
+                finally_body: Box::new(self.decode_located_expr(*ensuring)),
             },
             tf::Expr::FunctionCall { id, args } => Expr::FunctionCall {
                 function: self.function(id),
-                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+                arguments: args
+                    .into_iter()
+                    .map(|arg| self.decode_located_expr(*arg))
+                    .collect(),
             },
             tf::Expr::FunctionObjectCall { f, a } => Expr::FunctionObjectCall {
-                function: Box::new(self.decode_expr(*f)),
-                argument: Box::new(self.decode_expr(*a)),
+                function: Box::new(self.decode_located_expr(*f)),
+                argument: Box::new(self.decode_located_expr(*a)),
             },
             tf::Expr::FunctionType { a, r } => Expr::FunctionType {
                 a: Box::new(self.decode_closure_parameter_var(*a)),
-                r: Box::new(self.decode_expr(*r)),
+                r: Box::new(self.decode_located_expr(*r)),
             },
             tf::Expr::Condition {
                 value,
                 when_true_witness,
                 when_false_witness,
             } => Expr::Condition {
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
                 when_true_witness: when_true_witness.map(|var| self.decode_local_var(*var)),
                 when_false_witness: when_false_witness.map(|var| self.decode_local_var(*var)),
             },
@@ -1322,9 +1372,9 @@ impl TubeDecoder {
                 true_body,
                 false_body,
             } => Expr::IfElse {
-                condition: Box::new(self.decode_expr(*condition)),
-                when_true: Box::new(self.decode_expr(*true_body)),
-                when_false: Box::new(self.decode_expr(*false_body)),
+                condition: Box::new(self.decode_located_expr(*condition)),
+                when_true: Box::new(self.decode_located_expr(*true_body)),
+                when_false: Box::new(self.decode_located_expr(*false_body)),
             },
             tf::Expr::InstanceMethodCall {
                 method_id,
@@ -1334,13 +1384,19 @@ impl TubeDecoder {
             } => Expr::MethodCall {
                 method: self.method(method_id),
                 instance_type: self.decode_method_instance_type(*instance_type),
-                receiver: Box::new(self.decode_expr(*instance)),
-                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+                receiver: Box::new(self.decode_located_expr(*instance)),
+                arguments: args
+                    .into_iter()
+                    .map(|arg| self.decode_located_expr(*arg))
+                    .collect(),
             },
             tf::Expr::InstanceSingletonType { .. } => todo!("decode instance expressions"),
             tf::Expr::NewInstance { instance_id, args } => Expr::NewInstance {
                 instance: self.instance(instance_id),
-                arguments: args.into_iter().map(|arg| self.decode_expr(*arg)).collect(),
+                arguments: args
+                    .into_iter()
+                    .map(|arg| self.decode_located_expr(*arg))
+                    .collect(),
             },
             tf::Expr::IntLiteral { i } => Expr::IntLiteral(i),
             tf::Expr::I8Literal { value } => Expr::I8Literal(value),
@@ -1352,8 +1408,8 @@ impl TubeDecoder {
             tf::Expr::I64Literal { value } => Expr::I64Literal(value),
             tf::Expr::U64Literal { value } => Expr::U64Literal(value),
             tf::Expr::Is { value, pattern } => Expr::Is {
-                value: Box::new(self.decode_expr(*value)),
-                pattern: Box::new(self.decode_pattern(*pattern)),
+                value: Box::new(self.decode_located_expr(*value)),
+                pattern: Box::new(self.decode_pattern_default_location(*pattern)),
             },
             tf::Expr::Closure {
                 v,
@@ -1361,30 +1417,30 @@ impl TubeDecoder {
                 body,
             } => Expr::Closure {
                 v: Box::new(self.decode_closure_parameter_var(*v)),
-                return_type: Box::new(self.decode_expr(*return_type)),
-                body: Box::new(self.decode_expr(*body)),
+                return_type: Box::new(self.decode_located_expr(*return_type)),
+                body: Box::new(self.decode_located_expr(*body)),
             },
             tf::Expr::Match { value, cases } => Expr::Match {
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
                 cases: cases
                     .into_iter()
                     .map(|case| self.decode_match_case(*case))
                     .collect(),
             },
             tf::Expr::Or { a, b } => Expr::Or(
-                Box::new(self.decode_expr(*a)),
-                Box::new(self.decode_expr(*b)),
+                Box::new(self.decode_located_expr(*a)),
+                Box::new(self.decode_located_expr(*b)),
             ),
-            tf::Expr::Not { a } => Expr::Not(Box::new(self.decode_expr(*a))),
+            tf::Expr::Not { a } => Expr::Not(Box::new(self.decode_located_expr(*a))),
             tf::Expr::Raise { ex } => Expr::Raise {
-                ex: Box::new(self.decode_expr(*ex)),
+                ex: Box::new(self.decode_located_expr(*ex)),
             },
             tf::Expr::RecordType { record_type } => Expr::RecordType(RecordType {
                 record: self.record(record_type.id),
                 arguments: record_type
                     .args
                     .into_iter()
-                    .map(|arg| self.decode_expr(*arg))
+                    .map(|arg| self.decode_located_expr(*arg))
                     .collect(),
             }),
             tf::Expr::RecordFieldLoad {
@@ -1397,11 +1453,11 @@ impl TubeDecoder {
                     arguments: record
                         .args
                         .into_iter()
-                        .map(|arg| self.decode_expr(*arg))
+                        .map(|arg| self.decode_located_expr(*arg))
                         .collect(),
                 }),
                 field: self.record_field(field_id),
-                record_value: Box::new(self.decode_expr(*record_value)),
+                record_value: Box::new(self.decode_located_expr(*record_value)),
             },
             tf::Expr::RecordFieldStore {
                 record,
@@ -1414,12 +1470,12 @@ impl TubeDecoder {
                     arguments: record
                         .args
                         .into_iter()
-                        .map(|arg| self.decode_expr(*arg))
+                        .map(|arg| self.decode_located_expr(*arg))
                         .collect(),
                 }),
                 field: self.record_field(field_id),
-                record_value: Box::new(self.decode_expr(*record_value)),
-                new_value: Box::new(self.decode_expr(*field_value)),
+                record_value: Box::new(self.decode_located_expr(*record_value)),
+                new_value: Box::new(self.decode_located_expr(*field_value)),
             },
             tf::Expr::RecordLiteral { record, fields } => Expr::RecordLiteral {
                 record_type: RecordType {
@@ -1427,7 +1483,7 @@ impl TubeDecoder {
                     arguments: record
                         .args
                         .into_iter()
-                        .map(|arg| self.decode_expr(*arg))
+                        .map(|arg| self.decode_located_expr(*arg))
                         .collect(),
                 },
                 fields: fields
@@ -1436,7 +1492,7 @@ impl TubeDecoder {
                         let record_field = self.record_field(field.field_id);
                         RecordFieldLiteral {
                             field: record_field,
-                            value: self.decode_expr(*field.value),
+                            value: self.decode_located_expr(*field.value),
                         }
                     })
                     .collect(),
@@ -1449,8 +1505,8 @@ impl TubeDecoder {
             | tf::Expr::RefCellLoad { .. }
             | tf::Expr::RefCellStore { .. } => todo!("decode ref-cell expressions"),
             tf::Expr::Sequence { head, tail } => {
-                let exprs = iter::once(self.decode_expr(*head))
-                    .chain(tail.into_iter().map(|expr| self.decode_expr(*expr)))
+                let exprs = iter::once(self.decode_located_expr(*head))
+                    .chain(tail.into_iter().map(|expr| self.decode_located_expr(*expr)))
                     .collect::<Vec<_>>();
                 Expr::Sequence(
                     Vec1::try_from(exprs).expect("tube sequence expression is non-empty"),
@@ -1463,22 +1519,24 @@ impl TubeDecoder {
             tf::Expr::Tuple { items } => Expr::Tuple {
                 items: items
                     .into_iter()
-                    .map(|item| self.decode_expr(*item))
+                    .map(|item| self.decode_located_expr(*item))
                     .collect(),
             },
-            tf::Expr::TupleElement { index, tuple } => {
-                Expr::TupleElement(Box::new(self.decode_expr(*tuple)), to_usize_index(index))
-            }
-            tf::Expr::TypeN { n } => Expr::Type(Box::new(self.decode_expr(*n))),
+            tf::Expr::TupleElement { index, tuple } => Expr::TupleElement(
+                Box::new(self.decode_located_expr(*tuple)),
+                to_usize_index(index),
+            ),
+            tf::Expr::TypeN { n } => Expr::Type(Box::new(self.decode_located_expr(*n))),
             tf::Expr::TypeBigN { n } => Expr::BigType(n.into()),
             tf::Expr::Unbox { t, value } => Expr::Unbox {
-                t: Box::new(self.decode_expr(*t)),
-                value: Box::new(self.decode_expr(*value)),
+                t: Box::new(self.decode_located_expr(*t)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Expr::Variable { v } => Expr::Variable(self.decode_var(*v)),
-            tf::Expr::VariableStore { v, value } => {
-                Expr::VariableStore(self.decode_var(*v), Box::new(self.decode_expr(*value)))
-            }
+            tf::Expr::VariableStore { v, value } => Expr::VariableStore(
+                self.decode_var(*v),
+                Box::new(self.decode_located_expr(*value)),
+            ),
         }
     }
 
@@ -1491,21 +1549,21 @@ impl TubeDecoder {
             tf::Builtin::StringType {} => Builtin::StringType,
             tf::Builtin::NeverType {} => Builtin::NeverType,
             tf::Builtin::ArrayType { element_type } => Builtin::ArrayType {
-                element_type: Box::new(self.decode_expr(*element_type)),
+                element_type: Box::new(self.decode_located_expr(*element_type)),
             },
             tf::Builtin::IntNegate {
                 integer_type,
                 value,
             } => Builtin::IntNegate {
                 integer_type: decode_format_integer_type(integer_type),
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Builtin::IntBitNot {
                 integer_type,
                 value,
             } => Builtin::IntBitNot {
                 integer_type: decode_format_integer_type(integer_type),
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Builtin::IntConvert {
                 source_type,
@@ -1514,7 +1572,7 @@ impl TubeDecoder {
             } => Builtin::IntConvert {
                 source_type: decode_format_integer_type(source_type),
                 dest_type: decode_format_integer_type(dest_type),
-                value: Box::new(self.decode_expr(*value)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Builtin::IntAdd {
                 integer_type,
@@ -1522,8 +1580,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntAdd {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntSub {
                 integer_type,
@@ -1531,8 +1589,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntSub {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntMul {
                 integer_type,
@@ -1540,8 +1598,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntMul {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntBitAnd {
                 integer_type,
@@ -1549,8 +1607,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntBitAnd {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntBitOr {
                 integer_type,
@@ -1558,8 +1616,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntBitOr {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntBitXor {
                 integer_type,
@@ -1567,8 +1625,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntBitXor {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntBitShiftLeft {
                 integer_type,
@@ -1576,8 +1634,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntBitShiftLeft {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntBitShiftRight {
                 integer_type,
@@ -1585,8 +1643,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntBitShiftRight {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntEq {
                 integer_type,
@@ -1594,8 +1652,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntEq {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntLt {
                 integer_type,
@@ -1603,8 +1661,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntLt {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntLe {
                 integer_type,
@@ -1612,8 +1670,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntLe {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntGt {
                 integer_type,
@@ -1621,8 +1679,8 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntGt {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::IntGe {
                 integer_type,
@@ -1630,45 +1688,45 @@ impl TubeDecoder {
                 rhs,
             } => Builtin::IntGe {
                 integer_type: decode_format_integer_type(integer_type),
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::StringConcat { values } => Builtin::StringConcat {
                 values: values
                     .into_iter()
-                    .map(|value| self.decode_expr(*value))
+                    .map(|value| self.decode_located_expr(*value))
                     .collect(),
             },
             tf::Builtin::StringEq { lhs, rhs } => Builtin::StringEq {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::BoolEq { lhs, rhs } => Builtin::BoolEq {
-                lhs: Box::new(self.decode_expr(*lhs)),
-                rhs: Box::new(self.decode_expr(*rhs)),
+                lhs: Box::new(self.decode_located_expr(*lhs)),
+                rhs: Box::new(self.decode_located_expr(*rhs)),
             },
             tf::Builtin::ArrayCreateUnsafeUninitialized {
                 element_type,
                 length,
             } => Builtin::ArrayCreateUnsafeUninitialized {
-                element_type: Box::new(self.decode_expr(*element_type)),
-                length: Box::new(self.decode_expr(*length)),
+                element_type: Box::new(self.decode_located_expr(*element_type)),
+                length: Box::new(self.decode_located_expr(*length)),
             },
             tf::Builtin::ArrayLength {
                 element_type,
                 array,
             } => Builtin::ArrayLength {
-                element_type: Box::new(self.decode_expr(*element_type)),
-                array: Box::new(self.decode_expr(*array)),
+                element_type: Box::new(self.decode_located_expr(*element_type)),
+                array: Box::new(self.decode_located_expr(*array)),
             },
             tf::Builtin::ArrayGet {
                 element_type,
                 array,
                 index,
             } => Builtin::ArrayGet {
-                element_type: Box::new(self.decode_expr(*element_type)),
-                array: Box::new(self.decode_expr(*array)),
-                index: Box::new(self.decode_expr(*index)),
+                element_type: Box::new(self.decode_located_expr(*element_type)),
+                array: Box::new(self.decode_located_expr(*array)),
+                index: Box::new(self.decode_located_expr(*index)),
             },
             tf::Builtin::ArraySet {
                 element_type,
@@ -1676,18 +1734,28 @@ impl TubeDecoder {
                 index,
                 value,
             } => Builtin::ArraySet {
-                element_type: Box::new(self.decode_expr(*element_type)),
-                array: Box::new(self.decode_expr(*array)),
-                index: Box::new(self.decode_expr(*index)),
-                value: Box::new(self.decode_expr(*value)),
+                element_type: Box::new(self.decode_located_expr(*element_type)),
+                array: Box::new(self.decode_located_expr(*array)),
+                index: Box::new(self.decode_located_expr(*index)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Builtin::EqualToRefl { r#type, value } => Builtin::EqualToRefl {
-                r#type: Box::new(self.decode_expr(*r#type)),
-                value: Box::new(self.decode_expr(*value)),
+                r#type: Box::new(self.decode_located_expr(*r#type)),
+                value: Box::new(self.decode_located_expr(*value)),
             },
             tf::Builtin::UnsafeAssumeErased { r#type } => Builtin::UnsafeAssumeErased {
-                r#type: Box::new(self.decode_expr(*r#type)),
+                r#type: Box::new(self.decode_located_expr(*r#type)),
             },
+        }
+    }
+
+    fn decode_pattern_default_location(
+        self: &Arc<Self>,
+        pattern: tf::Pattern,
+    ) -> LocatedPattern<DefaultExprContext> {
+        LocatedPattern {
+            value: self.decode_pattern(pattern),
+            location: Self::default_location(),
         }
     }
 
@@ -1695,17 +1763,20 @@ impl TubeDecoder {
         match pattern {
             tf::Pattern::Error {} => Pattern::Error,
             tf::Pattern::Discard { t } => Pattern::Discard {
-                t: Box::new(self.decode_expr(*t)),
+                t: Box::new(self.decode_expr_default_location(*t)),
             },
             tf::Pattern::Tuple { items } => Pattern::Tuple(
                 items
                     .into_iter()
-                    .map(|item| self.decode_pattern(*item))
+                    .map(|item| self.decode_pattern_default_location(*item))
                     .collect(),
             ),
             tf::Pattern::Binding { v, pattern } => {
                 let variable = *self.decode_local_var(*v);
-                Pattern::Binding(variable, Box::new(self.decode_pattern(*pattern)))
+                Pattern::Binding(
+                    variable,
+                    Box::new(self.decode_pattern_default_location(*pattern)),
+                )
             }
             tf::Pattern::EnumVariant {
                 enum_type,
@@ -1718,13 +1789,13 @@ impl TubeDecoder {
                     arguments: enum_type
                         .args
                         .into_iter()
-                        .map(|arg| self.decode_expr(*arg))
+                        .map(|arg| self.decode_located_expr(*arg))
                         .collect(),
                 },
                 variant: self.enum_variant(variant_id),
                 args: args
                     .into_iter()
-                    .map(|arg| self.decode_pattern(*arg))
+                    .map(|arg| self.decode_pattern_default_location(*arg))
                     .collect(),
                 fields: fields
                     .into_iter()
@@ -1739,8 +1810,8 @@ impl TubeDecoder {
 
     fn decode_match_case(self: &Arc<Self>, case: tf::MatchCase) -> MatchCase<DefaultExprContext> {
         MatchCase {
-            pattern: self.decode_pattern(*case.pattern),
-            body: self.decode_expr(*case.body),
+            pattern: self.decode_pattern_default_location(*case.pattern),
+            body: self.decode_located_expr(*case.body),
         }
     }
 
@@ -1750,7 +1821,7 @@ impl TubeDecoder {
     ) -> RecordFieldPattern<DefaultExprContext> {
         RecordFieldPattern {
             field: self.record_field(field.field_id),
-            pattern: self.decode_pattern(*field.pattern),
+            pattern: self.decode_pattern_default_location(*field.pattern),
         }
     }
 
@@ -1763,7 +1834,7 @@ impl TubeDecoder {
             arguments: trait_type
                 .args
                 .into_iter()
-                .map(|arg| self.decode_expr(*arg))
+                .map(|arg| self.decode_located_expr(*arg))
                 .collect(),
         }
     }
@@ -1801,7 +1872,7 @@ impl TubeDecoder {
                 owner: self.decode_expression_owner(*owner),
                 parameter_index: usize::try_from(parameter_index)
                     .expect("parameter index does not fit usize"),
-                var_type: self.decode_expr(*var_type),
+                var_type: self.decode_expr_default_location(*var_type),
                 name: name.map(|name| decode_identifier(*name)),
                 erasure_mode: decode_erasure_mode(*erasure),
                 is_witness: witness,
@@ -1812,7 +1883,7 @@ impl TubeDecoder {
                 var_type,
             } => Variable::InstanceParameter(Box::new(InstanceParameterVariable {
                 owner: self.decode_expression_owner(*owner),
-                var_type: self.decode_expr(*var_type),
+                var_type: self.decode_expr_default_location(*var_type),
                 name: name.map(|name| decode_identifier(*name)),
             })),
             tf::Var::ClosureParameterVar { id } => {
@@ -1828,7 +1899,7 @@ impl TubeDecoder {
         let variable_id = variable.id;
         let variable = ClosureParameterVariable {
             id: UniqueIdentifier::new(),
-            var_type: self.decode_expr(*variable.var_type),
+            var_type: self.decode_expr_default_location(*variable.var_type),
             name: variable.name.map(|name| decode_identifier(*name)),
             is_mutable: variable.mutable,
             erasure_mode: decode_erasure_mode(*variable.erasure),
@@ -1848,7 +1919,7 @@ impl TubeDecoder {
             .unwrap_or_else(|| {
                 Box::new(ClosureParameterVariable {
                     id: UniqueIdentifier::new(),
-                    var_type: Expr::Error,
+                    var_type: LocatedExpr::error(Self::default_location()),
                     name: None,
                     is_mutable: false,
                     erasure_mode: ErasureMode::Concrete,
@@ -1898,7 +1969,7 @@ impl TubeDecoder {
         let local_variable = Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: variable.name.map(|name| decode_identifier(*name)),
-            var_type: self.decode_expr(*variable.var_type),
+            var_type: self.decode_expr_default_location(*variable.var_type),
             erasure_mode: if variable.erased {
                 ErasureMode::Erased
             } else {
@@ -1925,7 +1996,7 @@ impl TubeDecoder {
             id: UniqueIdentifier::new(),
             name: label.name.map(|name| decode_identifier(*name)),
             kind: decode_block_label_kind(label.kind),
-            block_result_type: self.decode_expr(*label.block_result_type),
+            block_result_type: self.decode_expr_default_location(*label.block_result_type),
         });
 
         rwlock_write(&self.block_labels).insert(id, block_label.clone());
@@ -2066,6 +2137,10 @@ impl Trait for DecodedTrait {
         })
     }
 
+    fn location(&self) -> Location {
+        TubeDecoder::decode_location((*self.definition.location).clone())
+    }
+
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
         get_or_init_cached(&self.signature, || {
             Arc::new(
@@ -2099,7 +2174,7 @@ impl Trait for DecodedTrait {
                 self.decoder.context.clone(),
                 MethodOwner::Trait(trait_ref),
                 access_token,
-                None,
+                self.location(),
             ))
         })
     }
@@ -2236,6 +2311,10 @@ impl Instance for DecodedInstance {
         })
     }
 
+    fn location(&self) -> Location {
+        TubeDecoder::decode_location((*self.definition.location).clone())
+    }
+
     fn erasure_mode(&self) -> ErasureMode {
         decode_erasure_mode((*self.definition.erasure).clone())
     }
@@ -2273,7 +2352,7 @@ impl Instance for DecodedInstance {
                 self.decoder.context.clone(),
                 MethodOwner::Instance(instance_ref),
                 access_token,
-                None,
+                self.location(),
             ))
         })
     }
@@ -2426,7 +2505,7 @@ struct DecodedEnumVariantField {
     owner: Arc<DecodedEnumVariant>,
     definition: tf::RecordFieldDefinition,
     metadata: RecordFieldMetadata,
-    field_type: UnloadCell<Arc<Expr<DefaultExprContext>>>,
+    field_type: UnloadCell<Arc<LocatedExpr<DefaultExprContext>>>,
 }
 
 impl DecodedEnumVariantField {
@@ -2467,13 +2546,13 @@ impl RecordField for DecodedEnumVariantField {
         &self.metadata
     }
 
-    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
+    fn field_type(self: Arc<Self>) -> Arc<LocatedExpr<DefaultExprContext>> {
         get_or_init_cached(&self.field_type, || {
             Arc::new(
                 self.owner
                     .owner
                     .decoder
-                    .decode_expr((*self.definition.field_type).clone()),
+                    .decode_expr_default_location((*self.definition.field_type).clone()),
             )
         })
     }
@@ -2551,7 +2630,7 @@ struct DecodedRecordField {
     owner: Arc<DecodedRecord>,
     definition: tf::RecordFieldDefinition,
     metadata: RecordFieldMetadata,
-    field_type: UnloadCell<Arc<Expr<DefaultExprContext>>>,
+    field_type: UnloadCell<Arc<LocatedExpr<DefaultExprContext>>>,
 }
 
 impl DecodedRecordField {
@@ -2592,12 +2671,12 @@ impl RecordField for DecodedRecordField {
         &self.metadata
     }
 
-    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>> {
+    fn field_type(self: Arc<Self>) -> Arc<LocatedExpr<DefaultExprContext>> {
         get_or_init_cached(&self.field_type, || {
             Arc::new(
                 self.owner
                     .decoder
-                    .decode_expr((*self.definition.field_type).clone()),
+                    .decode_expr_default_location((*self.definition.field_type).clone()),
             )
         })
     }

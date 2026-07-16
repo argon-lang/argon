@@ -14,7 +14,8 @@ use argon_compiler::{
     MethodInstanceParameter, MethodMetadata, MethodOwner, Unload,
 };
 use argon_expr::{
-    ErasureMode, Expr, ExpressionOwner, InstanceParameterVariable, TraitType, Variable,
+    ErasureMode, Expr, ExprLocationExt, ExpressionOwner, InstanceParameterVariable, LocatedExpr,
+    TraitType, Variable,
 };
 use argon_parser::ast;
 use argon_util::sync::ThreadSafe;
@@ -91,7 +92,7 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
         }
     }
 
-    fn receiver_type(&self) -> Expr<DefaultExprContext> {
+    fn receiver_type(&self) -> LocatedExpr<DefaultExprContext> {
         match self.closure.owner() {
             MethodOwner::Trait(trait_) => {
                 let owner = ExpressionOwner::Trait(trait_.clone());
@@ -99,13 +100,19 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
 
                 Expr::TraitType(TraitType {
                     trait_,
-                    arguments: SignatureParser::get_parameter_variables(
-                        &owner,
-                        &signature.parameters,
-                    )
-                    .map(|param| Expr::Variable(Variable::Parameter(Box::new(param))))
-                    .collect(),
+                    arguments: signature
+                        .parameters
+                        .iter()
+                        .enumerate()
+                        .map(|(i, param)| {
+                            Expr::Variable(Variable::Parameter(Box::new(
+                                param.clone().to_parameter_var(owner.clone(), i),
+                            )))
+                            .with_location(self.decl.name.location.clone())
+                        })
+                        .collect(),
                 })
+                .with_location(self.decl.name.location.clone())
             }
             MethodOwner::Instance(instance) => instance.signature().return_type.clone(),
         }

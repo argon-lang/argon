@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use argon_expr::{ClosureParameterVariable, Expr, ExprContext, ExprScanner, Variable};
+use argon_expr::{ClosureParameterVariable, Expr, ExprContext, ExprScanner, LocatedExpr, Variable};
 use hashbrown::HashSet;
 
 use super::FreeVariableScanner;
@@ -18,7 +18,7 @@ where
         }
     }
 
-    pub fn scan_captures(expr: &Expr<EC>) -> HashSet<Variable<EC>> {
+    pub fn scan_captures(expr: &LocatedExpr<EC>) -> HashSet<Variable<EC>> {
         let mut scanner = Self::new();
         scanner.scan(expr);
         scanner.into_captures()
@@ -28,7 +28,7 @@ where
         self.captures
     }
 
-    fn scan_closure(&mut self, parameter: &ClosureParameterVariable<EC>, body: &Expr<EC>) {
+    fn scan_closure(&mut self, parameter: &ClosureParameterVariable<EC>, body: &LocatedExpr<EC>) {
         let mut captures = FreeVariableScanner::scan_free_variables(body);
         let closure_parameter = Variable::ClosureParameter(Box::new(parameter.clone()));
         captures.remove(&closure_parameter);
@@ -51,12 +51,12 @@ where
 {
     type EC = EC;
 
-    fn scan(&mut self, expr: &Expr<Self::EC>) -> bool {
+    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
         if let Expr::Closure { v, body, .. } = expr {
             self.scan_closure(v, body);
         }
 
-        argon_expr::default_scan(self, expr)
+        argon_expr::default_scan_expr(self, expr)
     }
 }
 
@@ -66,10 +66,12 @@ mod tests {
     use alloc::boxed::Box;
     use alloc::vec;
     use argon_expr::{
-        ClosureParameterVariable, ErasureMode, Expr, ExprContext, LocalVariable, Variable,
+        ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprLocationExt, LocalVariable,
+        Variable,
     };
     use argon_util::UniqueIdentifier;
     use mitsein::vec1::Vec1;
+    use parse18_runtime::{FilePosition, Location};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -86,11 +88,19 @@ mod tests {
         type Instance = ();
     }
 
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
+    }
+
     fn local_variable() -> Box<LocalVariable<TestContext>> {
         Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
-            var_type: Expr::int_type(),
+            var_type: Expr::int_type().with_location(location()),
             erasure_mode: ErasureMode::Concrete,
             is_witness: false,
             is_mutable: false,
@@ -100,7 +110,7 @@ mod tests {
     fn closure_parameter() -> Box<ClosureParameterVariable<TestContext>> {
         Box::new(ClosureParameterVariable {
             id: UniqueIdentifier::new(),
-            var_type: Expr::int_type(),
+            var_type: Expr::int_type().with_location(location()),
             name: None,
             is_mutable: false,
             erasure_mode: ErasureMode::Concrete,
@@ -115,15 +125,16 @@ mod tests {
         let captured = Variable::Local(local_variable());
         let body = Expr::Tuple {
             items: vec![
-                Expr::Variable(parameter_var),
-                Expr::Variable(captured.clone()),
+                Expr::Variable(parameter_var).with_location(location()),
+                Expr::Variable(captured.clone()).with_location(location()),
             ],
         };
         let expr = Expr::Closure {
             v: parameter.clone(),
-            return_type: Box::new(Expr::int_type()),
-            body: Box::new(body),
-        };
+            return_type: Box::new(Expr::int_type().with_location(location())),
+            body: Box::new(body.with_location(location())),
+        }
+        .with_location(location());
 
         let captures = CaptureScanner::scan_captures(&expr);
 
@@ -137,17 +148,22 @@ mod tests {
         let bound = local_variable();
         let body = Expr::Sequence(
             Vec1::try_from(vec![
-                Expr::VariableBinding(bound.clone(), Box::new(Expr::IntLiteral(1.into()))),
-                Expr::Variable(Variable::Local(bound.clone())),
+                Expr::VariableBinding(
+                    bound.clone(),
+                    Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+                )
+                .with_location(location()),
+                Expr::Variable(Variable::Local(bound.clone())).with_location(location()),
             ])
             .ok()
             .unwrap(),
         );
         let expr = Expr::Closure {
             v: parameter.clone(),
-            return_type: Box::new(Expr::int_type()),
-            body: Box::new(body),
-        };
+            return_type: Box::new(Expr::int_type().with_location(location())),
+            body: Box::new(body.with_location(location())),
+        }
+        .with_location(location());
 
         let captures = CaptureScanner::scan_captures(&expr);
 
@@ -163,14 +179,15 @@ mod tests {
 
         let inner = Expr::Closure {
             v: inner_parameter.clone(),
-            return_type: Box::new(Expr::int_type()),
-            body: Box::new(Expr::Variable(captured.clone())),
+            return_type: Box::new(Expr::int_type().with_location(location())),
+            body: Box::new(Expr::Variable(captured.clone()).with_location(location())),
         };
         let outer = Expr::Closure {
             v: outer_parameter.clone(),
-            return_type: Box::new(Expr::int_type()),
-            body: Box::new(inner),
-        };
+            return_type: Box::new(Expr::int_type().with_location(location())),
+            body: Box::new(inner.with_location(location())),
+        }
+        .with_location(location());
 
         let captures = CaptureScanner::scan_captures(&outer);
 

@@ -1,7 +1,7 @@
 use crate::{
-    BlockLabel, Builtin, EnumType, Expr, ExprContext, InstanceType, LoopLabels, MatchCase,
-    MethodInstanceType, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType,
-    Variable,
+    BlockLabel, Builtin, EnumType, Expr, ExprContext, InstanceType, LocatedExpr, LocatedPattern,
+    LoopLabels, MatchCase, MethodInstanceType, Pattern, RecordFieldLiteral, RecordFieldPattern,
+    RecordType, TraitType, Variable,
 };
 
 mod function_result;
@@ -21,16 +21,24 @@ pub trait ExprScanner {
         true
     }
 
-    fn scan(&mut self, expr: &Expr<Self::EC>) -> bool {
-        default_scan(self, expr)
+    fn scan(&mut self, expr: &LocatedExpr<Self::EC>) -> bool {
+        self.scan_expr(&expr.value)
+    }
+
+    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
+        default_scan_expr(self, expr)
     }
 
     fn scan_variable(&mut self, v: &Variable<Self::EC>) -> bool {
         default_scan_variable(self, v)
     }
 
-    fn scan_pattern(&mut self, pattern: &Pattern<Self::EC>) -> bool {
-        default_scan_pattern(self, pattern)
+    fn scan_pattern(&mut self, pattern: &LocatedPattern<Self::EC>) -> bool {
+        self.scan_pattern_value(&pattern.value)
+    }
+
+    fn scan_pattern_value(&mut self, pattern: &Pattern<Self::EC>) -> bool {
+        default_scan_pattern_value(self, pattern)
     }
 }
 
@@ -41,20 +49,28 @@ pub trait ExprScannerMut {
         true
     }
 
-    fn scan(&mut self, expr: &mut Expr<Self::EC>) -> bool {
-        default_scan_mut(self, expr)
+    fn scan(&mut self, expr: &mut LocatedExpr<Self::EC>) -> bool {
+        self.scan_expr(&mut expr.value)
+    }
+
+    fn scan_expr(&mut self, expr: &mut Expr<Self::EC>) -> bool {
+        default_scan_expr_mut(self, expr)
     }
 
     fn scan_variable(&mut self, v: &mut Variable<Self::EC>) -> bool {
         default_scan_variable_mut(self, v)
     }
 
-    fn scan_pattern(&mut self, pattern: &mut Pattern<Self::EC>) -> bool {
-        default_scan_pattern_mut(self, pattern)
+    fn scan_pattern(&mut self, pattern: &mut LocatedPattern<Self::EC>) -> bool {
+        self.scan_pattern_value(&mut pattern.value)
+    }
+
+    fn scan_pattern_value(&mut self, pattern: &mut Pattern<Self::EC>) -> bool {
+        default_scan_pattern_value_mut(self, pattern)
     }
 }
 
-pub fn default_scan<S>(scanner: &mut S, expr: &Expr<S::EC>) -> bool
+pub fn default_scan_expr<S>(scanner: &mut S, expr: &Expr<S::EC>) -> bool
 where
     S: ExprScanner + ?Sized,
 {
@@ -361,7 +377,7 @@ where
     }
 }
 
-pub fn default_scan_pattern<S>(scanner: &mut S, pattern: &Pattern<S::EC>) -> bool
+pub fn default_scan_pattern_value<S>(scanner: &mut S, pattern: &Pattern<S::EC>) -> bool
 where
     S: ExprScanner + ?Sized,
 {
@@ -387,7 +403,7 @@ where
     }
 }
 
-pub fn default_scan_mut<S>(scanner: &mut S, expr: &mut Expr<S::EC>) -> bool
+pub fn default_scan_expr_mut<S>(scanner: &mut S, expr: &mut Expr<S::EC>) -> bool
 where
     S: ExprScannerMut + ?Sized,
 {
@@ -716,7 +732,7 @@ where
     }
 }
 
-pub fn default_scan_pattern_mut<S>(scanner: &mut S, pattern: &mut Pattern<S::EC>) -> bool
+pub fn default_scan_pattern_value_mut<S>(scanner: &mut S, pattern: &mut Pattern<S::EC>) -> bool
 where
     S: ExprScannerMut + ?Sized,
 {
@@ -749,9 +765,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ExprScanner, ExprScannerMut};
-    use crate::{Builtin, Expr, ExprContext};
+    use crate::{Builtin, Expr, ExprContext, ExprLocationExt};
     use alloc::vec;
     use alloc::vec::Vec;
+    use parse18_runtime::{FilePosition, Location};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -766,6 +783,14 @@ mod tests {
         type EnumVariant = ();
         type Method = ();
         type Instance = ();
+    }
+
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
     }
 
     struct StopAtHole {
@@ -785,15 +810,15 @@ mod tests {
     #[test]
     fn scanner_short_circuits_when_scan_returns_false() {
         let expr = Expr::Builtin(Builtin::BoolEq {
-            lhs: Box::new(Expr::Hole(1)),
-            rhs: Box::new(Expr::Hole(2)),
+            lhs: Box::new(Expr::Hole(1).with_location(location())),
+            rhs: Box::new(Expr::Hole(2).with_location(location())),
         });
         let mut scanner = StopAtHole {
             stop_at: 2,
             visited: Vec::new(),
         };
 
-        assert!(!scanner.scan(&expr));
+        assert!(!scanner.scan_expr(&expr));
         assert_eq!(scanner.visited, vec![1, 2]);
     }
 
@@ -811,16 +836,16 @@ mod tests {
     #[test]
     fn mutable_scanner_can_modify_exprs() {
         let mut expr = Expr::Builtin(Builtin::BoolEq {
-            lhs: Box::new(Expr::Hole(1)),
-            rhs: Box::new(Expr::Hole(2)),
+            lhs: Box::new(Expr::Hole(1).with_location(location())),
+            rhs: Box::new(Expr::Hole(2).with_location(location())),
         });
 
-        assert!(ReplaceHoles.scan(&mut expr));
+        assert!(ReplaceHoles.scan_expr(&mut expr));
 
         assert!(matches!(
             expr,
             Expr::Builtin(Builtin::BoolEq { lhs, rhs })
-                if matches!((&*lhs, &*rhs), (Expr::Hole(11), Expr::Hole(12)))
+                if matches!((&lhs.value, &rhs.value), (Expr::Hole(11), Expr::Hole(12)))
         ));
     }
 }

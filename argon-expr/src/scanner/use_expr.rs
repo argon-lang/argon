@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext, ExprScanner};
+use crate::{Expr, ExprContext, ExprScanner, LocatedExpr};
 
 pub struct UseExprScanner<EC: ExprContext + ?Sized> {
     found_use: bool,
@@ -29,13 +29,13 @@ impl<EC: ExprContext + ?Sized> UseExprScanner<EC> {
         self.found_use_mut
     }
 
-    pub fn contains_use(expr: &Expr<EC>) -> bool {
+    pub fn contains_use(expr: &LocatedExpr<EC>) -> bool {
         let mut scanner = Self::new();
         scanner.scan(expr);
         scanner.found_use()
     }
 
-    pub fn contains_use_mut(expr: &Expr<EC>) -> bool {
+    pub fn contains_use_mut(expr: &LocatedExpr<EC>) -> bool {
         let mut scanner = Self::new();
         scanner.scan(expr);
         scanner.found_use_mut()
@@ -45,21 +45,22 @@ impl<EC: ExprContext + ?Sized> UseExprScanner<EC> {
 impl<EC: ExprContext + ?Sized> ExprScanner for UseExprScanner<EC> {
     type EC = EC;
 
-    fn scan(&mut self, expr: &Expr<Self::EC>) -> bool {
+    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
         if let Expr::Use { is_mutable, .. } = expr {
             self.found_use = true;
             self.found_use_mut |= *is_mutable;
         }
 
-        crate::default_scan(self, expr)
+        crate::default_scan_expr(self, expr)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::UseExprScanner;
-    use crate::{Expr, ExprContext};
+    use crate::{Expr, ExprContext, ExprLocationExt};
     use alloc::{boxed::Box, vec};
+    use parse18_runtime::{FilePosition, Location};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -76,12 +77,21 @@ mod tests {
         type Instance = ();
     }
 
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
+    }
+
     #[test]
     fn detects_use_expression() {
         let expr = Expr::<TestContext>::Use {
             is_mutable: false,
-            inner: Box::new(Expr::IntLiteral(1.into())),
-        };
+            inner: Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+        }
+        .with_location(location());
 
         assert!(UseExprScanner::contains_use(&expr));
         assert!(!UseExprScanner::contains_use_mut(&expr));
@@ -91,8 +101,9 @@ mod tests {
     fn detects_use_mut_expression() {
         let expr = Expr::<TestContext>::Use {
             is_mutable: true,
-            inner: Box::new(Expr::IntLiteral(1.into())),
-        };
+            inner: Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+        }
+        .with_location(location());
 
         assert!(UseExprScanner::contains_use(&expr));
         assert!(UseExprScanner::contains_use_mut(&expr));
@@ -101,13 +112,20 @@ mod tests {
     #[test]
     fn detects_nested_use_expression() {
         let expr = Expr::<TestContext>::Shared {
-            inner: Box::new(Expr::Tuple {
-                items: vec![Expr::Use {
-                    is_mutable: false,
-                    inner: Box::new(Expr::IntLiteral(1.into())),
-                }],
-            }),
-        };
+            inner: Box::new(
+                Expr::Tuple {
+                    items: vec![
+                        Expr::Use {
+                            is_mutable: false,
+                            inner: Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+                        }
+                        .with_location(location()),
+                    ],
+                }
+                .with_location(location()),
+            ),
+        }
+        .with_location(location());
 
         assert!(UseExprScanner::contains_use(&expr));
     }
@@ -115,10 +133,14 @@ mod tests {
     #[test]
     fn ignores_non_use_expressions() {
         let expr = Expr::<TestContext>::Shared {
-            inner: Box::new(Expr::Shared {
-                inner: Box::new(Expr::IntLiteral(1.into())),
-            }),
-        };
+            inner: Box::new(
+                Expr::Shared {
+                    inner: Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+                }
+                .with_location(location()),
+            ),
+        }
+        .with_location(location());
 
         assert!(!UseExprScanner::contains_use(&expr));
         assert!(!UseExprScanner::contains_use_mut(&expr));

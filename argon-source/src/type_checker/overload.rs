@@ -12,8 +12,9 @@ use argon_compiler::scope::{self, LocalVariableScope, Scope};
 use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{Function, FunctionSignature, Method, RecordField};
 use argon_expr::{
-    EnumType, ErasureMode, Expr, ExprScannerMut, ExpressionOwner, FunctionResultValueSubstScanner,
-    LocalVariable, MethodInstanceType, RecordType, SubstScanner, TraitType, TypeComparer, Variable,
+    EnumType, ErasureMode, Expr, ExprLocationExt, ExprScannerMut, ExpressionOwner,
+    FunctionResultValueSubstScanner, LocalVariable, LocatedExpr, MethodInstanceType, RecordType,
+    SubstScanner, TraitType, TypeComparer, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
 use argon_util::{CompileError, MultiSlice, UniqueIdentifier};
@@ -26,20 +27,20 @@ pub(super) enum Overloadable<'a> {
     InstanceMethod {
         method: Arc<dyn Method>,
         trait_type: TraitType<TypeCheckExprContext>,
-        obj: Expr<TypeCheckExprContext>,
+        obj: LocatedExpr<TypeCheckExprContext>,
     },
     ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
     RecordField {
         record_type: RecordType<TypeCheckExprContext>,
         field: Arc<dyn RecordField>,
-        field_type: Expr<TypeCheckExprContext>,
-        record_value: Expr<TypeCheckExprContext>,
+        field_type: LocatedExpr<TypeCheckExprContext>,
+        record_value: LocatedExpr<TypeCheckExprContext>,
     },
     RecordFieldStore {
         record_type: RecordType<TypeCheckExprContext>,
         field: Arc<dyn RecordField>,
-        field_type: Expr<TypeCheckExprContext>,
-        record_value: Expr<TypeCheckExprContext>,
+        field_type: LocatedExpr<TypeCheckExprContext>,
+        record_value: LocatedExpr<TypeCheckExprContext>,
     },
 }
 
@@ -116,7 +117,7 @@ impl<'a> Overloadable<'a> {
                     param_type: field_type.clone(),
                     bindings: vec![],
                 }],
-                return_type: Expr::unit(),
+                return_type: Expr::unit().with_location(field_type.location.clone()),
                 ensures_clauses: vec![],
             },
         }
@@ -357,12 +358,13 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                                 TypeInferResult::Complete(inferred)
                                     if !self
                                         .type_checker
-                                        .treat_as_token(&inferred.checked_expr) =>
+                                        .treat_as_token(&inferred.checked_expr.value) =>
                                 {
                                     let mut inferred = inferred.clone();
 
                                     inferred.checked_expr =
-                                        Expr::BoxedType(Box::new(inferred.checked_expr));
+                                        Expr::BoxedType(Box::new(inferred.checked_expr))
+                                            .with_location(self.call_location.clone());
 
                                     inferred_arg = Cow::Owned(TypeInferResult::Complete(inferred));
                                 }
@@ -402,7 +404,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                                 &mut return_type,
                                 &mut ensures_clauses,
                                 v,
-                                &Expr::Hole(hole),
+                                &Expr::Hole(hole).with_location(self.call_location.clone()),
                             );
                         }
                     }
@@ -418,8 +420,8 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
     fn substitute_inferred_arg_in_param_types(
         &self,
         params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
-        return_type: &mut Expr<TypeCheckExprContext>,
-        ensures_clauses: &mut [Expr<TypeCheckExprContext>],
+        return_type: &mut LocatedExpr<TypeCheckExprContext>,
+        ensures_clauses: &mut [LocatedExpr<TypeCheckExprContext>],
         v: Variable<TypeCheckExprContext>,
         arg: &TypeInferResult<'e>,
     ) {
@@ -438,7 +440,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                 return_type,
                 ensures_clauses,
                 v,
-                &Expr::Hole(hole),
+                &Expr::Hole(hole).with_location(self.call_location.clone()),
             );
         }
     }
@@ -497,10 +499,13 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
                         if param.erasure_mode == ErasureMode::Token
                             && self.type_checker.is_type(param.param_type.clone())
-                            && !self.type_checker.treat_as_token(&arg_expr.checked_expr)
+                            && !self
+                                .type_checker
+                                .treat_as_token(&arg_expr.checked_expr.value)
                         {
                             arg_expr.checked_expr =
-                                Expr::BoxedType(Box::new(arg_expr.checked_expr));
+                                Expr::BoxedType(Box::new(arg_expr.checked_expr))
+                                    .with_location(self.call_location.clone());
                         }
 
                         if let Some(v) = v {
@@ -538,11 +543,12 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
                                 &mut return_type,
                                 &mut ensures_clauses,
                                 v,
-                                &Expr::Hole(hole.clone()),
+                                &Expr::Hole(hole.clone()).with_location(self.call_location.clone()),
                             );
                         }
 
-                        selected_args.push(Expr::Hole(hole));
+                        selected_args
+                            .push(Expr::Hole(hole).with_location(self.call_location.clone()));
                     }
                     FunctionParameterListType::RequiresList => {
                         let arg = self
@@ -581,10 +587,10 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
 
 pub(super) fn substitute_arg_in_param_types(
     params: &mut VecDeque<SignatureParameter<TypeCheckExprContext>>,
-    return_type: &mut Expr<TypeCheckExprContext>,
-    ensures_clauses: &mut [Expr<TypeCheckExprContext>],
+    return_type: &mut LocatedExpr<TypeCheckExprContext>,
+    ensures_clauses: &mut [LocatedExpr<TypeCheckExprContext>],
     v: Variable<TypeCheckExprContext>,
-    arg: &Expr<TypeCheckExprContext>,
+    arg: &LocatedExpr<TypeCheckExprContext>,
 ) {
     let mut scanner = SubstScanner::new();
     scanner.add_substitution(v, Cow::Borrowed(arg));
@@ -645,9 +651,9 @@ pub(super) struct ResolvedOverload<'e> {
 pub(super) struct SelectedOverload<'e> {
     pub(super) call_location: &'e Location,
     pub(super) overload: Overloadable<'e>,
-    pub(super) args: Vec<Expr<TypeCheckExprContext>>,
-    pub(super) return_type: Expr<TypeCheckExprContext>,
-    pub(super) ensures_clauses: Vec<Expr<TypeCheckExprContext>>,
+    pub(super) args: Vec<LocatedExpr<TypeCheckExprContext>>,
+    pub(super) return_type: LocatedExpr<TypeCheckExprContext>,
+    pub(super) ensures_clauses: Vec<LocatedExpr<TypeCheckExprContext>>,
     pub(super) unspecified_parameters: VecDeque<SignatureParameter<TypeCheckExprContext>>,
 }
 
@@ -687,8 +693,8 @@ impl<'a> SelectedOverload<'a> {
                         ));
                 }
 
-                let enum_type = match &self.return_type {
-                    Expr::Error => return InferredType::error(),
+                let enum_type = match &self.return_type.value {
+                    Expr::Error => return InferredType::error(self.call_location.clone()),
                     Expr::EnumType(e) => e.clone(),
                     _ => panic!("Expected enum type"),
                 };
@@ -755,7 +761,14 @@ impl<'a> SelectedOverload<'a> {
             }
         };
 
-        let expr = Self::bind_ensures_clauses(checker, expr, &return_type, &ensures_clauses);
+        let expr = expr.with_location(self.call_location.clone());
+        let expr = Self::bind_ensures_clauses(
+            checker,
+            expr,
+            &return_type,
+            &ensures_clauses,
+            self.call_location,
+        );
 
         InferredType {
             checked_expr: expr,
@@ -765,10 +778,11 @@ impl<'a> SelectedOverload<'a> {
 
     fn bind_ensures_clauses(
         checker: &mut TypeChecker<'_, '_, '_>,
-        expr: Expr<TypeCheckExprContext>,
-        return_type: &Expr<TypeCheckExprContext>,
-        ensures_clauses: &[Expr<TypeCheckExprContext>],
-    ) -> Expr<TypeCheckExprContext> {
+        expr: LocatedExpr<TypeCheckExprContext>,
+        return_type: &LocatedExpr<TypeCheckExprContext>,
+        ensures_clauses: &[LocatedExpr<TypeCheckExprContext>],
+        location: &Location,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         if ensures_clauses.is_empty() {
             return expr;
         }
@@ -781,7 +795,8 @@ impl<'a> SelectedOverload<'a> {
             is_witness: false,
             is_mutable: false,
         });
-        let alias_expr = Expr::Variable(Variable::Local(alias.clone()));
+        let alias_expr =
+            Expr::Variable(Variable::Local(alias.clone())).with_location(location.clone());
 
         let equality_witness = Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
@@ -790,7 +805,8 @@ impl<'a> SelectedOverload<'a> {
                 r#type: Box::new(return_type.clone()),
                 lhs: Box::new(alias_expr.clone()),
                 rhs: Box::new(expr.clone()),
-            },
+            }
+            .with_location(location.clone()),
             erasure_mode: ErasureMode::Erased,
             is_witness: true,
             is_mutable: false,
@@ -821,10 +837,14 @@ impl<'a> SelectedOverload<'a> {
         Expr::BindErasedAlias {
             variable: alias,
             equality_witness: Some(equality_witness),
-            value: Box::new(Expr::BindEnsures {
-                value: Box::new(expr),
-                variables: ensures_witnesses,
-            }),
+            value: Box::new(
+                Expr::BindEnsures {
+                    value: Box::new(expr),
+                    variables: ensures_witnesses,
+                }
+                .with_location(location.clone()),
+            ),
         }
+        .with_location(location.clone())
     }
 }

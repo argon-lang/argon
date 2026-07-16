@@ -3,7 +3,9 @@ use alloc::format;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use argon_expr::{Builtin, Expr, ExprContext, IntegerType, RecordFieldLiteral, Variable};
+use argon_expr::{
+    Builtin, Expr, ExprContext, IntegerType, LocatedExpr, RecordFieldLiteral, Variable,
+};
 use core::str::FromStr;
 use hashbrown::{HashMap, HashSet};
 use z3::ast::{self, Ast, BV, Bool, Dynamic, Int, Seq, String as Z3String};
@@ -22,7 +24,7 @@ pub struct Z3Expr<
     expected_type_sort: ExpectedTypeSort,
     is_variant_of_enum: FuncDecl,
     inhabited: FuncDecl,
-    opaque_values: HashMap<Expr<EC>, Dynamic>,
+    opaque_values: HashMap<LocatedExpr<EC>, Dynamic>,
     asserted_enums: HashSet<Arc<dyn Enum>>,
     enum_terms: HashMap<Arc<dyn Enum>, Dynamic>,
     enum_variant_terms: HashMap<Arc<dyn EnumVariant>, Dynamic>,
@@ -116,8 +118,8 @@ impl<
         dynamic_to_bool(self.is_variant_of_enum.apply(&[enum_, variant]))
     }
 
-    pub fn inhabited(&mut self, expr: &Expr<EC>) -> Bool {
-        match expr {
+    pub fn inhabited(&mut self, expr: &LocatedExpr<EC>) -> Bool {
+        match &expr.value {
             Expr::Builtin(Builtin::NeverType) => Bool::from_bool(false),
             Expr::ConjunctionType { lhs, rhs } => {
                 let lhs = self.inhabited(lhs);
@@ -256,8 +258,8 @@ impl<
         self.enum_variant_cached_term(variant)
     }
 
-    fn assert_variable_type(&mut self, c: &Dynamic, t: &Expr<EC>) {
-        match t {
+    fn assert_variable_type(&mut self, c: &Dynamic, t: &LocatedExpr<EC>) {
+        match &t.value {
             Expr::Builtin(Builtin::IntType { integer_type }) => {
                 let tester = match integer_type {
                     IntegerType::Int => &self.argon_value_sort.value_testers.int_literal,
@@ -750,23 +752,23 @@ impl<
     }
 
     #[must_use]
-    pub fn expr_to_z3(&mut self, expr: &Expr<EC>) -> Dynamic {
+    pub fn expr_to_z3(&mut self, expr: &LocatedExpr<EC>) -> Dynamic {
         self.expr_to_z3_value(expr)
             .unwrap_or_else(|| self.opaque_expr_value(expr))
     }
 
     #[must_use]
-    pub fn opaque_value_for_expr(&self, expr: &Expr<EC>) -> Option<&Dynamic> {
+    pub fn opaque_value_for_expr(&self, expr: &LocatedExpr<EC>) -> Option<&Dynamic> {
         self.opaque_values.get(expr)
     }
 
     #[must_use]
-    pub fn opaque_values(&self) -> &HashMap<Expr<EC>, Dynamic> {
+    pub fn opaque_values(&self) -> &HashMap<LocatedExpr<EC>, Dynamic> {
         &self.opaque_values
     }
 
-    fn expr_to_z3_value(&mut self, expr: &Expr<EC>) -> Option<Dynamic> {
-        match expr {
+    fn expr_to_z3_value(&mut self, expr: &LocatedExpr<EC>) -> Option<Dynamic> {
+        match &expr.value {
             Expr::And(a, b) => {
                 let a = self.expr_to_z3(a);
                 let b = self.expr_to_z3(b);
@@ -877,10 +879,10 @@ impl<
                     value,
                 } => {
                     if dest_type == source_type {
-                        self.expr_to_z3_value(value)
+                        self.expr_to_z3_value(&value)
                     } else {
                         match (dest_type, source_type) {
-                            (IntegerType::Int, IntegerType::Int) => self.expr_to_z3_value(value),
+                            (IntegerType::Int, IntegerType::Int) => self.expr_to_z3_value(&value),
 
                             (
                                 IntegerType::I8
@@ -1801,9 +1803,12 @@ impl<
         }
     }
 
-    fn value_seq(&mut self, values: &[Expr<EC>]) -> Seq {
+    fn value_seq<'a>(&mut self, values: impl IntoIterator<Item = &'a LocatedExpr<EC>>) -> Seq
+    where
+        EC: 'a,
+    {
         let units = values
-            .iter()
+            .into_iter()
             .map(|value| {
                 let value = self.expr_to_z3(value);
                 Seq::unit(&value)
@@ -2074,7 +2079,7 @@ impl<
         )
     }
 
-    fn opaque_expr_value(&mut self, expr: &Expr<EC>) -> Dynamic {
+    fn opaque_expr_value(&mut self, expr: &LocatedExpr<EC>) -> Dynamic {
         let id = self.opaque_values.len();
         self.opaque_values
             .entry(expr.clone())
@@ -2483,8 +2488,9 @@ mod tests {
         test_utils::{TestEnum, TestEnumVariant},
     };
     use alloc::{sync::Arc, vec};
-    use argon_expr::Builtin;
+    use argon_expr::{Builtin, ExprLocationExt};
     use argon_util::UniqueIdentifier;
+    use parse18_runtime::{FilePosition, Location};
     use z3::{SatResult, SortKind};
 
     fn test_context() -> Context {
@@ -2495,19 +2501,35 @@ mod tests {
         Variable::Local(Box::new(argon_expr::LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
-            var_type: Expr::bool_type(),
+            var_type: located(Expr::bool_type()),
             erasure_mode: argon_expr::ErasureMode::Concrete,
             is_witness: false,
             is_mutable: false,
         }))
     }
 
-    fn int_expr(value: i64) -> Expr<DefaultExprContext> {
-        Expr::IntLiteral(value.into())
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
     }
 
-    fn string_expr(value: &str) -> Expr<DefaultExprContext> {
-        Expr::StringLiteral(value.into())
+    fn located(expr: Expr<DefaultExprContext>) -> LocatedExpr<DefaultExprContext> {
+        expr.with_location(location())
+    }
+
+    fn int_expr(value: i64) -> LocatedExpr<DefaultExprContext> {
+        located(Expr::IntLiteral(value.into()))
+    }
+
+    fn string_expr(value: &str) -> LocatedExpr<DefaultExprContext> {
+        located(Expr::StringLiteral(value.into()))
+    }
+
+    fn bool_expr(value: bool) -> LocatedExpr<DefaultExprContext> {
+        located(Expr::BoolLiteral(value))
     }
 
     fn int_expr_value(z3expr: &mut Z3Expr<DefaultExprContext>, value: i64) -> Int {
@@ -2521,7 +2543,7 @@ mod tests {
     }
 
     fn bool_expr_value(z3expr: &mut Z3Expr<DefaultExprContext>, value: bool) -> Bool {
-        let value = z3expr.expr_to_z3(&Expr::BoolLiteral(value));
+        let value = z3expr.expr_to_z3(&bool_expr(value));
         z3expr.bool_literal_value(&value)
     }
 
@@ -2642,11 +2664,11 @@ mod tests {
     #[test]
     fn opaque_expr_conversion_reuses_cached_value() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let expr = Expr::Builtin(Builtin::IntBitAnd {
+        let expr = located(Expr::Builtin(Builtin::IntBitAnd {
             integer_type: IntegerType::Int,
-            lhs: Box::new(Expr::IntLiteral(1.into())),
-            rhs: Box::new(Expr::IntLiteral(2.into())),
-        });
+            lhs: Box::new(int_expr(1)),
+            rhs: Box::new(int_expr(2)),
+        }));
 
         let first = z3expr.expr_to_z3(&expr);
         let second = z3expr.expr_to_z3(&expr);
@@ -2660,38 +2682,38 @@ mod tests {
     fn int_builtin_operations_use_z3_int_operations() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
-        let neg = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntNegate {
+        let neg = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntNegate {
             integer_type: IntegerType::Int,
             value: Box::new(int_expr(4)),
-        }));
+        })));
         let expected_neg = int_expr_value(&mut z3expr, 4).unary_minus();
         assert_eq!(z3expr.wrap_int_literal(&expected_neg), neg);
 
-        let add = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntAdd {
+        let add = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntAdd {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(2)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 1);
         let rhs = int_expr_value(&mut z3expr, 2);
         let expected_add = Int::add(&[lhs, rhs]);
         assert_eq!(z3expr.wrap_int_literal(&expected_add), add);
 
-        let sub = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntSub {
+        let sub = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntSub {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(5)),
             rhs: Box::new(int_expr(3)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 5);
         let rhs = int_expr_value(&mut z3expr, 3);
         let expected_sub = Int::sub(&[lhs, rhs]);
         assert_eq!(z3expr.wrap_int_literal(&expected_sub), sub);
 
-        let mul = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntMul {
+        let mul = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntMul {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(6)),
             rhs: Box::new(int_expr(7)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 6);
         let rhs = int_expr_value(&mut z3expr, 7);
         let expected_mul = Int::mul(&[lhs, rhs]);
@@ -2702,51 +2724,51 @@ mod tests {
     fn int_comparison_builtins_use_z3_int_comparisons() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
-        let eq = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntEq {
+        let eq = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntEq {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(1)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 1);
         let rhs = int_expr_value(&mut z3expr, 1);
         let expected_eq = lhs.eq(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_eq), eq);
 
-        let lt = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntLt {
+        let lt = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntLt {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(2)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 1);
         let rhs = int_expr_value(&mut z3expr, 2);
         let expected_lt = lhs.lt(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_lt), lt);
 
-        let le = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntLe {
+        let le = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntLe {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(2)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 1);
         let rhs = int_expr_value(&mut z3expr, 2);
         let expected_le = lhs.le(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_le), le);
 
-        let gt = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntGt {
+        let gt = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntGt {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(2)),
             rhs: Box::new(int_expr(1)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 2);
         let rhs = int_expr_value(&mut z3expr, 1);
         let expected_gt = lhs.gt(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_gt), gt);
 
-        let ge = z3expr.expr_to_z3(&Expr::Builtin(Builtin::IntGe {
+        let ge = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntGe {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(2)),
             rhs: Box::new(int_expr(1)),
-        }));
+        })));
         let lhs = int_expr_value(&mut z3expr, 2);
         let rhs = int_expr_value(&mut z3expr, 1);
         let expected_ge = lhs.ge(&rhs);
@@ -2757,28 +2779,28 @@ mod tests {
     fn string_and_bool_builtins_use_z3_operations() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
 
-        let concat = z3expr.expr_to_z3(&Expr::Builtin(Builtin::StringConcat {
+        let concat = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::StringConcat {
             values: vec![string_expr("ab"), string_expr("cd"), string_expr("ef")],
-        }));
+        })));
         let lhs = string_expr_value(&mut z3expr, "ab");
         let mid = string_expr_value(&mut z3expr, "cd");
         let rhs = string_expr_value(&mut z3expr, "ef");
         let expected_concat = Z3String::concat(&[lhs, mid, rhs]);
         assert_eq!(z3expr.wrap_string_literal(&expected_concat), concat);
 
-        let string_eq = z3expr.expr_to_z3(&Expr::Builtin(Builtin::StringEq {
+        let string_eq = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::StringEq {
             lhs: Box::new(string_expr("a")),
             rhs: Box::new(string_expr("a")),
-        }));
+        })));
         let lhs = string_expr_value(&mut z3expr, "a");
         let rhs = string_expr_value(&mut z3expr, "a");
         let expected_string_eq = lhs.eq(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_string_eq), string_eq);
 
-        let bool_eq = z3expr.expr_to_z3(&Expr::Builtin(Builtin::BoolEq {
-            lhs: Box::new(Expr::BoolLiteral(true)),
-            rhs: Box::new(Expr::BoolLiteral(false)),
-        }));
+        let bool_eq = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::BoolEq {
+            lhs: Box::new(bool_expr(true)),
+            rhs: Box::new(bool_expr(false)),
+        })));
         let lhs = bool_expr_value(&mut z3expr, true);
         let rhs = bool_expr_value(&mut z3expr, false);
         let expected_bool_eq = lhs.eq(&rhs);
@@ -2850,8 +2872,8 @@ mod tests {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
         let a = bool_var();
         let b = bool_var();
-        let a_expr = Expr::Variable(a);
-        let b_expr = Expr::Variable(b);
+        let a_expr = located(Expr::Variable(a));
+        let b_expr = located(Expr::Variable(b));
 
         let a_value = z3expr.expr_to_z3(&a_expr);
         let b_value = z3expr.expr_to_z3(&b_expr);
@@ -2863,10 +2885,10 @@ mod tests {
             &z3expr.argon_value_sort.value_constructors.bool_literal,
             &[&expected_and_bool],
         );
-        let actual_and = z3expr.expr_to_z3(&Expr::And(
+        let actual_and = z3expr.expr_to_z3(&located(Expr::And(
             Box::new(a_expr.clone()),
             Box::new(b_expr.clone()),
-        ));
+        )));
         assert_eq!(expected_and, actual_and);
 
         let expected_or_bool = Bool::or(&[&a_bool, &b_bool]);
@@ -2874,10 +2896,10 @@ mod tests {
             &z3expr.argon_value_sort.value_constructors.bool_literal,
             &[&expected_or_bool],
         );
-        let actual_or = z3expr.expr_to_z3(&Expr::Or(
+        let actual_or = z3expr.expr_to_z3(&located(Expr::Or(
             Box::new(a_expr.clone()),
             Box::new(b_expr.clone()),
-        ));
+        )));
         assert_eq!(expected_or, actual_or);
 
         let expected_not_bool = a_bool.not();
@@ -2885,7 +2907,7 @@ mod tests {
             &z3expr.argon_value_sort.value_constructors.bool_literal,
             &[&expected_not_bool],
         );
-        let actual_not = z3expr.expr_to_z3(&Expr::Not(Box::new(a_expr)));
+        let actual_not = z3expr.expr_to_z3(&located(Expr::Not(Box::new(a_expr))));
         assert_eq!(expected_not, actual_not);
     }
 
@@ -3229,7 +3251,7 @@ mod tests {
     #[test]
     fn variable_conversion_reuses_cached_value() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let expr = Expr::Variable(bool_var());
+        let expr = located(Expr::Variable(bool_var()));
 
         let first = z3expr.expr_to_z3(&expr);
         let second = z3expr.expr_to_z3(&expr);
@@ -3240,9 +3262,9 @@ mod tests {
     #[test]
     fn inhabited_uses_predicate_for_opaque_types() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let expr = Expr::Builtin(Builtin::IntType {
+        let expr = located(Expr::Builtin(Builtin::IntType {
             integer_type: IntegerType::Int,
-        });
+        }));
         let value = z3expr.expr_to_z3(&expr);
 
         let expected = dynamic_to_bool(z3expr.inhabited_func().apply(&[&value]));
@@ -3254,26 +3276,26 @@ mod tests {
     #[test]
     fn inhabited_reduces_structural_type_rules() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let lhs = Expr::Builtin(Builtin::IntType {
+        let lhs = located(Expr::Builtin(Builtin::IntType {
             integer_type: IntegerType::Int,
-        });
-        let rhs = Expr::Builtin(Builtin::BoolType);
+        }));
+        let rhs = located(Expr::Builtin(Builtin::BoolType));
         let lhs_inhabited = z3expr.inhabited(&lhs);
         let rhs_inhabited = z3expr.inhabited(&rhs);
 
-        let conjunction = z3expr.inhabited(&Expr::ConjunctionType {
+        let conjunction = z3expr.inhabited(&located(Expr::ConjunctionType {
             lhs: Box::new(lhs.clone()),
             rhs: Box::new(rhs.clone()),
-        });
+        }));
         assert_eq!(Bool::and(&[&lhs_inhabited, &rhs_inhabited]), conjunction);
 
-        let disjunction = z3expr.inhabited(&Expr::DisjunctionType {
+        let disjunction = z3expr.inhabited(&located(Expr::DisjunctionType {
             lhs: Box::new(lhs.clone()),
             rhs: Box::new(rhs.clone()),
-        });
+        }));
         assert_eq!(Bool::or(&[&lhs_inhabited, &rhs_inhabited]), disjunction);
 
-        let function_type = z3expr.inhabited(&Expr::FunctionType {
+        let function_type = z3expr.inhabited(&located(Expr::FunctionType {
             a: Box::new(argon_expr::ClosureParameterVariable {
                 id: UniqueIdentifier::new(),
                 var_type: lhs.clone(),
@@ -3283,18 +3305,18 @@ mod tests {
                 is_witness: false,
             }),
             r: Box::new(rhs.clone()),
-        });
+        }));
         assert_eq!(lhs_inhabited.implies(&rhs_inhabited), function_type);
     }
 
     #[test]
     fn equal_to_type_is_inhabited_when_operands_are_equal() {
         let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
-        let expr = Expr::EqualToType {
-            r#type: Box::new(Expr::int_type()),
+        let expr = located(Expr::EqualToType {
+            r#type: Box::new(located(Expr::int_type())),
             lhs: Box::new(int_expr(1)),
             rhs: Box::new(int_expr(1)),
-        };
+        });
         let inhabited = z3expr.inhabited(&expr);
 
         z3expr.solver().assert(inhabited.not());

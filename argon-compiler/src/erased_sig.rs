@@ -2,7 +2,7 @@ use crate::{
     Context, DefaultExprContext, DefaultExprNormalizer, FunctionSignature, ModulePath, TubeName,
 };
 use alloc::{boxed::Box, vec::Vec};
-use argon_expr::{Builtin, ErasureMode, Expr, IntegerType, NormalizerScanner};
+use argon_expr::{Builtin, ErasureMode, Expr, IntegerType, LocatedExpr, NormalizerScanner};
 use argon_parser::ast::Identifier;
 use argon_util::{UniqueIdentifier, Unload};
 
@@ -70,11 +70,14 @@ pub fn erase_signature(
     }
 }
 
-pub fn erase_type(context: &Context, mut t: Expr<DefaultExprContext>) -> ErasedSignatureType {
+pub fn erase_type(
+    context: &Context,
+    mut t: LocatedExpr<DefaultExprContext>,
+) -> ErasedSignatureType {
     let mut normalizer = NormalizerScanner::new(context.normalize_fuel(), DefaultExprNormalizer);
     normalizer.normalize(&mut t);
 
-    match t {
+    match t.value {
         Expr::Builtin(builtin) => erase_builtin(context, builtin),
 
         Expr::FunctionType { a, r } => ErasedSignatureType::Function(

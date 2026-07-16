@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext};
+use crate::{ExprContext, LocatedExpr};
 use argon_parser::ast::Identifier;
 use argon_util::UniqueIdentifier;
 use core::hash::{Hash, Hasher};
@@ -11,7 +11,7 @@ pub struct BlockLabel<EC: ExprContext + ?Sized> {
     pub id: UniqueIdentifier,
     pub name: Option<Identifier>,
     pub kind: BlockLabelKind,
-    pub block_result_type: Expr<EC>,
+    pub block_result_type: LocatedExpr<EC>,
 }
 
 impl<EC: ExprContext + ?Sized> PartialEq for BlockLabel<EC> {

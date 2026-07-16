@@ -6,7 +6,8 @@ use alloc::borrow::Cow;
 use argon_compiler::z3expr::Z3Expr;
 use argon_compiler::{Context, ImplicitValue};
 use argon_expr::{
-    Builtin, Expr, ExprScannerMut, ExpressionOwner, FullNormalizer, SubstScanner, Variable,
+    Builtin, Expr, ExprLocationExt, ExprScannerMut, ExpressionOwner, FullNormalizer, LocatedExpr,
+    SubstScanner, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
 use hashbrown::HashMap;
@@ -17,17 +18,22 @@ pub struct Z3ImplicitResolver<'a> {
     pub context: Context,
     pub location: &'a Location,
     pub given_assertions: &'a [ImplicitValue<TypeCheckExprContext>],
-    pub known_var_values: &'a HashMap<Variable<TypeCheckExprContext>, Expr<TypeCheckExprContext>>,
+    pub known_var_values:
+        &'a HashMap<Variable<TypeCheckExprContext>, LocatedExpr<TypeCheckExprContext>>,
 }
 
 impl Z3ImplicitResolver<'_> {
+    fn loc(&self, expr: Expr<TypeCheckExprContext>) -> LocatedExpr<TypeCheckExprContext> {
+        expr.with_location(self.location.clone())
+    }
+
     fn add_known_var_value_assertions(
         &self,
         z3expr: &mut Z3Expr<TypeCheckExprContext>,
         model: &mut Model,
     ) {
         for (variable, value) in self.known_var_values {
-            let mut variable = Expr::Variable(variable.clone());
+            let mut variable = self.loc(Expr::Variable(variable.clone()));
             let mut value = value.clone();
 
             let mut norm =
@@ -64,8 +70,10 @@ impl Z3ImplicitResolver<'_> {
                     param.scan_mut(&mut subst);
 
                     let variable = param.clone().to_parameter_var(owner.clone(), i);
-                    let arg =
-                        Expr::Hole(Hole::new(self.location.clone(), param.param_type.clone()));
+                    let arg = self.loc(Expr::Hole(Hole::new(
+                        self.location.clone(),
+                        param.param_type.clone(),
+                    )));
                     subst.add_substitution(
                         Variable::Parameter(Box::new(variable)),
                         Cow::Owned(arg.clone()),
@@ -108,7 +116,7 @@ impl Z3ImplicitResolver<'_> {
     fn convert_expr(
         &self,
         z3expr: &mut Z3Expr<TypeCheckExprContext>,
-        mut expr: Expr<TypeCheckExprContext>,
+        mut expr: LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
     ) -> Bool {
         {
@@ -129,9 +137,9 @@ enum AssertionBinder {
 impl ImplicitResolver for Z3ImplicitResolver<'_> {
     fn try_resolve_implicit(
         self,
-        t: &Expr<TypeCheckExprContext>,
+        t: &LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
-    ) -> Option<Expr<TypeCheckExprContext>> {
+    ) -> Option<LocatedExpr<TypeCheckExprContext>> {
         let mut z3expr = Z3Expr::new(self.context.clone());
 
         self.add_known_var_value_assertions(&mut z3expr, model);
@@ -147,9 +155,9 @@ impl ImplicitResolver for Z3ImplicitResolver<'_> {
 
         match sat_result {
             z3::SatResult::Sat | z3::SatResult::Unknown => None,
-            z3::SatResult::Unsat => Some(Expr::Builtin(Builtin::UnsafeAssumeErased {
+            z3::SatResult::Unsat => Some(self.loc(Expr::Builtin(Builtin::UnsafeAssumeErased {
                 r#type: Box::new(t.clone()),
-            })),
+            }))),
         }
     }
 }

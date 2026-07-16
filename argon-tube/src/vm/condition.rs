@@ -1,6 +1,6 @@
 use crate::vm::{AnyRegister, EmitResult, EmitStop, ExprEmitter};
 use argon_compiler::DefaultExprContext;
-use argon_expr::Expr;
+use argon_expr::{Expr, LocatedExpr};
 use argon_format_vm::vm as vf;
 
 use crate::vm::pattern::emit_pattern;
@@ -13,9 +13,12 @@ pub(super) struct ConditionEmitter<'a, 'b> {
 }
 
 impl<'a, 'b> ConditionEmitter<'a, 'b> {
-    pub(super) fn emit_condition(&mut self, mut expr: &Expr<DefaultExprContext>) -> EmitResult<()> {
+    pub(super) fn emit_condition(
+        &mut self,
+        mut expr: &LocatedExpr<DefaultExprContext>,
+    ) -> EmitResult<()> {
         loop {
-            match expr {
+            match &expr.value {
                 Expr::BoolLiteral(true) => {}
                 Expr::BoolLiteral(false) => {
                     self.expr_emitter.emit(vf::Instruction::BlockBreak {
@@ -82,7 +85,7 @@ impl<'a, 'b> ConditionEmitter<'a, 'b> {
                 }
 
                 Expr::Condition { value, .. } => {
-                    expr = &**value;
+                    expr = value;
                     continue;
                 }
 

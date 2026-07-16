@@ -1,6 +1,7 @@
 use crate::{
-    Builtin, Expr, ExprContext, MatchCase, MethodInstanceType, Normalizer, NormalizerScanner,
-    Pattern, RecordFieldLiteral, RecordFieldPattern, SubstScanner, Variable,
+    Builtin, Expr, ExprContext, ExprLocationExt, LocatedExpr, LocatedPattern, MatchCase,
+    MethodInstanceType, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral,
+    RecordFieldPattern, SubstScanner, Variable,
 };
 use alloc::{borrow::Cow, vec::Vec};
 use argon_util::Fuel;
@@ -22,9 +23,9 @@ pub trait Unify {
     where
         Self: 'a;
 
-    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: Expr<Self::EC>) -> bool;
+    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: LocatedExpr<Self::EC>) -> bool;
 
-    fn unify(&mut self, mut a: Expr<Self::EC>, mut b: Expr<Self::EC>) -> bool {
+    fn unify(&mut self, mut a: LocatedExpr<Self::EC>, mut b: LocatedExpr<Self::EC>) -> bool {
         {
             let mut norm =
                 NormalizerScanner::new(self.normalize_fuel(), Self::normalizer(self.model_mut()));
@@ -36,11 +37,17 @@ pub trait Unify {
             norm.normalize(&mut b);
         }
 
-        match (a, b) {
+        match (a.value, b.value) {
             (Expr::Error, _) | (_, Expr::Error) => true,
-            (Expr::Hole(a), b) => self.unify_hole(a, b),
+            (Expr::Hole(a), b_value) => {
+                b.value = b_value;
+                self.unify_hole(a, b)
+            }
 
-            (a, Expr::Hole(b)) => self.unify_hole(b, a),
+            (a_value, Expr::Hole(b)) => {
+                a.value = a_value;
+                self.unify_hole(b, a)
+            }
 
             (Expr::And(a1, b1), Expr::And(a2, b2)) | (Expr::Or(a1, b1), Expr::Or(a2, b2)) => {
                 self.unify(*a1, *a2) && self.unify(*b1, *b2)
@@ -165,7 +172,10 @@ pub trait Unify {
                 let mut b_result = *b_result;
                 SubstScanner::subst(
                     Variable::ClosureParameter(b_arg.clone()),
-                    Cow::Owned(Expr::Variable(Variable::ClosureParameter(a_arg.clone()))),
+                    Cow::Owned(
+                        Expr::Variable(Variable::ClosureParameter(a_arg.clone()))
+                            .with_location(a.location.clone()),
+                    ),
                     &mut b_result,
                 );
 
@@ -187,7 +197,10 @@ pub trait Unify {
                 let mut b_body = *b_body;
                 SubstScanner::subst(
                     Variable::ClosureParameter(b_arg.clone()),
-                    Cow::Owned(Expr::Variable(Variable::ClosureParameter(a_arg.clone()))),
+                    Cow::Owned(
+                        Expr::Variable(Variable::ClosureParameter(a_arg.clone()))
+                            .with_location(a.location.clone()),
+                    ),
                     &mut b_body,
                 );
 
@@ -465,7 +478,7 @@ pub trait Unify {
         }
     }
 
-    fn unify_all(&mut self, a: Vec<Expr<Self::EC>>, b: Vec<Expr<Self::EC>>) -> bool {
+    fn unify_all(&mut self, a: Vec<LocatedExpr<Self::EC>>, b: Vec<LocatedExpr<Self::EC>>) -> bool {
         a.len() == b.len() && a.into_iter().zip(b).all(|(a, b)| self.unify(a, b))
     }
 
@@ -503,7 +516,11 @@ pub trait Unify {
         }
     }
 
-    fn unify_pattern(&mut self, a: Pattern<Self::EC>, b: Pattern<Self::EC>) -> bool {
+    fn unify_pattern(&mut self, a: LocatedPattern<Self::EC>, b: LocatedPattern<Self::EC>) -> bool {
+        self.unify_pattern_value(a.value, b.value)
+    }
+
+    fn unify_pattern_value(&mut self, a: Pattern<Self::EC>, b: Pattern<Self::EC>) -> bool {
         match (a, b) {
             (Pattern::Error, _) | (_, Pattern::Error) => true,
             (Pattern::Discard { t: a }, Pattern::Discard { t: b }) => self.unify(*a, *b),
@@ -540,7 +557,11 @@ pub trait Unify {
         }
     }
 
-    fn unify_patterns(&mut self, a: Vec<Pattern<Self::EC>>, b: Vec<Pattern<Self::EC>>) -> bool {
+    fn unify_patterns(
+        &mut self,
+        a: Vec<LocatedPattern<Self::EC>>,
+        b: Vec<LocatedPattern<Self::EC>>,
+    ) -> bool {
         a.len() == b.len() && a.into_iter().zip(b).all(|(a, b)| self.unify_pattern(a, b))
     }
 
@@ -875,9 +896,13 @@ pub trait Unify {
 #[cfg(test)]
 mod tests {
     use super::Unify;
-    use crate::{ClosureParameterVariable, ErasureMode, Expr, ExprContext, Normalizer, Variable};
+    use crate::{
+        ClosureParameterVariable, ErasureMode, Expr, ExprContext, ExprLocationExt, LocatedExpr,
+        Normalizer, Variable,
+    };
     use alloc::{boxed::Box, vec::Vec};
     use argon_util::{Fuel, UniqueIdentifier};
+    use parse18_runtime::{FilePosition, Location};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -894,20 +919,28 @@ mod tests {
         type Instance = ();
     }
 
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
+    }
+
     struct NoopNormalizer;
 
     impl Normalizer for NoopNormalizer {
         type EC = TestContext;
 
-        fn resolve_hole(&mut self, _hole: &()) -> Option<Expr<Self::EC>> {
+        fn resolve_hole(&mut self, _hole: &()) -> Option<LocatedExpr<Self::EC>> {
             None
         }
 
         fn get_function_body(
             &mut self,
             _function: &(),
-            _arguments: &mut Vec<Expr<Self::EC>>,
-        ) -> Option<Expr<Self::EC>> {
+            _arguments: &mut Vec<LocatedExpr<Self::EC>>,
+        ) -> Option<LocatedExpr<Self::EC>> {
             None
         }
     }
@@ -943,7 +976,7 @@ mod tests {
             NoopNormalizer
         }
 
-        fn unify_hole(&mut self, _a: (), _b: Expr<Self::EC>) -> bool {
+        fn unify_hole(&mut self, _a: (), _b: LocatedExpr<Self::EC>) -> bool {
             false
         }
     }
@@ -951,7 +984,8 @@ mod tests {
     fn closure_parameter() -> Box<ClosureParameterVariable<TestContext>> {
         Box::new(ClosureParameterVariable {
             id: UniqueIdentifier::new(),
-            var_type: Expr::Type(Box::new(Expr::BigType(0.into()))),
+            var_type: Expr::Type(Box::new(Expr::BigType(0.into()).with_location(location())))
+                .with_location(location()),
             name: None,
             is_mutable: false,
             erasure_mode: ErasureMode::Concrete,
@@ -966,13 +1000,16 @@ mod tests {
 
         let left = Expr::FunctionType {
             a: a.clone(),
-            r: Box::new(Expr::Variable(Variable::ClosureParameter(a))),
+            r: Box::new(Expr::Variable(Variable::ClosureParameter(a)).with_location(location())),
         };
         let right = Expr::FunctionType {
             a: b.clone(),
-            r: Box::new(Expr::Variable(Variable::ClosureParameter(b))),
+            r: Box::new(Expr::Variable(Variable::ClosureParameter(b)).with_location(location())),
         };
 
-        assert!(TestUnifier { model: TestModel }.unify(left, right));
+        assert!(TestUnifier { model: TestModel }.unify(
+            left.with_location(location()),
+            right.with_location(location())
+        ));
     }
 }

@@ -3,7 +3,8 @@ use crate::scanner::PurityScanner;
 use crate::shifter::DefaultToExprTypeContextShifter;
 use crate::{Context, FunctionSignature};
 use argon_expr::{
-    Builtin, ErasureMode, Expr, ExprContext, ExprScanner, TypeComparer, default_scan,
+    Builtin, ErasureMode, Expr, ExprContext, ExprScanner, LocatedExpr, TypeComparer,
+    default_scan_expr,
 };
 use argon_util::CompileError;
 use parse18_runtime::Location;
@@ -23,13 +24,13 @@ where
 {
     type EC = Cmp::EC;
 
-    fn scan(&mut self, expr: &Expr<Self::EC>) -> bool {
+    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
         let old_suppress_errors = self.suppress_errors;
 
         match self.expected_erasure {
             ErasureMode::Erased => {
                 let mut purity = PurityScanner::new();
-                purity.scan(expr);
+                purity.scan_expr(expr);
                 if purity.found_impure() {
                     self.context
                         .reporter()
@@ -187,7 +188,7 @@ where
                 }
 
                 Expr::Tuple { .. } => {
-                    default_scan(self, expr);
+                    default_scan_expr(self, expr);
                 }
 
                 Expr::Type(level) => self.scan_erased(level),
@@ -239,7 +240,7 @@ where
 
                 _ => {
                     self.prohibit_for_token();
-                    default_scan(self, expr);
+                    default_scan_expr(self, expr);
                 }
             },
         }
@@ -254,17 +255,23 @@ where
     Cmp: TypeComparer,
     Cmp::EC: ExprTypeContext,
 {
-    fn scan_token(&mut self, expr: &Expr<Cmp::EC>) {
+    fn scan_token<T>(&mut self, expr: T)
+    where
+        T: AsExpr<Cmp::EC>,
+    {
         let old_erasure = self.expected_erasure;
         self.expected_erasure = ErasureMode::Token;
-        self.scan(expr);
+        self.scan_expr(expr.as_expr());
         self.expected_erasure = old_erasure;
     }
 
-    fn scan_erased(&mut self, expr: &Expr<Cmp::EC>) {
+    fn scan_erased<T>(&mut self, expr: T)
+    where
+        T: AsExpr<Cmp::EC>,
+    {
         let old_erasure = self.expected_erasure;
         self.expected_erasure = ErasureMode::Erased;
-        self.scan(expr);
+        self.scan_expr(expr.as_expr());
         self.expected_erasure = old_erasure;
     }
 
@@ -293,7 +300,7 @@ where
     fn scan_arguments<SigEC: ExprContext + ?Sized>(
         &mut self,
         sig: &FunctionSignature<SigEC>,
-        arguments: &Vec<Expr<Cmp::EC>>,
+        arguments: &[LocatedExpr<Cmp::EC>],
     ) {
         let old_erasure = self.expected_erasure;
 
@@ -303,5 +310,33 @@ where
         }
 
         self.expected_erasure = old_erasure;
+    }
+}
+
+trait AsExpr<EC: ExprContext + ?Sized> {
+    fn as_expr(&self) -> &Expr<EC>;
+}
+
+impl<EC: ExprContext + ?Sized> AsExpr<EC> for Expr<EC> {
+    fn as_expr(&self) -> &Expr<EC> {
+        self
+    }
+}
+
+impl<EC: ExprContext + ?Sized> AsExpr<EC> for LocatedExpr<EC> {
+    fn as_expr(&self) -> &Expr<EC> {
+        &self.value
+    }
+}
+
+impl<EC: ExprContext + ?Sized> AsExpr<EC> for Box<LocatedExpr<EC>> {
+    fn as_expr(&self) -> &Expr<EC> {
+        &self.value
+    }
+}
+
+impl<EC: ExprContext + ?Sized, T: AsExpr<EC> + ?Sized> AsExpr<EC> for &T {
+    fn as_expr(&self) -> &Expr<EC> {
+        (*self).as_expr()
     }
 }

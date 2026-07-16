@@ -2,25 +2,55 @@ use crate::vm::{AnyRegister, EmitResult, ExprEmitter, TokenEmitterCommon};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use argon_compiler::DefaultExprContext;
-use argon_compiler::expr_type::get_pattern_type;
-use argon_expr::{Expr, Pattern, Variable};
+use argon_expr::{Expr, ExprLocationExt, LocatedPattern, Pattern, Variable};
 use argon_format_vm::vm as vf;
 use num_bigint::BigUint;
+
+fn pattern_token_type(
+    emitter: &mut ExprEmitter<'_>,
+    pattern: &LocatedPattern<DefaultExprContext>,
+) -> EmitResult<vf::Token> {
+    match &pattern.value {
+        Pattern::Error => {
+            todo!("emit error pattern")
+        }
+        Pattern::Discard { t } => Ok(emitter.token_expr(t)?),
+        Pattern::Tuple(items) => Ok(vf::Token::Tuple {
+            elements: items
+                .iter()
+                .map(|item| pattern_token_type(emitter, item).map(Box::new))
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
+        Pattern::Binding(variable, _) => Ok(emitter.token_expr(&variable.var_type)?),
+        Pattern::EnumVariant { enum_type, .. } => Ok(emitter.token_expr(
+            &Expr::EnumType(enum_type.clone()).with_location(pattern.location.clone()),
+        )?),
+        Pattern::String(_) => {
+            Ok(emitter.token_expr(&Expr::string_type().with_location(pattern.location.clone()))?)
+        }
+        Pattern::Int(_) => {
+            Ok(emitter.token_expr(&Expr::int_type().with_location(pattern.location.clone()))?)
+        }
+        Pattern::Bool(_) => {
+            Ok(emitter.token_expr(&Expr::bool_type().with_location(pattern.location.clone()))?)
+        }
+    }
+}
 
 pub(super) fn emit_pattern(
     emitter: &mut ExprEmitter<'_>,
     when_false_label: &vf::BlockId,
     value_reg: vf::RegisterId,
-    pattern: &Pattern<DefaultExprContext>,
+    pattern: &LocatedPattern<DefaultExprContext>,
 ) -> EmitResult<()> {
-    Ok(match pattern {
+    Ok(match &pattern.value {
         Pattern::Error => {
             todo!("emit error pattern")
         }
         Pattern::Discard { .. } => {}
         Pattern::Tuple(elements) => {
             for (i, element) in elements.iter().enumerate() {
-                let element_type = emitter.token_expr(&get_pattern_type(element))?;
+                let element_type = pattern_token_type(emitter, element)?;
                 let element_reg = emitter.add_var(element_type);
 
                 emitter.emit(vf::Instruction::TupleElement {
@@ -58,7 +88,7 @@ pub(super) fn emit_pattern(
             let arg_patterns = args
                 .iter()
                 .map(|arg| -> EmitResult<_> {
-                    let t = emitter.token_expr(&get_pattern_type(arg))?;
+                    let t = pattern_token_type(emitter, arg)?;
                     let arg_reg = emitter.add_var(t);
                     Ok((arg_reg, arg))
                 })
@@ -67,13 +97,15 @@ pub(super) fn emit_pattern(
             let field_patterns = fields
                 .iter()
                 .map(|field| -> EmitResult<_> {
-                    let t = emitter.token_expr(&get_pattern_type(&field.pattern))?;
+                    let t = pattern_token_type(emitter, &field.pattern)?;
                     let field_reg = emitter.add_var(t);
                     Ok((field_reg, field))
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let enum_type_token = emitter.token_expr(&Expr::EnumType(enum_type.clone()))?;
+            let enum_type_token = emitter.token_expr(
+                &Expr::EnumType(enum_type.clone()).with_location(pattern.location.clone()),
+            )?;
             let variant_id = BigUint::from(emitter.encoder.get_enum_variant_id(variant.clone()));
             let field_extractors = field_patterns
                 .iter()
@@ -108,7 +140,10 @@ pub(super) fn emit_pattern(
             }
         }
         Pattern::String(s) => {
-            let sr = emitter.expr(&Expr::StringLiteral(Box::from(s.as_str())), AnyRegister)?;
+            let sr = emitter.expr(
+                &Expr::StringLiteral(Box::from(s.as_str())).with_location(pattern.location.clone()),
+                AnyRegister,
+            )?;
 
             let check_res = emitter.add_var(vf::Token::Builtin {
                 b: Box::new(vf::BuiltinType::Bool {}),
@@ -127,7 +162,10 @@ pub(super) fn emit_pattern(
             });
         }
         Pattern::Int(i) => {
-            let sr = emitter.expr(&Expr::IntLiteral(i.clone()), AnyRegister)?;
+            let sr = emitter.expr(
+                &Expr::IntLiteral(i.clone()).with_location(pattern.location.clone()),
+                AnyRegister,
+            )?;
 
             let check_res = emitter.add_var(vf::Token::Builtin {
                 b: Box::new(vf::BuiltinType::Bool {}),
@@ -147,7 +185,10 @@ pub(super) fn emit_pattern(
             });
         }
         Pattern::Bool(b) => {
-            let sr = emitter.expr(&Expr::BoolLiteral(*b), AnyRegister)?;
+            let sr = emitter.expr(
+                &Expr::BoolLiteral(*b).with_location(pattern.location.clone()),
+                AnyRegister,
+            )?;
 
             let check_res = emitter.add_var(vf::Token::Builtin {
                 b: Box::new(vf::BuiltinType::Bool {}),

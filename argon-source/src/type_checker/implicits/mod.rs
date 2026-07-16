@@ -2,7 +2,7 @@ use crate::type_checker::implicits::prolog::PrologImplicitResolver;
 use crate::type_checker::implicits::z3resolver::Z3ImplicitResolver;
 use crate::type_checker::{Model, TypeCheckExprContext};
 use argon_compiler::{Context, ImplicitValue};
-use argon_expr::{Expr, Variable};
+use argon_expr::{LocatedExpr, Variable};
 use hashbrown::HashMap;
 use parse18_runtime::Location;
 
@@ -14,14 +14,15 @@ pub struct ImplicitResolverInput<'a> {
     pub resolve_location: &'a Location,
     pub model: &'a mut Model,
     pub given_assertions: Vec<ImplicitValue<TypeCheckExprContext>>,
-    pub known_var_values: HashMap<Variable<TypeCheckExprContext>, Expr<TypeCheckExprContext>>,
+    pub known_var_values:
+        HashMap<Variable<TypeCheckExprContext>, LocatedExpr<TypeCheckExprContext>>,
 }
 
 impl<'a> ImplicitResolverInput<'a> {
     pub fn try_resolve_implicit(
         self,
-        t: &Expr<TypeCheckExprContext>,
-    ) -> Option<Expr<TypeCheckExprContext>> {
+        t: &LocatedExpr<TypeCheckExprContext>,
+    ) -> Option<LocatedExpr<TypeCheckExprContext>> {
         let result = PrologImplicitResolver {
             location: self.resolve_location,
             fuel: self.context.prolog_fuel(),
@@ -46,7 +47,7 @@ impl<'a> ImplicitResolverInput<'a> {
 trait ImplicitResolver {
     fn try_resolve_implicit(
         self,
-        t: &Expr<TypeCheckExprContext>,
+        t: &LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
-    ) -> Option<Expr<TypeCheckExprContext>>;
+    ) -> Option<LocatedExpr<TypeCheckExprContext>>;
 }

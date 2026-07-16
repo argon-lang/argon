@@ -505,28 +505,36 @@ impl CompileError {
         )
     }
 
-    pub fn use_after_move() -> Self {
-        Self::new(ErrorCode::UseAfterMove, "Use after move", None)
+    pub fn use_after_move(loc: Location) -> Self {
+        Self::new(ErrorCode::UseAfterMove, "Use after move", Some(loc))
     }
 
-    pub fn move_while_borrowed() -> Self {
-        Self::new(ErrorCode::MoveWhileBorrowed, "Move while borrowed", None)
-    }
-
-    pub fn borrow_after_move() -> Self {
-        Self::new(ErrorCode::BorrowAfterMove, "Borrow after move", None)
-    }
-
-    pub fn mutable_borrow_conflict() -> Self {
+    pub fn move_while_borrowed(loc: Location) -> Self {
         Self::new(
-            ErrorCode::MutableBorrowConflict,
-            "Mutable borrow conflict",
-            None,
+            ErrorCode::MoveWhileBorrowed,
+            "Move while borrowed",
+            Some(loc),
         )
     }
 
-    pub fn assign_to_shared() -> Self {
-        Self::new(ErrorCode::AssignToShared, "Assign to shared variable", None)
+    pub fn borrow_after_move(loc: Location) -> Self {
+        Self::new(ErrorCode::BorrowAfterMove, "Borrow after move", Some(loc))
+    }
+
+    pub fn mutable_borrow_conflict(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::MutableBorrowConflict,
+            "Mutable borrow conflict",
+            Some(loc),
+        )
+    }
+
+    pub fn assign_to_shared(loc: Location) -> Self {
+        Self::new(
+            ErrorCode::AssignToShared,
+            "Assign to shared variable",
+            Some(loc),
+        )
     }
 }
 

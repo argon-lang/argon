@@ -21,7 +21,7 @@ pub use crate::implicits::ImplicitValue;
 use crate::platform::PlatformExtern;
 pub use crate::signature::{FunctionSignature, SubstFunctionSignature};
 use alloc::{string::String, string::ToString, sync::Arc, vec::Vec};
-pub use argon_expr::{Builtin, ErasureMode, Expr};
+pub use argon_expr::{Builtin, ErasureMode, Expr, LocatedExpr};
 use argon_expr::{ExprContext, ExpressionOwner, Normalizer, SubstScanner};
 pub use argon_parser::ast::{
     BinaryOperator, BinaryOperatorIdentifier, FunctionParameterListType, Identifier, UnaryOperator,
@@ -425,7 +425,7 @@ pub struct FunctionMetadata {
 }
 
 pub enum FunctionImplementation {
-    Expr(Expr<DefaultExprContext>),
+    Expr(LocatedExpr<DefaultExprContext>),
     Extern(PlatformExtern),
 }
 
@@ -516,7 +516,7 @@ pub trait Record: Debug + Unload + ThreadSafe {
 pub trait RecordField: Debug + Unload + ThreadSafe {
     fn owning_record(&self) -> RecordFieldOwner;
     fn metadata(&self) -> &RecordFieldMetadata;
-    fn field_type(self: Arc<Self>) -> Arc<Expr<DefaultExprContext>>;
+    fn field_type(self: Arc<Self>) -> Arc<LocatedExpr<DefaultExprContext>>;
 }
 
 pub enum RecordFieldOwner {
@@ -558,6 +558,7 @@ pub struct EnumVariantMetadata {
 
 pub trait Trait: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
+    fn location(&self) -> parse18_runtime::Location;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
     fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
@@ -565,6 +566,7 @@ pub trait Trait: Debug + Unload + ThreadSafe {
 
 pub trait Instance: Debug + Unload + ThreadSafe {
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
+    fn location(&self) -> parse18_runtime::Location;
     fn erasure_mode(&self) -> ErasureMode;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
@@ -797,15 +799,18 @@ pub struct DefaultExprNormalizer;
 impl Normalizer for DefaultExprNormalizer {
     type EC = DefaultExprContext;
 
-    fn resolve_hole(&mut self, hole: &<Self::EC as ExprContext>::Hole) -> Option<Expr<Self::EC>> {
+    fn resolve_hole(
+        &mut self,
+        hole: &<Self::EC as ExprContext>::Hole,
+    ) -> Option<LocatedExpr<Self::EC>> {
         match *hole {}
     }
 
     fn get_function_body(
         &mut self,
         function: &Arc<dyn Function>,
-        arguments: &mut Vec<Expr<DefaultExprContext>>,
-    ) -> Option<Expr<DefaultExprContext>> {
+        arguments: &mut Vec<LocatedExpr<DefaultExprContext>>,
+    ) -> Option<LocatedExpr<DefaultExprContext>> {
         if !function.metadata().is_inline {
             return None;
         }
@@ -818,7 +823,6 @@ impl Normalizer for DefaultExprNormalizer {
         let signature = function.clone().signature();
         let owner = ExpressionOwner::Function(function.clone());
         let mut body = body.clone();
-        let arguments = mem::take(arguments);
         let mut subst = SubstScanner::new();
         subst.add_function_parameter_substitutions(owner, &signature, &arguments);
         subst.scan(&mut body);
@@ -865,7 +869,11 @@ impl Unify for DefaultExprComparer {
         DefaultExprNormalizer
     }
 
-    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, _b: Expr<Self::EC>) -> bool {
+    fn unify_hole(
+        &mut self,
+        a: <Self::EC as ExprContext>::Hole,
+        _b: LocatedExpr<Self::EC>,
+    ) -> bool {
         match a {}
     }
 }

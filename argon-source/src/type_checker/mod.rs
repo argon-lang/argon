@@ -16,10 +16,11 @@ use argon_compiler::{
 };
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
-    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprScanner, ExprScannerMut,
-    ExpressionOwner, FunctionResultValueSubstScanner, IntegerType, LocalVariable, LoopLabels,
-    MatchCase, Normalizer, NormalizerScanner, Pattern, RecordFieldLiteral, RecordType,
-    SubstScanner, TraitType, TypeComparer, Unify, Variable, VariableTupleElement,
+    ErasureMode, Expr, ExprContext, ExprContextShifter, ExprLocationExt, ExprScanner,
+    ExprScannerMut, ExpressionOwner, FunctionResultValueSubstScanner, IntegerType, LocalVariable,
+    LocatedExpr, LocatedPattern, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
+    RecordFieldLiteral, RecordType, SubstScanner, TraitType, TypeComparer, Unify, Variable,
+    VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -45,7 +46,7 @@ pub fn type_check_type_expr(
     context: Context,
     options: TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
-) -> Expr<DefaultExprContext> {
+) -> LocatedExpr<DefaultExprContext> {
     let TypeCheckOptions {
         access,
         scope,
@@ -83,8 +84,8 @@ pub fn type_check_expr(
     context: Context,
     options: TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
-    expected_type: &Expr<DefaultExprContext>,
-) -> Expr<DefaultExprContext> {
+    expected_type: &LocatedExpr<DefaultExprContext>,
+) -> LocatedExpr<DefaultExprContext> {
     let TypeCheckOptions {
         access,
         scope,
@@ -130,7 +131,7 @@ fn check_erasure(
     context: Context,
     options: &TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
-    result: &Expr<DefaultExprContext>,
+    result: &LocatedExpr<DefaultExprContext>,
 ) {
     let mut erasure_scanner = ErasureScanner {
         context: context.clone(),
@@ -146,7 +147,7 @@ fn check_purity(
     context: Context,
     options: &TypeCheckOptions<'_>,
     e: &WithLocation<ast::Expr>,
-    result: &Expr<DefaultExprContext>,
+    result: &LocatedExpr<DefaultExprContext>,
 ) {
     if options.effect_info != EffectInfo::Pure {
         return;
@@ -166,7 +167,7 @@ pub struct TypeCheckOptions<'a> {
     scope: &'a dyn Scope<ExprContext = DefaultExprContext>,
     erasure_mode: ErasureMode,
     effect_info: EffectInfo,
-    ensures_clauses: Option<&'a [Expr<DefaultExprContext>]>,
+    ensures_clauses: Option<&'a [LocatedExpr<DefaultExprContext>]>,
 }
 
 impl<'a> TypeCheckOptions<'a> {
@@ -189,7 +190,10 @@ impl<'a> TypeCheckOptions<'a> {
         self
     }
 
-    pub fn with_ensures_clauses(mut self, ensures_clauses: &'a [Expr<DefaultExprContext>]) -> Self {
+    pub fn with_ensures_clauses(
+        mut self,
+        ensures_clauses: &'a [LocatedExpr<DefaultExprContext>],
+    ) -> Self {
         self.ensures_clauses = Some(ensures_clauses);
         self
     }
@@ -223,7 +227,7 @@ impl ExprContextShifter for TypeCheckToDefaultExprContextShifter {
 
     fn shift_hole(&mut self, hole: Hole) -> Expr<DefaultExprContext> {
         match self.model.hole_values.get(&hole) {
-            Some(value) => self.shift(value.clone()),
+            Some(value) => self.shift(value.clone()).value,
             None => {
                 self.context
                     .reporter()
@@ -244,7 +248,7 @@ fn default_to_type_check_shifter() -> DefaultTypeCheckShifter {
 }
 
 impl ExprTypeContext for TypeCheckExprContext {
-    fn get_hole_type(hole: &Hole) -> Expr<Self> {
+    fn get_hole_type(hole: &Hole) -> LocatedExpr<Self> {
         hole.hole_info.hole_type.clone()
     }
 }
@@ -256,15 +260,18 @@ struct ExprNormalizer<'a> {
 impl Normalizer for ExprNormalizer<'_> {
     type EC = TypeCheckExprContext;
 
-    fn resolve_hole(&mut self, hole: &<Self::EC as ExprContext>::Hole) -> Option<Expr<Self::EC>> {
+    fn resolve_hole(
+        &mut self,
+        hole: &<Self::EC as ExprContext>::Hole,
+    ) -> Option<LocatedExpr<Self::EC>> {
         self.model.hole_values.get(hole).cloned()
     }
 
     fn get_function_body(
         &mut self,
         function: &Arc<dyn Function>,
-        arguments: &mut Vec<Expr<TypeCheckExprContext>>,
-    ) -> Option<Expr<TypeCheckExprContext>> {
+        arguments: &mut Vec<LocatedExpr<TypeCheckExprContext>>,
+    ) -> Option<LocatedExpr<TypeCheckExprContext>> {
         if !function.metadata().is_inline {
             return None;
         }
@@ -292,7 +299,7 @@ impl Normalizer for ExprNormalizer<'_> {
 
 struct HoleInfo {
     location: Location,
-    hole_type: Expr<TypeCheckExprContext>, // TODO: Change to ExpectedType
+    hole_type: LocatedExpr<TypeCheckExprContext>, // TODO: Change to ExpectedType
 }
 
 #[derive(Clone)]
@@ -301,7 +308,7 @@ struct Hole {
 }
 
 impl Hole {
-    fn new(location: Location, hole_type: Expr<TypeCheckExprContext>) -> Self {
+    fn new(location: Location, hole_type: LocatedExpr<TypeCheckExprContext>) -> Self {
         Self {
             hole_info: Arc::new(HoleInfo {
                 location,
@@ -337,7 +344,7 @@ impl Hash for Hole {
 
 #[derive(Clone)]
 struct Model {
-    hole_values: HashMap<Hole, Expr<TypeCheckExprContext>>,
+    hole_values: HashMap<Hole, LocatedExpr<TypeCheckExprContext>>,
 }
 
 impl Model {
@@ -353,7 +360,7 @@ enum TypeInferResult<'a> {
     // Fully inferred type
     Complete(InferredType),
 
-    // Types that needs additional type information
+    // Types that need additional type information
     Closure {
         location: &'a Location,
         function_literal: &'a FunctionLiteral,
@@ -366,31 +373,34 @@ enum TypeInferResult<'a> {
 
     // The remaining cases are compound expressions that may have subexpressions that require additional type information
     Finally {
+        location: &'a Location,
         body_result: Box<TypeInferResult<'a>>,
-        finally_body: Box<Expr<TypeCheckExprContext>>,
+        finally_body: Box<LocatedExpr<TypeCheckExprContext>>,
     },
 
     IfElse {
-        condition: Box<Expr<TypeCheckExprContext>>,
+        location: &'a Location,
+        condition: Box<LocatedExpr<TypeCheckExprContext>>,
         true_body: Box<TypeInferResult<'a>>,
-        false_body_location: &'a Location,
         false_body: Box<TypeInferResult<'a>>,
     },
 
     Match {
-        expression: Box<Expr<TypeCheckExprContext>>,
+        location: &'a Location,
+        expression: Box<LocatedExpr<TypeCheckExprContext>>,
         arms: Vec<InferResultMatchArm<'a>>,
     },
 
     Sequence {
-        init_exprs: Vec1<Expr<TypeCheckExprContext>>,
+        location: &'a Location,
+        init_exprs: Vec1<LocatedExpr<TypeCheckExprContext>>,
         last_result: Box<TypeInferResult<'a>>,
     },
 }
 
 impl<'a> TypeInferResult<'a> {
-    fn error() -> Self {
-        Self::Complete(InferredType::error())
+    fn error(location: Location) -> Self {
+        Self::Complete(InferredType::error(location))
     }
 
     fn partially_inferred_type<'b>(&'b self) -> PartiallyInferredType<'b> {
@@ -410,7 +420,15 @@ impl<'a> TypeInferResult<'a> {
             TypeInferResult::Match { arms, .. } => arms
                 .first()
                 .map(|arm| arm.body.partially_inferred_type())
-                .unwrap_or_else(|| PartiallyInferredType::Full(Cow::Owned(Expr::never_type()))),
+                .unwrap_or_else(|| {
+                    PartiallyInferredType::Full(Cow::Owned(Expr::never_type().with_location(
+                        Location {
+                            file: Default::default(),
+                            start: parse18_runtime::FilePosition { line: 0, column: 0 },
+                            end: parse18_runtime::FilePosition { line: 0, column: 0 },
+                        },
+                    )))
+                }),
             TypeInferResult::Sequence { last_result, .. } => last_result.partially_inferred_type(),
         }
     }
@@ -426,28 +444,28 @@ impl<'a> TypeInferResult<'a> {
 #[derive(Debug, Clone)]
 struct InferResultMatchArm<'a> {
     location: &'a Location,
-    pattern: Pattern<TypeCheckExprContext>,
+    pattern: LocatedPattern<TypeCheckExprContext>,
     body: TypeInferResult<'a>,
 }
 
 #[derive(Debug, Clone)]
 struct InferredType {
-    inferred_type: Expr<TypeCheckExprContext>,
-    checked_expr: Expr<TypeCheckExprContext>,
+    inferred_type: LocatedExpr<TypeCheckExprContext>,
+    checked_expr: LocatedExpr<TypeCheckExprContext>,
 }
 
 impl InferredType {
-    fn error() -> Self {
+    fn error(location: Location) -> Self {
         InferredType {
-            inferred_type: Expr::Error,
-            checked_expr: Expr::Error,
+            inferred_type: LocatedExpr::error(location.clone()),
+            checked_expr: LocatedExpr::error(location),
         }
     }
 }
 
 #[derive(Debug)]
 enum PartiallyInferredType<'b> {
-    Full(Cow<'b, Expr<TypeCheckExprContext>>),
+    Full(Cow<'b, LocatedExpr<TypeCheckExprContext>>),
     Closure,
     Tuple(Vec<PartiallyInferredType<'b>>),
 }
@@ -458,7 +476,7 @@ struct TypeChecker<'access, 'scope, 'model> {
     scope: &'scope mut dyn LocalScope<ExprContext = TypeCheckExprContext>,
     model: &'model mut Model,
     erasure_check_mode: ErasureMode,
-    ensures_clauses: Vec<Expr<TypeCheckExprContext>>,
+    ensures_clauses: Vec<LocatedExpr<TypeCheckExprContext>>,
     return_position: bool,
 }
 
@@ -482,8 +500,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check<'e>(
         &mut self,
         expr: &'e WithLocation<ast::Expr>,
-        expected_type: &Expr<TypeCheckExprContext>,
-    ) -> Expr<TypeCheckExprContext> {
+        expected_type: &LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let return_position = mem::replace(&mut self.return_position, false);
 
         if return_position
@@ -508,14 +526,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         body: &'e WithLocation<Vec<WithLocation<ast::Stmt>>>,
         finally_body: Option<&'e WithLocation<Vec<WithLocation<ast::Stmt>>>>,
-        expected_type: &Expr<TypeCheckExprContext>,
-    ) -> Expr<TypeCheckExprContext> {
+        expected_type: &LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let mut nested = with_nested_scope!(self);
 
         let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
             let infer = TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::unit(),
-                inferred_type: Expr::unit(),
+                checked_expr: Expr::unit().with_location(body.location.clone()),
+                inferred_type: Expr::unit().with_location(body.location.clone()),
             });
             let checked = nested.check_inferred_type(
                 &body.location,
@@ -529,7 +547,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             .iter()
             .map(|stmt| {
                 let old_return_position = mem::replace(&mut nested.return_position, false);
-                let checked = nested.check_stmt(stmt, &Expr::unit());
+                let expected_unit = Expr::unit().with_location(stmt.location.clone());
+                let checked = nested.check_stmt(stmt, &expected_unit);
                 nested.return_position = old_return_position;
                 checked
             })
@@ -542,16 +561,18 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let block_body = match Vec1::try_from(checked_stmts) {
             Ok(mut checked_stmts) => {
                 checked_stmts.push(last_checked);
-                Expr::Sequence(checked_stmts)
+                Expr::Sequence(checked_stmts).with_location(body.location.clone())
             }
             Err(_) => last_checked,
         };
 
         if let Some(finally_body) = finally_body {
+            let expected_unit = Expr::unit().with_location(finally_body.location.clone());
             Expr::Finally {
                 block_body: Box::new(block_body),
-                finally_body: Box::new(nested.check_block(finally_body, &Expr::unit())),
+                finally_body: Box::new(nested.check_block(finally_body, &expected_unit)),
             }
+            .with_location(body.location.clone())
         } else {
             block_body
         }
@@ -560,8 +581,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check_return_stmt<'e>(
         &mut self,
         stmt: &'e WithLocation<ast::Stmt>,
-        expected_type: &Expr<TypeCheckExprContext>,
-    ) -> Expr<TypeCheckExprContext> {
+        expected_type: &LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         match &stmt.value {
             ast::Stmt::Expr(expr) => self.check(expr, expected_type),
             _ => {
@@ -580,7 +601,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         location: &Location,
         inferred: InferredType,
-    ) -> Expr<TypeCheckExprContext> {
+    ) -> LocatedExpr<TypeCheckExprContext> {
         if self.ensures_clauses.is_empty() || Self::is_never_type(&inferred.inferred_type) {
             return inferred.checked_expr;
         }
@@ -598,11 +619,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         inferred.checked_expr
     }
 
-    fn is_never_type(t: &Expr<TypeCheckExprContext>) -> bool {
-        matches!(t, Expr::Builtin(Builtin::NeverType))
+    fn is_never_type(t: &LocatedExpr<TypeCheckExprContext>) -> bool {
+        matches!(t.value, Expr::Builtin(Builtin::NeverType))
     }
 
-    fn check_type<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> Expr<TypeCheckExprContext> {
+    fn check_type<'e>(
+        &mut self,
+        expr: &'e WithLocation<ast::Expr>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         self.check_type_with_meta_type(expr, false).checked_expr
     }
 
@@ -615,8 +639,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let mut inferred =
             self.check_inferred_type(&expr.location, infer, ExpectedType::AnyMetaType);
 
-        if !allow_erased && !self.treat_as_token(&inferred.checked_expr) {
-            inferred.checked_expr = Expr::BoxedType(Box::new(inferred.checked_expr));
+        if !allow_erased && !self.treat_as_token(&inferred.checked_expr.value) {
+            inferred.checked_expr = LocatedExpr {
+                location: inferred.checked_expr.location.clone(),
+                value: Expr::BoxedType(Box::new(inferred.checked_expr)),
+            };
         }
 
         inferred
@@ -650,7 +677,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn infer<'e>(&mut self, expr: &'e WithLocation<ast::Expr>) -> TypeInferResult<'e> {
         match &expr.value {
-            ast::Expr::Error => TypeInferResult::error(),
+            ast::Expr::Error => TypeInferResult::error(expr.location.clone()),
 
             ast::Expr::As { value, value_type } => {
                 let t = self.check_type(value_type);
@@ -663,8 +690,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             ast::Expr::BoolLiteral(value) => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::BoolLiteral(*value),
-                inferred_type: Expr::bool_type(),
+                checked_expr: Expr::BoolLiteral(*value).with_location(expr.location.clone()),
+                inferred_type: Expr::bool_type().with_location(expr.location.clone()),
             }),
             ast::Expr::IntLiteral { value, suffix } => TypeInferResult::Complete(
                 self.infer_integer_literal(&expr.location, value.clone(), suffix),
@@ -694,7 +721,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 .clone(),
                         ));
 
-                    return TypeInferResult::error();
+                    return TypeInferResult::error(expr.location.clone());
                 };
 
                 let t = block_label.block_result_type.clone();
@@ -702,8 +729,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     Some(value) => self.check(value, &t),
                     None => {
                         let infer = TypeInferResult::Complete(InferredType {
-                            checked_expr: Expr::unit(),
-                            inferred_type: Expr::unit(),
+                            checked_expr: Expr::unit().with_location(expr.location.clone()),
+                            inferred_type: Expr::unit().with_location(expr.location.clone()),
                         });
                         self.check_inferred_type(&expr.location, infer, ExpectedType::Exact(&t))
                             .checked_expr
@@ -714,8 +741,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Break {
                         label: Box::new(block_label),
                         value: Box::new(value),
-                    },
-                    inferred_type: Expr::never_type(),
+                    }
+                    .with_location(expr.location.clone()),
+                    inferred_type: Expr::never_type().with_location(expr.location.clone()),
                 })
             }
 
@@ -742,23 +770,25 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 .clone(),
                         ));
 
-                    return TypeInferResult::error();
+                    return TypeInferResult::error(expr.location.clone());
                 };
 
                 if is_break {
                     TypeInferResult::Complete(InferredType {
                         checked_expr: Expr::Break {
                             label: Box::new(block_label),
-                            value: Box::new(Expr::unit()),
-                        },
-                        inferred_type: Expr::never_type(),
+                            value: Box::new(Expr::unit().with_location(expr.location.clone())),
+                        }
+                        .with_location(expr.location.clone()),
+                        inferred_type: Expr::never_type().with_location(expr.location.clone()),
                     })
                 } else {
                     TypeInferResult::Complete(InferredType {
                         checked_expr: Expr::Retry {
                             label: Box::new(block_label),
-                        },
-                        inferred_type: Expr::never_type(),
+                        }
+                        .with_location(expr.location.clone()),
+                        inferred_type: Expr::never_type().with_location(expr.location.clone()),
                     })
                 }
             }
@@ -785,14 +815,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 .clone(),
                         ));
 
-                    return TypeInferResult::error();
+                    return TypeInferResult::error(expr.location.clone());
                 };
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::Retry {
                         label: Box::new(block_label),
-                    },
-                    inferred_type: Expr::never_type(),
+                    }
+                    .with_location(expr.location.clone()),
+                    inferred_type: Expr::never_type().with_location(expr.location.clone()),
                 })
             }
             ast::Expr::Retry { label } => {
@@ -818,14 +849,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 .clone(),
                         ));
 
-                    return TypeInferResult::error();
+                    return TypeInferResult::error(expr.location.clone());
                 };
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::Retry {
                         label: Box::new(block_label),
-                    },
-                    inferred_type: Expr::never_type(),
+                    }
+                    .with_location(expr.location.clone()),
+                    inferred_type: Expr::never_type().with_location(expr.location.clone()),
                 })
             }
 
@@ -855,16 +887,18 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         let a = self.check_condition_expr(a);
                         let b = self.check_condition_expr(b);
                         return TypeInferResult::Complete(InferredType {
-                            checked_expr: Expr::Or(Box::new(a), Box::new(b)),
-                            inferred_type: Expr::bool_type(),
+                            checked_expr: Expr::Or(Box::new(a), Box::new(b))
+                                .with_location(expr.location.clone()),
+                            inferred_type: Expr::bool_type().with_location(expr.location.clone()),
                         });
                     }
                     ast::BinaryOperator::LogicalAnd => {
                         let a = self.check_condition_expr(a);
                         let b = self.check_condition_expr(b);
                         return TypeInferResult::Complete(InferredType {
-                            checked_expr: Expr::And(Box::new(a), Box::new(b)),
-                            inferred_type: Expr::bool_type(),
+                            checked_expr: Expr::And(Box::new(a), Box::new(b))
+                                .with_location(expr.location.clone()),
+                            inferred_type: Expr::bool_type().with_location(expr.location.clone()),
                         });
                     }
 
@@ -872,7 +906,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         let a_inferred = self.infer(a).infer_fully();
                         let b_inferred = self.infer(b).infer_fully();
 
-                        let mut branch_typer = BranchTyper::new();
+                        let mut branch_typer = BranchTyper::new(expr.location.clone());
                         branch_typer.add_branch(self, &a_inferred.inferred_type);
                         branch_typer.add_branch(self, &b_inferred.inferred_type);
                         let compare_type = branch_typer.into_branch_type();
@@ -884,7 +918,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 r#type: Box::new(compare_type),
                                 lhs: Box::new(a_inferred.checked_expr),
                                 rhs: Box::new(b_inferred.checked_expr),
-                            },
+                            }
+                            .with_location(expr.location.clone()),
                             inferred_type: meta_type,
                         });
                     }
@@ -930,8 +965,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     ast::UnaryOperator::LogicalNot => {
                         let value = self.check_condition_expr(a);
                         return TypeInferResult::Complete(InferredType {
-                            checked_expr: Expr::Not(Box::new(value)),
-                            inferred_type: Expr::bool_type(),
+                            checked_expr: Expr::Not(Box::new(value))
+                                .with_location(expr.location.clone()),
+                            inferred_type: Expr::bool_type().with_location(expr.location.clone()),
                         });
                     }
 
@@ -950,7 +986,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         inferred_type: result_type.clone(),
                         checked_expr: Expr::FunctionResultValue {
                             result_type: Box::new(result_type),
-                        },
+                        }
+                        .with_location(expr.location.clone()),
                     })
                 } else {
                     self.context
@@ -959,7 +996,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             expr.location.clone(),
                             "result",
                         ));
-                    TypeInferResult::error()
+                    TypeInferResult::error(expr.location.clone())
                 }
             }
 
@@ -973,7 +1010,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     let record_call = self.process_call(record_expr, None);
 
                     let overloads = match record_call.callee {
-                        CalleeInfo::Error => return TypeInferResult::error(),
+                        CalleeInfo::Error => return TypeInferResult::error(expr.location.clone()),
                         CalleeInfo::Overloadable(overloads) => overloads,
                         _ => break 'not_record,
                     };
@@ -982,7 +1019,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         .resolve_overload_lookup(overloads, record_call.arguments);
 
                     let Some(mut selected_overload) = resolved.overload else {
-                        return TypeInferResult::error();
+                        return TypeInferResult::error(expr.location.clone());
                     };
 
                     let owner: RecordFieldOwner;
@@ -1026,7 +1063,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             selected_overload
                                 .unspecified_parameters
                                 .drain(..)
-                                .map(|_| Expr::Error),
+                                .map(|_| Expr::Error.with_location(expr.location.clone())),
                         );
                     }
 
@@ -1096,11 +1133,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         )
                     }
 
-                    let expr: Expr<TypeCheckExprContext>;
+                    let checked_expr: Expr<TypeCheckExprContext>;
                     let expr_type: Expr<TypeCheckExprContext>;
                     match owner {
                         RecordFieldOwner::Record(r) => {
-                            expr = Expr::RecordLiteral {
+                            checked_expr = Expr::RecordLiteral {
                                 record_type: RecordType {
                                     record: r.clone(),
                                     arguments: selected_overload.args.clone(),
@@ -1113,14 +1150,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             });
                         }
                         RecordFieldOwner::EnumVariant(v) => {
-                            let enum_type = match selected_overload.return_type {
-                                Expr::Error => return TypeInferResult::error(),
+                            let enum_type = match selected_overload.return_type.value {
+                                Expr::Error => {
+                                    return TypeInferResult::error(expr.location.clone());
+                                }
                                 Expr::EnumType(t) => t,
                                 _ => panic!("Expected enum type"),
                             };
 
                             expr_type = Expr::EnumType(enum_type.clone());
-                            expr = Expr::EnumVariantLiteral {
+                            checked_expr = Expr::EnumVariantLiteral {
                                 enum_type,
                                 variant: v.clone(),
                                 arguments: selected_overload.args,
@@ -1130,8 +1169,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     }
 
                     return TypeInferResult::Complete(InferredType {
-                        checked_expr: expr,
-                        inferred_type: expr_type,
+                        checked_expr: checked_expr.with_location(expr.location.clone()),
+                        inferred_type: expr_type.with_location(expr.location.clone()),
                     });
                 }
 
@@ -1140,7 +1179,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     .report_error(CompileError::record_type_required(
                         record_expr.location.clone(),
                     ));
-                TypeInferResult::error()
+                TypeInferResult::error(expr.location.clone())
             }
 
             ast::Expr::StringLiteral(value) => {
@@ -1148,30 +1187,32 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     && let StringFragment::Text(text) = part
                 {
                     Expr::StringLiteral(Box::from(text.as_str()))
+                        .with_location(expr.location.clone())
                 } else {
+                    let string_type = Expr::string_type().with_location(expr.location.clone());
                     let parts = value
                         .parts
                         .iter()
                         .map(|part| match part {
                             StringFragment::Text(text) => {
                                 Expr::StringLiteral(Box::from(text.as_str()))
+                                    .with_location(expr.location.clone())
                             }
-                            StringFragment::Interpolate { value: e } => {
-                                self.check(e, &Expr::string_type())
-                            }
+                            StringFragment::Interpolate { value: e } => self.check(e, &string_type),
                         })
                         .collect::<Vec<_>>();
                     Expr::Builtin(Builtin::StringConcat { values: parts })
+                        .with_location(expr.location.clone())
                 };
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: str_expr,
-                    inferred_type: Expr::string_type(),
+                    inferred_type: Expr::string_type().with_location(expr.location.clone()),
                 })
             }
             ast::Expr::BigType(value) => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::BigType(value.clone()),
-                inferred_type: Expr::BigType(value + 1),
+                checked_expr: Expr::BigType(value.clone()).with_location(expr.location.clone()),
+                inferred_type: Expr::BigType(value + 1).with_location(expr.location.clone()),
             }),
             ast::Expr::Assert { t } => {
                 let assert_type = self.check_type_with_meta_type(t, true).checked_expr;
@@ -1193,15 +1234,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let decl = Expr::VariableBinding(Box::new(local), Box::new(value));
 
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: decl,
-                    inferred_type: Expr::unit(),
+                    checked_expr: decl.with_location(expr.location.clone()),
+                    inferred_type: Expr::unit().with_location(expr.location.clone()),
                 })
             }
             ast::Expr::Block { body, finally_body } => {
                 let mut result = self.infer_block(body);
 
                 if let Some(finally_body) = finally_body {
-                    let checked_finally_body = self.check_block(finally_body, &Expr::unit());
+                    let expected_unit = Expr::unit().with_location(finally_body.location.clone());
+                    let checked_finally_body = self.check_block(finally_body, &expected_unit);
 
                     result = match result {
                         TypeInferResult::Complete(InferredType {
@@ -1211,11 +1253,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             checked_expr: Expr::Finally {
                                 block_body: Box::new(checked_expr),
                                 finally_body: Box::new(checked_finally_body),
-                            },
+                            }
+                            .with_location(expr.location.clone()),
                             inferred_type,
                         }),
 
                         _ => TypeInferResult::Finally {
+                            location: &expr.location,
                             body_result: Box::new(result),
                             finally_body: Box::new(checked_finally_body),
                         },
@@ -1248,7 +1292,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::FunctionType {
                         a: Box::new(arg),
                         r: Box::new(ret_type.checked_expr),
-                    },
+                    }
+                    .with_location(expr.location.clone()),
                     inferred_type: ret_type.inferred_type,
                 })
             }
@@ -1285,7 +1330,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         TypeInferResult::Complete(false_body_inferred),
                         TypeInferResult::Complete(true_body_inferred),
                     ) => {
-                        let mut branch_typer = BranchTyper::new();
+                        let mut branch_typer = BranchTyper::new(expr.location.clone());
                         branch_typer.add_branch(self, &true_body_inferred.inferred_type);
                         branch_typer.add_branch(self, &false_body_inferred.inferred_type);
 
@@ -1312,15 +1357,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 condition: Box::new(conv_condition),
                                 when_true: Box::new(checked_true_body),
                                 when_false: Box::new(checked_false_body),
-                            },
+                            }
+                            .with_location(expr.location.clone()),
                             inferred_type: branch_type,
                         })
                     }
 
                     _ => TypeInferResult::IfElse {
+                        location: &expr.location,
                         condition: Box::new(conv_condition),
                         true_body: Box::new(true_body_result),
-                        false_body_location: &when_false.location,
                         false_body: Box::new(false_body_result),
                     },
                 }
@@ -1333,8 +1379,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Is {
                         value: Box::new(conv_value.checked_expr),
                         pattern: Box::new(conv_pattern),
-                    },
-                    inferred_type: Expr::bool_type(),
+                    }
+                    .with_location(expr.location.clone()),
+                    inferred_type: Expr::bool_type().with_location(expr.location.clone()),
                 })
             }
 
@@ -1347,12 +1394,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     .unwrap_or(&expr.location)
                     .clone();
 
-                let block_label_hole = Hole::new(label_location, Expr::type_n(0));
+                let block_label_hole = Hole::new(
+                    label_location.clone(),
+                    Expr::type_n(0).with_location(label_location.clone()),
+                );
                 let mut block_label = BlockLabel {
                     id: UniqueIdentifier::new(),
                     name: label.as_ref().map(|l| l.value.clone()),
                     kind: BlockLabelKind::Loop,
-                    block_result_type: Expr::Hole(block_label_hole.clone()),
+                    block_result_type: Expr::Hole(block_label_hole.clone())
+                        .with_location(label_location.clone()),
                 };
 
                 checker
@@ -1361,12 +1412,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         block_label.clone(),
                     )));
 
-                let mut body = checker.check_block(body, &Expr::unit());
-                match body {
-                    Expr::Sequence(ref mut items) => {
-                        items.push(Expr::Retry {
-                            label: Box::new(block_label.clone()),
-                        });
+                let expected_unit = Expr::unit().with_location(body.location.clone());
+                let mut body = checker.check_block(body, &expected_unit);
+                match &mut body.value {
+                    Expr::Sequence(items) => {
+                        items.push(
+                            Expr::Retry {
+                                label: Box::new(block_label.clone()),
+                            }
+                            .with_location(expr.location.clone()),
+                        );
                     }
 
                     _ => {
@@ -1374,16 +1429,19 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             body,
                             Expr::Retry {
                                 label: Box::new(block_label.clone()),
-                            },
-                        ]);
+                            }
+                            .with_location(expr.location.clone()),
+                        ])
+                        .with_location(expr.location.clone());
                     }
                 }
 
                 let loop_type = match checker.model.hole_values.get(&block_label_hole) {
                     Some(t) => t.clone(),
                     None => {
-                        block_label.block_result_type = Expr::never_type();
-                        Expr::never_type()
+                        block_label.block_result_type =
+                            Expr::never_type().with_location(expr.location.clone());
+                        Expr::never_type().with_location(expr.location.clone())
                     }
                 };
 
@@ -1391,14 +1449,21 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Block {
                         label: Box::new(block_label),
                         body: Box::new(body),
-                    },
+                    }
+                    .with_location(expr.location.clone()),
                     inferred_type: loop_type,
                 })
             }
 
             ast::Expr::Match { value, cases } => {
                 enum CaseResults<'a> {
-                    FullyInferred(Vec<(&'a Location, Pattern<TypeCheckExprContext>, InferredType)>),
+                    FullyInferred(
+                        Vec<(
+                            &'a Location,
+                            LocatedPattern<TypeCheckExprContext>,
+                            InferredType,
+                        )>,
+                    ),
                     InferResults(Vec<InferResultMatchArm<'a>>),
                 }
 
@@ -1431,7 +1496,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let value = self.infer(value).infer_fully();
 
                 let mut case_res = CaseResults::FullyInferred(Vec::new());
-                let mut branch_typer = BranchTyper::new();
+                let mut branch_typer = BranchTyper::new(expr.location.clone());
 
                 for case in cases {
                     let pattern =
@@ -1503,12 +1568,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             checked_expr: Expr::Match {
                                 value: Box::new(value.checked_expr),
                                 cases,
-                            },
+                            }
+                            .with_location(expr.location.clone()),
                             inferred_type: branch_type,
                         })
                     }
 
                     CaseResults::InferResults(infer_res) => TypeInferResult::Match {
+                        location: &expr.location,
                         expression: Box::new(value.checked_expr),
                         arms: infer_res,
                     },
@@ -1521,13 +1588,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let ex_type = Expr::TraitType(TraitType {
                     trait_: ex_trait,
                     arguments: vec![],
-                });
+                })
+                .with_location(expr.location.clone());
 
                 let ex = self.check(ex, &ex_type);
 
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::Raise { ex: Box::new(ex) },
-                    inferred_type: Expr::never_type(),
+                    checked_expr: Expr::Raise { ex: Box::new(ex) }
+                        .with_location(expr.location.clone()),
+                    inferred_type: Expr::never_type().with_location(expr.location.clone()),
                 })
             }
 
@@ -1557,8 +1626,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     }
 
                     return TypeInferResult::Complete(InferredType {
-                        checked_expr: Expr::Tuple { items: values },
-                        inferred_type: Expr::Tuple { items: types },
+                        checked_expr: Expr::Tuple { items: values }
+                            .with_location(expr.location.clone()),
+                        inferred_type: Expr::Tuple { items: types }
+                            .with_location(expr.location.clone()),
                     });
                 }
 
@@ -1579,7 +1650,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     id: UniqueIdentifier::new(),
                     name: label.as_ref().map(|l| l.value.clone()),
                     kind: BlockLabelKind::WhileOuter,
-                    block_result_type: Expr::unit(),
+                    block_result_type: Expr::unit().with_location(expr.location.clone()),
                 };
 
                 // Treat the label as a loop label when checking the condition
@@ -1589,13 +1660,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         block_label.clone(),
                     )));
 
-                let cond = checker.check(condition, &Expr::bool_type());
+                let bool_type = Expr::bool_type().with_location(condition.location.clone());
+                let cond = checker.check(condition, &bool_type);
 
                 let inner_label = BlockLabel {
                     id: UniqueIdentifier::new(),
                     name: block_label.name.clone(),
                     kind: BlockLabelKind::WhileInner,
-                    block_result_type: Expr::unit(),
+                    block_result_type: Expr::unit().with_location(expr.location.clone()),
                 };
 
                 checker
@@ -1605,12 +1677,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         inner: inner_label.clone(),
                     }));
 
-                let mut body = checker.check_block(body, &Expr::unit());
-                match body {
-                    Expr::Sequence(ref mut items) => {
-                        items.push(Expr::Retry {
-                            label: Box::new(block_label.clone()),
-                        });
+                let unit_type = Expr::unit().with_location(body.location.clone());
+                let mut body = checker.check_block(body, &unit_type);
+                match &mut body.value {
+                    Expr::Sequence(items) => {
+                        items.push(
+                            Expr::Retry {
+                                label: Box::new(block_label.clone()),
+                            }
+                            .with_location(expr.location.clone()),
+                        );
                     }
 
                     _ => {
@@ -1618,35 +1694,51 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             body,
                             Expr::Retry {
                                 label: Box::new(block_label.clone()),
-                            },
-                        ]);
+                            }
+                            .with_location(expr.location.clone()),
+                        ])
+                        .with_location(expr.location.clone());
                     }
                 }
 
                 let while_loop = Expr::Block {
                     label: Box::new(block_label.clone()),
-                    body: Box::new(Expr::Sequence(vec1![
-                        Expr::IfElse {
-                            condition: Box::new(cond),
-                            when_true: Box::new(Expr::unit()),
-                            when_false: Box::new(Expr::Break {
+                    body: Box::new(
+                        Expr::Sequence(vec1![
+                            Expr::IfElse {
+                                condition: Box::new(cond),
+                                when_true: Box::new(
+                                    Expr::unit().with_location(expr.location.clone())
+                                ),
+                                when_false: Box::new(
+                                    Expr::Break {
+                                        label: Box::new(block_label.clone()),
+                                        value: Box::new(
+                                            Expr::unit().with_location(expr.location.clone())
+                                        ),
+                                    }
+                                    .with_location(expr.location.clone())
+                                ),
+                            }
+                            .with_location(expr.location.clone()),
+                            Expr::Block {
+                                label: Box::new(inner_label.clone()),
+                                body: Box::new(body),
+                            }
+                            .with_location(expr.location.clone()),
+                            Expr::Retry {
                                 label: Box::new(block_label.clone()),
-                                value: Box::new(Expr::unit()),
-                            }),
-                        },
-                        Expr::Block {
-                            label: Box::new(inner_label.clone()),
-                            body: Box::new(body),
-                        },
-                        Expr::Retry {
-                            label: Box::new(block_label.clone()),
-                        },
-                    ])),
-                };
+                            }
+                            .with_location(expr.location.clone()),
+                        ])
+                        .with_location(expr.location.clone()),
+                    ),
+                }
+                .with_location(expr.location.clone());
 
                 TypeInferResult::Complete(InferredType {
                     checked_expr: while_loop,
-                    inferred_type: Expr::unit(),
+                    inferred_type: Expr::unit().with_location(expr.location.clone()),
                 })
             }
 
@@ -1656,7 +1748,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Use {
                         is_mutable: *is_mutable,
                         inner: Box::new(value.checked_expr),
-                    },
+                    }
+                    .with_location(expr.location.clone()),
                     inferred_type: value.inferred_type,
                 })
             }
@@ -1665,7 +1758,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::Shared {
                         inner: Box::new(value.checked_expr),
-                    },
+                    }
+                    .with_location(expr.location.clone()),
                     inferred_type: value.inferred_type,
                 })
             }
@@ -1674,7 +1768,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let inner = self.check_type_with_meta_type(t, false);
 
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::BoxedType(Box::new(inner.checked_expr)),
+                    checked_expr: Expr::BoxedType(Box::new(inner.checked_expr))
+                        .with_location(expr.location.clone()),
                     inferred_type: inner.inferred_type,
                 })
             }
@@ -1684,8 +1779,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Box {
                         t: Box::new(value.inferred_type.clone()),
                         value: Box::new(value.checked_expr),
-                    },
-                    inferred_type: Expr::BoxedType(Box::new(value.inferred_type)),
+                    }
+                    .with_location(expr.location.clone()),
+                    inferred_type: Expr::BoxedType(Box::new(value.inferred_type))
+                        .with_location(expr.location.clone()),
                 })
             }
             ast::Expr::Unbox { value } => {
@@ -1701,7 +1798,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     norm.normalize(&mut value.inferred_type);
                 }
 
-                let unboxed_type = match value.inferred_type {
+                let unboxed_type = match value.inferred_type.value {
                     Expr::BoxedType(t) => t,
                     _ => todo!("Expected boxed type"),
                 };
@@ -1712,7 +1809,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Unbox {
                         t: unboxed_type,
                         value: Box::new(value.checked_expr),
-                    },
+                    }
+                    .with_location(expr.location.clone()),
                     inferred_type,
                 })
             }
@@ -1727,14 +1825,17 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
         let Some((last_stmt, leading_stmts)) = body.value.split_last() else {
             return TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::unit(),
-                inferred_type: Expr::unit(),
+                checked_expr: Expr::unit().with_location(body.location.clone()),
+                inferred_type: Expr::unit().with_location(body.location.clone()),
             });
         };
 
         let checked_stmts = leading_stmts
             .iter()
-            .map(|stmt| nested.check_stmt(stmt, &Expr::unit()))
+            .map(|stmt| {
+                let expected_unit = Expr::unit().with_location(stmt.location.clone());
+                nested.check_stmt(stmt, &expected_unit)
+            })
             .collect::<Vec<_>>();
 
         let Ok(mut checked_stmts) = Vec1::try_from(checked_stmts) else {
@@ -1748,12 +1849,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }) => {
                 checked_stmts.push(checked_expr);
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::Sequence(checked_stmts),
+                    checked_expr: Expr::Sequence(checked_stmts)
+                        .with_location(body.location.clone()),
                     inferred_type,
                 })
             }
 
             last_result => TypeInferResult::Sequence {
+                location: &body.location,
                 init_exprs: checked_stmts,
                 last_result: Box::new(last_result),
             },
@@ -1763,8 +1866,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check_block<'e>(
         &mut self,
         body: &'e WithLocation<Vec<WithLocation<ast::Stmt>>>,
-        expected_type: &Expr<TypeCheckExprContext>,
-    ) -> Expr<TypeCheckExprContext> {
+        expected_type: &LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let infer = self.infer_block(body);
         self.check_inferred_type(&body.location, infer, ExpectedType::Exact(expected_type))
             .checked_expr
@@ -1773,8 +1876,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check_stmt<'e>(
         &mut self,
         stmt: &'e WithLocation<ast::Stmt>,
-        expected_type: &Expr<TypeCheckExprContext>,
-    ) -> Expr<TypeCheckExprContext> {
+        expected_type: &LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let infer = self.infer_stmt(stmt);
         self.check_inferred_type(&stmt.location, infer, ExpectedType::Exact(expected_type))
             .checked_expr
@@ -1784,12 +1887,12 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         match &stmt.value {
             ast::Stmt::Expr(expr) => self.infer(expr),
             ast::Stmt::Label(_) => TypeInferResult::Complete(InferredType {
-                checked_expr: Expr::unit(),
-                inferred_type: Expr::unit(),
+                checked_expr: Expr::unit().with_location(stmt.location.clone()),
+                inferred_type: Expr::unit().with_location(stmt.location.clone()),
             }),
             ast::Stmt::VariableDeclaration(v) => {
-                let variable_value: Expr<TypeCheckExprContext>;
-                let var_type: Expr<TypeCheckExprContext>;
+                let variable_value: LocatedExpr<TypeCheckExprContext>;
+                let var_type: LocatedExpr<TypeCheckExprContext>;
                 if let Some(t) = &v.var_type {
                     var_type = self.check_type(t);
                     variable_value = self.check(&v.value, &var_type);
@@ -1829,8 +1932,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
 
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::VariableBinding(v, Box::new(variable_value)),
-                    inferred_type: Expr::unit(),
+                    checked_expr: Expr::VariableBinding(v, Box::new(variable_value))
+                        .with_location(stmt.location.clone()),
+                    inferred_type: Expr::unit().with_location(stmt.location.clone()),
                 })
             }
             _ => todo!("inferring non-expression statements in blocks: {:#?}", stmt),
@@ -1839,7 +1943,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn infer_call<'e>(&mut self, call: CallInfo<'e>) -> TypeInferResult<'e> {
         match call.callee {
-            CalleeInfo::Error => TypeInferResult::error(),
+            CalleeInfo::Error => TypeInferResult::error(call.location.clone()),
             CalleeInfo::Builtin(builtin) => {
                 self.infer_builtin(call.location, builtin, call.arguments)
             }
@@ -1855,7 +1959,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     .resolve_overload_lookup(overloads, call.arguments);
 
                 let Some(mut selected_overload) = resolved.overload else {
-                    return TypeInferResult::error();
+                    return TypeInferResult::error(call.location.clone());
                 };
 
                 let mut curried_closure_params =
@@ -1881,14 +1985,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             &mut selected_overload.return_type,
                             &mut selected_overload.ensures_clauses,
                             Variable::Parameter(Box::new(param_var)),
-                            &Expr::Variable(closure_param_var.clone()),
+                            &Expr::Variable(closure_param_var.clone())
+                                .with_location(call.location.clone()),
                         )
                     }
 
                     curried_closure_params.push(closure_param);
-                    selected_overload
-                        .args
-                        .push(Expr::Variable(closure_param_var))
+                    selected_overload.args.push(
+                        Expr::Variable(closure_param_var).with_location(call.location.clone()),
+                    )
                 }
 
                 let mut inferred_type = selected_overload.into_inferred_type(self);
@@ -1898,13 +2003,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     inferred_type.inferred_type = Expr::FunctionType {
                         a: Box::new(curried_closure_param.clone()),
                         r: Box::new(inferred_type.inferred_type),
-                    };
+                    }
+                    .with_location(call.location.clone());
 
                     inferred_type.checked_expr = Expr::Closure {
                         v: Box::new(curried_closure_param),
                         return_type: Box::new(return_type),
                         body: Box::new(inferred_type.checked_expr),
-                    };
+                    }
+                    .with_location(call.location.clone());
                 }
 
                 self.infer_function_object_call_inferred(
@@ -1925,8 +2032,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 }
 
                 TypeInferResult::Complete(InferredType {
-                    checked_expr: Expr::type_n(0),
-                    inferred_type: Expr::type_n(1),
+                    checked_expr: Expr::type_n(0).with_location(call.location.clone()),
+                    inferred_type: Expr::type_n(1).with_location(call.location.clone()),
                 })
             }
             CalleeInfo::Index(obj, index) => {
@@ -2207,7 +2314,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 builtin_name,
                 args,
                 |_| [],
-                |_, element_type_type| element_type_type,
+                |_, element_type_type| element_type_type.value,
                 |element_type, []| Builtin::ArrayType {
                     element_type: Box::new(element_type),
                 },
@@ -2494,8 +2601,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 location,
                 builtin_name,
                 args,
-                Expr::string_type(),
-                Expr::string_type(),
+                Expr::string_type().with_location(location.clone()),
+                Expr::string_type().with_location(location.clone()),
                 |values| Builtin::StringConcat { values },
             ),
             "string_eq" => same_type_bool_binary_builtin!(StringEq, Expr::string_type()),
@@ -2516,7 +2623,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             "array_get" => parameterized_builtin!(
                 ArrayGet,
                 element_type,
-                [Expr::array_type(element_type.clone()), Expr::int_type()] => element_type.clone(),
+                [Expr::array_type(element_type.clone()), Expr::int_type()] => element_type.value.clone(),
                 { array, index }
             ),
             "array_set" => parameterized_builtin!(
@@ -2525,14 +2632,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 [
                     Expr::array_type(element_type.clone()),
                     Expr::int_type(),
-                    element_type.clone(),
+                    element_type.value.clone(),
                 ] => Expr::unit(),
                 { array, index, value }
             ),
 
             _ => {
                 self.report_invalid_builtin(location, builtin_name);
-                TypeInferResult::error()
+                TypeInferResult::error(location.clone())
             }
         }
     }
@@ -2545,36 +2652,41 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         create_expected_arg_types: impl FnOnce() -> [Expr<TypeCheckExprContext>; ARG_COUNT],
         create_inferred_type: impl FnOnce() -> Expr<TypeCheckExprContext>,
         create_builtin: impl FnOnce(
-            [Expr<TypeCheckExprContext>; ARG_COUNT],
+            [LocatedExpr<TypeCheckExprContext>; ARG_COUNT],
         ) -> Builtin<TypeCheckExprContext>,
     ) -> TypeInferResult<'e> {
         if args.len() != ARG_COUNT {
             self.report_builtin_arity_error(location, builtin_name, ARG_COUNT, args.len());
-            return TypeInferResult::error();
+            return TypeInferResult::error(location.clone());
         }
 
         let checked_args = args
             .iter()
             .zip(create_expected_arg_types())
-            .map(|(arg, expected_type)| self.check(arg.arg, &expected_type))
+            .map(|(arg, expected_type)| {
+                self.check(arg.arg, &expected_type.with_location(location.clone()))
+            })
             .collect::<Vec<_>>();
-        let checked_args: [Expr<TypeCheckExprContext>; ARG_COUNT] =
+        let checked_args: [LocatedExpr<TypeCheckExprContext>; ARG_COUNT] =
             checked_args.try_into().unwrap_or_else(|_| unreachable!());
 
         TypeInferResult::Complete(InferredType {
-            checked_expr: Expr::Builtin(create_builtin(checked_args)),
-            inferred_type: create_inferred_type(),
+            checked_expr: Expr::Builtin(create_builtin(checked_args))
+                .with_location(location.clone()),
+            inferred_type: create_inferred_type().with_location(location.clone()),
         })
     }
 
     fn infer_variadic_builtin<'e>(
         &mut self,
-        _location: &Location,
+        location: &Location,
         _builtin_name: &str,
         args: VecDeque<ArgumentInfo<'e>>,
-        expected_arg_type: Expr<TypeCheckExprContext>,
-        inferred_type: Expr<TypeCheckExprContext>,
-        create_builtin: impl FnOnce(Vec<Expr<TypeCheckExprContext>>) -> Builtin<TypeCheckExprContext>,
+        expected_arg_type: LocatedExpr<TypeCheckExprContext>,
+        inferred_type: LocatedExpr<TypeCheckExprContext>,
+        create_builtin: impl FnOnce(
+            Vec<LocatedExpr<TypeCheckExprContext>>,
+        ) -> Builtin<TypeCheckExprContext>,
     ) -> TypeInferResult<'e> {
         let checked_args = args
             .iter()
@@ -2582,7 +2694,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             .collect();
 
         TypeInferResult::Complete(InferredType {
-            checked_expr: Expr::Builtin(create_builtin(checked_args)),
+            checked_expr: Expr::Builtin(create_builtin(checked_args))
+                .with_location(location.clone()),
             inferred_type,
         })
     }
@@ -2593,15 +2706,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         builtin_name: &str,
         mut args: VecDeque<ArgumentInfo<'e>>,
         create_rest_arg_types: impl FnOnce(
-            &Expr<TypeCheckExprContext>,
+            &LocatedExpr<TypeCheckExprContext>,
         ) -> [Expr<TypeCheckExprContext>; REST_ARG_COUNT],
         create_result_type: impl FnOnce(
-            &Expr<TypeCheckExprContext>,
-            Expr<TypeCheckExprContext>,
+            &LocatedExpr<TypeCheckExprContext>,
+            LocatedExpr<TypeCheckExprContext>,
         ) -> Expr<TypeCheckExprContext>,
         create_builtin: impl FnOnce(
-            Expr<TypeCheckExprContext>,
-            [Expr<TypeCheckExprContext>; REST_ARG_COUNT],
+            LocatedExpr<TypeCheckExprContext>,
+            [LocatedExpr<TypeCheckExprContext>; REST_ARG_COUNT],
         ) -> Builtin<TypeCheckExprContext>,
     ) -> TypeInferResult<'e> {
         let expected_arg_count = REST_ARG_COUNT + 1;
@@ -2609,7 +2722,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
         let Some(element_type_arg) = args.pop_front() else {
             self.report_builtin_arity_error(location, builtin_name, expected_arg_count, 0);
-            return TypeInferResult::error();
+            return TypeInferResult::error(location.clone());
         };
 
         let InferredType {
@@ -2625,20 +2738,25 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 expected_arg_count,
                 total_arg_count,
             );
-            return TypeInferResult::error();
+            return TypeInferResult::error(location.clone());
         }
 
         let checked_args = args
             .iter()
             .zip(expected_rest_arg_types)
-            .map(|(arg, expected_type)| self.check(arg.arg, &expected_type))
+            .map(|(arg, expected_type)| {
+                self.check(arg.arg, &expected_type.with_location(location.clone()))
+            })
             .collect::<Vec<_>>();
-        let checked_args: [Expr<TypeCheckExprContext>; REST_ARG_COUNT] =
-            checked_args.try_into().unwrap_or_else(|_| unreachable!());
+        let checked_args: [LocatedExpr<TypeCheckExprContext>; REST_ARG_COUNT] = checked_args
+            .try_into()
+            .unwrap_or_else(|_| unreachable!("Length was already checked"));
 
         TypeInferResult::Complete(InferredType {
-            checked_expr: Expr::Builtin(create_builtin(element_type.clone(), checked_args)),
-            inferred_type: create_result_type(&element_type, element_type_type),
+            inferred_type: create_result_type(&element_type, element_type_type)
+                .with_location(location.clone()),
+            checked_expr: Expr::Builtin(create_builtin(element_type, checked_args))
+                .with_location(location.clone()),
         })
     }
 
@@ -2650,8 +2768,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     ) -> InferredType {
         match suffix {
             ast::IntLiteralSuffix::None => InferredType {
-                checked_expr: Expr::IntLiteral(value),
-                inferred_type: Expr::int_type(),
+                checked_expr: Expr::IntLiteral(value).with_location(location.clone()),
+                inferred_type: Expr::int_type().with_location(location.clone()),
             },
             ast::IntLiteralSuffix::Signed(8) => {
                 let byte_value: i8 = match i8::try_from(&value) {
@@ -2666,15 +2784,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::i8_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::i8_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::I8Literal(byte_value),
-                    inferred_type: Expr::i8_type(),
+                    checked_expr: Expr::I8Literal(byte_value).with_location(location.clone()),
+                    inferred_type: Expr::i8_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Signed(16) => {
@@ -2690,15 +2808,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::i16_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::i16_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::I16Literal(short_value),
-                    inferred_type: Expr::i16_type(),
+                    checked_expr: Expr::I16Literal(short_value).with_location(location.clone()),
+                    inferred_type: Expr::i16_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Signed(32) => {
@@ -2714,15 +2832,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::i32_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::i32_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::I32Literal(int_value),
-                    inferred_type: Expr::i32_type(),
+                    checked_expr: Expr::I32Literal(int_value).with_location(location.clone()),
+                    inferred_type: Expr::i32_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Signed(64) => {
@@ -2738,15 +2856,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::i64_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::i64_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::I64Literal(int_value),
-                    inferred_type: Expr::i64_type(),
+                    checked_expr: Expr::I64Literal(int_value).with_location(location.clone()),
+                    inferred_type: Expr::i64_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Unsigned(8) => {
@@ -2762,15 +2880,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::u8_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::u8_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::U8Literal(byte_value),
-                    inferred_type: Expr::u8_type(),
+                    checked_expr: Expr::U8Literal(byte_value).with_location(location.clone()),
+                    inferred_type: Expr::u8_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Unsigned(16) => {
@@ -2786,15 +2904,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::u16_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::u16_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::U16Literal(short_value),
-                    inferred_type: Expr::u16_type(),
+                    checked_expr: Expr::U16Literal(short_value).with_location(location.clone()),
+                    inferred_type: Expr::u16_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Unsigned(32) => {
@@ -2810,15 +2928,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::u32_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::u32_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::U32Literal(int_value),
-                    inferred_type: Expr::u32_type(),
+                    checked_expr: Expr::U32Literal(int_value).with_location(location.clone()),
+                    inferred_type: Expr::u32_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Unsigned(64) => {
@@ -2834,15 +2952,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             ),
                         );
                         return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::u64_type(),
+                            checked_expr: Expr::Error.with_location(location.clone()),
+                            inferred_type: Expr::u64_type().with_location(location.clone()),
                         };
                     }
                 };
 
                 InferredType {
-                    checked_expr: Expr::U64Literal(int_value),
-                    inferred_type: Expr::u64_type(),
+                    checked_expr: Expr::U64Literal(int_value).with_location(location.clone()),
+                    inferred_type: Expr::u64_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Signed(bits) => {
@@ -2853,8 +2971,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         format!("i{}", bits),
                     ));
                 InferredType {
-                    checked_expr: Expr::Error,
-                    inferred_type: Expr::int_type(),
+                    checked_expr: Expr::Error.with_location(location.clone()),
+                    inferred_type: Expr::int_type().with_location(location.clone()),
                 }
             }
             ast::IntLiteralSuffix::Unsigned(bits) => {
@@ -2865,8 +2983,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         format!("u{}", bits),
                     ));
                 InferredType {
-                    checked_expr: Expr::Error,
-                    inferred_type: Expr::int_type(),
+                    checked_expr: Expr::Error.with_location(location.clone()),
+                    inferred_type: Expr::int_type().with_location(location.clone()),
                 }
             }
         }
@@ -2874,7 +2992,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn infer_variable<'e>(
         &mut self,
-        _var_location: &'e Location,
+        location: &'e Location,
         v: Variable<TypeCheckExprContext>,
         args: VecDeque<ArgumentInfo<'e>>,
     ) -> TypeInferResult<'e> {
@@ -2882,7 +3000,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let expr = Expr::Variable(v);
 
         let inferred = InferredType {
-            checked_expr: expr,
+            checked_expr: expr.with_location(location.clone()),
             inferred_type: t,
         };
 
@@ -2909,21 +3027,24 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
         let expr = Expr::VariableStore(v, Box::new(value));
         TypeInferResult::Complete(InferredType {
-            checked_expr: expr,
-            inferred_type: Expr::unit(),
+            checked_expr: expr.with_location(location.clone()),
+            inferred_type: Expr::unit().with_location(location.clone()),
         })
     }
 
     fn infer_variable_tuple_element<'e>(
         &mut self,
-        _location: &Location,
+        location: &Location,
         vte: VariableTupleElement<TypeCheckExprContext>,
         args: VecDeque<ArgumentInfo<'e>>,
     ) -> TypeInferResult<'e> {
         let t = vte.binding_type;
-        let expr = Expr::TupleElement(Box::new(Expr::Variable(vte.variable)), vte.index);
+        let expr = Expr::TupleElement(
+            Box::new(Expr::Variable(vte.variable).with_location(location.clone())),
+            vte.index,
+        );
         let res = TypeInferResult::Complete(InferredType {
-            checked_expr: expr,
+            checked_expr: expr.with_location(location.clone()),
             inferred_type: t,
         });
 
@@ -2954,9 +3075,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         'args: for (arg_result, arg) in args {
             let t = 'not_func_type: {
                 match expr_result.partially_inferred_type() {
-                    PartiallyInferredType::Full(t) => match t.as_ref() {
-                        func_type @ Expr::FunctionType { a, r } => {
-                            let func_type = func_type.clone();
+                    PartiallyInferredType::Full(t) => match &t.as_ref().value {
+                        Expr::FunctionType { a, r } => {
+                            let func_type = t.as_ref().clone();
                             let r = (**r).clone();
 
                             let checked_arg = self.check_inferred_type(
@@ -2974,7 +3095,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 checked_expr: Expr::FunctionObjectCall {
                                     function: Box::new(f.checked_expr),
                                     argument: Box::new(checked_arg.checked_expr),
-                                },
+                                }
+                                .with_location(arg.call_location.clone()),
                                 inferred_type: r,
                             });
                             continue 'args;
@@ -2996,7 +3118,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     format!("{:?}", t),
                 ));
 
-            return TypeInferResult::error();
+            return TypeInferResult::error(arg.call_location.clone());
         }
 
         expr_result
@@ -3178,12 +3300,15 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 norm.normalize(&mut instance.inferred_type);
             }
 
-            match instance.inferred_type {
+            match instance.inferred_type.value {
                 Expr::BoxedType(t) => {
                     instance.inferred_type = (*t).clone();
-                    instance.checked_expr = Expr::Unbox {
-                        t,
-                        value: Box::new(instance.checked_expr),
+                    instance.checked_expr = LocatedExpr {
+                        location: instance.checked_expr.location.clone(),
+                        value: Expr::Unbox {
+                            t,
+                            value: Box::new(instance.checked_expr),
+                        },
                     };
                     continue;
                 }
@@ -3429,7 +3554,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             location.clone(),
                             format!("{:?}", expected_type),
                         ));
-                    return InferredType::error();
+                    return InferredType::error(location.clone());
                 };
                 let mut expected_type = expected_type.clone();
 
@@ -3444,7 +3569,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let Expr::FunctionType {
                     a: func_type_arg,
                     r: mut func_type_result,
-                } = expected_type
+                } = expected_type.value
                 else {
                     self.context
                         .reporter()
@@ -3452,7 +3577,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             location.clone(),
                             format!("{:?}", expected_type),
                         ));
-                    return InferredType::error();
+                    return InferredType::error(location.clone());
                 };
 
                 let param = ClosureParameterVariable {
@@ -3469,7 +3594,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 let mut subst = SubstScanner::new();
                 subst.add_substitution(
                     Variable::ClosureParameter(func_type_arg),
-                    Cow::Owned(Expr::Variable(param_var.clone())),
+                    Cow::Owned(Expr::Variable(param_var.clone()).with_location(location.clone())),
                 );
                 subst.scan(&mut func_type_result);
 
@@ -3489,20 +3614,23 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         v: Box::new(param),
                         return_type: func_type_result,
                         body: Box::new(body),
-                    },
-                    inferred_type: function_type,
+                    }
+                    .with_location(location.clone()),
+                    inferred_type: function_type.with_location(location.clone()),
                 }
             }
 
             TypeInferResult::Tuple { location, elements } => {
                 let element_expected_types: Vec<ExpectedType<'_>> = match expected_type {
                     ExpectedType::AnyMetaType
-                    | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => {
-                        elements.iter().map(|_| expected_type).collect()
-                    }
-                    ExpectedType::Exact(Expr::Tuple { items }) => {
-                        items.iter().map(ExpectedType::Exact).collect()
-                    }
+                    | ExpectedType::Exact(LocatedExpr {
+                        value: Expr::Type(_) | Expr::BigType(_),
+                        ..
+                    }) => elements.iter().map(|_| expected_type).collect(),
+                    ExpectedType::Exact(LocatedExpr {
+                        value: Expr::Tuple { items },
+                        ..
+                    }) => items.iter().map(ExpectedType::Exact).collect(),
 
                     _ => {
                         self.context
@@ -3512,10 +3640,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 format!("{:?}", expected_type),
                             ));
 
-                        return InferredType {
-                            checked_expr: Expr::Error,
-                            inferred_type: Expr::Error,
-                        };
+                        return InferredType::error(location.clone());
                     }
                 };
 
@@ -3541,14 +3666,17 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 InferredType {
                     checked_expr: Expr::Tuple {
                         items: element_exprs,
-                    },
+                    }
+                    .with_location(location.clone()),
                     inferred_type: Expr::Tuple {
                         items: element_types,
-                    },
+                    }
+                    .with_location(location.clone()),
                 }
             }
 
             TypeInferResult::Finally {
+                location,
                 body_result,
                 finally_body,
             } => {
@@ -3557,20 +3685,21 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                     checked_expr: Expr::Finally {
                         block_body: Box::new(body_inferred.checked_expr),
                         finally_body,
-                    },
+                    }
+                    .with_location(location.clone()),
                     inferred_type: body_inferred.inferred_type,
                 }
             }
             TypeInferResult::IfElse {
+                location,
                 condition,
                 true_body,
-                false_body_location,
                 false_body,
             } => {
                 let true_body_inferred = self.resolve_inferred_type(*true_body, expected_type);
                 let checked_false_body = self
                     .check_inferred_type(
-                        false_body_location,
+                        location,
                         *false_body,
                         ExpectedType::Exact(&true_body_inferred.inferred_type),
                     )
@@ -3581,11 +3710,16 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         condition,
                         when_true: Box::new(true_body_inferred.checked_expr),
                         when_false: Box::new(checked_false_body),
-                    },
+                    }
+                    .with_location(location.clone()),
                     inferred_type: true_body_inferred.inferred_type,
                 }
             }
-            TypeInferResult::Match { expression, arms } => {
+            TypeInferResult::Match {
+                location,
+                expression,
+                arms,
+            } => {
                 let mut cases = Vec::with_capacity(arms.len());
                 let mut arms_iter = arms.into_iter();
                 let selected_type;
@@ -3610,25 +3744,27 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         });
                     }
                 } else {
-                    selected_type = Expr::never_type();
+                    selected_type = Expr::never_type().with_location(location.clone());
                 }
 
                 InferredType {
                     checked_expr: Expr::Match {
                         value: expression,
                         cases,
-                    },
+                    }
+                    .with_location(location.clone()),
                     inferred_type: selected_type,
                 }
             }
             TypeInferResult::Sequence {
+                location,
                 init_exprs: mut exprs,
                 last_result,
             } => {
                 let last_inferred = self.resolve_inferred_type(*last_result, expected_type);
                 exprs.push(last_inferred.checked_expr);
                 InferredType {
-                    checked_expr: Expr::Sequence(exprs),
+                    checked_expr: Expr::Sequence(exprs).with_location(location.clone()),
                     inferred_type: last_inferred.inferred_type,
                 }
             }
@@ -3656,7 +3792,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
 
         for transformation in transformations {
-            transformation.transform(&mut inferred.checked_expr, &mut inferred.inferred_type);
+            transformation.transform(
+                &mut inferred.checked_expr.value,
+                &mut inferred.inferred_type.value,
+                &location,
+            );
         }
 
         inferred
@@ -3665,27 +3805,37 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check_condition_expr(
         &mut self,
         expr: &WithLocation<ast::Expr>,
-    ) -> Expr<TypeCheckExprContext> {
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let condition = self.infer(expr);
-        self.check_condition(condition)
+        self.check_condition(condition, &expr.location)
     }
 
-    fn check_condition(&mut self, condition: TypeInferResult) -> Expr<TypeCheckExprContext> {
+    fn check_condition(
+        &mut self,
+        condition: TypeInferResult,
+        location: &Location,
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let mut cond_expr = self
-            .resolve_inferred_type(condition, ExpectedType::Exact(&Expr::bool_type()))
+            .resolve_inferred_type(
+                condition,
+                ExpectedType::Exact(&Expr::bool_type().with_location(location.clone())),
+            )
             .checked_expr;
 
         if !matches!(
-            cond_expr,
+            cond_expr.value,
             Expr::BoolLiteral(_) | Expr::And(..) | Expr::Or(..) | Expr::Not(_) | Expr::Is { .. }
         ) {
             let (when_true_witness, when_false_witness) = self.create_if_cond_vars(&cond_expr);
 
             if when_true_witness.is_some() || when_false_witness.is_some() {
-                cond_expr = Expr::Condition {
-                    value: Box::new(cond_expr),
-                    when_true_witness,
-                    when_false_witness,
+                cond_expr = LocatedExpr {
+                    location: cond_expr.location.clone(),
+                    value: Expr::Condition {
+                        value: Box::new(cond_expr),
+                        when_true_witness,
+                        when_false_witness,
+                    },
                 };
             }
         }
@@ -3695,7 +3845,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn create_if_cond_vars(
         &mut self,
-        cond_expr: &Expr<TypeCheckExprContext>,
+        cond_expr: &LocatedExpr<TypeCheckExprContext>,
     ) -> (
         Option<Box<LocalVariable<TypeCheckExprContext>>>,
         Option<Box<LocalVariable<TypeCheckExprContext>>>,
@@ -3710,17 +3860,20 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn create_if_branch_var(
         &mut self,
-        cond_expr: &Expr<TypeCheckExprContext>,
+        cond_expr: &LocatedExpr<TypeCheckExprContext>,
         equal_to_value: bool,
     ) -> Box<LocalVariable<TypeCheckExprContext>> {
         Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
             var_type: Expr::EqualToType {
-                r#type: Box::new(Expr::bool_type()),
+                r#type: Box::new(Expr::bool_type().with_location(cond_expr.location.clone())),
                 lhs: Box::new(cond_expr.clone()),
-                rhs: Box::new(Expr::BoolLiteral(equal_to_value)),
-            },
+                rhs: Box::new(
+                    Expr::BoolLiteral(equal_to_value).with_location(cond_expr.location.clone()),
+                ),
+            }
+            .with_location(cond_expr.location.clone()),
             erasure_mode: ErasureMode::Erased,
             is_witness: true,
             is_mutable: false,
@@ -3730,9 +3883,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
     fn check_pattern(
         &mut self,
         pattern: &WithLocation<ast::Pattern>,
-        mut pattern_type: Expr<TypeCheckExprContext>,
-    ) -> Pattern<TypeCheckExprContext> {
-        match &pattern.value {
+        mut pattern_type: LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedPattern<TypeCheckExprContext> {
+        let value = match &pattern.value {
             ast::Pattern::Discard => Pattern::Discard {
                 t: Box::new(pattern_type),
             },
@@ -3746,7 +3899,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                 let Expr::Tuple {
                     items: element_types,
-                } = pattern_type
+                } = pattern_type.value
                 else {
                     todo!("Tuple pattern type");
                 };
@@ -3791,10 +3944,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         );
                         normalizer.normalize(&mut pattern_type);
 
-                        let enum_type = match &pattern_type {
+                        let enum_type = match &pattern_type.value {
                             Expr::EnumType(enum_type) => enum_type,
                             Expr::Error => {
-                                return Pattern::Error;
+                                return LocatedPattern {
+                                    value: Pattern::Error,
+                                    location: pattern.location.clone(),
+                                };
                             }
                             _ => {
                                 self.context
@@ -3804,7 +3960,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                         format!("{:?}", pattern_type),
                                         "an enum type".to_string(),
                                     ));
-                                return Pattern::Error;
+                                return LocatedPattern {
+                                    value: Pattern::Error,
+                                    location: pattern.location.clone(),
+                                };
                             }
                         };
 
@@ -3853,7 +4012,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 if !self.type_matches_expected(
                     &mut transformations,
                     &pattern_type,
-                    ExpectedType::Exact(&Expr::string_type()),
+                    ExpectedType::Exact(
+                        &Expr::string_type().with_location(pattern.location.clone()),
+                    ),
                 ) {
                     todo!()
                 }
@@ -3873,7 +4034,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 if !self.type_matches_expected(
                     &mut transformations,
                     &pattern_type,
-                    ExpectedType::Exact(&Expr::int_type()),
+                    ExpectedType::Exact(&Expr::int_type().with_location(pattern.location.clone())),
                 ) {
                     todo!()
                 }
@@ -3889,7 +4050,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 if !self.type_matches_expected(
                     &mut transformations,
                     &pattern_type,
-                    ExpectedType::Exact(&Expr::bool_type()),
+                    ExpectedType::Exact(&Expr::bool_type().with_location(pattern.location.clone())),
                 ) {
                     todo!()
                 }
@@ -3900,6 +4061,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
                 Pattern::Bool(*b)
             }
+        };
+
+        LocatedPattern {
+            value,
+            location: pattern.location.clone(),
         }
     }
 
@@ -3963,7 +4129,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         &mut self,
         mut args: &[ast::PatternArgument],
         mut params: &[SignatureParameter<TypeCheckExprContext>],
-    ) -> Vec<Pattern<TypeCheckExprContext>> {
+    ) -> Vec<LocatedPattern<TypeCheckExprContext>> {
         let mut patterns = Vec::with_capacity(params.len());
 
         loop {
@@ -3986,8 +4152,11 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             } else if param.list_type == FunctionParameterListType::NormalList {
                 todo!()
             } else {
-                patterns.push(Pattern::Discard {
-                    t: Box::new(param.param_type.clone()),
+                patterns.push(LocatedPattern {
+                    value: Pattern::Discard {
+                        t: Box::new(param.param_type.clone()),
+                    },
+                    location: param.param_type.location.clone(),
                 });
             }
 
@@ -3999,9 +4168,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
 
     fn resolve_implicit(
         &mut self,
-        t: &Expr<TypeCheckExprContext>,
+        t: &LocatedExpr<TypeCheckExprContext>,
         location: &Location,
-    ) -> Expr<TypeCheckExprContext> {
+    ) -> LocatedExpr<TypeCheckExprContext> {
         let mut given_assertions = Vec::new();
         self.scope.given_assertions(&mut given_assertions);
 
@@ -4018,7 +4187,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 .reporter()
                 .report_error(CompileError::implicit_not_found(location.clone()));
 
-            Expr::Error
+            LocatedExpr::error(location.clone())
         })
     }
 
@@ -4081,17 +4250,21 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 );
                 norm.normalize(&mut expected_type);
 
-                matches!(expected_type, Expr::FunctionType { .. })
+                matches!(expected_type.value, Expr::FunctionType { .. })
             }
             PartiallyInferredType::Tuple(elements) => match expected_type {
                 ExpectedType::AnyMetaType
-                | ExpectedType::Exact(Expr::Type(_) | Expr::BigType(_)) => {
-                    elements.iter().all(|e| {
-                        self.partially_inferred_type_matches_expected(false, e, expected_type)
-                    })
-                }
+                | ExpectedType::Exact(LocatedExpr {
+                    value: Expr::Type(_) | Expr::BigType(_),
+                    ..
+                }) => elements.iter().all(|e| {
+                    self.partially_inferred_type_matches_expected(false, e, expected_type)
+                }),
 
-                ExpectedType::Exact(Expr::Tuple { items }) if items.len() == elements.len() => {
+                ExpectedType::Exact(LocatedExpr {
+                    value: Expr::Tuple { items },
+                    ..
+                }) if items.len() == elements.len() => {
                     elements.iter().zip(items.iter()).all(|(actual, expected)| {
                         self.partially_inferred_type_matches_expected(
                             false,
@@ -4169,11 +4342,11 @@ impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
         ExprNormalizer { model }
     }
 
-    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: Expr<Self::EC>) -> bool {
-        if let Expr::Hole(b) = &b
+    fn unify_hole(&mut self, a: <Self::EC as ExprContext>::Hole, b: LocatedExpr<Self::EC>) -> bool {
+        if let Expr::Hole(b) = &b.value
             && a == *b
         {
-            return false;
+            return true;
         }
 
         match self.model.hole_values.entry_ref(&a) {
@@ -4183,7 +4356,7 @@ impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
             }
             hash_map::EntryRef::Vacant(vea) => {
                 // TODO: Type check the hole
-                match b {
+                match b.value {
                     Expr::Hole(b) => match self.model.hole_values.entry_ref(&b) {
                         hash_map::EntryRef::Occupied(oeb) => {
                             let b_value = oeb.get().clone();
@@ -4191,7 +4364,10 @@ impl<'access, 'scope, 'model> Unify for TypeChecker<'access, 'scope, 'model> {
                             true
                         }
                         hash_map::EntryRef::Vacant(veb) => {
-                            veb.insert(Expr::Hole(a));
+                            veb.insert(LocatedExpr {
+                                location: a.hole_info.location.clone(),
+                                value: Expr::Hole(a),
+                            });
                             true
                         }
                     },
@@ -4218,9 +4394,9 @@ impl<'access, 'scope, 'model> UnifyModel for TypeChecker<'access, 'scope, 'model
 fn unify_hole_impl<U: UnifyModel<EC = TypeCheckExprContext>>(
     unify: &mut U,
     a: Hole,
-    b: Expr<TypeCheckExprContext>,
+    b: LocatedExpr<TypeCheckExprContext>,
 ) -> bool {
-    if let Expr::Hole(b) = &b
+    if let Expr::Hole(b) = &b.value
         && a == *b
     {
         return false;
@@ -4233,20 +4409,21 @@ fn unify_hole_impl<U: UnifyModel<EC = TypeCheckExprContext>>(
         }
         hash_map::EntryRef::Vacant(vea) => {
             // TODO: Type check the hole
-            match b {
-                Expr::Hole(b) => match unify.model().hole_values.entry_ref(&b) {
+            match &b.value {
+                Expr::Hole(b) => match unify.model().hole_values.entry_ref(b) {
                     hash_map::EntryRef::Occupied(oeb) => {
                         let b_value = oeb.get().clone();
                         unify.model().hole_values.insert(a, b_value);
                         true
                     }
                     hash_map::EntryRef::Vacant(veb) => {
-                        veb.insert(Expr::Hole(a));
+                        let location = a.hole_info.location.clone();
+                        veb.insert(Expr::Hole(a).with_location(location));
                         true
                     }
                 },
                 _ => {
-                    vea.insert(b.clone());
+                    vea.insert(b);
                     true
                 }
             }
@@ -4273,7 +4450,7 @@ fn build_subst_holes_for_args(
             let hole = Hole::new(location.clone(), t);
             subst.add_substitution(
                 Variable::Parameter(Box::new(v)),
-                Cow::Owned(Expr::Hole(hole.clone())),
+                Cow::Owned(Expr::Hole(hole.clone()).with_location(location.clone())),
             );
             hole
         })
@@ -4296,11 +4473,11 @@ fn substitute_holes_for_args(
 }
 
 fn get_condition_vars(
-    condition: &Expr<TypeCheckExprContext>,
+    condition: &LocatedExpr<TypeCheckExprContext>,
     when_true_vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
     when_false_vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
 ) {
-    match condition {
+    match &condition.value {
         Expr::Condition {
             value,
             when_true_witness,
@@ -4336,10 +4513,10 @@ fn get_condition_vars(
 }
 
 fn get_pattern_vars(
-    pattern: &Pattern<TypeCheckExprContext>,
+    pattern: &LocatedPattern<TypeCheckExprContext>,
     vars: &mut Vec<LocalVariable<TypeCheckExprContext>>,
 ) {
-    match pattern {
+    match &pattern.value {
         Pattern::Error => {}
         Pattern::Discard { .. } => {}
         Pattern::Tuple(items) => {
@@ -4402,22 +4579,22 @@ struct CallInfo<'a> {
 }
 
 struct BranchTyper {
-    branch_type: Expr<TypeCheckExprContext>,
+    branch_type: LocatedExpr<TypeCheckExprContext>,
 }
 
 impl BranchTyper {
-    fn new() -> Self {
+    fn new(location: Location) -> Self {
         Self {
-            branch_type: Expr::never_type(),
+            branch_type: Expr::never_type().with_location(location),
         }
     }
 
     fn add_branch(
         &mut self,
         _checker: &mut TypeChecker<'_, '_, '_>,
-        t: &Expr<TypeCheckExprContext>,
+        t: &LocatedExpr<TypeCheckExprContext>,
     ) {
-        match self.branch_type {
+        match self.branch_type.value {
             Expr::Builtin(Builtin::NeverType) => {
                 self.branch_type = t.clone();
             }
@@ -4426,7 +4603,7 @@ impl BranchTyper {
         }
     }
 
-    fn into_branch_type(self) -> Expr<TypeCheckExprContext> {
+    fn into_branch_type(self) -> LocatedExpr<TypeCheckExprContext> {
         self.branch_type
     }
 }

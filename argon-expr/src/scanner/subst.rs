@@ -1,9 +1,9 @@
-use crate::{Expr, ExprContext, ExprScannerMut, Variable};
+use crate::{Expr, ExprContext, ExprScannerMut, LocatedExpr, Variable};
 use alloc::borrow::Cow;
 use hashbrown::HashMap;
 
 pub struct SubstScanner<'a, EC: ExprContext + ?Sized> {
-    substitutions: HashMap<Variable<EC>, Cow<'a, Expr<EC>>>,
+    substitutions: HashMap<Variable<EC>, Cow<'a, LocatedExpr<EC>>>,
 }
 
 impl<'a, EC: ExprContext + ?Sized> SubstScanner<'a, EC> {
@@ -13,14 +13,18 @@ impl<'a, EC: ExprContext + ?Sized> SubstScanner<'a, EC> {
         }
     }
 
-    pub fn add_substitution(&mut self, variable: Variable<EC>, replacement: Cow<'a, Expr<EC>>) {
+    pub fn add_substitution(
+        &mut self,
+        variable: Variable<EC>,
+        replacement: Cow<'a, LocatedExpr<EC>>,
+    ) {
         self.substitutions.insert(variable, replacement);
     }
 
     pub fn subst(
         variable: Variable<EC>,
-        replacement: Cow<'a, Expr<EC>>,
-        expr: &mut Expr<EC>,
+        replacement: Cow<'a, LocatedExpr<EC>>,
+        expr: &mut LocatedExpr<EC>,
     ) -> bool {
         let mut scanner = Self::new();
         scanner.add_substitution(variable, replacement);
@@ -31,26 +35,27 @@ impl<'a, EC: ExprContext + ?Sized> SubstScanner<'a, EC> {
 impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
     type EC = EC;
 
-    fn scan(&mut self, expr: &mut Expr<Self::EC>) -> bool {
-        if let Expr::Variable(variable) = expr {
+    fn scan(&mut self, expr: &mut LocatedExpr<Self::EC>) -> bool {
+        if let Expr::Variable(variable) = &expr.value {
             if let Some(replacement) = self.substitutions.get(variable) {
                 *expr = replacement.as_ref().clone();
-                true
-            } else {
-                crate::default_scan_mut(self, expr)
+                return true;
             }
-        } else {
-            crate::default_scan_mut(self, expr)
         }
+
+        self.scan_expr(&mut expr.value)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::SubstScanner;
-    use crate::{ErasureMode, Expr, ExprContext, ExprScannerMut, LocalVariable, Variable};
+    use crate::{
+        ErasureMode, Expr, ExprContext, ExprLocationExt, ExprScannerMut, LocalVariable, Variable,
+    };
     use alloc::{borrow::Cow, boxed::Box, vec};
     use argon_util::UniqueIdentifier;
+    use parse18_runtime::{FilePosition, Location};
 
     #[derive(Debug, Eq, Hash, PartialEq)]
     struct TestContext;
@@ -67,11 +72,19 @@ mod tests {
         type Instance = ();
     }
 
+    fn location() -> Location {
+        Location {
+            file: Default::default(),
+            start: FilePosition { line: 0, column: 0 },
+            end: FilePosition { line: 0, column: 0 },
+        }
+    }
+
     fn variable() -> Variable<TestContext> {
         Variable::Local(Box::new(LocalVariable {
             id: UniqueIdentifier::new(),
             name: None,
-            var_type: Expr::Error,
+            var_type: Expr::Error.with_location(location()),
             erasure_mode: ErasureMode::Concrete,
             is_witness: false,
             is_mutable: false,
@@ -83,12 +96,13 @@ mod tests {
         let variable = variable();
         let mut expr = Expr::Tuple {
             items: vec![
-                Expr::Variable(variable.clone()),
-                Expr::BoolLiteral(false),
-                Expr::Variable(variable.clone()),
+                Expr::Variable(variable.clone()).with_location(location()),
+                Expr::BoolLiteral(false).with_location(location()),
+                Expr::Variable(variable.clone()).with_location(location()),
             ],
-        };
-        let replacement = Expr::BoolLiteral(true);
+        }
+        .with_location(location());
+        let replacement = Expr::BoolLiteral(true).with_location(location());
 
         assert!(SubstScanner::subst(
             variable,
@@ -98,17 +112,42 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Tuple {
-                items,
+            crate::LocatedExpr {
+                value: Expr::Tuple {
+                    items,
+                },
+                ..
             } if matches!(
                 items.as_slice(),
                 [
-                    Expr::BoolLiteral(true),
-                    Expr::BoolLiteral(false),
-                    Expr::BoolLiteral(true),
-                ]
+                    first,
+                    second,
+                    third,
+                ] if matches!(
+                    (&first.value, &second.value, &third.value),
+                    (
+                        Expr::BoolLiteral(true),
+                        Expr::BoolLiteral(false),
+                        Expr::BoolLiteral(true),
+                    )
+                )
             )
         ));
+    }
+
+    #[test]
+    fn substitutes_root_variable() {
+        let variable = variable();
+        let mut expr = Expr::Variable(variable.clone()).with_location(location());
+        let replacement = Expr::BoolLiteral(true).with_location(location());
+
+        assert!(SubstScanner::subst(
+            variable,
+            Cow::Borrowed(&replacement),
+            &mut expr
+        ));
+
+        assert!(matches!(expr.value, Expr::BoolLiteral(true)));
     }
 
     #[test]
@@ -117,13 +156,14 @@ mod tests {
         let second_variable = variable();
         let mut expr = Expr::Tuple {
             items: vec![
-                Expr::Variable(first_variable.clone()),
-                Expr::Variable(second_variable.clone()),
-                Expr::Variable(first_variable.clone()),
+                Expr::Variable(first_variable.clone()).with_location(location()),
+                Expr::Variable(second_variable.clone()).with_location(location()),
+                Expr::Variable(first_variable.clone()).with_location(location()),
             ],
-        };
-        let first_replacement = Expr::BoolLiteral(true);
-        let second_replacement = Expr::IntLiteral(5.into());
+        }
+        .with_location(location());
+        let first_replacement = Expr::BoolLiteral(true).with_location(location());
+        let second_replacement = Expr::IntLiteral(5.into()).with_location(location());
 
         let mut scanner = SubstScanner::new();
         scanner.add_substitution(first_variable, Cow::Borrowed(&first_replacement));
@@ -132,15 +172,25 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Tuple {
-                items,
+            crate::LocatedExpr {
+                value: Expr::Tuple {
+                    items,
+                },
+                ..
             } if matches!(
                 items.as_slice(),
                 [
-                    Expr::BoolLiteral(true),
-                    Expr::IntLiteral(i),
-                    Expr::BoolLiteral(true),
-                ] if i == &5.into()
+                    first,
+                    second,
+                    third,
+                ] if matches!(
+                    (&first.value, &second.value, &third.value),
+                    (
+                        Expr::BoolLiteral(true),
+                        Expr::IntLiteral(i),
+                        Expr::BoolLiteral(true),
+                    ) if i == &5.into()
+                )
             )
         ));
     }
@@ -151,12 +201,13 @@ mod tests {
         let second_variable = variable();
         let mut expr = Expr::Tuple {
             items: vec![
-                Expr::Variable(first_variable.clone()),
-                Expr::Variable(second_variable.clone()),
+                Expr::Variable(first_variable.clone()).with_location(location()),
+                Expr::Variable(second_variable.clone()).with_location(location()),
             ],
-        };
-        let first_replacement = Expr::Variable(second_variable.clone());
-        let second_replacement = Expr::BoolLiteral(true);
+        }
+        .with_location(location());
+        let first_replacement = Expr::Variable(second_variable.clone()).with_location(location());
+        let second_replacement = Expr::BoolLiteral(true).with_location(location());
 
         let mut scanner = SubstScanner::new();
         scanner.add_substitution(first_variable, Cow::Borrowed(&first_replacement));
@@ -165,14 +216,21 @@ mod tests {
 
         assert!(matches!(
             expr,
-            Expr::Tuple {
-                items,
+            crate::LocatedExpr {
+                value: Expr::Tuple {
+                    items,
+                },
+                ..
             } if matches!(
                 items.as_slice(),
                 [
-                    Expr::Variable(variable),
-                    Expr::BoolLiteral(true),
-                ] if variable == &second_variable
+                    first,
+                    second,
+                ] if matches!(
+                    (&first.value, &second.value),
+                    (Expr::Variable(variable), Expr::BoolLiteral(true))
+                        if variable == &second_variable
+                )
             )
         ));
     }
@@ -180,8 +238,12 @@ mod tests {
     #[test]
     fn does_not_substitute_store_targets() {
         let variable = variable();
-        let mut expr = Expr::VariableStore(variable.clone(), Box::new(Expr::IntLiteral(1.into())));
-        let replacement = Expr::BoolLiteral(true);
+        let mut expr = Expr::VariableStore(
+            variable.clone(),
+            Box::new(Expr::IntLiteral(1.into()).with_location(location())),
+        )
+        .with_location(location());
+        let replacement = Expr::BoolLiteral(true).with_location(location());
 
         assert!(SubstScanner::subst(
             variable,
@@ -189,6 +251,6 @@ mod tests {
             &mut expr
         ));
 
-        assert!(matches!(expr, Expr::VariableStore(_, _)));
+        assert!(matches!(expr.value, Expr::VariableStore(_, _)));
     }
 }

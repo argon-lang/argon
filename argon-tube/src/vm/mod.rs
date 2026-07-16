@@ -15,8 +15,8 @@ use argon_compiler::{
     RecordField, RecordFieldOwner, Trait, Tube, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExprScanner, ExpressionOwner, InstanceParameterVariable,
-    IntegerType, NormalizerScanner, TraitType, Variable,
+    BlockLabel, ErasureMode, Expr, ExprLocationExt, ExprScanner, ExpressionOwner,
+    InstanceParameterVariable, IntegerType, LocatedExpr, NormalizerScanner, TraitType, Variable,
 };
 use argon_format_vm::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
@@ -475,7 +475,7 @@ impl VmEncoder {
                                     let metadata = field.metadata();
                                     let field_type = builder
                                         .token_emitter(self)
-                                        .token_expr(&field.clone().field_type())?;
+                                        .token_expr(field.clone().field_type().as_ref())?;
 
                                     Ok(Box::new(vf::RecordFieldDefinition {
                                         field_id: BigUint::from(field_id),
@@ -981,12 +981,14 @@ impl VmEncoder {
 
         builder.add_owner_parameters(self, TypeDeclaration::from(field.owning_record()))?;
 
-        builder.token_emitter(self).token_expr(&field.field_type())
+        builder
+            .token_emitter(self)
+            .token_expr(field.field_type().as_ref())
     }
 
     fn emit_function_body(
         &mut self,
-        expr: &Expr<DefaultExprContext>,
+        expr: &LocatedExpr<DefaultExprContext>,
         signature: &mut FunctionSignatureWithMapping,
         import_specifier: ImportSpecifier,
     ) -> Result<vf::FunctionBody, InternalCompilerError> {
@@ -1047,7 +1049,7 @@ enum EntryEmitter {
         sig: FunctionSignatureWithMapping,
         syn_id: usize,
         syn_import_spec: ImportSpecifier,
-        body: Expr<DefaultExprContext>,
+        body: LocatedExpr<DefaultExprContext>,
     },
 }
 
@@ -1172,7 +1174,7 @@ impl FunctionSignatureBuilder {
     fn add_instance_parameter(
         &mut self,
         owner: ExpressionOwner<DefaultExprContext>,
-        var_type: Expr<DefaultExprContext>,
+        var_type: LocatedExpr<DefaultExprContext>,
         name: Option<Identifier>,
     ) -> Result<(), InternalCompilerError> {
         let param = InstanceParameterVariable {
@@ -1254,7 +1256,7 @@ impl FunctionSignatureBuilder {
     fn finish(
         self,
         encoder: &mut VmEncoder,
-        return_type: &Expr<DefaultExprContext>,
+        return_type: &LocatedExpr<DefaultExprContext>,
     ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
         let reg_offset = if self.instance_param.is_some() {
             BigUint::from(1u32)
@@ -1351,20 +1353,20 @@ trait TokenEmitterCommon {
 
     fn fallback_token_expr(
         &mut self,
-        _t: &Expr<DefaultExprContext>,
+        t: &LocatedExpr<DefaultExprContext>,
     ) -> Result<vf::Token, InternalCompilerError> {
-        todo!("emit fallback token expression")
+        todo!("emit fallback token expression: {t:?}")
     }
 
     fn token_expr(
         &mut self,
-        t: &Expr<argon_compiler::DefaultExprContext>,
+        t: &LocatedExpr<argon_compiler::DefaultExprContext>,
     ) -> Result<vf::Token, InternalCompilerError> {
         let mut t = t.clone();
         NormalizerScanner::new(self.context().normalize_fuel(), DefaultExprNormalizer)
             .normalize(&mut t);
 
-        match &t {
+        match &t.value {
             Expr::BoxedType(_) => Ok(vf::Token::Boxed {}),
 
             Expr::Builtin(builtin) => {
@@ -1439,7 +1441,7 @@ trait TokenEmitterCommon {
             }),
 
             Expr::Tuple { items } => Ok(vf::Token::Tuple {
-                elements: self.token_exprs(items)?,
+                elements: self.token_located_exprs(items)?,
             }),
 
             Expr::Type(_) | Expr::BigType(_) => Ok(vf::Token::TypeInfo {}),
@@ -1456,9 +1458,9 @@ trait TokenEmitterCommon {
         }
     }
 
-    fn token_exprs<'a>(
+    fn token_located_exprs<'a>(
         &mut self,
-        exprs: impl IntoIterator<Item = &'a Expr<argon_compiler::DefaultExprContext>>,
+        exprs: impl IntoIterator<Item = &'a LocatedExpr<argon_compiler::DefaultExprContext>>,
     ) -> Result<Vec<Box<vf::Token>>, InternalCompilerError> {
         exprs
             .into_iter()
@@ -1488,7 +1490,7 @@ trait TokenEmitterCommon {
         &mut self,
         owner: ExpressionOwner<DefaultExprContext>,
         sig: &FunctionSignature<DefaultExprContext>,
-        args: &[Expr<DefaultExprContext>],
+        args: &[LocatedExpr<DefaultExprContext>],
     ) -> Result<Vec<Box<vf::Token>>, InternalCompilerError> {
         let sig_with_mapping = self.vm_encoder().emit_function_signature(&owner, sig)?;
 
@@ -1717,10 +1719,10 @@ impl<'a> ExprEmitter<'a> {
 
     fn expr<O: ExprOutput>(
         &mut self,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
         output: O,
     ) -> EmitResult<O::ResultType> {
-        Ok(match e {
+        Ok(match &e.value {
             Expr::And(_, _) | Expr::Or(_, _) | Expr::Not(_) | Expr::Is { .. } => {
                 let rb = output.output_register(self, e)?;
 
@@ -1806,7 +1808,7 @@ impl<'a> ExprEmitter<'a> {
                         sig,
                         syn_id,
                         syn_import_spec,
-                        body: (**body).clone(),
+                        body: body.as_ref().clone(),
                     });
 
                 match v.erasure_mode {
@@ -1903,7 +1905,7 @@ impl<'a> ExprEmitter<'a> {
             Expr::Builtin(builtin) => {
                 fn emit_value_op<O: ExprOutput>(
                     emitter: &mut ExprEmitter<'_>,
-                    e: &Expr<DefaultExprContext>,
+                    e: &LocatedExpr<DefaultExprContext>,
                     output: O,
                     op: impl FnOnce(vf::RegisterId) -> vf::BuiltinOp,
                 ) -> EmitResult<O::ResultType> {
@@ -2066,7 +2068,10 @@ impl<'a> ExprEmitter<'a> {
                         rhs,
                     } => integer_binary_op!(IntGe, integer_type, lhs, rhs),
                     Builtin::StringConcat { values } => match values.as_slice() {
-                        [] => self.expr(&Expr::StringLiteral(Box::from("")), output)?,
+                        [] => self.expr(
+                            &Expr::StringLiteral(Box::from("")).with_location(e.location.clone()),
+                            output,
+                        )?,
                         [value] => self.expr(value, output)?,
                         values => {
                             let rb = output.output_register(self, e)?;
@@ -2183,7 +2188,9 @@ impl<'a> ExprEmitter<'a> {
                     }));
                 }
 
-                let enum_type_token = self.token_expr(&Expr::EnumType(enum_type.clone()))?;
+                let enum_type_token = self.token_expr(
+                    &Expr::EnumType(enum_type.clone()).with_location(e.location.clone()),
+                )?;
                 let args = self.emit_arguments(
                     ExpressionOwner::EnumVariant(variant.clone()),
                     &variant.clone().signature(),
@@ -2254,7 +2261,7 @@ impl<'a> ExprEmitter<'a> {
             Expr::FunctionObjectCall { function, argument } => {
                 let frb = output.output_function_result(self, e)?;
 
-                let Expr::FunctionType { a, .. } = get_expr_type(function) else {
+                let Expr::FunctionType { a, .. } = get_expr_type(function).value else {
                     todo!("return a proper error")
                 };
 
@@ -2475,7 +2482,10 @@ impl<'a> ExprEmitter<'a> {
             } => {
                 let frb = output.output_function_result(self, e)?;
 
-                let instance_type_expr = instance_type.clone().into_expr();
+                let instance_type_expr = instance_type
+                    .clone()
+                    .into_expr()
+                    .with_location(e.location.clone());
                 let instance_type_token = self.token_expr(&instance_type_expr)?;
 
                 let receiver_reg = self.expr(receiver, AnyRegister)?;
@@ -2556,7 +2566,7 @@ impl<'a> ExprEmitter<'a> {
             } => {
                 let rb = output.output_register(self, e)?;
                 let field_id = BigUint::from(self.encoder.get_record_field_id(field.clone()));
-                let value_reg = self.expr(&**record_value, AnyRegister)?;
+                let value_reg = self.expr(record_value, AnyRegister)?;
                 self.emit(vf::Instruction::RecordFieldLoad {
                     dest: Box::new(rb.register().clone()),
                     field_id,
@@ -2572,8 +2582,8 @@ impl<'a> ExprEmitter<'a> {
                 new_value,
             } => {
                 let field_id = BigUint::from(self.encoder.get_record_field_id(field.clone()));
-                let record_value_reg = self.expr(&**record_value, AnyRegister)?;
-                let new_value_reg = self.expr(&**new_value, AnyRegister)?;
+                let record_value_reg = self.expr(record_value, AnyRegister)?;
+                let new_value_reg = self.expr(new_value, AnyRegister)?;
 
                 self.emit(vf::Instruction::RecordFieldStore {
                     field_id,
@@ -2608,7 +2618,9 @@ impl<'a> ExprEmitter<'a> {
                     }));
                 }
 
-                let record_type_token = self.token_expr(&Expr::RecordType(record_type.clone()))?;
+                let record_type_token = self.token_expr(
+                    &Expr::RecordType(record_type.clone()).with_location(e.location.clone()),
+                )?;
 
                 self.emit(vf::Instruction::RecordLiteral {
                     dest: Box::new(rb.register().clone()),
@@ -2816,7 +2828,7 @@ impl<'a> ExprEmitter<'a> {
         &mut self,
         owner: ExpressionOwner<DefaultExprContext>,
         sig: &FunctionSignature<DefaultExprContext>,
-        args: &[Expr<DefaultExprContext>],
+        args: &[LocatedExpr<DefaultExprContext>],
     ) -> EmitResult<FunctionArguments> {
         let sig_with_mapping = self.encoder.emit_function_signature(&owner, sig)?;
         self.emit_arguments_common(sig_with_mapping, args)
@@ -2825,7 +2837,7 @@ impl<'a> ExprEmitter<'a> {
     fn emit_arguments_common(
         &mut self,
         sig: FunctionSignatureWithMapping,
-        args: &[Expr<DefaultExprContext>],
+        args: &[LocatedExpr<DefaultExprContext>],
     ) -> EmitResult<FunctionArguments> {
         let mut arguments = Vec::with_capacity(args.len());
         let mut token_arguments = Vec::with_capacity(args.len());
@@ -2848,7 +2860,7 @@ impl<'a> ExprEmitter<'a> {
         })
     }
 
-    fn expr_return(&mut self, e: &Expr<DefaultExprContext>) -> EmitResult<()> {
+    fn expr_return(&mut self, e: &LocatedExpr<DefaultExprContext>) -> EmitResult<()> {
         self.expr(e, ExprOutputKnown::Return)
     }
 
@@ -2931,7 +2943,7 @@ trait ExprOutput: Sized {
     fn into_known_location(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<(Self::ResultType, ExprOutputKnown)>;
     fn copy_from(
         self,
@@ -2941,12 +2953,12 @@ trait ExprOutput: Sized {
     fn output_register(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<OutputRegisterBuilder<Self>>;
     fn output_function_result(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>>;
     fn output_unit_result(self, expr_emitter: &mut ExprEmitter<'_>)
     -> EmitResult<Self::ResultType>;
@@ -2967,7 +2979,7 @@ impl ExprOutput for ExprOutputKnown {
     fn into_known_location(
         self,
         _expr_emitter: &mut ExprEmitter<'_>,
-        _e: &Expr<DefaultExprContext>,
+        _e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
         Ok(((), self))
     }
@@ -3003,7 +3015,7 @@ impl ExprOutput for ExprOutputKnown {
     fn output_register(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<OutputRegisterBuilder<Self>> {
         Ok(match &self {
             ExprOutputKnown::Register(r) => OutputRegisterBuilder {
@@ -3011,8 +3023,7 @@ impl ExprOutput for ExprOutputKnown {
                 output: self,
             },
             _ => {
-                let t = get_expr_type(e);
-                let t = expr_emitter.token_expr(&t)?;
+                let t = token_for_expr_type(expr_emitter, e)?;
                 let r = expr_emitter.add_var(t);
                 OutputRegisterBuilder { r, output: self }
             }
@@ -3022,13 +3033,12 @@ impl ExprOutput for ExprOutputKnown {
     fn output_function_result(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>> {
         let builder_type = match self {
             ExprOutputKnown::Register(r) => OutputFunctionResultBuilderType::Register(r),
             ExprOutputKnown::RefCell(cell) => {
-                let t = get_expr_type(e);
-                let t = expr_emitter.token_expr(&t)?;
+                let t = token_for_expr_type(expr_emitter, e)?;
                 let r = expr_emitter.add_var(t);
                 OutputFunctionResultBuilderType::RefCell {
                     cell,
@@ -3037,8 +3047,7 @@ impl ExprOutput for ExprOutputKnown {
             }
             ExprOutputKnown::Discard => OutputFunctionResultBuilderType::Discard,
             ExprOutputKnown::Return if !expr_emitter.allow_tail_call => {
-                let t = get_expr_type(e);
-                let t = expr_emitter.token_expr(&t)?;
+                let t = token_for_expr_type(expr_emitter, e)?;
                 let r = expr_emitter.add_var(t);
                 OutputFunctionResultBuilderType::ReturnNonTail(r)
             }
@@ -3074,6 +3083,14 @@ impl ExprOutput for ExprOutputKnown {
     }
 }
 
+fn token_for_expr_type(
+    expr_emitter: &mut ExprEmitter<'_>,
+    e: &LocatedExpr<DefaultExprContext>,
+) -> Result<vf::Token, InternalCompilerError> {
+    let t = get_expr_type(e);
+    expr_emitter.token_expr(&t)
+}
+
 struct AnyRegister;
 
 impl ExprOutput for AnyRegister {
@@ -3082,10 +3099,9 @@ impl ExprOutput for AnyRegister {
     fn into_known_location(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<(Self::ResultType, ExprOutputKnown)> {
-        let t = get_expr_type(e);
-        let t = expr_emitter.token_expr(&t)?;
+        let t = token_for_expr_type(expr_emitter, e)?;
         let r = expr_emitter.add_var(t);
         Ok((r.clone(), ExprOutputKnown::Register(r)))
     }
@@ -3116,10 +3132,9 @@ impl ExprOutput for AnyRegister {
     fn output_register(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<OutputRegisterBuilder<Self>> {
-        let t = get_expr_type(e);
-        let t = expr_emitter.token_expr(&t)?;
+        let t = token_for_expr_type(expr_emitter, e)?;
         let r = expr_emitter.add_var(t);
         Ok(OutputRegisterBuilder { r, output: self })
     }
@@ -3127,7 +3142,7 @@ impl ExprOutput for AnyRegister {
     fn output_function_result(
         self,
         expr_emitter: &mut ExprEmitter<'_>,
-        e: &Expr<DefaultExprContext>,
+        e: &LocatedExpr<DefaultExprContext>,
     ) -> EmitResult<OutputFunctionResultBuilder<Self::ResultType>> {
         let (result, ko) = self.into_known_location(expr_emitter, e)?;
         let builder = ko.output_function_result(expr_emitter, e)?;
@@ -3239,11 +3254,12 @@ fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode
     }
 }
 
-fn method_receiver_type(method: Arc<dyn Method>) -> Expr<DefaultExprContext> {
+fn method_receiver_type(method: Arc<dyn Method>) -> LocatedExpr<DefaultExprContext> {
     match method.owner() {
         MethodOwner::Trait(trait_) => {
             let trait_owner = ExpressionOwner::Trait(trait_.clone());
             let signature = trait_.clone().signature();
+            let location = trait_.location();
 
             Expr::TraitType(TraitType {
                 trait_,
@@ -3255,9 +3271,11 @@ fn method_receiver_type(method: Arc<dyn Method>) -> Expr<DefaultExprContext> {
                         Expr::Variable(Variable::Parameter(Box::new(
                             param.clone().to_parameter_var(trait_owner.clone(), index),
                         )))
+                        .with_location(location.clone())
                     })
                     .collect(),
             })
+            .with_location(location)
         }
         MethodOwner::Instance(instance) => instance.signature().return_type.clone(),
     }
