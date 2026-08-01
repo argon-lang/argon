@@ -45,13 +45,13 @@ impl<EC: ExprContext + ?Sized> UseExprScanner<EC> {
 impl<EC: ExprContext + ?Sized> ExprScanner for UseExprScanner<EC> {
     type EC = EC;
 
-    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
-        if let Expr::Use { is_mutable, .. } = expr {
+    fn scan(&mut self, expr: &LocatedExpr<Self::EC>) -> bool {
+        if let Expr::Use { is_mutable, .. } = &expr.value {
             self.found_use = true;
-            self.found_use_mut |= *is_mutable;
+            self.found_use_mut |= is_mutable;
         }
 
-        crate::default_scan_expr(self, expr)
+        crate::default_scan(self, expr)
     }
 }
 

@@ -51,12 +51,12 @@ where
 {
     type EC = EC;
 
-    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
-        if let Expr::Closure { v, body, .. } = expr {
+    fn scan(&mut self, expr: &LocatedExpr<Self::EC>) -> bool {
+        if let Expr::Closure { v, body, .. } = &expr.value {
             self.scan_closure(v, body);
         }
 
-        argon_expr::default_scan_expr(self, expr)
+        argon_expr::default_scan(self, expr)
     }
 }
 

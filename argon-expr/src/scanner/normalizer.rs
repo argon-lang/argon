@@ -1,7 +1,4 @@
-use crate::{
-    Builtin, Expr, ExprContext, ExprLocationExt, ExprScannerMut, IntegerType, LocatedExpr,
-    SubstScanner, Variable, ownership::is_shared_type,
-};
+use crate::{Builtin, Expr, ExprContext, ExprLocationExt, ExprScannerMut, IntegerType, LocatedExpr, SubstScanner, Variable, ownership::is_shared_type, default_scan_mut};
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use argon_util::Fuel;
@@ -1155,7 +1152,7 @@ impl<EC: ExprContext + ?Sized, S: Normalizer<EC = EC>> ExprScannerMut for FullNo
     type EC = EC;
 
     fn scan(&mut self, expr: &mut LocatedExpr<Self::EC>) -> bool {
-        if !self.scan_expr(&mut expr.value) {
+        if !default_scan_mut(self, expr) {
             return false;
         }
 
@@ -1169,7 +1166,7 @@ impl<EC: ExprContext + ?Sized, S: Normalizer<EC = EC>> ExprScannerMut for FullNo
 #[cfg(test)]
 mod tests {
     use super::{FullNormalizer, Normalizer};
-    use crate::{Expr, ExprContext, ExprLocationExt, ExprScannerMut, LocatedExpr};
+    use crate::{Expr, ExprContext, ExprLocationExt, LocatedExpr};
     use alloc::vec;
     use alloc::vec::Vec;
     use argon_util::Fuel;
@@ -1259,7 +1256,7 @@ mod tests {
         .with_location(location());
         let mut normalizer = FullNormalizer::new(Fuel::new(10), TestNormalizer);
 
-        assert!(normalizer.scan_expr(&mut expr.value));
+        normalizer.normalize(&mut expr);
 
         assert_eq!(expr.value, Expr::BoolLiteral(true));
     }

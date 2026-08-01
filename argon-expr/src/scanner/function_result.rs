@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext, ExprScannerMut, LocatedExpr};
+use crate::{default_scan_mut, Expr, ExprContext, ExprScannerMut, LocatedExpr};
 use alloc::borrow::Cow;
 
 pub struct FunctionResultValueSubstScanner<'a, EC: ExprContext + ?Sized> {
@@ -24,7 +24,7 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for FunctionResultValueSubstScanne
             *expr = self.replacement.as_ref().clone();
             true
         } else {
-            self.scan_expr(&mut expr.value)
+            default_scan_mut(self, expr)
         }
     }
 }

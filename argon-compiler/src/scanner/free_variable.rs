@@ -50,8 +50,8 @@ where
 {
     type EC = EC;
 
-    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
-        match expr {
+    fn scan(&mut self, expr: &LocatedExpr<Self::EC>) -> bool {
+        match &expr.value {
             Expr::Closure { v, .. } => {
                 self.bind_variable(Variable::ClosureParameter(v.clone()));
             }
@@ -97,7 +97,7 @@ where
             _ => {}
         }
 
-        argon_expr::default_scan_expr(self, expr)
+        argon_expr::default_scan(self, expr)
     }
 
     fn scan_variable(&mut self, v: &Variable<Self::EC>) -> bool {

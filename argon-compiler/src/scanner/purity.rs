@@ -56,8 +56,8 @@ where
 {
     type EC = EC;
 
-    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
-        match expr {
+    fn scan(&mut self, expr: &LocatedExpr<Self::EC>) -> bool {
+        match &expr.value {
             Expr::FunctionCall { function, .. } => {
                 if function.metadata().effect_info == EffectInfo::Effectful {
                     self.found_impure = true;
@@ -96,6 +96,6 @@ where
             _ => {}
         }
 
-        argon_expr::default_scan_expr(self, expr)
+        argon_expr::default_scan(self, expr)
     }
 }

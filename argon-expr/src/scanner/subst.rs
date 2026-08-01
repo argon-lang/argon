@@ -1,4 +1,4 @@
-use crate::{Expr, ExprContext, ExprScannerMut, LocatedExpr, Variable};
+use crate::{default_scan_mut, Expr, ExprContext, ExprScannerMut, LocatedExpr, Variable};
 use alloc::borrow::Cow;
 use hashbrown::HashMap;
 
@@ -43,7 +43,7 @@ impl<EC: ExprContext + ?Sized> ExprScannerMut for SubstScanner<'_, EC> {
             }
         }
 
-        self.scan_expr(&mut expr.value)
+        default_scan_mut(self, expr)
     }
 }
 

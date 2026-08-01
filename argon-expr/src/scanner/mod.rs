@@ -22,11 +22,7 @@ pub trait ExprScanner {
     }
 
     fn scan(&mut self, expr: &LocatedExpr<Self::EC>) -> bool {
-        self.scan_expr(&expr.value)
-    }
-
-    fn scan_expr(&mut self, expr: &Expr<Self::EC>) -> bool {
-        default_scan_expr(self, expr)
+        default_scan(self, expr)
     }
 
     fn scan_variable(&mut self, v: &Variable<Self::EC>) -> bool {
@@ -50,11 +46,7 @@ pub trait ExprScannerMut {
     }
 
     fn scan(&mut self, expr: &mut LocatedExpr<Self::EC>) -> bool {
-        self.scan_expr(&mut expr.value)
-    }
-
-    fn scan_expr(&mut self, expr: &mut Expr<Self::EC>) -> bool {
-        default_scan_expr_mut(self, expr)
+        default_scan_mut(self, expr)
     }
 
     fn scan_variable(&mut self, v: &mut Variable<Self::EC>) -> bool {
@@ -70,11 +62,11 @@ pub trait ExprScannerMut {
     }
 }
 
-pub fn default_scan_expr<S>(scanner: &mut S, expr: &Expr<S::EC>) -> bool
+pub fn default_scan<S>(scanner: &mut S, expr: &LocatedExpr<S::EC>) -> bool
 where
     S: ExprScanner + ?Sized,
 {
-    match expr {
+    match &expr.value {
         Expr::Error => true,
         Expr::Hole(hole) => scanner.scan_hole(hole),
         Expr::And(a, b) => scanner.scan(a) && scanner.scan(b),
@@ -403,11 +395,11 @@ where
     }
 }
 
-pub fn default_scan_expr_mut<S>(scanner: &mut S, expr: &mut Expr<S::EC>) -> bool
+pub fn default_scan_mut<S>(scanner: &mut S, expr: &mut LocatedExpr<S::EC>) -> bool
 where
     S: ExprScannerMut + ?Sized,
 {
-    match expr {
+    match &mut expr.value {
         Expr::Error => true,
         Expr::Hole(hole) => scanner.scan_hole(hole),
         Expr::And(a, b) => scanner.scan(a.as_mut()) && scanner.scan(b.as_mut()),
@@ -765,7 +757,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ExprScanner, ExprScannerMut};
-    use crate::{Builtin, Expr, ExprContext, ExprLocationExt};
+    use crate::{Builtin, Expr, ExprContext, ExprLocationExt, LocatedExpr};
     use alloc::vec;
     use alloc::vec::Vec;
     use parse18_runtime::{FilePosition, Location};
@@ -818,7 +810,9 @@ mod tests {
             visited: Vec::new(),
         };
 
-        assert!(!scanner.scan_expr(&expr));
+        let located = expr.with_location(location());
+
+        assert!(!scanner.scan(&located));
         assert_eq!(scanner.visited, vec![1, 2]);
     }
 
@@ -840,10 +834,12 @@ mod tests {
             rhs: Box::new(Expr::Hole(2).with_location(location())),
         });
 
-        assert!(ReplaceHoles.scan_expr(&mut expr));
+        let mut located = LocatedExpr::new(expr, location());
+
+        assert!(ReplaceHoles.scan(&mut located));
 
         assert!(matches!(
-            expr,
+            located.value,
             Expr::Builtin(Builtin::BoolEq { lhs, rhs })
                 if matches!((&lhs.value, &rhs.value), (Expr::Hole(11), Expr::Hole(12)))
         ));
