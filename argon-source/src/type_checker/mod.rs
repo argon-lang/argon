@@ -3372,7 +3372,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                         record_type: record_type.clone(),
                                         field: field.clone(),
                                         field_type,
-                                        record_value: instance.checked_expr.clone(),
+                                        record_value: Expr::BorrowMut {
+                                            value: Box::new(instance.checked_expr.clone()),
+                                        }
+                                        .with_location(instance.checked_expr.location.clone()),
                                     }
                                 } else {
                                     Overloadable::RecordField {

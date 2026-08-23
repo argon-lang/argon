@@ -801,8 +801,7 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
                 for argument in &record_type.arguments {
                     self.scan(argument);
                 }
-                self.scan(record_value);
-                self.scan(new_value);
+                self.scan_call_arguments([record_value.as_ref(), new_value.as_ref()]);
             }
             Expr::RecordLiteral {
                 record_type,
