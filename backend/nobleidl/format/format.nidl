@@ -714,6 +714,22 @@ enum expr {
         true-body: located-expr;
         false-body: located-expr;
     },
+    use {
+        is-mutable: bool;
+        inner: located-expr;
+    },
+    shared {
+        inner: located-expr;
+    },
+    share {
+        value: located-expr;
+    },
+    borrow {
+        value: located-expr;
+    },
+    borrow-mut {
+        value: located-expr;
+    },
     instance-method-call {
         method-id: nat;
         instance-type: method-instance-type;

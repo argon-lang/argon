@@ -1367,6 +1367,9 @@ trait TokenEmitterCommon {
             .normalize(&mut t);
 
         match &t.value {
+            Expr::Borrow { value } => self.token_expr(value),
+            Expr::BorrowMut { value } => self.token_expr(value),
+
             Expr::BoxedType(_) => Ok(vf::Token::Boxed {}),
 
             Expr::Builtin(builtin) => {
@@ -1431,6 +1434,9 @@ trait TokenEmitterCommon {
                 )?,
             }),
 
+            Expr::Share { value } => self.token_expr(value),
+            Expr::Shared { inner } => self.token_expr(inner),
+
             Expr::TraitType(trait_type) => Ok(vf::Token::Trait {
                 trait_id: BigUint::from(self.vm_encoder().get_trait_id(trait_type.trait_.clone())),
                 args: self.emit_token_arguments(
@@ -1445,6 +1451,8 @@ trait TokenEmitterCommon {
             }),
 
             Expr::Type(_) | Expr::BigType(_) => Ok(vf::Token::TypeInfo {}),
+
+            Expr::Use { inner, is_mutable: _ } => self.token_expr(inner),
 
             Expr::Variable(variable) => match variable_erasure_mode(variable) {
                 ErasureMode::Token => match self.get_parameter_as_token(variable)? {
@@ -1842,6 +1850,9 @@ impl<'a> ExprEmitter<'a> {
             }
 
             Expr::Condition { value, .. } => self.expr(value, output)?,
+
+            Expr::Borrow { value } => self.expr(value, output)?,
+            Expr::BorrowMut { value } => self.expr(value, output)?,
 
             Expr::Box { t: _, value } => {
                 let rb = output.output_register(self, e)?;
@@ -2641,6 +2652,8 @@ impl<'a> ExprEmitter<'a> {
 
                 self.expr(item, output)?
             }
+
+            Expr::Share { value } => self.expr(value, output)?,
 
             Expr::StringLiteral(s) => {
                 let rb = output.output_register(self, e)?;

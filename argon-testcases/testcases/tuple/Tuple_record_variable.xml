@@ -1,0 +1,38 @@
+<ArgonTest>
+
+    <Name>Tuple record variable</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        module _
+
+        import Argon.Core::*
+        
+        record MyRecord
+            value: String
+        end
+        
+        proc printTuple(a: MyRecord, b: MyRecord): () do
+            puts a.value
+            puts b.value
+        end
+        
+        proc main(): () do
+            let tupleValue: (MyRecord, MyRecord) = MyRecord {
+                value: "1"
+            }, MyRecord {
+                value: "2"
+            }
+            printTuple tupleValue
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        1
+        2
+    </ExpectedOutput>
+
+</ArgonTest>

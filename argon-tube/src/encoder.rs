@@ -13,9 +13,9 @@ use num_bigint::{BigInt, BigUint};
 
 use crate::ids::TubeIdProvider;
 use argon_expr::{
-    BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, IntegerType,
-    LocalVariable, LocatedExpr, MatchCase, MethodInstanceType, Pattern, RecordFieldPattern,
-    RecordType, TraitType, Variable,
+    BlockLabel, BlockLabelKind, ClosureParameterVariable, ExpressionOwner, InstanceType,
+    IntegerType, LocalVariable, LocatedExpr, MatchCase, MethodInstanceType, Pattern,
+    RecordFieldPattern, RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
 use parse18_runtime::{FilePosition, Location};
@@ -914,6 +914,20 @@ impl TubeEncoder {
         })
     }
 
+    fn emit_instance_type(
+        &mut self,
+        instance_type: &InstanceType<DefaultExprContext>,
+    ) -> Result<tf::InstanceSingletonType, InternalCompilerError> {
+        Ok(tf::InstanceSingletonType {
+            id: BigUint::from(self.get_instance_id(instance_type.instance.clone())),
+            args: instance_type
+                .arguments
+                .iter()
+                .map(|arg| self.emit_located_expr(arg).map(Box::new))
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+
     fn emit_file_position(position: &FilePosition) -> tf::FilePosition {
         tf::FilePosition {
             line: BigUint::from(position.line),
@@ -945,6 +959,7 @@ impl TubeEncoder {
     ) -> Result<tf::Expr, InternalCompilerError> {
         Ok(match expr {
             Expr::Error => tf::Expr::Error {},
+            Expr::Hole(hole) => match *hole {},
             Expr::FunctionResultValue { result_type } => tf::Expr::ErasedValue {
                 r#type: Box::new(self.emit_located_expr(result_type)?),
             },
@@ -1096,6 +1111,25 @@ impl TubeEncoder {
                 condition: Box::new(self.emit_located_expr(condition)?),
                 true_body: Box::new(self.emit_located_expr(when_true)?),
                 false_body: Box::new(self.emit_located_expr(when_false)?),
+            },
+            Expr::Use { is_mutable, inner } => tf::Expr::Use {
+                is_mutable: *is_mutable,
+                inner: Box::new(self.emit_located_expr(inner)?),
+            },
+            Expr::Shared { inner } => tf::Expr::Shared {
+                inner: Box::new(self.emit_located_expr(inner)?),
+            },
+            Expr::Share { value } => tf::Expr::Share {
+                value: Box::new(self.emit_located_expr(value)?),
+            },
+            Expr::Borrow { value } => tf::Expr::Borrow {
+                value: Box::new(self.emit_located_expr(value)?),
+            },
+            Expr::BorrowMut { value } => tf::Expr::BorrowMut {
+                value: Box::new(self.emit_located_expr(value)?),
+            },
+            Expr::InstanceType(instance_type) => tf::Expr::InstanceSingletonType {
+                instance_singleton_type: Box::new(self.emit_instance_type(instance_type)?),
             },
             Expr::Is { value, pattern } => tf::Expr::Is {
                 value: Box::new(self.emit_located_expr(value)?),
@@ -1270,7 +1304,6 @@ impl TubeEncoder {
                 v: Box::new(self.emit_var(variable)?),
                 value: Box::new(self.emit_located_expr(value)?),
             },
-            _ => todo!("Unimplement emit_expr for {:?}", expr),
         })
     }
 

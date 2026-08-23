@@ -97,10 +97,12 @@ pub trait TypeComparer: Unify {
             norm.normalize(&mut expr);
         }
 
-        match &expr.value {
+        match expr.value {
             Expr::Type(_) => true,
             Expr::BigType(_) => true,
-            Expr::Tuple { items } => items.into_iter().all(|item| self.is_type(item.clone())),
+            Expr::Tuple { items } => items.into_iter().all(|item| self.is_type(item)),
+            Expr::Use { inner, .. } => self.is_type(*inner),
+            Expr::Shared { inner } => self.is_type(*inner),
             _ => false,
         }
     }
@@ -181,10 +183,14 @@ pub trait TypeComparer: Unify {
                             inner: inner_expected,
                         } => {
                             if let Expr::Use {
-                                is_mutable: false,
+                                is_mutable: inner_is_mutable,
                                 inner: inner_actual,
                             } = actual_type.value
                             {
+                                if inner_is_mutable {
+                                    transformations.push(TypeCompareTransformation::Borrow);
+                                }
+
                                 actual_type = *inner_actual;
                             } else {
                                 transformations.push(TypeCompareTransformation::Borrow);

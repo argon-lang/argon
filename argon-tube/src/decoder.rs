@@ -18,9 +18,9 @@ use argon_compiler::{
 };
 use argon_expr::{
     BlockLabel, BlockLabelKind, ClosureParameterVariable, EnumType, InstanceParameterVariable,
-    IntegerType, LocalVariable, LocatedExpr, LocatedPattern, MatchCase, MethodInstanceType,
-    ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern, RecordType, TraitType,
-    Variable,
+    InstanceType, IntegerType, LocalVariable, LocatedExpr, LocatedPattern, MatchCase,
+    MethodInstanceType, ParameterVariable, Pattern, RecordFieldLiteral, RecordFieldPattern,
+    RecordType, TraitType, Variable,
 };
 use argon_format::tube as tf;
 use argon_util::sync::{RwLock, rwlock_read, rwlock_write};
@@ -1376,6 +1376,22 @@ impl TubeDecoder {
                 when_true: Box::new(self.decode_located_expr(*true_body)),
                 when_false: Box::new(self.decode_located_expr(*false_body)),
             },
+            tf::Expr::Use { is_mutable, inner } => Expr::Use {
+                is_mutable,
+                inner: Box::new(self.decode_located_expr(*inner)),
+            },
+            tf::Expr::Shared { inner } => Expr::Shared {
+                inner: Box::new(self.decode_located_expr(*inner)),
+            },
+            tf::Expr::Share { value } => Expr::Share {
+                value: Box::new(self.decode_located_expr(*value)),
+            },
+            tf::Expr::Borrow { value } => Expr::Borrow {
+                value: Box::new(self.decode_located_expr(*value)),
+            },
+            tf::Expr::BorrowMut { value } => Expr::BorrowMut {
+                value: Box::new(self.decode_located_expr(*value)),
+            },
             tf::Expr::InstanceMethodCall {
                 method_id,
                 instance_type,
@@ -1390,7 +1406,16 @@ impl TubeDecoder {
                     .map(|arg| self.decode_located_expr(*arg))
                     .collect(),
             },
-            tf::Expr::InstanceSingletonType { .. } => todo!("decode instance expressions"),
+            tf::Expr::InstanceSingletonType {
+                instance_singleton_type,
+            } => Expr::InstanceType(InstanceType {
+                instance: self.instance(instance_singleton_type.id),
+                arguments: instance_singleton_type
+                    .args
+                    .into_iter()
+                    .map(|arg| self.decode_located_expr(*arg))
+                    .collect(),
+            }),
             tf::Expr::NewInstance { instance_id, args } => Expr::NewInstance {
                 instance: self.instance(instance_id),
                 arguments: args

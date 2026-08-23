@@ -1,19 +1,18 @@
-use crate::type_checker::{TypeCheckExprContext, TypeChecker};
-use argon_expr::ownership::is_shared_type;
-use argon_expr::{
-    Builtin, Expr, LocatedExpr, LocatedPattern, MatchCase, Pattern, RecordFieldLiteral,
-    RecordFieldPattern, Variable,
-};
+use crate::type_checker::{ExprNormalizer, TypeCheckExprContext, TypeChecker};
+use argon_expr::ownership::{is_shared_type, is_use_mutable_type, is_use_type};
+use argon_expr::{Builtin, Expr, FullNormalizer, LocatedExpr, LocatedPattern, MatchCase, Pattern, RecordFieldLiteral, RecordFieldPattern, Variable};
 use argon_util::CompileError;
 use hashbrown::{HashMap, HashSet};
-use parse18_runtime::{FilePosition, Location};
+use parse18_runtime::Location;
+
+
 
 // Ownership Tracking algorithm
 // - Any use of a variable not directly in Borrow, BorrowMut, or Share is considered a move, unless the variable has a shared type.
 // - Any use of a variable within a nested closure is considered to be shared at that point.
 //    - Any future assignments to such referenced variables are also considered shared.
 // - Any borrows passed to a function are considered to be released once the function returns.
-pub(super) fn check_ownership(tc: &TypeChecker, e: &LocatedExpr<TypeCheckExprContext>) {
+pub(super) fn check_ownership(tc: &mut TypeChecker, e: &LocatedExpr<TypeCheckExprContext>) {
     OwnershipChecker::new(tc).check(e);
 }
 
@@ -32,14 +31,14 @@ struct BorrowSnapshot {
 }
 
 struct OwnershipChecker<'a, 'access, 'scope, 'model> {
-    tc: &'a TypeChecker<'access, 'scope, 'model>,
+    tc: &'a mut TypeChecker<'access, 'scope, 'model>,
     states: HashMap<Variable<TypeCheckExprContext>, VariableState>,
     scopes: Vec<HashSet<Variable<TypeCheckExprContext>>>,
     closure_boundaries: Vec<usize>,
 }
 
 impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> {
-    fn new(tc: &'a TypeChecker<'access, 'scope, 'model>) -> Self {
+    fn new(tc: &'a mut TypeChecker<'access, 'scope, 'model>) -> Self {
         Self {
             tc,
             states: HashMap::new(),
@@ -54,14 +53,6 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
 
     fn report(&self, error: CompileError) {
         self.tc.context.reporter().report_error(error);
-    }
-
-    fn unknown_location() -> Location {
-        Location {
-            file: Default::default(),
-            start: FilePosition { line: 0, column: 0 },
-            end: FilePosition { line: 0, column: 0 },
-        }
     }
 
     fn state_mut(&mut self, variable: &Variable<TypeCheckExprContext>) -> &mut VariableState {
@@ -86,7 +77,28 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         }
     }
 
-    fn use_variable(&mut self, variable: &Variable<TypeCheckExprContext>) {
+    fn use_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location) {
+        let mut norm_type = variable.var_type().clone();
+
+        let mut norm = FullNormalizer::new(
+            self.tc.context.normalize_fuel(),
+            ExprNormalizer { model: &mut self.tc.model, }
+        );
+        norm.normalize(&mut norm_type);
+
+        if is_shared_type(&norm_type) {
+            self.share_variable(variable, location);
+            return;
+        }
+        else if is_use_type(&norm_type) {
+            self.borrow_variable(variable, location, false);
+            return;
+        }
+        else if is_use_mutable_type(&norm_type) {
+            self.borrow_variable(variable, location, true);
+            return;
+        }
+
         if self.closure_boundaries.len() > 1 && !self.is_current_closure_local(variable) {
             self.state_mut(variable).shared = true;
             return;
@@ -98,23 +110,23 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
 
         let state = self.state_mut(variable);
         if state.moved {
-            self.report(CompileError::use_after_move(Self::unknown_location()));
+            self.report(CompileError::use_after_move(location.clone()));
         } else if state.borrows > 0 || state.mutable_borrows > 0 {
-            self.report(CompileError::move_while_borrowed(Self::unknown_location()));
+            self.report(CompileError::move_while_borrowed(location.clone()));
         }
 
         self.state_mut(variable).moved = true;
     }
 
-    fn borrow_variable(&mut self, variable: &Variable<TypeCheckExprContext>, is_mutable: bool) {
+    fn borrow_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location, is_mutable: bool) {
         let state = self.state_mut(variable);
         if state.moved {
-            self.report(CompileError::borrow_after_move(Self::unknown_location()));
+            self.report(CompileError::borrow_after_move(location.clone()));
         } else if is_mutable && (state.borrows > 0 || state.mutable_borrows > 0)
             || !is_mutable && state.mutable_borrows > 0
         {
             self.report(CompileError::mutable_borrow_conflict(
-                Self::unknown_location(),
+                location.clone(),
             ));
         }
 
@@ -126,24 +138,34 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         }
     }
 
-    fn share_variable(&mut self, variable: &Variable<TypeCheckExprContext>) {
+    fn share_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location) {
         let state = self.state_mut(variable);
         if state.moved {
-            self.report(CompileError::use_after_move(Self::unknown_location()));
+            self.report(CompileError::use_after_move(location.clone()));
         }
 
         self.state_mut(variable).shared = true;
     }
 
-    fn assign_variable(&mut self, variable: &Variable<TypeCheckExprContext>) {
+    fn assign_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location, value: &LocatedExpr<TypeCheckExprContext>) {
         if self.is_shared(variable) {
-            self.report(CompileError::assign_to_shared(Self::unknown_location()));
+            let value = LocatedExpr {
+                location: value.location.clone(),
+                value: Expr::Share {
+                    value: Box::new(value.clone()),
+                },
+            };
+
+            self.scan(&value);
+        }
+        else {
+            self.scan(value);
         }
 
         let state = self.state_mut(variable);
         if state.borrows > 0 || state.mutable_borrows > 0 {
             self.report(CompileError::mutable_borrow_conflict(
-                Self::unknown_location(),
+                location.clone(),
             ));
             return;
         }
@@ -424,21 +446,21 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
             Expr::Use { inner, .. } | Expr::Shared { inner } => self.scan(inner),
             Expr::Share { value } => {
                 if let Expr::Variable(variable) = &value.value {
-                    self.share_variable(variable);
+                    self.share_variable(variable, &value.location);
                 } else {
                     self.scan(value);
                 }
             }
             Expr::Borrow { value } => {
                 if let Expr::Variable(variable) = &value.value {
-                    self.borrow_variable(variable, false);
+                    self.borrow_variable(variable, &value.location, false);
                 } else {
                     self.scan(value);
                 }
             }
             Expr::BorrowMut { value } => {
                 if let Expr::Variable(variable) = &value.value {
-                    self.borrow_variable(variable, true);
+                    self.borrow_variable(variable, &value.location, true);
                 } else {
                     self.scan(value);
                 }
@@ -465,15 +487,14 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
                 }
             }
             Expr::Type(t) | Expr::BoxedType(t) => self.scan(t),
-            Expr::Variable(variable) => self.use_variable(variable),
+            Expr::Variable(variable) => self.use_variable(variable, &expr.location),
             Expr::VariableBinding(variable, value) => {
                 self.scan(&variable.var_type);
                 self.scan(value);
                 self.add_local(Variable::Local(variable.clone()));
             }
             Expr::VariableStore(variable, value) => {
-                self.scan(value);
-                self.assign_variable(variable);
+                self.assign_variable(variable, &expr.location, &**value);
             }
             Expr::Box { t, value } | Expr::Unbox { t, value } => {
                 self.scan(t);

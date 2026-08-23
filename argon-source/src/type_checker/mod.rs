@@ -68,6 +68,8 @@ pub fn type_check_type_expr(
 
     let expr = checker.check_type(e);
 
+    ownership::check_ownership(&mut checker, &expr);
+
     let result = TypeCheckToDefaultExprContextShifter {
         context: context.clone(),
         model,
@@ -114,6 +116,7 @@ pub fn type_check_expr(
 
     let expected_type = default_to_type_check_shifter().shift(expected_type.clone());
     let expr = checker.check(e, &expected_type);
+    ownership::check_ownership(&mut checker, &expr);
 
     let result = TypeCheckToDefaultExprContextShifter {
         context: context.clone(),
@@ -670,6 +673,9 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             Expr::Variable(v) => v.erasure_mode() == ErasureMode::Token,
+
+            Expr::Use { inner, .. } => self.treat_as_token(&inner.value),
+            Expr::Shared { inner, .. } => self.treat_as_token(&inner.value),
 
             _ => false,
         }
@@ -2617,22 +2623,46 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             "array_length" => parameterized_builtin!(
                 ArrayLength,
                 element_type,
-                [Expr::array_type(element_type.clone())] => Expr::int_type(),
+                [
+                    Expr::Use {
+                        is_mutable: false,
+                        inner: Box::new(
+                            Expr::array_type(element_type.clone()).with_location(location.clone())
+                        ),
+                    },
+                ] => Expr::int_type(),
                 { array }
             ),
             "array_get" => parameterized_builtin!(
                 ArrayGet,
                 element_type,
-                [Expr::array_type(element_type.clone()), Expr::int_type()] => element_type.value.clone(),
+                [
+                    Expr::Use {
+                        is_mutable: false,
+                        inner: Box::new(
+                            Expr::array_type(element_type.clone()).with_location(location.clone())
+                        ),
+                    },
+                    Expr::int_type(),
+                ] => Expr::Shared {
+                        inner: Box::new(element_type.value.clone().with_location(location.clone())),
+                },
                 { array, index }
             ),
             "array_set" => parameterized_builtin!(
                 ArraySet,
                 element_type,
                 [
-                    Expr::array_type(element_type.clone()),
+                    Expr::Use {
+                        is_mutable: true,
+                        inner: Box::new(
+                            Expr::array_type(element_type.clone()).with_location(location.clone())
+                        ),
+                    },
                     Expr::int_type(),
-                    element_type.value.clone(),
+                    Expr::Shared {
+                        inner: Box::new(element_type.value.clone().with_location(location.clone())),
+                    },
                 ] => Expr::unit(),
                 { array, index, value }
             ),
