@@ -299,14 +299,6 @@ impl VTableBuilder {
                 ExpressionOwner::Method(method.clone()),
                 sig.clone(),
             ) {
-                eprintln!("signature mismatch");
-                self.signature_matches(
-                    ExpressionOwner::Method(slot.method.clone()),
-                    slot_value.signature.as_ref().clone(),
-                    ExpressionOwner::Method(method.clone()),
-                    sig.clone(),
-                );
-
                 continue;
             }
 

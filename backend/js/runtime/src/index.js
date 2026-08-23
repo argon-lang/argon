@@ -303,7 +303,6 @@ export function createTraitType(traitInfo) {
                         "message",
                         {
                             get() {
-                                console.log("getting message");
                                 return resolve(this[c.methods["message$a$r$bstring$a$e"]]());
                             }
                         }
