@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Tuple projection move then use sibling</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        record MyRecord
+            value: String
+        end
+
+        proc takeRecord(value: MyRecord): () = ()
+
+        proc moveThenUseSibling(a: MyRecord, b: MyRecord): () do
+            takeRecord a
+            puts b.value
+        end
+
+        proc main(): () do
+            let tupleValue: (MyRecord, MyRecord) = MyRecord {
+                value: "1"
+            }, MyRecord {
+                value: "2"
+            }
+            moveThenUseSibling tupleValue
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>2</ExpectedOutput>
+
+</ArgonTest>

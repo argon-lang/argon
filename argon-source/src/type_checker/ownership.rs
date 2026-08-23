@@ -1,11 +1,13 @@
 use crate::type_checker::{ExprNormalizer, TypeCheckExprContext, TypeChecker};
+use argon_compiler::expr_type::get_expr_type;
 use argon_expr::ownership::{is_shared_type, is_use_mutable_type, is_use_type};
-use argon_expr::{Builtin, Expr, FullNormalizer, LocatedExpr, LocatedPattern, MatchCase, Pattern, RecordFieldLiteral, RecordFieldPattern, Variable};
+use argon_expr::{
+    Builtin, Expr, FullNormalizer, LocatedExpr, LocatedPattern, MatchCase, Pattern,
+    RecordFieldLiteral, RecordFieldPattern, Variable,
+};
 use argon_util::CompileError;
 use hashbrown::{HashMap, HashSet};
 use parse18_runtime::Location;
-
-
 
 // Ownership Tracking algorithm
 // - Any use of a variable not directly in Borrow, BorrowMut, or Share is considered a move, unless the variable has a shared type.
@@ -16,18 +18,32 @@ pub(super) fn check_ownership(tc: &mut TypeChecker, e: &LocatedExpr<TypeCheckExp
     OwnershipChecker::new(tc).check(e);
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct VariableState {
     moved: bool,
     shared: bool,
     borrows: usize,
     mutable_borrows: usize,
+    moved_descendants: usize,
+    shared_descendants: usize,
+    borrows_descendants: usize,
+    mutable_borrows_descendants: usize,
+    projections: HashMap<usize, VariableState>,
 }
 
-#[derive(Clone, Copy)]
-struct BorrowSnapshot {
+#[derive(Clone, Default)]
+struct BorrowSnapshots {
     borrows: usize,
     mutable_borrows: usize,
+    projections: HashMap<usize, BorrowSnapshots>,
+}
+
+fn adjust_count(value: usize, delta: isize) -> usize {
+    if delta >= 0 {
+        value + delta as usize
+    } else {
+        value - (-delta) as usize
+    }
 }
 
 struct OwnershipChecker<'a, 'access, 'scope, 'model> {
@@ -55,13 +71,355 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         self.tc.context.reporter().report_error(error);
     }
 
-    fn state_mut(&mut self, variable: &Variable<TypeCheckExprContext>) -> &mut VariableState {
-        self.states.entry(variable.clone()).or_default()
+    fn state_mut_at(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> &mut VariableState {
+        let mut state = self.states.entry(variable.clone()).or_default();
+        for projection in projections {
+            state = state.projections.entry(*projection).or_default();
+        }
+        state
     }
 
-    fn is_shared(&self, variable: &Variable<TypeCheckExprContext>) -> bool {
-        is_shared_type(variable.var_type())
-            || self.states.get(variable).is_some_and(|state| state.shared)
+    fn state_at(
+        &self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> Option<&VariableState> {
+        let mut state = self.states.get(variable)?;
+        for projection in projections {
+            state = state.projections.get(projection)?;
+        }
+        Some(state)
+    }
+
+    fn adjust_descendant_summaries(
+        state: &mut VariableState,
+        projections: &[usize],
+        moved: isize,
+        shared: isize,
+        borrows: isize,
+        mutable_borrows: isize,
+    ) {
+        if projections.is_empty() {
+            return;
+        }
+
+        state.moved_descendants = adjust_count(state.moved_descendants, moved);
+        state.shared_descendants = adjust_count(state.shared_descendants, shared);
+        state.borrows_descendants = adjust_count(state.borrows_descendants, borrows);
+        state.mutable_borrows_descendants =
+            adjust_count(state.mutable_borrows_descendants, mutable_borrows);
+
+        let projection = projections[0];
+        let child = state.projections.entry(projection).or_default();
+        Self::adjust_descendant_summaries(
+            child,
+            &projections[1..],
+            moved,
+            shared,
+            borrows,
+            mutable_borrows,
+        );
+    }
+
+    fn adjust_state_summary(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+        moved: isize,
+        shared: isize,
+        borrows: isize,
+        mutable_borrows: isize,
+    ) {
+        let state = self.states.entry(variable.clone()).or_default();
+        Self::adjust_descendant_summaries(
+            state,
+            projections,
+            moved,
+            shared,
+            borrows,
+            mutable_borrows,
+        );
+    }
+
+    fn normalize_type(
+        &mut self,
+        mut r#type: LocatedExpr<TypeCheckExprContext>,
+    ) -> LocatedExpr<TypeCheckExprContext> {
+        let mut normalizer = FullNormalizer::new(
+            self.tc.context.normalize_fuel(),
+            ExprNormalizer {
+                model: &mut self.tc.model,
+            },
+        );
+        normalizer.normalize(&mut r#type);
+        r#type
+    }
+
+    fn is_shared_place(
+        &self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> bool {
+        let Some(mut state) = self.states.get(variable) else {
+            return false;
+        };
+
+        if state.shared {
+            return true;
+        }
+
+        for projection in projections {
+            let Some(next_state) = state.projections.get(projection) else {
+                return false;
+            };
+            state = next_state;
+            if state.shared {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn place_is_moved(
+        &self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> bool {
+        let Some(mut state) = self.states.get(variable) else {
+            return false;
+        };
+
+        if state.moved {
+            return true;
+        }
+
+        for projection in projections {
+            let Some(next_state) = state.projections.get(projection) else {
+                return false;
+            };
+            state = next_state;
+            if state.moved {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn place_has_moved_descendants(
+        &self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> bool {
+        self.state_at(variable, projections)
+            .is_some_and(|state| state.moved_descendants > 0)
+    }
+
+    fn place_has_borrow(&self, state: &VariableState) -> bool {
+        state.borrows > 0
+            || state.mutable_borrows > 0
+            || state.borrows_descendants > 0
+            || state.mutable_borrows_descendants > 0
+    }
+
+    fn ancestor_has_borrow(
+        &self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> bool {
+        let Some(mut state) = self.states.get(variable) else {
+            return false;
+        };
+
+        if state.borrows > 0 || state.mutable_borrows > 0 {
+            return true;
+        }
+
+        for projection in projections {
+            let Some(next_state) = state.projections.get(projection) else {
+                return false;
+            };
+            state = next_state;
+            if state.borrows > 0 || state.mutable_borrows > 0 {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn ancestor_has_mutable_borrow(
+        &self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+    ) -> bool {
+        let Some(mut state) = self.states.get(variable) else {
+            return false;
+        };
+
+        if state.mutable_borrows > 0 {
+            return true;
+        }
+
+        for projection in projections {
+            let Some(next_state) = state.projections.get(projection) else {
+                return false;
+            };
+            state = next_state;
+            if state.mutable_borrows > 0 {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn use_place(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+        r#type: &LocatedExpr<TypeCheckExprContext>,
+        location: &Location,
+    ) {
+        let normalized_type = self.normalize_type(r#type.clone());
+        if is_shared_type(&normalized_type) {
+            self.share_place(variable, projections, location);
+            return;
+        }
+
+        if is_use_type(&normalized_type) {
+            self.borrow_place(variable, projections, location, false);
+            return;
+        }
+        if is_use_mutable_type(&normalized_type) {
+            self.borrow_place(variable, projections, location, true);
+            return;
+        }
+
+        if self.closure_boundaries.len() > 1 && !self.is_current_closure_local(variable) {
+            self.mark_shared(variable, projections);
+            return;
+        }
+
+        if self.is_shared_place(variable, projections) {
+            return;
+        }
+
+        self.move_place(variable, projections, location);
+    }
+
+    fn move_place(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+        location: &Location,
+    ) {
+        if self.place_is_moved(variable, projections)
+            || self.place_has_moved_descendants(variable, projections)
+        {
+            self.report(CompileError::use_after_move(location.clone()));
+            return;
+        }
+
+        if self.ancestor_has_borrow(variable, projections)
+            || self
+                .state_at(variable, projections)
+                .is_some_and(|state| self.place_has_borrow(state))
+        {
+            self.report(CompileError::move_while_borrowed(location.clone()));
+        }
+
+        let should_mark_moved = {
+            let state = self.state_mut_at(variable, projections);
+            if !state.moved {
+                state.moved = true;
+                true
+            } else {
+                false
+            }
+        };
+        if should_mark_moved {
+            self.adjust_state_summary(variable, projections, 1, 0, 0, 0);
+        }
+    }
+
+    fn borrow_place(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+        location: &Location,
+        is_mutable: bool,
+    ) {
+        if self.place_is_moved(variable, projections)
+            || self.place_has_moved_descendants(variable, projections)
+        {
+            self.report(CompileError::borrow_after_move(location.clone()));
+        }
+
+        let conflicts = if is_mutable {
+            self.ancestor_has_borrow(variable, projections)
+                || self
+                    .state_at(variable, projections)
+                    .is_some_and(|state| self.place_has_borrow(state))
+        } else {
+            self.ancestor_has_mutable_borrow(variable, projections)
+                || self.state_at(variable, projections).is_some_and(|state| {
+                    state.mutable_borrows > 0 || state.mutable_borrows_descendants > 0
+                })
+        };
+
+        if conflicts {
+            self.report(CompileError::mutable_borrow_conflict(location.clone()));
+        }
+
+        {
+            let state = self.state_mut_at(variable, projections);
+            if is_mutable {
+                state.mutable_borrows += 1;
+            } else {
+                state.borrows += 1;
+            }
+        }
+        if is_mutable {
+            self.adjust_state_summary(variable, projections, 0, 0, 0, 1);
+        } else {
+            self.adjust_state_summary(variable, projections, 0, 0, 1, 0);
+        }
+    }
+
+    fn mark_shared(&mut self, variable: &Variable<TypeCheckExprContext>, projections: &[usize]) {
+        let should_mark_shared = {
+            let state = self.state_mut_at(variable, projections);
+            if !state.shared {
+                state.shared = true;
+                true
+            } else {
+                false
+            }
+        };
+        if should_mark_shared {
+            self.adjust_state_summary(variable, projections, 0, 1, 0, 0);
+        }
+    }
+
+    fn share_place(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        projections: &[usize],
+        location: &Location,
+    ) {
+        if self.place_is_moved(variable, projections)
+            || self.place_has_moved_descendants(variable, projections)
+        {
+            self.report(CompileError::use_after_move(location.clone()));
+        }
+
+        self.mark_shared(variable, projections);
     }
 
     fn is_current_closure_local(&self, variable: &Variable<TypeCheckExprContext>) -> bool {
@@ -77,78 +435,20 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         }
     }
 
-    fn use_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location) {
-        let mut norm_type = variable.var_type().clone();
+    fn assign_variable(
+        &mut self,
+        variable: &Variable<TypeCheckExprContext>,
+        location: &Location,
+        value: &LocatedExpr<TypeCheckExprContext>,
+    ) {
+        let normalized_type = self.normalize_type(variable.var_type().clone());
+        let is_shared = is_shared_type(&normalized_type)
+            || self.is_shared_place(variable, &[])
+            || self
+                .state_at(variable, &[])
+                .is_some_and(|state| state.shared_descendants > 0);
 
-        let mut norm = FullNormalizer::new(
-            self.tc.context.normalize_fuel(),
-            ExprNormalizer { model: &mut self.tc.model, }
-        );
-        norm.normalize(&mut norm_type);
-
-        if is_shared_type(&norm_type) {
-            self.share_variable(variable, location);
-            return;
-        }
-        else if is_use_type(&norm_type) {
-            self.borrow_variable(variable, location, false);
-            return;
-        }
-        else if is_use_mutable_type(&norm_type) {
-            self.borrow_variable(variable, location, true);
-            return;
-        }
-
-        if self.closure_boundaries.len() > 1 && !self.is_current_closure_local(variable) {
-            self.state_mut(variable).shared = true;
-            return;
-        }
-
-        if self.is_shared(variable) {
-            return;
-        }
-
-        let state = self.state_mut(variable);
-        if state.moved {
-            self.report(CompileError::use_after_move(location.clone()));
-        } else if state.borrows > 0 || state.mutable_borrows > 0 {
-            self.report(CompileError::move_while_borrowed(location.clone()));
-        }
-
-        self.state_mut(variable).moved = true;
-    }
-
-    fn borrow_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location, is_mutable: bool) {
-        let state = self.state_mut(variable);
-        if state.moved {
-            self.report(CompileError::borrow_after_move(location.clone()));
-        } else if is_mutable && (state.borrows > 0 || state.mutable_borrows > 0)
-            || !is_mutable && state.mutable_borrows > 0
-        {
-            self.report(CompileError::mutable_borrow_conflict(
-                location.clone(),
-            ));
-        }
-
-        let state = self.state_mut(variable);
-        if is_mutable {
-            state.mutable_borrows += 1;
-        } else {
-            state.borrows += 1;
-        }
-    }
-
-    fn share_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location) {
-        let state = self.state_mut(variable);
-        if state.moved {
-            self.report(CompileError::use_after_move(location.clone()));
-        }
-
-        self.state_mut(variable).shared = true;
-    }
-
-    fn assign_variable(&mut self, variable: &Variable<TypeCheckExprContext>, location: &Location, value: &LocatedExpr<TypeCheckExprContext>) {
-        if self.is_shared(variable) {
+        if is_shared {
             let value = LocatedExpr {
                 location: value.location.clone(),
                 value: Expr::Share {
@@ -157,20 +457,70 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
             };
 
             self.scan(&value);
-        }
-        else {
+        } else {
             self.scan(value);
         }
 
-        let state = self.state_mut(variable);
-        if state.borrows > 0 || state.mutable_borrows > 0 {
-            self.report(CompileError::mutable_borrow_conflict(
-                location.clone(),
-            ));
+        if self
+            .state_at(variable, &[])
+            .is_some_and(|state| self.place_has_borrow(state))
+        {
+            self.report(CompileError::mutable_borrow_conflict(location.clone()));
             return;
         }
 
-        self.state_mut(variable).moved = false;
+        let state = self.state_mut_at(variable, &[]);
+        let shared = state.shared || state.shared_descendants > 0;
+        state.moved = false;
+        state.shared = shared;
+        state.borrows = 0;
+        state.mutable_borrows = 0;
+        state.moved_descendants = 0;
+        state.shared_descendants = 0;
+        state.borrows_descendants = 0;
+        state.mutable_borrows_descendants = 0;
+        state.projections.clear();
+    }
+
+    fn snapshot_borrows(state: &VariableState) -> BorrowSnapshots {
+        BorrowSnapshots {
+            borrows: state.borrows,
+            mutable_borrows: state.mutable_borrows,
+            projections: state
+                .projections
+                .iter()
+                .map(|(projection, state)| (*projection, Self::snapshot_borrows(state)))
+                .collect(),
+        }
+    }
+
+    fn restore_borrows(state: &mut VariableState, snapshot: Option<&BorrowSnapshots>) {
+        state.borrows = snapshot.map_or(0, |snapshot| snapshot.borrows);
+        state.mutable_borrows = snapshot.map_or(0, |snapshot| snapshot.mutable_borrows);
+
+        for (projection, child) in &mut state.projections {
+            let child_snapshot = snapshot.and_then(|snapshot| snapshot.projections.get(projection));
+            Self::restore_borrows(child, child_snapshot);
+        }
+    }
+
+    fn recompute_summaries(state: &mut VariableState) {
+        for child in state.projections.values_mut() {
+            Self::recompute_summaries(child);
+        }
+
+        state.moved_descendants = 0;
+        state.shared_descendants = 0;
+        state.borrows_descendants = 0;
+        state.mutable_borrows_descendants = 0;
+
+        for child in state.projections.values() {
+            state.moved_descendants += usize::from(child.moved) + child.moved_descendants;
+            state.shared_descendants += usize::from(child.shared) + child.shared_descendants;
+            state.borrows_descendants += child.borrows + child.borrows_descendants;
+            state.mutable_borrows_descendants +=
+                child.mutable_borrows + child.mutable_borrows_descendants;
+        }
     }
 
     fn scan_call_arguments<'b>(
@@ -180,15 +530,7 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         let borrow_snapshot = self
             .states
             .iter()
-            .map(|(variable, state)| {
-                (
-                    variable.clone(),
-                    BorrowSnapshot {
-                        borrows: state.borrows,
-                        mutable_borrows: state.mutable_borrows,
-                    },
-                )
-            })
+            .map(|(variable, state)| (variable.clone(), Self::snapshot_borrows(state)))
             .collect::<HashMap<_, _>>();
 
         for value in values {
@@ -196,13 +538,8 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         }
 
         for (variable, state) in &mut self.states {
-            if let Some(snapshot) = borrow_snapshot.get(variable) {
-                state.borrows = snapshot.borrows;
-                state.mutable_borrows = snapshot.mutable_borrows;
-            } else {
-                state.borrows = 0;
-                state.mutable_borrows = 0;
-            }
+            Self::restore_borrows(state, borrow_snapshot.get(variable));
+            Self::recompute_summaries(state);
         }
     }
 
@@ -227,11 +564,38 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         for branch in branches {
             for (variable, branch_state) in branch {
                 let state = self.states.entry(variable).or_default();
-                state.moved |= branch_state.moved;
-                state.shared |= branch_state.shared;
-                state.borrows = state.borrows.max(branch_state.borrows);
-                state.mutable_borrows = state.mutable_borrows.max(branch_state.mutable_borrows);
+                Self::merge_state(state, &branch_state);
             }
+        }
+
+        for state in self.states.values_mut() {
+            Self::recompute_summaries(state);
+        }
+    }
+
+    fn merge_state(state: &mut VariableState, branch_state: &VariableState) {
+        state.moved |= branch_state.moved;
+        state.shared |= branch_state.shared;
+        state.borrows = state.borrows.max(branch_state.borrows);
+        state.mutable_borrows = state.mutable_borrows.max(branch_state.mutable_borrows);
+
+        for (projection, branch_child) in &branch_state.projections {
+            let child = state.projections.entry(*projection).or_default();
+            Self::merge_state(child, branch_child);
+        }
+    }
+
+    fn place_for_expr(
+        expr: &LocatedExpr<TypeCheckExprContext>,
+    ) -> Option<(Variable<TypeCheckExprContext>, Vec<usize>)> {
+        match &expr.value {
+            Expr::Variable(variable) => Some((variable.clone(), Vec::new())),
+            Expr::TupleElement(value, index) => {
+                let (variable, mut projections) = Self::place_for_expr(value)?;
+                projections.push(*index);
+                Some((variable, projections))
+            }
+            _ => None,
         }
     }
 
@@ -407,8 +771,16 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
                 self.scan(receiver);
                 self.scan_call_arguments(arguments);
             }
-            Expr::Not(value) | Expr::Raise { ex: value } | Expr::TupleElement(value, _) => {
+            Expr::Not(value) | Expr::Raise { ex: value } => {
                 self.scan(value);
+            }
+            Expr::TupleElement(value, _) => {
+                if let Some((variable, projections)) = Self::place_for_expr(expr) {
+                    let r#type = get_expr_type(expr);
+                    self.use_place(&variable, &projections, &r#type, &expr.location);
+                } else {
+                    self.scan(value);
+                }
             }
             Expr::RecordFieldLoad {
                 record_type,
@@ -445,22 +817,22 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
             }
             Expr::Use { inner, .. } | Expr::Shared { inner } => self.scan(inner),
             Expr::Share { value } => {
-                if let Expr::Variable(variable) = &value.value {
-                    self.share_variable(variable, &value.location);
+                if let Some((variable, projections)) = Self::place_for_expr(value) {
+                    self.share_place(&variable, &projections, &value.location);
                 } else {
                     self.scan(value);
                 }
             }
             Expr::Borrow { value } => {
-                if let Expr::Variable(variable) = &value.value {
-                    self.borrow_variable(variable, &value.location, false);
+                if let Some((variable, projections)) = Self::place_for_expr(value) {
+                    self.borrow_place(&variable, &projections, &value.location, false);
                 } else {
                     self.scan(value);
                 }
             }
             Expr::BorrowMut { value } => {
-                if let Expr::Variable(variable) = &value.value {
-                    self.borrow_variable(variable, &value.location, true);
+                if let Some((variable, projections)) = Self::place_for_expr(value) {
+                    self.borrow_place(&variable, &projections, &value.location, true);
                 } else {
                     self.scan(value);
                 }
@@ -487,7 +859,10 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
                 }
             }
             Expr::Type(t) | Expr::BoxedType(t) => self.scan(t),
-            Expr::Variable(variable) => self.use_variable(variable, &expr.location),
+            Expr::Variable(variable) => {
+                let r#type = variable.var_type().clone();
+                self.use_place(variable, &[], &r#type, &expr.location);
+            }
             Expr::VariableBinding(variable, value) => {
                 self.scan(&variable.var_type);
                 self.scan(value);
