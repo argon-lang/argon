@@ -10,6 +10,7 @@ import dev.argon.esexpr.SyntaxException;
 import dev.argon.esexpr.UnsignedBigInteger;
 import dev.argon.jvmbackendmetadata.JvmPlatformTubeMetadata;
 import dev.argon.vm.*;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -31,8 +32,8 @@ public final class IrReader {
 			Optional.empty()
 		);
 
-	private TubeHeader header;
-	private TubeMetadata metadata;
+	private @Nullable TubeHeader header;
+	private @Nullable TubeMetadata metadata;
 	private final Map<UnsignedBigInteger, ModuleModelBuilder> modules = new HashMap<>();
 
 	private final Map<UnsignedBigInteger, TubeFileEntry.ModuleReference> moduleRefMap = new HashMap<>();
@@ -181,7 +182,7 @@ public final class IrReader {
 				for(var field : recordDefinition.definition().fields()) {
 					recordFieldMap.put(
 						field.fieldId(),
-						new RecordFieldEntry.Record(new TubeFileEntry.RecordFieldReference(
+						new RecordFieldEntry.OfRecord(new TubeFileEntry.RecordFieldReference(
 							field.fieldId(),
 							recordDefinition.definition().recordId(),
 							field.name(),
@@ -241,7 +242,7 @@ public final class IrReader {
 			case TubeFileEntry.RecordFieldReference recordFieldRef -> {
 				recordFieldMap.put(
 					recordFieldRef.recordFieldId(),
-					new RecordFieldEntry.Record(recordFieldRef)
+					new RecordFieldEntry.OfRecord(recordFieldRef)
 				);
 				return;
 			}
@@ -362,7 +363,7 @@ public final class IrReader {
 	}
 
 	private sealed interface RecordFieldEntry {
-		record Record(TubeFileEntry.RecordFieldReference entry) implements RecordFieldEntry {
+		record OfRecord(TubeFileEntry.RecordFieldReference entry) implements RecordFieldEntry {
 		}
 
 		record EnumVariant(TubeFileEntry.EnumVariantRecordFieldReference entry) implements RecordFieldEntry {
@@ -591,7 +592,7 @@ public final class IrReader {
 
 		private RecordFieldInfo computeRecordFieldInfo(UnsignedBigInteger id) {
 			return switch(require(recordFieldMap, id, "Invalid record field id")) {
-				case RecordFieldEntry.Record(var entry) -> {
+				case RecordFieldEntry.OfRecord(var entry) -> {
 					var fieldType = tokenClassDesc(entry.fieldType());
 					var fieldName = ClassNaming.fieldName(entry.name());
 					yield new RecordFieldInfo(

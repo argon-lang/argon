@@ -15,10 +15,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -111,7 +113,9 @@ final class ExternMetadataScannerTest {
 			IllegalArgumentException.class,
 			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes))
 		);
-		assertTrue(ex.getMessage().contains("must be a public static method"));
+		var message = ex.getMessage();
+		assertNotNull(message);
+		assertTrue(message.contains("must be a public static method"));
 	}
 
 	@Test
@@ -137,7 +141,9 @@ final class ExternMetadataScannerTest {
 			IllegalArgumentException.class,
 			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes))
 		);
-		assertTrue(ex.getMessage().contains("must be a public static method"));
+		var message = ex.getMessage();
+		assertNotNull(message);
+		assertTrue(message.contains("must be a public static method"));
 	}
 
 	@Test
@@ -187,7 +193,7 @@ final class ExternMetadataScannerTest {
 		var sourceFiles = new ArrayList<String>();
 		for(var source : sources) {
 			var path = sourceRoot.resolve(source.relativePath());
-			Files.createDirectories(path.getParent());
+			Files.createDirectories(Objects.requireNonNull(path.getParent()));
 			Files.writeString(path, source.contents(), StandardCharsets.UTF_8);
 			sourceFiles.add(path.toString());
 		}
@@ -199,7 +205,7 @@ final class ExternMetadataScannerTest {
 
 		var args = new ArrayList<String>();
 		args.add("-classpath");
-		args.add(System.getProperty("java.class.path"));
+		args.add(Objects.requireNonNull(System.getProperty("java.class.path")));
 		args.add("-d");
 		args.add(classes.toString());
 		args.addAll(sourceFiles);
@@ -216,7 +222,7 @@ final class ExternMetadataScannerTest {
 		try(var stream = Files.walk(classes)) {
 			return stream
 				.filter(Files::isRegularFile)
-				.filter(path -> path.getFileName().toString().endsWith(".class"))
+				.filter(path -> Objects.requireNonNull(path.getFileName()).toString().endsWith(".class"))
 				.sorted()
 				.map(InputFile::fromPath)
 				.toList();

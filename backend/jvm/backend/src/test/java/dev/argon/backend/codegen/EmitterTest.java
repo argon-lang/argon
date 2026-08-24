@@ -142,7 +142,9 @@ final class EmitterTest {
 		));
 
 		assertTrue(entries.containsKey("test/pkg/Foo.class"));
-		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
+		var moduleInfoBytes = entries.get("module-info.class");
+		assertNotNull(moduleInfoBytes);
+		var moduleInfo = Classfile.parse(moduleInfoBytes).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals("test.module", module.moduleName().name().stringValue());
 		assertEquals(Set.of("test.pkg"), exportedPackages(module));
@@ -176,7 +178,9 @@ final class EmitterTest {
 			Map.of()
 		));
 
-		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
+		var moduleInfoBytes = entries.get("module-info.class");
+		assertNotNull(moduleInfoBytes);
+		var moduleInfo = Classfile.parse(moduleInfoBytes).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals(Set.of("java.base", "dev.argon.runtime", "ref.tube.module"), requiredModules(module));
 	}
@@ -222,7 +226,9 @@ final class EmitterTest {
 		));
 
 		assertTrue(entries.containsKey("existing/pkg/Existing.class"));
-		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
+		var moduleInfoBytes = entries.get("module-info.class");
+		assertNotNull(moduleInfoBytes);
+		var moduleInfo = Classfile.parse(moduleInfoBytes).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals(Set.of("existing.pkg", "added.pkg"), exportedPackages(module));
 	}
@@ -264,7 +270,9 @@ final class EmitterTest {
 			Map.of()
 		));
 
-		var moduleInfo = Classfile.parse(entries.get("module-info.class")).model();
+		var moduleInfoBytes = entries.get("module-info.class");
+		assertNotNull(moduleInfoBytes);
+		var moduleInfo = Classfile.parse(moduleInfoBytes).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals(Set.of("java.base", "dev.argon.runtime", "java.logging", "added.module"), requiredModules(module));
 	}
@@ -313,6 +321,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 				invoke.opcode() == Opcode.INVOKESTATIC &&
@@ -481,6 +490,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKESTATIC &&
@@ -562,6 +572,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeDynamicInstruction.class::isInstance)
 			.map(InvokeDynamicInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.findAny()
 			.orElseThrow();
 
@@ -588,6 +599,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertFalse(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKESTATIC &&
@@ -631,6 +643,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -680,6 +693,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -716,6 +730,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeDynamicInstruction.class::isInstance)
 			.map(InvokeDynamicInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.findAny()
 			.orElseThrow();
 
@@ -868,6 +883,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeDynamicInstruction.class::isInstance)
 			.map(InvokeDynamicInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertEquals(3, dynamicInvokes.size());
@@ -929,6 +945,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(BranchInstruction.class::isInstance)
 			.map(BranchInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(branchInstructions.stream().anyMatch(branch -> branch.opcode() == Opcode.IFEQ));
@@ -975,6 +992,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(BranchInstruction.class::isInstance)
 			.map(BranchInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(branchInstructions.stream().anyMatch(branch -> branch.opcode() == Opcode.IFEQ));
@@ -1014,6 +1032,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -1063,6 +1082,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -1095,6 +1115,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(TypeCheckInstruction.class::isInstance)
 			.map(TypeCheckInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(typeChecks.stream().anyMatch(typeCheck ->
@@ -1197,6 +1218,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKESTATIC &&
@@ -1227,6 +1249,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(FieldInstruction.class::isInstance)
 			.map(FieldInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(fieldInstructions.stream().anyMatch(field ->
 			field.opcode() == Opcode.GETFIELD &&
@@ -1475,6 +1498,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(TypeCheckInstruction.class::isInstance)
 			.map(TypeCheckInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(typeChecks.stream().anyMatch(typeCheck ->
 			typeCheck.opcode() == Opcode.INSTANCEOF &&
@@ -1489,6 +1513,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKESTATIC &&
@@ -1513,6 +1538,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(FieldInstruction.class::isInstance)
 			.map(FieldInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(fieldInstructions.stream().anyMatch(field ->
 			field.opcode() == Opcode.GETFIELD &&
@@ -1662,6 +1688,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(answerInvokes.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKEINTERFACE &&
@@ -1962,6 +1989,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(FieldInstruction.class::isInstance)
 			.map(FieldInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(fieldInstructions.stream().anyMatch(field ->
 					field.opcode() == Opcode.GETFIELD &&
@@ -1980,6 +2008,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKEINTERFACE &&
@@ -1998,6 +2027,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(FieldInstruction.class::isInstance)
 			.map(FieldInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 		assertTrue(callerFields.stream().anyMatch(field ->
 			field.opcode() == Opcode.GETFIELD &&
@@ -2045,6 +2075,7 @@ final class EmitterTest {
 			.elementStream()
 			.filter(InvokeInstruction.class::isInstance)
 			.map(InvokeInstruction.class::cast)
+			.map(Objects::requireNonNull)
 			.toList();
 
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -2140,7 +2171,7 @@ final class EmitterTest {
 		var sourceFiles = new ArrayList<String>();
 		for(var source : sources) {
 			var path = sourceRoot.resolve(source.relativePath());
-			Files.createDirectories(path.getParent());
+			Files.createDirectories(Objects.requireNonNull(path.getParent()));
 			Files.writeString(path, source.contents(), StandardCharsets.UTF_8);
 			sourceFiles.add(path.toString());
 		}
@@ -2163,7 +2194,7 @@ final class EmitterTest {
 		try(var paths = Files.walk(classes)) {
 			return paths
 				.filter(Files::isRegularFile)
-				.filter(path -> path.getFileName().toString().endsWith(".class"))
+				.filter(path -> Objects.requireNonNull(path.getFileName()).toString().endsWith(".class"))
 				.sorted()
 				.map(path -> {
 					try {

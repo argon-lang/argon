@@ -114,6 +114,7 @@ public final class Main {
 			CodegenCommandOptions.class,
 		}
 	)
+	@SuppressWarnings("NullAway")
 	public static final class RootCommandOptions implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
@@ -135,6 +136,7 @@ public final class Main {
 			JvmPlatformMetadataCommand.class,
 		}
 	)
+	@SuppressWarnings("NullAway")
 	public static final class PlatformMetadataCommandOptions implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
@@ -153,6 +155,7 @@ public final class Main {
 		name = "jvm",
 		description = "Load platform metadata for JVM"
 	)
+	@SuppressWarnings("NullAway")
 	public static final class JvmPlatformMetadataCommand implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
@@ -176,6 +179,7 @@ public final class Main {
 			JvmCodegenCommand.class,
 		}
 	)
+	@SuppressWarnings("NullAway")
 	public static final class CodegenCommandOptions implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
@@ -194,6 +198,7 @@ public final class Main {
 		name = "jvm",
 		description = "Generate JVM code from Argon VM IR"
 	)
+	@SuppressWarnings("NullAway")
 	public static final class JvmCodegenCommand implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;

@@ -32,6 +32,7 @@ public final class PartialApplicationSupport {
 		return new ConstantCallSite(factory);
 	}
 
+	@SuppressWarnings("UnusedMethod")
 	private static FunctionToken<?, ?> makeTokenFunction(MethodHandle target, int tokenArgumentCount, Object[] captures) {
 		var targetWithTokenLast = tokenLastTarget(target, tokenArgumentCount);
 		var boundTarget = MethodHandles

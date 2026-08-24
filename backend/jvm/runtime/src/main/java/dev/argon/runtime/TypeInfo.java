@@ -1,5 +1,7 @@
 package dev.argon.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -9,13 +11,13 @@ public final class TypeInfo implements Token {
 		this.typeArgs = null;
 	}
 
-	public TypeInfo(Class<?> type, Token ...typeArgs) {
+	public TypeInfo(Class<?> type, Token @Nullable ...typeArgs) {
 		this.type = type;
 		this.typeArgs = typeArgs == null || typeArgs.length == 0 ? null : typeArgs.clone();
 	}
 
 	private final Class<?> type;
-	private final Token[] typeArgs;
+	private final Token @Nullable[] typeArgs;
 
 	public Class<?> javaClass() {
 		return type;
@@ -30,7 +32,7 @@ public final class TypeInfo implements Token {
 	}
 
 	@Override
-	public boolean equals(Object obj) {
+	public boolean equals(@Nullable Object obj) {
 		if(this == obj) {
 			return true;
 		}

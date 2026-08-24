@@ -7,6 +7,7 @@ import dev.argon.esexpr.UnsignedBigInteger;
 import dev.argon.jvmbackendmetadata.JvmExtern;
 import dev.argon.vm.*;
 import dev.argon.vm.Instruction;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.classfile.*;
@@ -414,7 +415,6 @@ final class Emitter {
 			case FunctionImplementation.VmIr ir -> {
 				var registerOffset = 0;
 				int[] tokenSlots = new int[signature.tokenParameters().size()];
-				ClassDesc[] tokenTypes = new ClassDesc[tokenSlots.length];
 				TypeKind[] tokenKinds = new TypeKind[tokenSlots.length];
 				int[] registerSlots = new int[Math.addExact(
 					Math.addExact(receiverType.isPresent() ? 1 : 0, signature.parameters().size()),
@@ -436,7 +436,6 @@ final class Emitter {
 				for(int i = 0; i < signature.tokenParameters().size(); ++i) {
 					var tokenType = tokenAsClassDesc(signature.tokenParameters().get(i).kind());
 					tokenSlots[i] = cb.parameterSlot(i);
-					tokenTypes[i] = tokenType;
 					tokenKinds[i] = TypeKind.from(tokenType).asLoadable();
 				}
 
@@ -467,7 +466,6 @@ final class Emitter {
 				var blockEmitter = new BlockEmitter(
 					cb,
 					tokenSlots,
-					tokenTypes,
 					tokenKinds,
 					parentTokenParameterLoader,
 					registerSlots,
@@ -517,17 +515,6 @@ final class Emitter {
 		catch(DecodeException ex) {
 			throw new IllegalArgumentException("Invalid JVM extern function metadata", ex);
 		}
-	}
-
-	private List<ClassDesc> functionParameterTypes(FunctionDefinition function) {
-		var parameterTypes = new ArrayList<ClassDesc>();
-
-		parameterTypes.addAll(tokenParameterDescs(function.signature()));
-		for(var parameter : function.signature().parameters()) {
-			parameterTypes.add(tokenAsClassDesc(parameter.paramType()));
-		}
-
-		return parameterTypes;
 	}
 
 	private List<ClassDesc> tokenParameterDescs(FunctionSignature signature) {
@@ -995,74 +982,6 @@ final class Emitter {
 		writeEntry(classEntryName(builderInfo.builderClassDesc()), bytes);
 	}
 
-	private RecordDefinition recordDefinition(UnsignedBigInteger recordId) {
-		for(var module : program.modules()) {
-			for(var export : module.exports()) {
-				if(export instanceof ProgramModel.ModuleExportEntry.RecordDefinition(var recordDef)) {
-					var definition = recordDef.definition();
-					if(definition.recordId().equals(recordId)) {
-						return definition;
-					}
-				}
-			}
-		}
-
-		throw new IllegalArgumentException("Could not find record definition: " + recordId);
-	}
-
-	private EnumDefinition enumDefinition(UnsignedBigInteger enumId) {
-		for(var module : program.modules()) {
-			for(var export : module.exports()) {
-				if(export instanceof ProgramModel.ModuleExportEntry.EnumDefinition(var enumDef)) {
-					var definition = enumDef.definition();
-					if(definition.enumId().equals(enumId)) {
-						return definition;
-					}
-				}
-			}
-		}
-
-		throw new IllegalArgumentException("Could not find enum definition: " + enumId);
-	}
-
-	private EnumVariantDefinition enumVariantDefinition(UnsignedBigInteger variantId) {
-		var variantInfo = program.getEnumVariantInfo(variantId);
-		return enumDefinition(variantInfo.enumId()).variants().stream()
-			.filter(variant -> variant.name().equals(variantInfo.name()))
-			.findAny()
-			.orElseThrow(() -> new IllegalArgumentException("Could not find enum variant definition: " + variantId));
-	}
-
-	private FunctionDefinition functionDefinition(UnsignedBigInteger functionId) {
-		for(var module : program.modules()) {
-			for(var export : module.exports()) {
-				if(export instanceof ProgramModel.ModuleExportEntry.FunctionDefinition(var functionDef)) {
-					var definition = functionDef.definition();
-					if(definition.functionId().equals(functionId)) {
-						return definition;
-					}
-				}
-			}
-		}
-
-		throw new IllegalArgumentException("Could not find function definition: " + functionId);
-	}
-
-	private InstanceDefinition instanceDefinition(UnsignedBigInteger instanceId) {
-		for(var module : program.modules()) {
-			for(var export : module.exports()) {
-				if(export instanceof ProgramModel.ModuleExportEntry.InstanceDefinition(var instanceDef)) {
-					var definition = instanceDef.definition();
-					if(definition.instanceId().equals(instanceId)) {
-						return definition;
-					}
-				}
-			}
-		}
-
-		throw new IllegalArgumentException("Could not find instance definition: " + instanceId);
-	}
-
 	private void emitTrait(TubeFileEntry.TraitDefinition traitDef) throws IOException {
 		var definition = traitDef.definition();
 		var traitInfo = program.getTraitInfo(definition.traitId());
@@ -1321,10 +1240,9 @@ final class Emitter {
 		private static final ClassDesc CD_UNSUPPORTED_OPERATION_EXCEPTION =
 			ClassDesc.of("java.lang.UnsupportedOperationException");
 
-		public BlockEmitter(
+		private BlockEmitter(
 			CodeBuilder cb,
 			int[] tokenSlots,
-			ClassDesc[] tokenTypes,
 			TypeKind[] tokenKinds,
 			ParentTokenParameterLoader parentTokenParameterLoader,
 			int[] registerSlots,
@@ -1336,7 +1254,6 @@ final class Emitter {
 		) {
 			this.cb = cb;
 			this.tokenSlots = tokenSlots;
-			this.tokenTypes = tokenTypes;
 			this.tokenKinds = tokenKinds;
 			this.parentTokenParameterLoader = parentTokenParameterLoader;
 			this.registerSlots = registerSlots;
@@ -1349,7 +1266,6 @@ final class Emitter {
 
 		private final CodeBuilder cb;
 		private final int[] tokenSlots;
-		private final ClassDesc[] tokenTypes;
 		private final TypeKind[] tokenKinds;
 		private final ParentTokenParameterLoader parentTokenParameterLoader;
 		private final int[] registerSlots;
@@ -1360,11 +1276,11 @@ final class Emitter {
 		private final TypeKind returnKind;
 
 		private final Map<BlockId, BlockLabels> blocks = new HashMap<>();
-		private Integer returnValueSlot = null;
+		private @Nullable Integer returnValueSlot = null;
 		private ReturnMode returnMode = new ReturnMode.Direct();
 		private boolean reachable = true;
 
-		public void emitRegion(Region region) {
+		private void emitRegion(Region region) {
 			reachable = true;
 			switch(region) {
 				case Region.BasicBlock basicBlock -> {
@@ -1538,6 +1454,7 @@ final class Emitter {
 
 				case Instruction.BlockBreak breakInsn -> {
 					var labels = blocks.get(breakInsn.blockId());
+					Objects.requireNonNull(labels, "Block labels not found");
 					labels.endReachable = true;
 					cb.goto_(labels.end);
 					reachable = false;
@@ -1545,6 +1462,7 @@ final class Emitter {
 
 				case Instruction.BlockBreakIf breakIf -> {
 					var labels = blocks.get(breakIf.blockId());
+					Objects.requireNonNull(labels, "Block labels not found");
 					labels.endReachable = true;
 					cb.iload(registerSlot(breakIf.condition()));
 					cb.ifne(labels.end);
@@ -1552,13 +1470,16 @@ final class Emitter {
 
 				case Instruction.BlockBreakUnless breakUnless -> {
 					var labels = blocks.get(breakUnless.blockId());
+					Objects.requireNonNull(labels, "Block labels not found");
 					labels.endReachable = true;
 					cb.iload(registerSlot(breakUnless.condition()));
 					cb.ifeq(labels.end);
 				}
 
 				case Instruction.BlockRetry retry -> {
-					cb.goto_(blocks.get(retry.blockId()).start);
+					var labels = blocks.get(retry.blockId());
+					Objects.requireNonNull(labels, "Block labels not found");
+					cb.goto_(labels.start);
 					reachable = false;
 				}
 
@@ -1741,6 +1662,7 @@ final class Emitter {
 					var variantInfo = program.getEnumVariantInfo(isEnumVariantOrBreak.variantId());
 					var variantDesc = variantInfo.variantClassDesc();
 					var notVariantLabels = blocks.get(isEnumVariantOrBreak.notVariantBlockId());
+					Objects.requireNonNull(notVariantLabels, "Block labels not found");
 					notVariantLabels.endReachable = true;
 
 					loadRegister(isEnumVariantOrBreak.value());
@@ -2247,7 +2169,8 @@ final class Emitter {
 					);
 				}
 
-				case Token.Builtin(var builtin) -> {
+				case Token.Builtin builtinToken -> {
+					var builtin = builtinToken.b();
 					switch(builtin) {
 						case BuiltinType.Array(var elementType) -> {
 							if(TokenTypes.elementTypeRequiresErasedArray(elementType)) {
@@ -3851,6 +3774,8 @@ final class Emitter {
 		) {
 			private Label label(Map<BlockId, BlockLabels> blocks) {
 				var labels = blocks.get(blockId);
+				Objects.requireNonNull(labels, "Block labels not found");
+
 				return switch(kind) {
 					case START -> labels.start;
 					case END -> labels.end;

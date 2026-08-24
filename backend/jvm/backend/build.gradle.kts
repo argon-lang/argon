@@ -1,16 +1,18 @@
 plugins {
     application
+    alias(libs.plugins.errorprone)
 }
 
 description = "Argon compiler backend for the JVM"
 
 dependencies {
+    compileOnly(libs.jspecify)
 	implementation(project(":api"))
-	implementation("info.picocli:picocli:4.7.7")
+	implementation(libs.picocli)
 
 	testImplementation(project(":runtime"))
-	testImplementation("org.junit.jupiter:junit-jupiter:5.10.3")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	testImplementation(libs.junit.jupiter)
+	testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 application {
