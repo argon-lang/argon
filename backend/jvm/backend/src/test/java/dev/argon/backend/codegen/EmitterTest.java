@@ -52,6 +52,10 @@ final class EmitterTest {
 		);
 	}
 
+	private static String functionName(FunctionDefinition function) {
+		return ClassNamingProxy.functionName(function._import());
+	}
+
 	private static MethodTypeDesc functionDescriptor(FunctionSignature signature) {
 		var parameterTypes = new ArrayList<ClassDesc>();
 		for(var parameter : signature.tokenParameters()) {
@@ -313,7 +317,7 @@ final class EmitterTest {
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 				invoke.opcode() == Opcode.INVOKESTATIC &&
 				invoke.owner().asInternalName().equals("test/executable/Globals") &&
-				invoke.name().equalsString("main") &&
+				invoke.name().equalsString(functionName(main)) &&
 				invoke.type().equalsString("(Ldev/argon/runtime/Tuple0;)Ldev/argon/runtime/Trampoline;")
 		));
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -469,7 +473,7 @@ final class EmitterTest {
 		assertNotNull(globalsClass);
 		var classModel = Classfile.parse(globalsClass).model();
 		var callerMethod = classModel.methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(caller)))
 			.findAny()
 			.orElseThrow();
 		assertEquals("(Ljava/math/BigInteger;)Ldev/argon/runtime/Trampoline;", callerMethod.methodType().stringValue());
@@ -481,7 +485,7 @@ final class EmitterTest {
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKESTATIC &&
 				invoke.owner().asInternalName().equals("test/functions/Globals") &&
-				invoke.name().equalsString("identity") &&
+				invoke.name().equalsString(functionName(identity)) &&
 				invoke.type().equalsString("(Ljava/math/BigInteger;)Ldev/argon/runtime/Trampoline;")
 		));
 		assertTrue(invokeInstructions.stream().anyMatch(invoke ->
@@ -551,7 +555,7 @@ final class EmitterTest {
 		assertNotNull(globalsClass);
 		var classModel = Classfile.parse(globalsClass).model();
 		var callerMethod = classModel.methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(caller)))
 			.findAny()
 			.orElseThrow();
 		var dynamicInvoke = callerMethod.code().orElseThrow()
@@ -574,7 +578,7 @@ final class EmitterTest {
 			MethodHandleDesc.ofMethod(
 				DirectMethodHandleDesc.Kind.STATIC,
 				ClassDesc.of("test.functions", "Globals"),
-				"identity",
+				functionName(identity),
 				functionType
 			),
 			MethodTypeDesc.of(trampoline)
@@ -588,7 +592,7 @@ final class EmitterTest {
 		assertFalse(invokeInstructions.stream().anyMatch(invoke ->
 			invoke.opcode() == Opcode.INVOKESTATIC &&
 				invoke.owner().asInternalName().equals("test/functions/Globals") &&
-			invoke.name().equalsString("identity")
+			invoke.name().equalsString(functionName(identity))
 		));
 	}
 
@@ -857,7 +861,7 @@ final class EmitterTest {
 		var globalsClass = entries.get("test/functions/Globals.class");
 		assertNotNull(globalsClass);
 		var callerMethod = Classfile.parse(globalsClass).model().methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(caller)))
 			.findAny()
 			.orElseThrow();
 		var dynamicInvokes = callerMethod.code().orElseThrow()
@@ -1186,7 +1190,7 @@ final class EmitterTest {
 		var globalsClass = entries.get("test/functions/Globals.class");
 		assertNotNull(globalsClass);
 		var callerMethod = Classfile.parse(globalsClass).model().methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(caller)))
 			.findAny()
 			.orElseThrow();
 		var invokeInstructions = callerMethod.code().orElseThrow()
@@ -1464,7 +1468,7 @@ final class EmitterTest {
 		var globalsClass = entries.get("test/functions/Globals.class");
 		assertNotNull(globalsClass);
 		var callerMethod = Classfile.parse(globalsClass).model().methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(caller)))
 			.findAny()
 			.orElseThrow();
 		var typeChecks = callerMethod.code().orElseThrow()
@@ -1969,7 +1973,7 @@ final class EmitterTest {
 		var globalsClass = entries.get("test/instances/Globals.class");
 		assertNotNull(globalsClass);
 		var callerMethod = Classfile.parse(globalsClass).model().methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(caller)))
 			.findAny()
 			.orElseThrow();
 		var invokeInstructions = callerMethod.code().orElseThrow()
@@ -2105,7 +2109,7 @@ final class EmitterTest {
 		var classModel = Classfile.parse(globalsClass).model();
 
 		return classModel.methods().stream()
-			.filter(method -> method.methodName().equalsString("caller"))
+			.filter(method -> method.methodName().equalsString(functionName(function)))
 			.findAny()
 			.orElseThrow();
 	}
