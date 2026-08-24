@@ -1,10 +1,9 @@
 package dev.argon.backend;
 
 import dev.argon.backend.codegen.Codegen;
-import dev.argon.backend.externs.ExternMetadataScanner;
+import dev.argon.backend.externs.PlatformMetadata;
 import dev.argon.backend.io.InputFile;
 import dev.argon.backend.io.OutputFile;
-import dev.argon.esexpr.ESExprBinaryWriter;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
@@ -35,7 +34,7 @@ public final class Main {
 	}
 
 	private static int run(String[] args) {
-		return new CommandLine(new RootCommand())
+		return new CommandLine(new RootCommandOptions())
 			.setCommandName("argon-jvm-backend")
 			.setParameterExceptionHandler((ParameterException ex, String[] ignored) -> {
 				System.err.println("argon-jvm-backend: " + ex.getMessage());
@@ -52,11 +51,10 @@ public final class Main {
 	}
 
 	private static int runPlatformMetadata(JvmPlatformMetadataCommand command) throws IOException {
-		var metadata = ExternMetadataScanner.platformMetadata(expandInputFiles(command.externFiles));
-
-		try(var output = OutputFile.fromPath(command.outputFile).open()) {
-			new ESExprBinaryWriter(output).write(dev.argon.backend.api.PlatformMetadataResult.codec().encode(metadata));
-		}
+		PlatformMetadata.platformMetadata(new PlatformMetadata.JVMPlatformMetadataOptions(
+			expandInputFiles(command.externFiles),
+			OutputFile.fromPath(command.outputFile)
+		));
 
 		return 0;
 	}
@@ -112,11 +110,11 @@ public final class Main {
 
 	@Command(
 		subcommands = {
-			PlatformMetadataCommand.class,
-			CodegenCommand.class,
+			PlatformMetadataCommandOptions.class,
+			CodegenCommandOptions.class,
 		}
 	)
-	public static final class RootCommand implements Callable<Integer> {
+	public static final class RootCommandOptions implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
 
@@ -137,7 +135,7 @@ public final class Main {
 			JvmPlatformMetadataCommand.class,
 		}
 	)
-	public static final class PlatformMetadataCommand implements Callable<Integer> {
+	public static final class PlatformMetadataCommandOptions implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
 
@@ -178,7 +176,7 @@ public final class Main {
 			JvmCodegenCommand.class,
 		}
 	)
-	public static final class CodegenCommand implements Callable<Integer> {
+	public static final class CodegenCommandOptions implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
 

@@ -9,7 +9,7 @@ import dev.argon.esexpr.SyntaxException;
 import java.io.IOException;
 import java.util.zip.ZipOutputStream;
 
-public class Codegen {
+public final class Codegen {
 	private Codegen() {}
 
 	public record JVMCodegenOptions(
