@@ -1,4 +1,7 @@
-use crate::{Builtin, Expr, ExprContext, ExprLocationExt, LocatedExpr, NormalizerScanner, Unify};
+use crate::{
+    Builtin, Expr, ExprContext, ExprLocationExt, LocatedExpr, NormalizerScanner, Unify,
+    ownership::is_shared_type,
+};
 use derivative::Derivative;
 use esexpr::core_types::num_bigint::BigInt;
 use parse18_runtime::Location;
@@ -137,6 +140,7 @@ pub trait TypeComparer: Unify {
                         norm.normalize(&mut actual_type);
                     }
 
+                    let actual_location = actual_type.location.clone();
                     match actual_type.value {
                         Expr::Type(ref n) => match &expected_type.value {
                             Expr::BigType(_) => return true,
@@ -164,6 +168,27 @@ pub trait TypeComparer: Unify {
 
                             actual_type = *actual_unboxed;
                             continue;
+                        }
+
+                        Expr::Shared {
+                            inner: mut actual_inner,
+                        } if !matches!(expected_type.value, Expr::Shared { .. }) =>
+                        {
+                            let mut norm = NormalizerScanner::new(
+                                self.normalize_fuel(),
+                                Self::normalizer(self.model_mut()),
+                            );
+                            norm.normalize(&mut actual_inner);
+
+                            if is_shared_type(&actual_inner) {
+                                actual_type = *actual_inner;
+                                continue;
+                            }
+
+                            actual_type = Expr::Shared {
+                                inner: actual_inner,
+                            }
+                            .with_location(actual_location);
                         }
 
                         _ => {}
