@@ -1,6 +1,7 @@
 .idea/
 
 target/
+.emsdk/
 bin/
 !**/src/bin/
 src-gen/
@@ -14,4 +15,3 @@ backend/jvm/**/build/
 
 .z3-trace
 dhat-heap.json
-

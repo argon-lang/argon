@@ -4,7 +4,19 @@ set -eu
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 dist_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+wasm_argonc="$dist_dir/arch/wasm32-unknown-emscripten/argonc.js"
 
+run_wasm() {
+    if ! command -v node >/dev/null 2>&1; then
+        printf 'argonc: Node.js is required to run the WebAssembly executable\n' >&2
+        exit 1
+    fi
+    exec node "$wasm_argonc" "$@"
+}
+
+if [ -n "${ARGONC_FORCE_WASM:-}" ]; then
+    run_wasm "$@"
+fi
 
 
 os="$(uname -s)"
@@ -21,9 +33,12 @@ case "$os:$arch" in
         arch_dir=aarch64-unknown-linux-gnu
         ;;
     *)
-        printf 'argonc: unsupported platform: %s %s\n\n' "$os" "$arch" >&2
-        exit 1
+        arch_dir=
         ;;
 esac
 
-exec "$dist_dir/arch/$arch_dir/argonc" "$@"
+if [ -n "$arch_dir" ] && [ -x "$dist_dir/arch/$arch_dir/argonc" ]; then
+    exec "$dist_dir/arch/$arch_dir/argonc" "$@"
+fi
+
+run_wasm "$@"
