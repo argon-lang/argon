@@ -146,11 +146,32 @@ final class Emitter {
 	}
 
 	private Set<PackageDesc> requiredExports() {
+		var emittedPackages = new HashSet<PackageDesc>();
+
+		for(var classfile : program.decodedMetadata().platformMetadata().additionalClasses().orElse(List.of())) {
+			var classModel = classfile.model();
+			if(!classModel.isModuleInfo()) {
+				var internalName = classModel.thisClass().asInternalName();
+				var separator = internalName.lastIndexOf('/');
+				if(separator >= 0) {
+					emittedPackages.add(PackageDesc.of(internalName.substring(0, separator).replace('/', '.')));
+				}
+			}
+		}
+
+		for(var module : program.modules()) {
+			if(!module.exports().isEmpty()) {
+				emittedPackages.add(program.getModuleInfo(module.moduleId()).packageName());
+			}
+		}
+
 		var exports = new HashSet<PackageDesc>();
 
 		for(var module : program.modules()) {
 			var moduleInfo = program.getModuleInfo(module.moduleId());
-			exports.add(moduleInfo.packageName());
+			if(emittedPackages.contains(moduleInfo.packageName())) {
+				exports.add(moduleInfo.packageName());
+			}
 		}
 
 		return exports;

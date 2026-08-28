@@ -197,6 +197,15 @@ final class EmitterTest {
 				"""
 			),
 			source(
+				"added/pkg/Added.java",
+				"""
+				package added.pkg;
+
+				public final class Added {
+				}
+				"""
+			),
+			source(
 				"existing/pkg/Existing.java",
 				"""
 				package existing.pkg;
@@ -231,6 +240,24 @@ final class EmitterTest {
 		var moduleInfo = Classfile.parse(moduleInfoBytes).model();
 		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
 		assertEquals(Set.of("existing.pkg", "added.pkg"), exportedPackages(module));
+	}
+
+	@Test
+	void emitGeneratedModuleInfoDoesNotExportEmptyPackages() throws Exception {
+		var entries = emitEntries(new TestProgramModel(
+			EMPTY_PLATFORM_METADATA,
+			List.of(new ProgramModel.ModuleModel(
+				new ModulePath(List.of("Empty")),
+				List.of(),
+				UnsignedBigInteger.ZERO
+			))
+		));
+
+		var moduleInfoBytes = entries.get("module-info.class");
+		assertNotNull(moduleInfoBytes);
+		var moduleInfo = Classfile.parse(moduleInfoBytes).model();
+		var module = moduleInfo.findAttribute(java.lang.classfile.Attributes.module()).orElseThrow();
+		assertEquals(Set.of(), exportedPackages(module));
 	}
 
 	@Test
