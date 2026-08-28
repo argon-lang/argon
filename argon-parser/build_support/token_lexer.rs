@@ -1,6 +1,6 @@
 use parse18_lexer_gen::{
     builder::DFABuilder,
-    codegen::rust::{RustSettings, emit_rust},
+    codegen::rust::{emit_rust, RustSettings},
     regex::Regex,
 };
 use std::io::{self, Write};
@@ -140,6 +140,10 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     b.add(Regex::str("inverse"), "TokenType::Token(Token::KwInverse)");
     b.add(Regex::str("update"), "TokenType::Token(Token::KwUpdate)");
     b.add(Regex::str("inline"), "TokenType::Token(Token::KwInline)");
+    b.add(
+        Regex::str("__argon_unsafe_assume_pure"),
+        "TokenType::Token(Token::KwArgonUnsafeAssumePure)",
+    );
     b.add(
         Regex::str("operator"),
         "TokenType::Token(Token::KwOperator)",

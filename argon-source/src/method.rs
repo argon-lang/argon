@@ -1,10 +1,10 @@
 use crate::modifiers::{
-    ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT,
-    METHOD_SLOT_CONCRETE, ModifierParser,
+    ModifierParser, ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS,
+    METHOD_SLOT_ABSTRACT, METHOD_SLOT_CONCRETE, UNSAFE_ASSUME_PURE,
 };
 use crate::module::DeclarationResult;
 use crate::signature::SignatureParser;
-use crate::type_checker::{TypeCheckOptions, type_check_expr};
+use crate::type_checker::{type_check_expr, TypeCheckOptions};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use argon_compiler::access::{AccessModifier, AccessToken};
@@ -33,6 +33,7 @@ pub struct SourceMethod<MC> {
     closure: MC,
     decl: ast::MethodDeclarationStmt,
     metadata: MethodMetadata,
+    unsafe_assume_pure: bool,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     implementation: UnloadCell<Arc<FunctionImplementation>>,
 }
@@ -48,7 +49,8 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
         let is_abstract = decl.body.is_none();
         let access = modifiers.parse(&ACCESS_MODIFIER);
         let erasure_mode = modifiers.parse(&ERASURE_MODE_NON_TOKEN);
-        if erasure_mode == ErasureMode::Erased && !decl.purity {
+        let unsafe_assume_pure = modifiers.parse(&UNSAFE_ASSUME_PURE);
+        if erasure_mode == ErasureMode::Erased && !(decl.purity || unsafe_assume_pure) {
             context
                 .reporter()
                 .report_error(CompileError::impure_erased_function(
@@ -68,7 +70,7 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
             } else {
                 &METHOD_SLOT_CONCRETE
             }),
-            effect_info: if decl.purity {
+            effect_info: if decl.purity || unsafe_assume_pure {
                 EffectInfo::Pure
             } else {
                 EffectInfo::Effectful
@@ -86,6 +88,7 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
                 closure,
                 decl,
                 metadata,
+                unsafe_assume_pure,
                 signature: UnloadCell::new(),
                 implementation: UnloadCell::new(),
             }),
@@ -198,7 +201,11 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
                             &parameter_scope,
                             self.metadata.erasure_mode,
                         )
-                        .with_effect_info(self.metadata.effect_info)
+                        .with_effect_info(if self.unsafe_assume_pure {
+                            EffectInfo::Effectful
+                        } else {
+                            self.metadata.effect_info
+                        })
                         .with_ensures_clauses(&signature.ensures_clauses),
                         body.as_ref(),
                         &signature.return_type,

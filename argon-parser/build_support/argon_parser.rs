@@ -1,7 +1,7 @@
-use parse18_ll_gen::codegen::rust::{RustSettings, emit_rust};
+use parse18_ll_gen::codegen::rust::{emit_rust, RustSettings};
 use parse18_ll_gen::grammar::{
-    Grammar, GrammarFactory, GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, TerminalInfo, error,
-    nonterm, rule as base_rule, ruleset as base_ruleset, term,
+    error, nonterm, rule as base_rule, ruleset as base_ruleset, term, Grammar, GrammarFactory,
+    GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, TerminalInfo,
 };
 use std::io::{self, Write};
 
@@ -163,6 +163,8 @@ pub enum Token {
     KwWitness,
     #[strum(serialize = "KwInline")]
     KwInline,
+    #[strum(serialize = "KwArgonUnsafeAssumePure")]
+    KwArgonUnsafeAssumePure,
     #[strum(serialize = "KwExtension")]
     KwExtension,
     #[strum(serialize = "KwInverse")]
@@ -1436,6 +1438,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ term(KwToken).discard() ], "(|| Modifier::Token)"),
                     rule([ term(KwWitness).discard() ], "(|| Modifier::Witness)"),
                     rule([ term(KwInline).discard() ], "(|| Modifier::Inline)"),
+                    rule([ term(KwArgonUnsafeAssumePure).discard() ], "(|| Modifier::ArgonUnsafeAssumePure)"),
                     rule([ term(KwFinal).discard() ], "(|| Modifier::Final)"),
                     rule([ term(KwVirtual).discard() ], "(|| Modifier::Virtual)"),
                     rule([ term(KwOverride).discard() ], "(|| Modifier::Override)"),

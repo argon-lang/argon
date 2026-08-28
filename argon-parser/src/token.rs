@@ -67,6 +67,7 @@ pub enum TokenCategory {
     KwToken,
     KwWitness,
     KwInline,
+    KwArgonUnsafeAssumePure,
     KwAbstract,
     KwType,
     KwBigType,
@@ -182,6 +183,7 @@ pub enum Modifier {
     Token,
     Witness,
     Inline,
+    ArgonUnsafeAssumePure,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -243,6 +245,7 @@ pub enum Token {
     KwToken,
     KwWitness,
     KwInline,
+    KwArgonUnsafeAssumePure,
     KwAbstract,
     KwType,
     KwBigType,
@@ -372,6 +375,7 @@ impl Token {
             Token::KwToken => TokenCategory::KwToken,
             Token::KwWitness => TokenCategory::KwWitness,
             Token::KwInline => TokenCategory::KwInline,
+            Token::KwArgonUnsafeAssumePure => TokenCategory::KwArgonUnsafeAssumePure,
             Token::KwAbstract => TokenCategory::KwAbstract,
             Token::KwType => TokenCategory::KwType,
             Token::KwBigType => TokenCategory::KwBigType,

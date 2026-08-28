@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use argon_parser::ast::{Expr, FunctionBody, Identifier, Stmt};
+use argon_parser::ast::{Expr, FunctionBody, Identifier, Modifier, Stmt};
 use argon_testcases::load_test_case;
 use argon_util::{CompileError, ErrorReporter, InternalCompilerError};
 use rstest::rstest;
@@ -30,6 +30,27 @@ impl ErrorReporter<Infallible> for TestErrorReporter {
     fn report_error(&self, error: Infallible) {
         match error {}
     }
+}
+
+#[test]
+fn parses_unsafe_assume_pure_modifier() {
+    let reporter = TestErrorReporter::default();
+    let file_name = PathBuf::from("index.argon");
+    let source = b"module _\n\n__argon_unsafe_assume_pure proc f(): () = ()\n";
+
+    let module = argon_parser::parse(source.as_slice(), &file_name, &reporter);
+
+    assert!(reporter.internal_errors.borrow().is_empty());
+    assert!(
+        reporter.parse_errors.borrow().is_empty(),
+        "parse errors: {:?}",
+        reporter.parse_errors.borrow()
+    );
+    let Stmt::FunctionDeclaration(function) = &module.stmts[0].value else {
+        panic!("expected function declaration");
+    };
+    assert_eq!(function.modifiers.len(), 1);
+    assert_eq!(function.modifiers[0].value, Modifier::ArgonUnsafeAssumePure);
 }
 
 #[test]

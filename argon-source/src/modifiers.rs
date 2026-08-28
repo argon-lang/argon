@@ -1,12 +1,12 @@
 use alloc::string::ToString;
+use argon_compiler::access::{AccessModifier, AccessModifierGlobal};
 use argon_compiler::Context;
 use argon_compiler::MethodSlot;
-use argon_compiler::access::{AccessModifier, AccessModifierGlobal};
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::CompileError;
-use hashbrown::HashMap;
 use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 use mitsein::slice1;
 use mitsein::slice1::Slice1;
 use parse18_runtime::{Location, WithLocation};
@@ -131,6 +131,11 @@ pub const IS_INLINE: ModifierSpec<bool> = slice1![
 
 pub const IS_WITNESS: ModifierSpec<bool> = slice1![
     modifier_spec_entry!(&[Modifier::Witness], true),
+    modifier_spec_entry!(&[], false),
+];
+
+pub const UNSAFE_ASSUME_PURE: ModifierSpec<bool> = slice1![
+    modifier_spec_entry!(&[Modifier::ArgonUnsafeAssumePure], true),
     modifier_spec_entry!(&[], false),
 ];
 

@@ -1,12 +1,12 @@
 use crate::modifiers::{
-    ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser,
+    ModifierParser, ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, UNSAFE_ASSUME_PURE,
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::{TypeCheckOptions, type_check_expr};
+use crate::type_checker::{type_check_expr, TypeCheckOptions};
 use alloc::{boxed::Box, sync::Arc};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
+use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{
@@ -23,6 +23,7 @@ pub struct SourceFunction {
     decl: Box<ast::FunctionDeclarationStmt>,
     closure: Box<dyn DeclarationClosure>,
     metadata: FunctionMetadata,
+    unsafe_assume_pure: bool,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     implementation: UnloadCell<Arc<FunctionImplementation>>,
 }
@@ -37,7 +38,8 @@ impl SourceFunction {
             ModifierParser::new(context.clone(), &decl.modifiers, &decl.name.location);
         let access = modifiers.parse(&ACCESS_MODIFIER_GLOBAL);
         let erasure_mode = modifiers.parse(&ERASURE_MODE);
-        if erasure_mode == ErasureMode::Erased && !decl.purity {
+        let unsafe_assume_pure = modifiers.parse(&UNSAFE_ASSUME_PURE);
+        if erasure_mode == ErasureMode::Erased && !(decl.purity || unsafe_assume_pure) {
             context
                 .reporter()
                 .report_error(CompileError::impure_erased_function(
@@ -49,7 +51,7 @@ impl SourceFunction {
             is_inline: modifiers.parse(&IS_INLINE),
             erasure_mode,
             is_witness: modifiers.parse(&IS_WITNESS),
-            effect_info: if decl.purity {
+            effect_info: if decl.purity || unsafe_assume_pure {
                 EffectInfo::Pure
             } else {
                 EffectInfo::Effectful
@@ -64,6 +66,7 @@ impl SourceFunction {
                 decl,
                 closure,
                 metadata,
+                unsafe_assume_pure,
                 signature: UnloadCell::new(),
                 implementation: UnloadCell::new(),
             }),
@@ -140,7 +143,11 @@ impl Function for SourceFunction {
                     let expr = type_check_expr(
                         self.context.clone(),
                         TypeCheckOptions::new(&access_token, &scope, self.metadata.erasure_mode)
-                            .with_effect_info(self.metadata.effect_info)
+                            .with_effect_info(if self.unsafe_assume_pure {
+                                EffectInfo::Effectful
+                            } else {
+                                self.metadata.effect_info
+                            })
                             .with_ensures_clauses(&signature.ensures_clauses),
                         body.as_ref(),
                         &signature.return_type,

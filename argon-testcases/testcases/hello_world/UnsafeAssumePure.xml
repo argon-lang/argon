@@ -1,0 +1,21 @@
+<ArgonTest>
+
+    <Name>Unsafe Assume Pure</Name>
+
+    <InputSource name="index.argon">
+        module _
+
+        import Argon.Core::*
+
+        __argon_unsafe_assume_pure proc unsafePrint(): () do
+            puts "Hello World"
+        end
+
+        def pureWrapper(): () = unsafePrint()
+
+        proc main(): () = pureWrapper()
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>
