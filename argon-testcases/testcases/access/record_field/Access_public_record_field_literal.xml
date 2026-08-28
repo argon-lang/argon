@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Public record literal field</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        public record Message
+            public value: String
+        end
+
+        proc main(): () do
+            let message = Message {
+                value: "visible"
+            }
+            puts message.value
+        end
+    ]]></InputSource>
+
+    <ExpectedOutput>visible</ExpectedOutput>
+
+</ArgonTest>

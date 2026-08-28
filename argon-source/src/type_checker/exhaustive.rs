@@ -439,6 +439,7 @@ mod tests {
             erasure_check_mode: ErasureMode::Concrete,
             ensures_clauses: Vec::new(),
             return_position: false,
+            enable_ownership: false,
         };
         let location = test_location();
         let mut checker = ExhaustiveChecker {
@@ -474,6 +475,7 @@ mod tests {
             erasure_check_mode: ErasureMode::Concrete,
             ensures_clauses: Vec::new(),
             return_position: false,
+            enable_ownership: false,
         };
         let location = test_location();
         let mut checker = ExhaustiveChecker {
@@ -519,6 +521,7 @@ mod tests {
             erasure_check_mode: ErasureMode::Concrete,
             ensures_clauses: Vec::new(),
             return_position: false,
+            enable_ownership: false,
         };
         let location = test_location();
         let mut checker = ExhaustiveChecker {

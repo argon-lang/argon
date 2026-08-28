@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Public enum variant literal field</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        enum Choice
+            record Message
+                public value: String
+            end
+        end
+
+        proc main(): () do
+            let _ = Choice.Message {
+                value: "visible"
+            }
+        end
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

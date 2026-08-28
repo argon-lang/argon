@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Public record literal field in different tube</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+        import Argon.TestReference::PublicFieldRecord
+
+        proc main(): () do
+            let message = PublicFieldRecord {
+                value: "visible"
+            }
+            puts message.value
+        end
+    ]]></InputSource>
+
+    <Libraries>
+        <Library>Argon.Core</Library>
+        <Library>Argon.TestReference</Library>
+    </Libraries>
+
+    <ExpectedOutput>visible</ExpectedOutput>
+
+</ArgonTest>

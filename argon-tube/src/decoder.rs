@@ -2536,6 +2536,7 @@ struct DecodedEnumVariantField {
 impl DecodedEnumVariantField {
     fn new(owner: Arc<DecodedEnumVariant>, definition: tf::RecordFieldDefinition) -> Self {
         let metadata = RecordFieldMetadata {
+            access: decode_access_modifier((*definition.access).clone()),
             is_mutable: definition.mutable,
             name: decode_identifier((*definition.name).clone()),
         };
@@ -2661,6 +2662,7 @@ struct DecodedRecordField {
 impl DecodedRecordField {
     fn new(owner: Arc<DecodedRecord>, definition: tf::RecordFieldDefinition) -> Self {
         let metadata = RecordFieldMetadata {
+            access: decode_access_modifier((*definition.access).clone()),
             is_mutable: definition.mutable,
             name: decode_identifier((*definition.name).clone()),
         };

@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Explicit inaccessible record literal field</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        public record Secret
+            private value: String
+        end
+
+        proc main(): () do
+            let _ = Secret {
+                value: "hidden"
+            }
+        end
+    ]]></InputSource>
+
+    <ExpectedError>AR0028</ExpectedError>
+
+</ArgonTest>

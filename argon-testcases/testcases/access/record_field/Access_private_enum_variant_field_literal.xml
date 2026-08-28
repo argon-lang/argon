@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Explicit inaccessible enum variant literal field</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        enum Choice
+            record Secret
+                private value: String
+            end
+        end
+
+        proc main(): () do
+            let _ = Choice.Secret {
+                value: "hidden"
+            }
+        end
+    ]]></InputSource>
+
+    <ExpectedError>AR0028</ExpectedError>
+
+</ArgonTest>

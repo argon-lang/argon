@@ -468,6 +468,10 @@ record record-field-definition {
     field-type: expr;
 
     @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier;
+
+    @esexpr:(keyword)
     @esexpr:(default-value #false)
     mutable: bool;
 }

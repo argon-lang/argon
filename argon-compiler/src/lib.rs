@@ -534,6 +534,7 @@ impl RecordFieldOwner {
 }
 
 pub struct RecordFieldMetadata {
+    pub access: access::AccessModifier,
     pub is_mutable: bool,
     pub name: Identifier,
 }

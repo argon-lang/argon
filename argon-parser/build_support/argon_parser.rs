@@ -417,6 +417,7 @@ enum Rule {
     RecordDeclarationStmtRest,
     RecordBody,
     RecordBodyStmt,
+    RecordBodyStmtRest,
     RecordField,
     EnumDeclarationStmtRest,
     EnumBody,
@@ -1703,8 +1704,14 @@ impl GrammarFactory for ParserFactory {
             RecordBodyStmt => ruleset(
                 "RecordBodyStmt",
                 [
-                    rule([ nonterm(RecordField) ], "record_body_stmt_record_field"),
-                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "record_body_stmt_from_declaration_builder"),
+                    rule([ nonterm(Modifiers), nonterm(RecordBodyStmtRest) ], "record_body_stmt_apply_builder"),
+                ],
+            ),
+            RecordBodyStmtRest => ruleset(
+                "Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordBodyStmt>",
+                [
+                    rule([ nonterm(RecordField) ], "record_body_stmt_record_field_builder"),
+                    rule([ nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "record_body_stmt_from_declaration_rest_builder"),
                 ],
             ),
             RecordField => ruleset(

@@ -1,5 +1,5 @@
 use crate::enums::SourceEnumVariant;
-use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
+use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser, RECORD_FIELD_ACCESS_MODIFIER};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
 use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
@@ -189,10 +189,14 @@ pub struct SourceRecordField {
 
 impl SourceRecordField {
     pub fn new(owner: SourceRecordFieldOwner, field: ast::RecordField) -> Self {
+        let mut modifiers =
+            ModifierParser::new(owner.context(), &field.modifiers, &field.name.location);
         let metadata = RecordFieldMetadata {
+            access: modifiers.parse(&RECORD_FIELD_ACCESS_MODIFIER),
             is_mutable: field.is_mutable,
             name: field.name.value.clone(),
         };
+        modifiers.done();
 
         Self {
             owner,

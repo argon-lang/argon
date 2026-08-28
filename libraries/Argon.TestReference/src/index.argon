@@ -24,3 +24,16 @@ end
 
 public instance MyInstance: MyTrait
 end
+
+public record PublicFieldRecord
+    public value: String
+end
+
+public record InternalFieldRecord
+    internal value: String
+end
+
+public def make_internal_field_record(): InternalFieldRecord =
+    InternalFieldRecord {
+        value: "hidden"
+    }

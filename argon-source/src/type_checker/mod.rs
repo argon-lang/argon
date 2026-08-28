@@ -1121,6 +1121,20 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                             continue;
                         };
 
+                        if !self.access.allows_access(
+                            &Declaration::RecordField(field.clone()),
+                            None,
+                            field.metadata().access,
+                        ) {
+                            self.context.reporter().report_error(
+                                CompileError::unknown_record_literal_field(
+                                    field_literal.value.name.location.clone(),
+                                    field_literal.value.name.value.to_string(),
+                                ),
+                            );
+                            continue;
+                        }
+
                         let mut field_type = default_to_type_check_shifter()
                             .shift((*field.clone().field_type()).clone());
                         subst.scan(&mut field_type);
@@ -3392,7 +3406,14 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         r.clone()
                             .fields()
                             .iter()
-                            .find(|field| field.metadata().name == *member)
+                            .find(|field| {
+                                field.metadata().name == *member
+                                    && self.access.allows_access(
+                                        &Declaration::RecordField((*field).clone()),
+                                        None,
+                                        field.metadata().access,
+                                    )
+                            })
                             .map(|field| {
                                 let mut field_type = default_to_type_check_shifter()
                                     .shift((*field.clone().field_type()).clone());

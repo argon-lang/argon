@@ -123,6 +123,7 @@ pub struct RecordDeclarationStmt {
 
 #[derive(Debug, Clone)]
 pub struct RecordField {
+    pub modifiers: Vec<WithLocation<Modifier>>,
     pub is_mutable: bool,
     pub name: WithLocation<Identifier>,
     pub field_type: WithLocation<Expr>,

@@ -331,8 +331,28 @@ fn record_declaration_stmt_rest_builder(
     })
 }
 
-fn record_body_stmt_record_field(field: RecordField) -> RecordBodyStmt {
-    RecordBodyStmt::RecordField(Box::new(field))
+fn record_body_stmt_apply_builder(
+    modifiers: Vec<WithLocation<Modifier>>,
+    builder: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordBodyStmt>,
+) -> RecordBodyStmt {
+    builder(modifiers)
+}
+
+fn record_body_stmt_record_field_builder(
+    field: RecordField,
+) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordBodyStmt> {
+    Box::new(move |modifiers| {
+        RecordBodyStmt::RecordField(Box::new(RecordField { modifiers, ..field }))
+    })
+}
+
+fn record_body_stmt_from_declaration_rest_builder(
+    method_purity: bool,
+    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
+) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordBodyStmt> {
+    Box::new(move |modifiers| {
+        declaration_stmt_to_record_body_stmt(build_decl((modifiers, method_purity)))
+    })
 }
 
 fn enum_declaration_stmt_rest_builder(
@@ -470,14 +490,6 @@ fn statement_record_builder(
     build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordDeclarationStmt>,
 ) -> Stmt {
     Stmt::RecordDeclaration(Box::new(build_decl(modifiers)))
-}
-
-fn record_body_stmt_from_declaration_builder(
-    modifiers: Vec<WithLocation<Modifier>>,
-    method_purity: bool,
-    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
-) -> RecordBodyStmt {
-    declaration_stmt_to_record_body_stmt(build_decl((modifiers, method_purity)))
 }
 
 fn trait_body_stmt_from_declaration_builder(
@@ -1002,6 +1014,7 @@ fn record_field(
     field_type: WithLocation<Expr>,
 ) -> RecordField {
     ast::RecordField {
+        modifiers: Vec::new(),
         is_mutable,
         name,
         field_type,

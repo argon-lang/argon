@@ -124,6 +124,22 @@ pub const ACCESS_MODIFIER: ModifierSpec<AccessModifier> = slice1![
     ),
 ];
 
+pub const RECORD_FIELD_ACCESS_MODIFIER: ModifierSpec<AccessModifier> = slice1![
+    modifier_spec_entry!(&[], AccessModifier::Public),
+    modifier_spec_entry!(&[Modifier::Public], AccessModifier::Public),
+    modifier_spec_entry!(&[Modifier::Private], AccessModifier::Private),
+    modifier_spec_entry!(&[Modifier::Protected], AccessModifier::Protected),
+    modifier_spec_entry!(&[Modifier::Internal], AccessModifier::Internal),
+    modifier_spec_entry!(
+        &[Modifier::Protected, Modifier::Internal],
+        AccessModifier::ProtectedOrInternal
+    ),
+    modifier_spec_entry!(
+        &[Modifier::Private, Modifier::Internal],
+        AccessModifier::ModulePrivate
+    ),
+];
+
 pub const IS_INLINE: ModifierSpec<bool> = slice1![
     modifier_spec_entry!(&[Modifier::Inline], true),
     modifier_spec_entry!(&[], false),
@@ -249,6 +265,20 @@ mod tests {
         parser.done();
 
         assert_eq!(access, AccessModifierGlobal::ModulePrivate);
+        assert!(reporter.errors().is_empty());
+    }
+
+    #[test]
+    fn record_field_access_modifier_defaults_to_public() {
+        let (context, reporter) = test_context();
+        let fallback_location = test_location(1, 1);
+        let modifiers = [];
+        let mut parser = ModifierParser::new(context, &modifiers, &fallback_location);
+
+        let access = parser.parse(RECORD_FIELD_ACCESS_MODIFIER);
+        parser.done();
+
+        assert_eq!(access, AccessModifier::Public);
         assert!(reporter.errors().is_empty());
     }
 

@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Read internal record field in different tube</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+        import Argon.TestReference::make_internal_field_record
+
+        proc main(): () do
+            let message = make_internal_field_record()
+            puts message.value
+        end
+    ]]></InputSource>
+
+    <Libraries>
+        <Library>Argon.Core</Library>
+        <Library>Argon.TestReference</Library>
+    </Libraries>
+
+    <ExpectedError>AR000A</ExpectedError>
+
+</ArgonTest>

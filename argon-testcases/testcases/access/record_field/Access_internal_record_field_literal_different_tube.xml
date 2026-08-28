@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Internal record literal field in different tube</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+        import Argon.TestReference::InternalFieldRecord
+
+        proc main(): () do
+            let _ = InternalFieldRecord {
+                value: "hidden"
+            }
+        end
+    ]]></InputSource>
+
+    <Libraries>
+        <Library>Argon.Core</Library>
+        <Library>Argon.TestReference</Library>
+    </Libraries>
+
+    <ExpectedError>AR0028</ExpectedError>
+
+</ArgonTest>

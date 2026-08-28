@@ -1,0 +1,21 @@
+<ArgonTest>
+
+    <Name>Omitted inaccessible record literal field remains required</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        public record Secret
+            private value: String
+        end
+
+        proc main(): () do
+            let _ = Secret {}
+        end
+    ]]></InputSource>
+
+    <ExpectedError>AR0029</ExpectedError>
+
+</ArgonTest>

@@ -349,6 +349,7 @@ impl TubeEncoder {
                                 field_type: Box::new(
                                     self.emit_expr(&field.clone().field_type().value)?,
                                 ),
+                                access: Box::new(encode_access_modifier(metadata.access)),
                                 mutable: metadata.is_mutable,
                             }))
                         })
@@ -429,6 +430,7 @@ impl TubeEncoder {
                                         field_type: Box::new(
                                             self.emit_expr(&field.clone().field_type().value)?,
                                         ),
+                                        access: Box::new(encode_access_modifier(metadata.access)),
                                         mutable: metadata.is_mutable,
                                     }))
                                 })
