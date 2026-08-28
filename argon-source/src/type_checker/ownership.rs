@@ -64,6 +64,10 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
     }
 
     fn check(&mut self, expr: &LocatedExpr<TypeCheckExprContext>) {
+        if !self.tc.enable_ownership {
+            return;
+        }
+        
         self.scan(expr);
     }
 

@@ -277,6 +277,10 @@ impl VmEncoder {
                 }
 
                 EntryEmitter::Function(function) => {
+                    if function.metadata().erasure_mode == ErasureMode::Erased {
+                        return Ok(None);
+                    }
+
                     let function_id = BigUint::from(self.ids.function_ids.get(function.clone()));
                     let import_specifier = function.clone().import_specifier();
                     let import = self.encode_import_specifier(&import_specifier)?;

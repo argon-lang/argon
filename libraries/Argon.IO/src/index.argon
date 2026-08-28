@@ -1,7 +1,8 @@
 module _
 
-import Argon.Core::Array
-import Argon.Core::U8
+import Argon.Core::Array::*
+import Argon.Core::Int::*
+import Argon.Core::U8::*
 
 public trait Resource (token T: type)
     public def _.resource: T = abstract
@@ -9,10 +10,9 @@ public trait Resource (token T: type)
 end
 
 public trait InputStream
-    public proc _.read(array: Array U8, offset: Int, count: Int)(requires erased ev: (offset >= 0 && count >= 0 && offset + count <= array.length) == true): Int = abstract
+    public proc _.read(array: use mut Array U8)(offset: Int)(count: Int)(requires erased ev: ((offset >= 0 && count >= 0 && offset + count <= array.length) == true)): Int ensures ((result >= 0 && result <= count) == true) = abstract
 end
 
 public trait OutputStream
-    public proc _.write(array: Array U8, offset: Int, count: Int)(requires erased ev: (offset >= 0 && count >= 0 && offset + count <= array.length) == true): () ensures ((result >= 0 && result <= count) == true) = abstract
+    public proc _.write(array: use Array U8)(offset: Int)(count: Int)(requires erased ev: ((offset >= 0 && count >= 0 && offset + count <= array.length) == true)): () = abstract
 end
-

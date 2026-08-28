@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use argon_compiler::access::AccessToken;
 use argon_compiler::scope::{FunctionResultValueScope, ParameterScope, Scope};
 use argon_compiler::signature::{FunctionSignature, ParameterBinding, SignatureParameter};
-use argon_compiler::{Context, DefaultExprContext};
+use argon_compiler::{Context, DefaultExprContext, EffectInfo};
 use argon_expr::{ErasureMode, Expr, ExprLocationExt, ExpressionOwner, ParameterVariable};
 use argon_parser::ast;
 use argon_util::{CompileError, MultiSlice};
@@ -130,7 +130,8 @@ impl<'a> SignatureParser<'a> {
             .map(|clause| {
                 type_check_type_expr(
                     self.context.clone(),
-                    TypeCheckOptions::new(&self.access_token, &result_scope, ErasureMode::Token),
+                    TypeCheckOptions::new(&self.access_token, &result_scope, ErasureMode::Erased)
+                        .with_effect_info(EffectInfo::Pure),
                     clause,
                 )
             })

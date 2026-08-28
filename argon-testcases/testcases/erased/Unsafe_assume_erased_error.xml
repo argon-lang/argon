@@ -1,0 +1,15 @@
+<ArgonTest>
+
+    <Name>Unsafe assume erased in non-erased context</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        def assumedString: String = __argon_builtin unsafe_assume_erased String
+    ]]></InputSource>
+
+    <ExpectedError>AR000D</ExpectedError>
+
+</ArgonTest>

@@ -305,6 +305,7 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             erasure_check_mode: self.type_checker.erasure_check_mode,
             ensures_clauses: Vec::new(),
             return_position: false,
+            enable_ownership: self.type_checker.enable_ownership,
         };
 
         let mut return_type = sig.return_type.clone();

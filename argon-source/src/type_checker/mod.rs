@@ -64,6 +64,7 @@ pub fn type_check_type_expr(
         erasure_check_mode: erasure_mode,
         ensures_clauses: Vec::new(),
         return_position: false,
+        enable_ownership: false,
     };
 
     let expr = checker.check_type(e);
@@ -112,6 +113,7 @@ pub fn type_check_expr(
         erasure_check_mode: erasure_mode,
         ensures_clauses,
         return_position: true,
+        enable_ownership: false,
     };
 
     let expected_type = default_to_type_check_shifter().shift(expected_type.clone());
@@ -481,6 +483,7 @@ struct TypeChecker<'access, 'scope, 'model> {
     erasure_check_mode: ErasureMode,
     ensures_clauses: Vec<LocatedExpr<TypeCheckExprContext>>,
     return_position: bool,
+    enable_ownership: bool,
 }
 
 macro_rules! with_nested_scope {
@@ -495,6 +498,7 @@ macro_rules! with_nested_scope {
             erasure_check_mode: $tc.erasure_check_mode,
             ensures_clauses: $tc.ensures_clauses.clone(),
             return_position: $tc.return_position,
+            enable_ownership: $tc.enable_ownership,
         }
     };
 }
@@ -1749,6 +1753,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             }
 
             ast::Expr::Use { is_mutable, value } => {
+                if !self.enable_ownership {
+                    panic!("Ownership is disabled");
+                }
+
                 let value = self.infer(value).infer_fully();
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::Use {
@@ -1760,6 +1768,10 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 })
             }
             ast::Expr::Shared { value } => {
+                if !self.enable_ownership {
+                    panic!("Ownership is disabled");
+                }
+
                 let value = self.infer(value).infer_fully();
                 TypeInferResult::Complete(InferredType {
                     checked_expr: Expr::Shared {
@@ -2221,6 +2233,8 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             };
         }
 
+        let enable_ownership = self.enable_ownership;
+
         match builtin_name {
             "int_type" => self.infer_fixed_builtin(
                 location,
@@ -2614,6 +2628,13 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
             "string_eq" => same_type_bool_binary_builtin!(StringEq, Expr::string_type()),
             "bool_eq" => same_type_bool_binary_builtin!(BoolEq, Expr::bool_type()),
 
+            "unsafe_assume_erased" => parameterized_builtin!(
+                UnsafeAssumeErased,
+                r#type,
+                [] => r#type.value.clone(),
+                {}
+            ),
+
             "array_create_unsafe_uninitialized" => parameterized_builtin!(
                 ArrayCreateUnsafeUninitialized,
                 element_type,
@@ -2637,31 +2658,52 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                 ArrayGet,
                 element_type,
                 [
-                    Expr::Use {
-                        is_mutable: false,
-                        inner: Box::new(
-                            Expr::array_type(element_type.clone()).with_location(location.clone())
-                        ),
+                    if enable_ownership {
+                        Expr::Use {
+                            is_mutable: false,
+                            inner: Box::new(
+                                Expr::array_type(element_type.clone()).with_location(location.clone())
+                            ),
+                        }
+                    }
+                    else {
+                        Expr::array_type(element_type.clone())
                     },
                     Expr::int_type(),
-                ] => Expr::Shared {
-                        inner: Box::new(element_type.value.clone().with_location(location.clone())),
-                },
+                ] =>
+                    if enable_ownership {
+                        Expr::Shared {
+                            inner: Box::new(element_type.value.clone().with_location(location.clone())),
+                        }
+                    }
+                    else {
+                        element_type.value.clone()
+                    },
                 { array, index }
             ),
             "array_set" => parameterized_builtin!(
                 ArraySet,
                 element_type,
                 [
-                    Expr::Use {
-                        is_mutable: true,
-                        inner: Box::new(
-                            Expr::array_type(element_type.clone()).with_location(location.clone())
-                        ),
+                    if enable_ownership {
+                        Expr::Use {
+                            is_mutable: true,
+                            inner: Box::new(
+                                Expr::array_type(element_type.clone()).with_location(location.clone())
+                            ),
+                        }
+                    }
+                    else {
+                        Expr::array_type(element_type.clone())
                     },
                     Expr::int_type(),
-                    Expr::Shared {
-                        inner: Box::new(element_type.value.clone().with_location(location.clone())),
+                    if enable_ownership {
+                        Expr::Shared {
+                            inner: Box::new(element_type.value.clone().with_location(location.clone())),
+                        }
+                    }
+                    else {
+                        element_type.value.clone()
                     },
                 ] => Expr::unit(),
                 { array, index, value }
