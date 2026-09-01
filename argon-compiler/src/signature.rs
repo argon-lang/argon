@@ -58,6 +58,36 @@ impl<EC: ExprContext + ?Sized> FunctionSignature<EC> {
         EC: DefaultExprAssociatedTypes,
     {
         match instance_type {
+            MethodInstanceType::Record(record_type) => {
+                let owner = ExpressionOwner::Record(record_type.record.clone());
+                let owner_sig = record_type
+                    .record
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut DefaultToExprTypeContextShifter::<EC>::default());
+                let mut subst = SubstScanner::new();
+                subst.add_function_parameter_substitutions(
+                    owner,
+                    &owner_sig,
+                    &record_type.arguments,
+                );
+                self.scan_mut(&mut subst);
+            }
+            MethodInstanceType::Enum(enum_type) => {
+                let owner = ExpressionOwner::Enum(enum_type.enum_.clone());
+                let owner_sig = enum_type
+                    .enum_
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut DefaultToExprTypeContextShifter::<EC>::default());
+                let mut subst = SubstScanner::new();
+                subst.add_function_parameter_substitutions(owner, &owner_sig, &enum_type.arguments);
+                self.scan_mut(&mut subst);
+            }
             MethodInstanceType::Trait(trait_type) => {
                 let owner = ExpressionOwner::Trait(trait_type.trait_.clone());
                 let owner_sig = trait_type

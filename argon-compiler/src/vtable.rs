@@ -8,8 +8,8 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use argon_expr::{
-    Expr, ExprLocationExt, ExpressionOwner, InstanceType, LocatedExpr, SubstScanner, TraitType,
-    Unify,
+    EnumType, Expr, ExprLocationExt, ExpressionOwner, InstanceType, LocatedExpr, RecordType,
+    SubstScanner, TraitType, Unify,
 };
 use argon_expr::{ExprScannerMut, Variable};
 use argon_parser::Location;
@@ -26,6 +26,10 @@ impl Unload for VTable {
 }
 
 impl VTable {
+    pub fn empty() -> Self {
+        Self { entries: HashMap::new() }
+    }
+
     fn scan_mut<S>(&mut self, scan: &mut S)
     where
         S: ExprScannerMut<EC = DefaultExprContext>,
@@ -99,6 +103,33 @@ pub fn build_vtable(
     let is_concrete;
 
     match &method_owner {
+        MethodOwner::Record(_) => {
+            is_concrete = true;
+            parent = VTable {
+                entries: HashMap::new(),
+            };
+        }
+        MethodOwner::Enum(_) => {
+            is_concrete = false;
+            parent = VTable {
+                entries: HashMap::new(),
+            };
+        }
+        MethodOwner::EnumVariant(variant) => {
+            is_concrete = true;
+            let enum_ = variant.owning_enum();
+            let mut enum_vtable = enum_.clone().vtable().as_ref().clone();
+            if let Expr::EnumType(enum_type) = &variant.clone().signature().return_type.value {
+                let mut subst = SubstScanner::new();
+                subst.add_function_parameter_substitutions(
+                    ExpressionOwner::Enum(enum_.clone()),
+                    &enum_.signature(),
+                    &enum_type.arguments,
+                );
+                enum_vtable.scan_mut(&mut subst);
+            }
+            parent = enum_vtable;
+        }
         MethodOwner::Trait(_) => {
             is_concrete = false;
             parent = VTable {
@@ -178,6 +209,9 @@ impl VTableBuilder {
 
     fn build_single_type_vtable(&mut self, method_owner: MethodOwner) {
         let methods = match method_owner {
+            MethodOwner::Record(record) => record.methods(),
+            MethodOwner::Enum(enum_) => enum_.methods(),
+            MethodOwner::EnumVariant(variant) => variant.methods(),
             MethodOwner::Instance(instance) => instance.methods(),
             MethodOwner::Trait(trait_) => trait_.methods(),
         };
@@ -245,6 +279,15 @@ impl VTableBuilder {
             .collect::<Vec<_>>();
 
         match method_owner {
+            MethodOwner::Record(r) => Expr::RecordType(RecordType {
+                record: r,
+                arguments,
+            }),
+            MethodOwner::Enum(e) => Expr::EnumType(EnumType {
+                enum_: e,
+                arguments,
+            }),
+            MethodOwner::EnumVariant(v) => v.signature().return_type.value.clone(),
             MethodOwner::Trait(t) => Expr::TraitType(TraitType {
                 trait_: t,
                 arguments,

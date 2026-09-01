@@ -631,6 +631,11 @@ final class Emitter {
 					codeBuilder.return_();
 				}
 			);
+
+			for(var method : definition.methods()) {
+				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
+					recordInfo.recordClassDesc(), ClassNaming.typeTokenParameterFieldName(index), tokenParameterDescs.get(index)));
+			}
 		});
 
 		writeEntry(classEntryName(recordInfo.recordClassDesc()), bytes);
@@ -772,6 +777,11 @@ final class Emitter {
 					codeBuilder.return_();
 				}
 			);
+
+			for(var method : definition.methods()) {
+				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
+					enumInfo.enumClassDesc(), ClassNaming.typeTokenParameterFieldName(index), tokenParameterDescs.get(index)));
+			}
 		});
 		writeEntry(classEntryName(enumInfo.enumClassDesc()), baseBytes);
 
@@ -820,6 +830,11 @@ final class Emitter {
 					flags |= ClassFile.ACC_FINAL;
 				}
 				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), flags);
+			}
+
+			for(var method : variant.methods()) {
+				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
+					variantInfo.variantClassDesc(), ClassNaming.instanceParameterFieldName(index), argDescs.get(index)));
 			}
 
 			classBuilder.withMethodBody(

@@ -1,6 +1,6 @@
 use parse18_lexer_gen::{
     builder::DFABuilder,
-    codegen::rust::{emit_rust, RustSettings},
+    codegen::rust::{RustSettings, emit_rust},
     regex::Regex,
 };
 use std::io::{self, Write};
@@ -72,6 +72,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
         "TokenType::Token(Token::KwInstance)",
     );
     b.add(Regex::str("new"), "TokenType::Token(Token::KwNew)");
+    b.add(Regex::str("with"), "TokenType::Token(Token::KwWith)");
     b.add(Regex::str("true"), "TokenType::Token(Token::KwTrue)");
     b.add(Regex::str("false"), "TokenType::Token(Token::KwFalse)");
     b.add(Regex::str("as"), "TokenType::Token(Token::KwAs)");

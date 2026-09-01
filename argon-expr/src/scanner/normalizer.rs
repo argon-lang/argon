@@ -1,4 +1,7 @@
-use crate::{Builtin, Expr, ExprContext, ExprLocationExt, ExprScannerMut, IntegerType, LocatedExpr, SubstScanner, Variable, ownership::is_shared_type, default_scan_mut};
+use crate::{
+    Builtin, Expr, ExprContext, ExprLocationExt, ExprScannerMut, IntegerType, LocatedExpr,
+    SubstScanner, Variable, default_scan_mut, ownership::is_shared_type,
+};
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use argon_util::Fuel;

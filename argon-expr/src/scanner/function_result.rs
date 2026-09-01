@@ -1,4 +1,4 @@
-use crate::{default_scan_mut, Expr, ExprContext, ExprScannerMut, LocatedExpr};
+use crate::{Expr, ExprContext, ExprScannerMut, LocatedExpr, default_scan_mut};
 use alloc::borrow::Cow;
 
 pub struct FunctionResultValueSubstScanner<'a, EC: ExprContext + ?Sized> {

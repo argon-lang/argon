@@ -200,6 +200,7 @@ impl TubeModel {
                     }
                     ModuleExportEntry::RecordDefinition(definition) => {
                         record_definitions.insert(definition.record_id.clone());
+                        method_definitions.extend(definition_methods(&definition.methods));
                         record_field_definitions
                             .extend(definition.fields.iter().map(|field| field.field_id.clone()));
                         entries.push(vf::TubeFileEntry::RecordDefinition {
@@ -208,8 +209,10 @@ impl TubeModel {
                     }
                     ModuleExportEntry::EnumDefinition(definition) => {
                         enum_definitions.insert(definition.enum_id.clone());
+                        method_definitions.extend(definition_methods(&definition.methods));
                         for variant in &definition.variants {
                             enum_variant_definitions.insert(variant.variant_id.clone());
+                            method_definitions.extend(definition_methods(&variant.methods));
                             record_field_definitions
                                 .extend(variant.fields.iter().map(|field| field.field_id.clone()));
                         }
@@ -337,6 +340,33 @@ impl TubeModel {
             }
 
             match &info.owner {
+                MethodOwner::Record(record_id) => {
+                    entries.push(vf::TubeFileEntry::RecordMethodReference {
+                        method_id: method_id.clone(),
+                        record_id: record_id.clone(),
+                        name: Box::new(info.name.clone()),
+                        erased_signature: Box::new(info.erased_signature.clone()),
+                        signature: Box::new(info.signature.clone()),
+                    })
+                }
+                MethodOwner::Enum(enum_id) => {
+                    entries.push(vf::TubeFileEntry::EnumMethodReference {
+                        method_id: method_id.clone(),
+                        enum_id: enum_id.clone(),
+                        name: Box::new(info.name.clone()),
+                        erased_signature: Box::new(info.erased_signature.clone()),
+                        signature: Box::new(info.signature.clone()),
+                    })
+                }
+                MethodOwner::EnumVariant(variant_id) => {
+                    entries.push(vf::TubeFileEntry::EnumVariantMethodReference {
+                        method_id: method_id.clone(),
+                        variant_id: variant_id.clone(),
+                        name: Box::new(info.name.clone()),
+                        erased_signature: Box::new(info.erased_signature.clone()),
+                        signature: Box::new(info.signature.clone()),
+                    })
+                }
                 MethodOwner::Trait(trait_id) => {
                     entries.push(vf::TubeFileEntry::TraitMethodReference {
                         method_id: method_id.clone(),
@@ -406,6 +436,19 @@ impl TubeModel {
             vf::TubeFileEntry::RecordDefinition { definition } => {
                 let definition = *definition;
                 let import = (*definition.import).clone();
+                for method in &definition.methods {
+                    self.method_info.insert(
+                        method.method_id.clone(),
+                        MethodInfo {
+                            owner: MethodOwner::Record(definition.record_id.clone()),
+                            parent_import_specifier: import.clone(),
+                            name: (*method.name).clone(),
+                            erased_signature: (*method.erased_signature).clone(),
+                            signature: (*method.signature).clone(),
+                            definition: Some((**method).clone()),
+                        },
+                    );
+                }
                 for field in &definition.fields {
                     self.record_field_info.insert(
                         field.field_id.clone(),
@@ -439,9 +482,47 @@ impl TubeModel {
                     },
                 );
             }
+            vf::TubeFileEntry::RecordMethodReference {
+                method_id,
+                record_id,
+                name,
+                erased_signature,
+                signature,
+            } => {
+                let parent_import_specifier = self
+                    .record_info
+                    .get(&record_id)
+                    .expect("record method references unknown record")
+                    .import_specifier
+                    .clone();
+                self.method_info.insert(
+                    method_id,
+                    MethodInfo {
+                        owner: MethodOwner::Record(record_id),
+                        parent_import_specifier,
+                        name: *name,
+                        erased_signature: *erased_signature,
+                        signature: *signature,
+                        definition: None,
+                    },
+                );
+            }
             vf::TubeFileEntry::EnumDefinition { definition } => {
                 let definition = *definition;
                 let import = (*definition.import).clone();
+                for method in &definition.methods {
+                    self.method_info.insert(
+                        method.method_id.clone(),
+                        MethodInfo {
+                            owner: MethodOwner::Enum(definition.enum_id.clone()),
+                            parent_import_specifier: import.clone(),
+                            name: (*method.name).clone(),
+                            erased_signature: (*method.erased_signature).clone(),
+                            signature: (*method.signature).clone(),
+                            definition: Some((**method).clone()),
+                        },
+                    );
+                }
                 for variant in &definition.variants {
                     self.enum_variant_info.insert(
                         variant.variant_id.clone(),
@@ -451,6 +532,19 @@ impl TubeModel {
                             signature: (*variant.signature).clone(),
                         },
                     );
+                    for method in &variant.methods {
+                        self.method_info.insert(
+                            method.method_id.clone(),
+                            MethodInfo {
+                                owner: MethodOwner::EnumVariant(variant.variant_id.clone()),
+                                parent_import_specifier: import.clone(),
+                                name: (*method.name).clone(),
+                                erased_signature: (*method.erased_signature).clone(),
+                                signature: (*method.signature).clone(),
+                                definition: Some((**method).clone()),
+                            },
+                        );
+                    }
                     for field in &variant.fields {
                         self.record_field_info.insert(
                             field.field_id.clone(),
@@ -485,6 +579,31 @@ impl TubeModel {
                     },
                 );
             }
+            vf::TubeFileEntry::EnumMethodReference {
+                method_id,
+                enum_id,
+                name,
+                erased_signature,
+                signature,
+            } => {
+                let parent_import_specifier = self
+                    .enum_info
+                    .get(&enum_id)
+                    .expect("enum method references unknown enum")
+                    .import_specifier
+                    .clone();
+                self.method_info.insert(
+                    method_id,
+                    MethodInfo {
+                        owner: MethodOwner::Enum(enum_id),
+                        parent_import_specifier,
+                        name: *name,
+                        erased_signature: *erased_signature,
+                        signature: *signature,
+                        definition: None,
+                    },
+                );
+            }
             vf::TubeFileEntry::EnumVariantReference {
                 variant_id,
                 enum_id,
@@ -497,6 +616,37 @@ impl TubeModel {
                         enum_id,
                         name: *name,
                         signature: *signature,
+                    },
+                );
+            }
+            vf::TubeFileEntry::EnumVariantMethodReference {
+                method_id,
+                variant_id,
+                name,
+                erased_signature,
+                signature,
+            } => {
+                let enum_id = self
+                    .enum_variant_info
+                    .get(&variant_id)
+                    .expect("variant method references unknown variant")
+                    .enum_id
+                    .clone();
+                let parent_import_specifier = self
+                    .enum_info
+                    .get(&enum_id)
+                    .expect("variant method references unknown enum")
+                    .import_specifier
+                    .clone();
+                self.method_info.insert(
+                    method_id,
+                    MethodInfo {
+                        owner: MethodOwner::EnumVariant(variant_id),
+                        parent_import_specifier,
+                        name: *name,
+                        erased_signature: *erased_signature,
+                        signature: *signature,
+                        definition: None,
                     },
                 );
             }
@@ -1798,6 +1948,15 @@ impl TubeModel {
     ) -> Option<BigUint> {
         let source_info = source_tube.method_info.get(method_id)?;
         let target_owner = match &source_info.owner {
+            MethodOwner::Record(record_id) => {
+                MethodOwner::Record(self.convert_record_id_from(source_tube, record_id)?)
+            }
+            MethodOwner::Enum(enum_id) => {
+                MethodOwner::Enum(self.convert_enum_id_from(source_tube, enum_id)?)
+            }
+            MethodOwner::EnumVariant(variant_id) => MethodOwner::EnumVariant(
+                self.convert_enum_variant_id_from(source_tube, variant_id)?,
+            ),
             MethodOwner::Trait(trait_id) => {
                 MethodOwner::Trait(self.convert_trait_id_from(source_tube, trait_id)?)
             }
@@ -1937,6 +2096,9 @@ pub struct TraitInfo {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum MethodOwner {
+    Record(BigUint),
+    Enum(BigUint),
+    EnumVariant(BigUint),
     Trait(BigUint),
     Instance(BigUint),
 }

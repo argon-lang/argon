@@ -178,6 +178,8 @@ public final class IrReader {
 				);
 				importSpec = recordDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.RecordDefinition(recordDefinition);
+				for(var method : recordDefinition.definition().methods()) methodMap.put(method.methodId(),
+					new MethodEntry.RecordOwner(new TubeFileEntry.RecordMethodReference(method.methodId(), recordDefinition.definition().recordId(), method.name(), method.erasedSignature(), method.signature())));
 
 				for(var field : recordDefinition.definition().fields()) {
 					recordFieldMap.put(
@@ -196,6 +198,7 @@ public final class IrReader {
 				recordMap.put(recordRef.recordId(), new RecordEntry.Reference(recordRef));
 				return;
 			}
+			case TubeFileEntry.RecordMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.RecordOwner(methodRef)); return; }
 
 			case TubeFileEntry.EnumDefinition enumDefinition -> {
 				enumMap.put(
@@ -204,6 +207,8 @@ public final class IrReader {
 				);
 				importSpec = enumDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.EnumDefinition(enumDefinition);
+				for(var method : enumDefinition.definition().methods()) methodMap.put(method.methodId(),
+					new MethodEntry.EnumOwner(new TubeFileEntry.EnumMethodReference(method.methodId(), enumDefinition.definition().enumId(), method.name(), method.erasedSignature(), method.signature())));
 				for(var variant : enumDefinition.definition().variants()) {
 					enumVariantMap.put(
 						variant.variantId(),
@@ -214,6 +219,8 @@ public final class IrReader {
 							variant.signature()
 						)
 					);
+					for(var method : variant.methods()) methodMap.put(method.methodId(),
+						new MethodEntry.EnumVariant(new TubeFileEntry.EnumVariantMethodReference(method.methodId(), variant.variantId(), method.name(), method.erasedSignature(), method.signature())));
 
 					for(var field : variant.fields()) {
 						recordFieldMap.put(
@@ -233,11 +240,13 @@ public final class IrReader {
 				enumMap.put(enumRef.enumId(), new EnumEntry.Reference(enumRef));
 				return;
 			}
+			case TubeFileEntry.EnumMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.EnumOwner(methodRef)); return; }
 
 			case TubeFileEntry.EnumVariantReference enumVariantRef -> {
 				enumVariantMap.put(enumVariantRef.variantId(), enumVariantRef);
 				return;
 			}
+			case TubeFileEntry.EnumVariantMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.EnumVariant(methodRef)); return; }
 
 			case TubeFileEntry.RecordFieldReference recordFieldRef -> {
 				recordFieldMap.put(
@@ -387,6 +396,9 @@ public final class IrReader {
 	}
 
 	private sealed interface MethodEntry {
+		record RecordOwner(TubeFileEntry.RecordMethodReference entry) implements MethodEntry {}
+		record EnumOwner(TubeFileEntry.EnumMethodReference entry) implements MethodEntry {}
+		record EnumVariant(TubeFileEntry.EnumVariantMethodReference entry) implements MethodEntry {}
 		record Trait(TubeFileEntry.TraitMethodReference entry) implements MethodEntry {
 		}
 
@@ -700,6 +712,9 @@ public final class IrReader {
 
 		private MethodInfo computeMethodInfo(UnsignedBigInteger id) {
 			return switch(require(methodMap, id, "Invalid method id")) {
+				case MethodEntry.RecordOwner(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getRecordInfo(ref.recordId()).recordClassDesc());
+				case MethodEntry.EnumOwner(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getEnumInfo(ref.enumId()).enumClassDesc());
+				case MethodEntry.EnumVariant(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getEnumVariantInfo(ref.variantId()).variantClassDesc());
 				case MethodEntry.Trait(var methodRef) -> {
 					var traitInfo = getTraitInfo(methodRef.traitId());
 
@@ -726,6 +741,11 @@ public final class IrReader {
 					);
 				}
 			};
+		}
+
+		private MethodInfo methodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature, ClassDesc definingClass) {
+			return new MethodInfo(name, erasedSignature, signature, definingClass,
+				ClassNaming.methodName(name, erasedSignature), functionSignatureDescriptor(signature));
 		}
 
 		@Override

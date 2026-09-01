@@ -35,7 +35,6 @@ use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
 use core::error::Error;
 use core::fmt::{Debug, Display, Formatter};
 use core::hash::{Hash, Hasher};
-use core::mem;
 use core::str::FromStr;
 use esexpr::ESExpr;
 use hashbrown::hash_map::Entry;
@@ -454,18 +453,27 @@ pub struct MethodMetadata {
 
 #[derive(Clone)]
 pub enum MethodOwner {
+    Record(Arc<dyn Record>),
+    Enum(Arc<dyn Enum>),
+    EnumVariant(Arc<dyn EnumVariant>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
 }
 impl MethodOwner {
     pub fn import_specifier(self) -> ImportSpecifier {
         match self {
+            MethodOwner::Record(r) => r.import_specifier(),
+            MethodOwner::Enum(e) => e.import_specifier(),
+            MethodOwner::EnumVariant(v) => v.owning_enum().import_specifier(),
             MethodOwner::Trait(t) => t.import_specifier(),
             MethodOwner::Instance(i) => i.import_specifier(),
         }
     }
     pub fn into_expression_owner(self) -> ExpressionOwner<DefaultExprContext> {
         match self {
+            MethodOwner::Record(record) => ExpressionOwner::Record(record),
+            MethodOwner::Enum(enum_) => ExpressionOwner::Enum(enum_),
+            MethodOwner::EnumVariant(variant) => ExpressionOwner::EnumVariant(variant),
             MethodOwner::Trait(trait_) => ExpressionOwner::Trait(trait_),
             MethodOwner::Instance(instance) => ExpressionOwner::Instance(instance),
         }
@@ -473,6 +481,9 @@ impl MethodOwner {
 
     pub fn signature(&self) -> Arc<FunctionSignature<DefaultExprContext>> {
         match self {
+            MethodOwner::Record(record) => record.clone().signature(),
+            MethodOwner::Enum(enum_) => enum_.clone().signature(),
+            MethodOwner::EnumVariant(variant) => variant.clone().signature(),
             MethodOwner::Trait(trait_) => trait_.clone().signature(),
             MethodOwner::Instance(instance) => instance.clone().signature(),
         }
@@ -507,10 +518,13 @@ impl Unload for MethodEntry {
 }
 
 pub trait Record: Debug + Unload + ThreadSafe {
+    fn location(&self) -> parse18_runtime::Location;
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>>;
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
 pub trait RecordField: Debug + Unload + ThreadSafe {
@@ -540,17 +554,23 @@ pub struct RecordFieldMetadata {
 }
 
 pub trait Enum: Debug + Unload + ThreadSafe {
+    fn location(&self) -> parse18_runtime::Location;
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
 
     fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>>;
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
 pub trait EnumVariant: Debug + Unload + ThreadSafe {
+    fn location(&self) -> parse18_runtime::Location;
     fn owning_enum(&self) -> Arc<dyn Enum>;
     fn metadata(&self) -> &EnumVariantMetadata;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>>;
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
 pub struct EnumVariantMetadata {
@@ -653,6 +673,9 @@ impl From<RecordFieldOwner> for TypeDeclaration {
 impl From<MethodOwner> for TypeDeclaration {
     fn from(owner: MethodOwner) -> Self {
         match owner {
+            MethodOwner::Record(r) => TypeDeclaration::Record(r),
+            MethodOwner::Enum(e) => TypeDeclaration::Enum(e),
+            MethodOwner::EnumVariant(v) => TypeDeclaration::EnumVariant(v),
             MethodOwner::Trait(t) => TypeDeclaration::Trait(t),
             MethodOwner::Instance(i) => TypeDeclaration::Instance(i),
         }

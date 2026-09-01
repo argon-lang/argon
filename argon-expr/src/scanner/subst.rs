@@ -1,4 +1,4 @@
-use crate::{default_scan_mut, Expr, ExprContext, ExprScannerMut, LocatedExpr, Variable};
+use crate::{Expr, ExprContext, ExprScannerMut, LocatedExpr, Variable, default_scan_mut};
 use alloc::borrow::Cow;
 use hashbrown::HashMap;
 

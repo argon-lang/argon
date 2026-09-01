@@ -1,10 +1,10 @@
 use crate::modifiers::{
-    ModifierParser, ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS,
-    METHOD_SLOT_ABSTRACT, METHOD_SLOT_CONCRETE, UNSAFE_ASSUME_PURE,
+    ACCESS_MODIFIER, ERASURE_MODE_NON_TOKEN, IS_INLINE, IS_WITNESS, METHOD_SLOT_ABSTRACT,
+    METHOD_SLOT_CONCRETE, ModifierParser, UNSAFE_ASSUME_PURE,
 };
 use crate::module::DeclarationResult;
 use crate::signature::SignatureParser;
-use crate::type_checker::{type_check_expr, TypeCheckOptions};
+use crate::type_checker::{TypeCheckOptions, type_check_expr};
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use argon_compiler::access::{AccessModifier, AccessToken};
@@ -14,8 +14,8 @@ use argon_compiler::{
     MethodInstanceParameter, MethodMetadata, MethodOwner, Unload,
 };
 use argon_expr::{
-    ErasureMode, Expr, ExprLocationExt, ExpressionOwner, InstanceParameterVariable, LocatedExpr,
-    TraitType, Variable,
+    EnumType, ErasureMode, Expr, ExprLocationExt, ExpressionOwner, InstanceParameterVariable,
+    LocatedExpr, RecordType, TraitType, Variable,
 };
 use argon_parser::ast;
 use argon_util::sync::ThreadSafe;
@@ -97,6 +97,45 @@ impl<MC: MethodClosure + 'static> SourceMethod<MC> {
 
     fn receiver_type(&self) -> LocatedExpr<DefaultExprContext> {
         match self.closure.owner() {
+            MethodOwner::Record(record) => {
+                let owner = ExpressionOwner::Record(record.clone());
+                let signature = record.clone().signature();
+                Expr::RecordType(RecordType {
+                    record,
+                    arguments: signature
+                        .parameters
+                        .iter()
+                        .enumerate()
+                        .map(|(i, param)| {
+                            Expr::Variable(Variable::Parameter(Box::new(
+                                param.clone().to_parameter_var(owner.clone(), i),
+                            )))
+                            .with_location(self.decl.name.location.clone())
+                        })
+                        .collect(),
+                })
+                .with_location(self.decl.name.location.clone())
+            }
+            MethodOwner::Enum(enum_) => {
+                let owner = ExpressionOwner::Enum(enum_.clone());
+                let signature = enum_.clone().signature();
+                Expr::EnumType(EnumType {
+                    enum_,
+                    arguments: signature
+                        .parameters
+                        .iter()
+                        .enumerate()
+                        .map(|(i, param)| {
+                            Expr::Variable(Variable::Parameter(Box::new(
+                                param.clone().to_parameter_var(owner.clone(), i),
+                            )))
+                            .with_location(self.decl.name.location.clone())
+                        })
+                        .collect(),
+                })
+                .with_location(self.decl.name.location.clone())
+            }
+            MethodOwner::EnumVariant(variant) => variant.signature().return_type.clone(),
             MethodOwner::Trait(trait_) => {
                 let owner = ExpressionOwner::Trait(trait_.clone());
                 let signature = trait_.clone().signature();

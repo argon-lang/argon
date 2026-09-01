@@ -901,12 +901,16 @@ pub struct InstanceType<EC: ExprContext + ?Sized> {
 #[derivative(Eq(bound = ""))]
 #[derivative(Hash(bound = ""))]
 pub enum MethodInstanceType<EC: ExprContext + ?Sized> {
+    Record(RecordType<EC>),
+    Enum(EnumType<EC>),
     Trait(TraitType<EC>),
 }
 
 impl<EC: ExprContext + ?Sized> MethodInstanceType<EC> {
     pub fn into_expr(self) -> Expr<EC> {
         match self {
+            MethodInstanceType::Record(record_type) => Expr::RecordType(record_type),
+            MethodInstanceType::Enum(enum_type) => Expr::EnumType(enum_type),
             MethodInstanceType::Trait(trait_type) => Expr::TraitType(trait_type),
         }
     }

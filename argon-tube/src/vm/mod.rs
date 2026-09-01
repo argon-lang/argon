@@ -15,8 +15,9 @@ use argon_compiler::{
     RecordField, RecordFieldOwner, Trait, Tube, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
 };
 use argon_expr::{
-    BlockLabel, ErasureMode, Expr, ExprLocationExt, ExprScanner, ExpressionOwner,
-    InstanceParameterVariable, IntegerType, LocatedExpr, NormalizerScanner, TraitType, Variable,
+    BlockLabel, EnumType, ErasureMode, Expr, ExprLocationExt, ExprScanner, ExpressionOwner,
+    InstanceParameterVariable, IntegerType, LocatedExpr, NormalizerScanner, RecordType, TraitType,
+    Variable,
 };
 use argon_format_vm::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
@@ -377,12 +378,24 @@ impl VmEncoder {
                         .collect::<Result<Vec<_>, InternalCompilerError>>()?;
 
                     let signature = builder.finish(self, &signature.return_type)?;
+                    let methods = record.clone().methods();
+                    let method_definitions = methods
+                        .iter()
+                        .map(|entry| {
+                            self.emit_method_definition(entry.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let vtable =
+                        self.emit_vtable(MethodOwner::Record(record.clone()), methods.as_ref())?;
 
                     vf::TubeFileEntry::RecordDefinition {
                         definition: Box::new(vf::RecordDefinition {
                             record_id,
                             import: Box::new(import),
                             signature: Box::new(signature.sig),
+                            vtable: Box::new(vtable),
+                            methods: method_definitions,
                             fields,
                         }),
                     }
@@ -448,6 +461,16 @@ impl VmEncoder {
                         &ExpressionOwner::Enum(enum_.clone()),
                         &enum_.clone().signature(),
                     )?;
+                    let enum_methods = enum_.clone().methods();
+                    let enum_method_definitions = enum_methods
+                        .iter()
+                        .map(|entry| {
+                            self.emit_method_definition(entry.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let enum_vtable =
+                        self.emit_vtable(MethodOwner::Enum(enum_.clone()), enum_methods.as_ref())?;
                     let variants = enum_
                         .clone()
                         .variants()
@@ -492,11 +515,25 @@ impl VmEncoder {
 
                             let variant_signature =
                                 builder.finish(self, &variant_signature.return_type)?;
+                            let methods = variant.clone().methods();
+                            let method_definitions = methods
+                                .iter()
+                                .map(|entry| {
+                                    self.emit_method_definition(entry.method.clone())
+                                        .map(Box::new)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            let vtable = self.emit_vtable(
+                                MethodOwner::EnumVariant(variant.clone()),
+                                methods.as_ref(),
+                            )?;
 
                             Ok(Box::new(vf::EnumVariantDefinition {
                                 variant_id: BigUint::from(variant_id),
                                 name: Box::new(encode_identifier(&variant.metadata().name)),
                                 signature: Box::new(variant_signature.sig),
+                                vtable: Box::new(vtable),
+                                methods: method_definitions,
                                 fields,
                             }))
                         })
@@ -507,6 +544,8 @@ impl VmEncoder {
                             enum_id,
                             import: Box::new(import),
                             signature: Box::new(signature.sig),
+                            vtable: Box::new(enum_vtable),
+                            methods: enum_method_definitions,
                             variants,
                         }),
                     }
@@ -553,6 +592,31 @@ impl VmEncoder {
                     )?;
 
                     match method.clone().owner() {
+                        MethodOwner::Record(record) => vf::TubeFileEntry::RecordMethodReference {
+                            method_id,
+                            record_id: BigUint::from(self.get_record_id(record)),
+                            name: Box::new(name),
+                            erased_signature: Box::new(signature),
+                            signature: Box::new(self.emit_method_signature(method.clone())?.sig),
+                        },
+                        MethodOwner::Enum(enum_) => vf::TubeFileEntry::EnumMethodReference {
+                            method_id,
+                            enum_id: BigUint::from(self.get_enum_id(enum_)),
+                            name: Box::new(name),
+                            erased_signature: Box::new(signature),
+                            signature: Box::new(self.emit_method_signature(method.clone())?.sig),
+                        },
+                        MethodOwner::EnumVariant(variant) => {
+                            vf::TubeFileEntry::EnumVariantMethodReference {
+                                method_id,
+                                variant_id: BigUint::from(self.get_enum_variant_id(variant)),
+                                name: Box::new(name),
+                                erased_signature: Box::new(signature),
+                                signature: Box::new(
+                                    self.emit_method_signature(method.clone())?.sig,
+                                ),
+                            }
+                        }
                         MethodOwner::Trait(trait_) => {
                             let trait_id = BigUint::from(self.get_trait_id(trait_));
 
@@ -875,6 +939,9 @@ impl VmEncoder {
             .implementation()
             .map(|implementation| {
                 let import_specifier = match method.clone().owner() {
+                    MethodOwner::Record(record) => record.import_specifier(),
+                    MethodOwner::Enum(enum_) => enum_.import_specifier(),
+                    MethodOwner::EnumVariant(variant) => variant.owning_enum().import_specifier(),
                     MethodOwner::Trait(trait_) => trait_.import_specifier(),
                     MethodOwner::Instance(instance) => instance.import_specifier(),
                 };
@@ -909,6 +976,9 @@ impl VmEncoder {
             .collect::<HashMap<_, _>>();
 
         let vtable = match owner {
+            MethodOwner::Record(record) => record.vtable(),
+            MethodOwner::Enum(enum_) => enum_.vtable(),
+            MethodOwner::EnumVariant(variant) => variant.vtable(),
             MethodOwner::Trait(trait_) => trait_.vtable(),
             MethodOwner::Instance(instance) => instance.vtable(),
         };
@@ -1456,7 +1526,10 @@ trait TokenEmitterCommon {
 
             Expr::Type(_) | Expr::BigType(_) => Ok(vf::Token::TypeInfo {}),
 
-            Expr::Use { inner, is_mutable: _ } => self.token_expr(inner),
+            Expr::Use {
+                inner,
+                is_mutable: _,
+            } => self.token_expr(inner),
 
             Expr::Variable(variable) => match variable_erasure_mode(variable) {
                 ErasureMode::Token => match self.get_parameter_as_token(variable)? {
@@ -3273,6 +3346,47 @@ fn variable_erasure_mode(variable: &Variable<DefaultExprContext>) -> ErasureMode
 
 fn method_receiver_type(method: Arc<dyn Method>) -> LocatedExpr<DefaultExprContext> {
     match method.owner() {
+        MethodOwner::Record(record) => {
+            let owner = ExpressionOwner::Record(record.clone());
+            let signature = record.clone().signature();
+            let location = record.location();
+            Expr::RecordType(RecordType {
+                record,
+                arguments: signature
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(index, param)| {
+                        Expr::Variable(Variable::Parameter(Box::new(
+                            param.clone().to_parameter_var(owner.clone(), index),
+                        )))
+                        .with_location(location.clone())
+                    })
+                    .collect(),
+            })
+            .with_location(location)
+        }
+        MethodOwner::Enum(enum_) => {
+            let owner = ExpressionOwner::Enum(enum_.clone());
+            let signature = enum_.clone().signature();
+            let location = enum_.location();
+            Expr::EnumType(EnumType {
+                enum_,
+                arguments: signature
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(index, param)| {
+                        Expr::Variable(Variable::Parameter(Box::new(
+                            param.clone().to_parameter_var(owner.clone(), index),
+                        )))
+                        .with_location(location.clone())
+                    })
+                    .collect(),
+            })
+            .with_location(location)
+        }
+        MethodOwner::EnumVariant(variant) => variant.signature().return_type.clone(),
         MethodOwner::Trait(trait_) => {
             let trait_owner = ExpressionOwner::Trait(trait_.clone());
             let signature = trait_.clone().signature();

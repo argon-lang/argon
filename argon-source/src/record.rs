@@ -1,4 +1,5 @@
 use crate::enums::SourceEnumVariant;
+use crate::method::{MethodClosure, SourceMethod};
 use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser, RECORD_FIELD_ACCESS_MODIFIER};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
@@ -6,13 +7,14 @@ use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
-use argon_compiler::scope::ParameterScope;
+use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
+use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
-    Context, DefaultExprContext, EnumVariant, Record, RecordField, RecordFieldMetadata,
-    RecordFieldOwner, TypeDeclaration, Unload,
+    Context, DefaultExprContext, EnumVariant, MethodEntry, MethodOwner, Record, RecordField,
+    RecordFieldMetadata, RecordFieldOwner, TypeDeclaration, Unload,
 };
-use argon_expr::{ErasureMode, Expr, ExpressionOwner, LocatedExpr};
+use argon_expr::{ErasureMode, ExpressionOwner, LocatedExpr};
 use argon_parser::ast;
 use argon_util::{MultiSlice, UnloadCell};
 use core::fmt::Debug;
@@ -23,6 +25,8 @@ pub struct SourceRecord {
     closure: Box<dyn DeclarationClosure>,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl SourceRecord {
@@ -44,6 +48,8 @@ impl SourceRecord {
                 closure,
                 signature: UnloadCell::new(),
                 fields: UnloadCell::new(),
+                methods: UnloadCell::new(),
+                vtable: UnloadCell::new(),
             }),
         }
     }
@@ -66,11 +72,16 @@ impl Unload for SourceRecord {
     fn unload(&self) {
         self.signature.unload();
         self.fields.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.closure.unload();
     }
 }
 
 impl Record for SourceRecord {
+    fn location(&self) -> parse18_runtime::Location {
+        self.decl.name.location.clone()
+    }
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
         let signature = erase_signature(self.context.clone(), self.clone().signature().as_ref());
         self.closure
@@ -120,6 +131,68 @@ impl Record for SourceRecord {
                     .collect(),
             )
         })
+    }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        self.methods.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::RecordBodyStmt::MethodDeclaration(method) => {
+                            let method_res = SourceMethod::from_ast(
+                                self.context.clone(),
+                                RecordMethodClosure {
+                                    record: self.clone(),
+                                },
+                                (**method).clone(),
+                            );
+                            Some(MethodEntry {
+                                access: method_res.access,
+                                method: method_res.result,
+                            })
+                        }
+                        ast::RecordBodyStmt::FunctionDeclaration(_)
+                        | ast::RecordBodyStmt::RecordField(_) => None,
+                    })
+                    .collect(),
+            )
+        })
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        self.vtable.initialize(|| {
+            Arc::new(build_vtable(
+                self.context.clone(),
+                MethodOwner::Record(self.clone()),
+                self.access_token(),
+                self.decl.name.location.clone(),
+            ))
+        })
+    }
+}
+
+struct RecordMethodClosure {
+    record: Arc<SourceRecord>,
+}
+
+impl MethodClosure for RecordMethodClosure {
+    fn owner(&self) -> MethodOwner {
+        MethodOwner::Record(self.record.clone())
+    }
+
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let record_ref: Arc<dyn Record> = self.record.clone();
+        ParameterScope::new(
+            self.record.closure.scope(),
+            ExpressionOwner::Record(record_ref),
+            &self.record.clone().signature().parameters,
+        )
+    }
+
+    fn access_token(&self) -> AccessToken {
+        self.record.access_token()
     }
 }
 

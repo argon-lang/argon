@@ -195,7 +195,12 @@ export function createRecordType(recordInfo) {
 
     const recordType = recordTypeConstructorObj[recordInfo.name];
 
-    recordType.specialize = specialize();
+    recordType.specialize = specialize({
+        customize(specialized) {
+            specialized.methods = Object.create(null);
+            applyVTable(specialized, recordInfo.methods, recordInfo.vtable);
+        },
+    });
 
     defineTokenArgSymbols(recordType, recordInfo);
 
@@ -212,12 +217,17 @@ export function createEnumType(enumInfo) {
                 continue;
             }
 
-            classObj.variants[variantName] = createEnumVariant(classObj, enumInfo.variants[variantName]);
+            const variantClass = createEnumVariant(classObj, enumInfo.variants[variantName]);
+            variantClass.methods = Object.create(classObj.methods);
+            applyVTable(variantClass, enumInfo.variants[variantName].methods, enumInfo.variants[variantName].vtable);
+            classObj.variants[variantName] = variantClass;
         }
     }
 
     enumType.specialize = specialize({
         customize(specialization) {
+            specialization.methods = Object.create(null);
+            applyVTable(specialization, enumInfo.methods, enumInfo.vtable);
             setupVariants(specialization);
         },
     });
@@ -276,7 +286,8 @@ function createEnumVariant(proto, variant) {
         proto.call(this);
     };
 
-    variantClass.prototype = Object.create(proto);
+    variantClass.prototype = Object.create(proto.prototype);
+    variantClass.prototype.constructor = variantClass;
 
     return variantClass;
 }

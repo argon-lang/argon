@@ -5,7 +5,7 @@ import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm.js";
 import { Identifier } from "@argon-lang/js-backend-api/vm.js";
 import { JsExtern } from "@argon-lang/js-backend-api";
-import type { IterableElement, JsonObject, JsonValue, ReadonlyDeep } from "type-fest";
+import type { IterableElement, JsonValue, ReadonlyDeep } from "type-fest";
 
 import { name as isValidIdName } from "estree-util-is-identifier-name";
 
@@ -918,8 +918,15 @@ class ModuleEmitter extends EmitterBase {
         }
     }
 
+    private objectProperty(name: string, value: ReadonlyDeep<estree.Expression>): ReadonlyDeep<estree.Property> {
+        return { type: "Property", computed: false, shorthand: false, method: false, kind: "init", key: { type: "Identifier", name }, value };
+    }
+
     private emitRecord(rec: ir.RecordDefinition): void {
         const name = this.getExportNameForImport(rec.import);
+        const nameId: estree.Expression = { type: "Identifier", name };
+        const methods = this.emitMethods(rec.methods, nameId);
+        const vtable = this.emitVTable(rec.vtable, nameId);
 
         this.addDeclaration({
             type: "VariableDeclaration",
@@ -936,14 +943,13 @@ class ModuleEmitter extends EmitterBase {
                         optional: false,
                         callee: this.getArgonRuntimeExport("createRecordType"),
                         arguments: [
-                            jsonToExpression({
-                                name,
-                                tokenParameterCount: rec.signature.tokenParameters.length,
-                                fields: rec.fields.map(field => ({
-                                    name: this.getExportNameForId(field.name),
-                                    mutable: field.mutable,
-                                })),
-                            }),
+                            { type: "ObjectExpression", properties: [
+                                this.objectProperty("name", { type: "Literal", value: name }),
+                                this.objectProperty("tokenParameterCount", { type: "Literal", value: rec.signature.tokenParameters.length }),
+                                this.objectProperty("fields", jsonToExpression(rec.fields.map(field => ({ name: this.getExportNameForId(field.name), mutable: field.mutable })))),
+                                this.objectProperty("methods", methods),
+                                this.objectProperty("vtable", vtable),
+                            ] },
                         ],
                     },
                 },
@@ -953,16 +959,17 @@ class ModuleEmitter extends EmitterBase {
 
     private emitEnum(enumDef: ir.EnumDefinition): void {
         const name = this.getExportNameForImport(enumDef.import);
-
-        const variantsObj: JsonObject = Object.create(null);
+        const nameId: estree.Expression = { type: "Identifier", name };
+        const variantProperties: ReadonlyDeep<estree.Property>[] = [];
         for(const variant of enumDef.variants) {
-            variantsObj[this.getExportNameForId(variant.name)] = {
-                argCount: variant.signature.tokenParameters.length + variant.signature.parameters.length,
-                fields: variant.fields.map(field => ({
-                    name: this.getExportNameForId(field.name),
-                    mutable: field.mutable,
-                }))
-            };
+            variantProperties.push({ type: "Property", computed: true, shorthand: false, method: false, kind: "init",
+                key: { type: "Literal", value: this.getExportNameForId(variant.name) },
+                value: { type: "ObjectExpression", properties: [
+                    this.objectProperty("argCount", { type: "Literal", value: variant.signature.tokenParameters.length + variant.signature.parameters.length }),
+                    this.objectProperty("fields", jsonToExpression(variant.fields.map(field => ({ name: this.getExportNameForId(field.name), mutable: field.mutable })))),
+                    this.objectProperty("methods", this.emitMethods(variant.methods, nameId)),
+                    this.objectProperty("vtable", this.emitVTable(variant.vtable, nameId)),
+                ] } });
         }
 
         this.addDeclaration({
@@ -980,11 +987,13 @@ class ModuleEmitter extends EmitterBase {
                         optional: false,
                         callee: this.getArgonRuntimeExport("createEnumType"),
                         arguments: [
-                            jsonToExpression({
-                                name,
-                                tokenParameterCount: enumDef.signature.tokenParameters.length,
-                                variants: variantsObj,
-                            }),
+                            { type: "ObjectExpression", properties: [
+                                this.objectProperty("name", { type: "Literal", value: name }),
+                                this.objectProperty("tokenParameterCount", { type: "Literal", value: enumDef.signature.tokenParameters.length }),
+                                this.objectProperty("methods", this.emitMethods(enumDef.methods, nameId)),
+                                this.objectProperty("vtable", this.emitVTable(enumDef.vtable, nameId)),
+                                this.objectProperty("variants", { type: "ObjectExpression", properties: variantProperties }),
+                            ] },
                         ],
                     },
                 },

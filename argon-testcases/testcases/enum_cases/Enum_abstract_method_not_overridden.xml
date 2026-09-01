@@ -1,0 +1,16 @@
+<ArgonTest>
+    <Name>Enum abstract method not overridden</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        enum Greeting
+            public def self.message(): String = abstract
+            Missing
+        end
+
+        proc main(): () do
+        end
+    ]]></InputSource>
+    <ExpectedError>AR0017</ExpectedError>
+</ArgonTest>

@@ -1,12 +1,12 @@
 use crate::modifiers::{
-    ModifierParser, ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, UNSAFE_ASSUME_PURE,
+    ACCESS_MODIFIER_GLOBAL, ERASURE_MODE, IS_INLINE, IS_WITNESS, ModifierParser, UNSAFE_ASSUME_PURE,
 };
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
-use crate::type_checker::{type_check_expr, TypeCheckOptions};
+use crate::type_checker::{TypeCheckOptions, type_check_expr};
 use alloc::{boxed::Box, sync::Arc};
 use argon_compiler::access::AccessToken;
-use argon_compiler::erased_sig::{erase_signature, ImportSpecifier};
+use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
 use argon_compiler::scope::ParameterScope;
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::{

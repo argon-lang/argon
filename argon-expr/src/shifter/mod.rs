@@ -614,6 +614,12 @@ where
     S: ExprContextShifter + ?Sized,
 {
     match instance_type {
+        MethodInstanceType::Record(record_type) => {
+            MethodInstanceType::Record(default_shift_record_type(shifter, record_type))
+        }
+        MethodInstanceType::Enum(enum_type) => {
+            MethodInstanceType::Enum(default_shift_enum_type(shifter, enum_type))
+        }
         MethodInstanceType::Trait(trait_type) => {
             MethodInstanceType::Trait(default_shift_trait_type(shifter, trait_type))
         }

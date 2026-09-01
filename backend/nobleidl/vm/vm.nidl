@@ -44,6 +44,14 @@ enum tube-file-entry {
         signature: function-signature;
     },
 
+    record-method-reference {
+        method-id: nat;
+        record-id: nat;
+        name: identifier;
+        erased-signature: erased-signature;
+        signature: function-signature;
+    },
+
     @esexpr:(inline-value)
     enum-definition {
         definition: enum-definition;
@@ -55,11 +63,27 @@ enum tube-file-entry {
         signature: function-signature;
     },
 
+    enum-method-reference {
+        method-id: nat;
+        enum-id: nat;
+        name: identifier;
+        erased-signature: erased-signature;
+        signature: function-signature;
+    },
+
     enum-variant-reference {
         variant-id: nat;
 
         enum-id: nat;
         name: identifier;
+        signature: function-signature;
+    },
+
+    enum-variant-method-reference {
+        method-id: nat;
+        variant-id: nat;
+        name: identifier;
+        erased-signature: erased-signature;
         signature: function-signature;
     },
 
@@ -371,6 +395,12 @@ record record-definition {
     @esexpr:(keyword)
     signature: function-signature;
 
+    @esexpr:(keyword)
+    vtable: vtable;
+
+    @esexpr:(keyword)
+    methods: list[method-definition];
+
     @esexpr:(vararg)
     fields: list[record-field-definition];
 }
@@ -396,6 +426,12 @@ record enum-definition {
     @esexpr:(keyword)
     signature: function-signature;
 
+    @esexpr:(keyword)
+    vtable: vtable;
+
+    @esexpr:(keyword)
+    methods: list[method-definition];
+
     @esexpr:(vararg)
     variants: list[enum-variant-definition];
 }
@@ -407,6 +443,12 @@ record enum-variant-definition {
 
     @esexpr:(keyword)
     signature: function-signature;
+
+    @esexpr:(keyword)
+    vtable: vtable;
+
+    @esexpr:(keyword)
+    methods: list[method-definition];
 
     @esexpr:(vararg)
     fields: list[record-field-definition];

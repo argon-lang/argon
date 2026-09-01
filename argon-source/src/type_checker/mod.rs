@@ -18,9 +18,9 @@ use argon_expr::{
     BlockLabel, BlockLabelDeclaration, BlockLabelKind, Builtin, ClosureParameterVariable,
     ErasureMode, Expr, ExprContext, ExprContextShifter, ExprLocationExt, ExprScanner,
     ExprScannerMut, ExpressionOwner, FunctionResultValueSubstScanner, IntegerType, LocalVariable,
-    LocatedExpr, LocatedPattern, LoopLabels, MatchCase, Normalizer, NormalizerScanner, Pattern,
-    RecordFieldLiteral, RecordType, SubstScanner, TraitType, TypeComparer, Unify, Variable,
-    VariableTupleElement,
+    LocatedExpr, LocatedPattern, LoopLabels, MatchCase, MethodInstanceType, Normalizer,
+    NormalizerScanner, Pattern, RecordFieldLiteral, RecordType, SubstScanner, TraitType,
+    TypeComparer, Unify, Variable, VariableTupleElement,
 };
 use argon_parser::ast;
 use argon_parser::ast::{FunctionLiteral, FunctionParameterListType, Identifier, StringFragment};
@@ -3452,6 +3452,54 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                                 vec![overload]
                             }),
                     );
+
+                    let instance_owner = Some(MethodOwner::Record(r.clone()));
+                    let method_overloads = r
+                        .clone()
+                        .methods()
+                        .iter()
+                        .filter(|entry| {
+                            entry.method.metadata().name == adjusted_member_name
+                                && self.access.allows_access(
+                                    &Declaration::Method(entry.method.clone()),
+                                    instance_owner.as_ref(),
+                                    entry.access,
+                                )
+                        })
+                        .map(|entry| Overloadable::InstanceMethod {
+                            method: entry.method.clone(),
+                            instance_type: MethodInstanceType::Record(record_type.clone()),
+                            obj: instance.checked_expr.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    if !method_overloads.is_empty() {
+                        overload_groups.push(method_overloads);
+                    }
+                }
+                Expr::EnumType(ref enum_type) => {
+                    let instance_owner = Some(MethodOwner::Enum(enum_type.enum_.clone()));
+                    let method_overloads = enum_type
+                        .enum_
+                        .clone()
+                        .methods()
+                        .iter()
+                        .filter(|entry| {
+                            entry.method.metadata().name == adjusted_member_name
+                                && self.access.allows_access(
+                                    &Declaration::Method(entry.method.clone()),
+                                    instance_owner.as_ref(),
+                                    entry.access,
+                                )
+                        })
+                        .map(|entry| Overloadable::InstanceMethod {
+                            method: entry.method.clone(),
+                            instance_type: MethodInstanceType::Enum(enum_type.clone()),
+                            obj: instance.checked_expr.clone(),
+                        })
+                        .collect::<Vec<_>>();
+                    if !method_overloads.is_empty() {
+                        overload_groups.push(method_overloads);
+                    }
                 }
                 Expr::TraitType(ref trait_type) => {
                     let instance_type_as_method_owner =
@@ -3471,7 +3519,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
                         })
                         .map(|entry| Overloadable::InstanceMethod {
                             method: entry.method.clone(),
-                            trait_type: trait_type.clone(),
+                            instance_type: MethodInstanceType::Trait(trait_type.clone()),
                             obj: instance.checked_expr.clone(),
                         })
                         .collect::<Vec<_>>();

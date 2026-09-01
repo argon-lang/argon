@@ -42,6 +42,13 @@ enum tube-file-entry {
         import: import-specifier;
     },
 
+    record-method-reference {
+        method-id: nat;
+        record-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+
     @esexpr:(inline-value)
     enum-definition {
         definition: enum-definition;
@@ -52,11 +59,25 @@ enum tube-file-entry {
         import: import-specifier;
     },
 
+    enum-method-reference {
+        method-id: nat;
+        enum-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+
     enum-variant-reference {
         variant-id: nat;
 
         enum-id: nat;
         name: identifier;
+    },
+
+    enum-variant-method-reference {
+        method-id: nat;
+        variant-id: nat;
+        name: identifier;
+        signature: erased-signature;
     },
 
     record-field-reference {
@@ -452,9 +473,13 @@ record extern-map {
 record record-definition {
     record-id: nat;
     import: import-specifier;
+    location: location;
 
     @esexpr:(keyword)
     signature: function-signature;
+
+    @esexpr:(keyword)
+    methods: list[method-entry];
 
     @esexpr:(vararg)
     fields: list[record-field-definition];
@@ -480,9 +505,13 @@ record record-field-definition {
 record enum-definition {
     enum-id: nat;
     import: import-specifier;
+    location: location;
 
     @esexpr:(keyword)
     signature: function-signature;
+
+    @esexpr:(keyword)
+    methods: list[method-entry];
 
     @esexpr:(vararg)
     variants: list[enum-variant-definition];
@@ -492,9 +521,13 @@ record enum-definition {
 record enum-variant-definition {
     variant-id: nat;
     name: identifier;
+    location: location;
 
     @esexpr:(keyword)
     signature: function-signature;
+
+    @esexpr:(keyword)
+    methods: list[method-entry];
 
     @esexpr:(vararg)
     fields: list[record-field-definition];
@@ -1061,6 +1094,12 @@ record instance-singleton-type {
 
 @esexpr:(derive-codec)
 enum method-instance-type {
+    @esexpr:(inline-value)
+    record-type { record-type: record-type; },
+
+    @esexpr:(inline-value)
+    enum-type { enum-type: enum-type; },
+
     @esexpr:(inline-value)
     trait-type {
         trait-type: trait-type;

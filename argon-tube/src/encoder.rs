@@ -176,6 +176,26 @@ impl TubeEncoder {
 
         if is_new {
             match method.clone().owner() {
+                MethodOwner::Record(record) => {
+                    self.get_record_id(record.clone());
+                    if import_specifier_tube(&record.import_specifier()) != self.tube.name() {
+                        self.entry_emitters.push_back(EntryEmitter::Method(method));
+                    }
+                }
+                MethodOwner::Enum(enum_) => {
+                    self.get_enum_id(enum_.clone());
+                    if import_specifier_tube(&enum_.import_specifier()) != self.tube.name() {
+                        self.entry_emitters.push_back(EntryEmitter::Method(method));
+                    }
+                }
+                MethodOwner::EnumVariant(variant) => {
+                    self.get_enum_variant_id(variant.clone());
+                    if import_specifier_tube(&variant.owning_enum().import_specifier())
+                        != self.tube.name()
+                    {
+                        self.entry_emitters.push_back(EntryEmitter::Method(method));
+                    }
+                }
                 MethodOwner::Trait(trait_) => {
                     self.get_trait_id(trait_.clone());
                     if import_specifier_tube(&trait_.import_specifier()) != self.tube.name() {
@@ -336,6 +356,13 @@ impl TubeEncoder {
                         import: Box::new(import),
                     }
                 } else {
+                    let methods = record
+                        .clone()
+                        .methods()
+                        .iter()
+                        .map(|method| self.emit_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    record.clone().vtable();
                     let fields = record
                         .clone()
                         .fields()
@@ -359,7 +386,9 @@ impl TubeEncoder {
                         definition: Box::new(tf::RecordDefinition {
                             record_id,
                             import: Box::new(import),
+                            location: Box::new(Self::emit_location(&record.location())),
                             signature: Box::new(self.emit_function_signature(&record.signature())?),
+                            methods,
                             fields,
                         }),
                     }
@@ -411,12 +440,26 @@ impl TubeEncoder {
                         import: Box::new(import),
                     }
                 } else {
+                    let methods = enum_
+                        .clone()
+                        .methods()
+                        .iter()
+                        .map(|method| self.emit_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    enum_.clone().vtable();
                     let variants = enum_
                         .clone()
                         .variants()
                         .iter()
                         .map(|variant| {
                             let variant_id = self.get_enum_variant_id(variant.clone());
+                            let methods = variant
+                                .clone()
+                                .methods()
+                                .iter()
+                                .map(|method| self.emit_method_entry(method).map(Box::new))
+                                .collect::<Result<Vec<_>, _>>()?;
+                            variant.clone().vtable();
                             let fields = variant
                                 .clone()
                                 .fields()
@@ -439,9 +482,11 @@ impl TubeEncoder {
                             Ok(Box::new(tf::EnumVariantDefinition {
                                 variant_id: BigUint::from(variant_id),
                                 name: Box::new(encode_identifier(&variant.metadata().name)?),
+                                location: Box::new(Self::emit_location(&variant.location())),
                                 signature: Box::new(
                                     self.emit_function_signature(&variant.clone().signature())?,
                                 ),
+                                methods,
                                 fields,
                             }))
                         })
@@ -451,7 +496,9 @@ impl TubeEncoder {
                         definition: Box::new(tf::EnumDefinition {
                             enum_id,
                             import: Box::new(import),
+                            location: Box::new(Self::emit_location(&enum_.location())),
                             signature: Box::new(self.emit_function_signature(&enum_.signature())?),
+                            methods,
                             variants,
                         }),
                     }
@@ -561,6 +608,26 @@ impl TubeEncoder {
                 }
 
                 match method.clone().owner() {
+                    MethodOwner::Record(record) => tf::TubeFileEntry::RecordMethodReference {
+                        method_id,
+                        record_id: BigUint::from(self.ids.record_ids.get(record)),
+                        name: Box::new(encode_identifier(&metadata.name)?),
+                        signature: Box::new(signature),
+                    },
+                    MethodOwner::Enum(enum_) => tf::TubeFileEntry::EnumMethodReference {
+                        method_id,
+                        enum_id: BigUint::from(self.ids.enum_ids.get(enum_)),
+                        name: Box::new(encode_identifier(&metadata.name)?),
+                        signature: Box::new(signature),
+                    },
+                    MethodOwner::EnumVariant(variant) => {
+                        tf::TubeFileEntry::EnumVariantMethodReference {
+                            method_id,
+                            variant_id: BigUint::from(self.ids.enum_variant_ids.get(variant)),
+                            name: Box::new(encode_identifier(&metadata.name)?),
+                            signature: Box::new(signature),
+                        }
+                    }
                     MethodOwner::Trait(trait_) => tf::TubeFileEntry::TraitMethodReference {
                         method_id,
                         trait_id: BigUint::from(self.ids.trait_ids.get(trait_)),
@@ -896,6 +963,12 @@ impl TubeEncoder {
         instance_type: &MethodInstanceType<DefaultExprContext>,
     ) -> Result<tf::MethodInstanceType, InternalCompilerError> {
         Ok(match instance_type {
+            MethodInstanceType::Record(record_type) => tf::MethodInstanceType::RecordType {
+                record_type: Box::new(self.emit_record_type(record_type)?),
+            },
+            MethodInstanceType::Enum(enum_type) => tf::MethodInstanceType::EnumType {
+                enum_type: Box::new(self.emit_enum_type(enum_type)?),
+            },
             MethodInstanceType::Trait(trait_type) => tf::MethodInstanceType::TraitType {
                 trait_type: Box::new(self.emit_trait_type(trait_type)?),
             },
@@ -909,6 +982,34 @@ impl TubeEncoder {
         Ok(tf::TraitType {
             id: BigUint::from(self.get_trait_id(trait_type.trait_.clone())),
             args: trait_type
+                .arguments
+                .iter()
+                .map(|arg| self.emit_located_expr(arg).map(Box::new))
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+
+    fn emit_record_type(
+        &mut self,
+        record_type: &argon_expr::RecordType<DefaultExprContext>,
+    ) -> Result<tf::RecordType, InternalCompilerError> {
+        Ok(tf::RecordType {
+            id: BigUint::from(self.get_record_id(record_type.record.clone())),
+            args: record_type
+                .arguments
+                .iter()
+                .map(|arg| self.emit_located_expr(arg).map(Box::new))
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+
+    fn emit_enum_type(
+        &mut self,
+        enum_type: &argon_expr::EnumType<DefaultExprContext>,
+    ) -> Result<tf::EnumType, InternalCompilerError> {
+        Ok(tf::EnumType {
+            id: BigUint::from(self.get_enum_id(enum_type.enum_.clone())),
+            args: enum_type
                 .arguments
                 .iter()
                 .map(|arg| self.emit_located_expr(arg).map(Box::new))

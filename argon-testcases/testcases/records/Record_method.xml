@@ -1,0 +1,19 @@
+<ArgonTest>
+    <Name>Record method</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        record Person
+            name: String
+
+            public def self.greeting(): String = self.name
+        end
+
+        proc main(): () do
+            let person = Person { name: "hello from record" }
+            puts (person.greeting ())
+        end
+    ]]></InputSource>
+    <ExpectedOutput>hello from record</ExpectedOutput>
+</ArgonTest>

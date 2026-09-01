@@ -343,6 +343,8 @@ where
     S: ExprScanner + ?Sized,
 {
     match instance_type {
+        MethodInstanceType::Record(record_type) => default_scan_record_type(scanner, record_type),
+        MethodInstanceType::Enum(enum_type) => default_scan_enum_type(scanner, enum_type),
         MethodInstanceType::Trait(trait_type) => default_scan_trait_type(scanner, trait_type),
     }
 }
@@ -695,6 +697,10 @@ where
     S: ExprScannerMut + ?Sized,
 {
     match instance_type {
+        MethodInstanceType::Record(record_type) => {
+            default_scan_record_type_mut(scanner, record_type)
+        }
+        MethodInstanceType::Enum(enum_type) => default_scan_enum_type_mut(scanner, enum_type),
         MethodInstanceType::Trait(trait_type) => default_scan_trait_type_mut(scanner, trait_type),
     }
 }

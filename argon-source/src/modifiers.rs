@@ -1,12 +1,12 @@
 use alloc::string::ToString;
-use argon_compiler::access::{AccessModifier, AccessModifierGlobal};
 use argon_compiler::Context;
 use argon_compiler::MethodSlot;
+use argon_compiler::access::{AccessModifier, AccessModifierGlobal};
 use argon_expr::ErasureMode;
 use argon_parser::ast::Modifier;
 use argon_util::CompileError;
-use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use mitsein::slice1;
 use mitsein::slice1::Slice1;
 use parse18_runtime::{Location, WithLocation};

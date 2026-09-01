@@ -172,8 +172,7 @@ pub trait TypeComparer: Unify {
 
                         Expr::Shared {
                             inner: mut actual_inner,
-                        } if !matches!(expected_type.value, Expr::Shared { .. }) =>
-                        {
+                        } if !matches!(expected_type.value, Expr::Shared { .. }) => {
                             let mut norm = NormalizerScanner::new(
                                 self.normalize_fuel(),
                                 Self::normalizer(self.model_mut()),

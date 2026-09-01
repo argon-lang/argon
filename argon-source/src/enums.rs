@@ -1,3 +1,4 @@
+use crate::method::{MethodClosure, SourceMethod};
 use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
@@ -6,11 +7,12 @@ use alloc::borrow::Cow;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
-use argon_compiler::scope::ParameterScope;
+use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
+use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
-    Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, RecordField,
-    TypeDeclaration, Unload,
+    Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, MethodEntry, MethodOwner,
+    RecordField, TypeDeclaration, Unload,
 };
 use argon_expr::{EnumType, Expr, ExprLocationExt, ExpressionOwner, SubstScanner, Variable};
 use argon_parser::ast;
@@ -26,6 +28,8 @@ pub struct SourceEnum {
     pub closure: Box<dyn DeclarationClosure>,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     variants: UnloadCell<Arc<Vec<Arc<dyn EnumVariant>>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl SourceEnum {
@@ -47,6 +51,8 @@ impl SourceEnum {
                 closure,
                 signature: UnloadCell::new(),
                 variants: UnloadCell::new(),
+                methods: UnloadCell::new(),
+                vtable: UnloadCell::new(),
             }),
         }
     }
@@ -91,11 +97,16 @@ impl Unload for SourceEnum {
     fn unload(&self) {
         self.signature.unload();
         self.variants.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.closure.unload();
     }
 }
 
 impl Enum for SourceEnum {
+    fn location(&self) -> parse18_runtime::Location {
+        self.decl.name.location.clone()
+    }
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
         let signature = erase_signature(self.context.clone(), self.clone().signature().as_ref());
         self.closure
@@ -142,6 +153,66 @@ impl Enum for SourceEnum {
             )
         })
     }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        self.methods.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::EnumBodyStmt::MethodDeclaration(method) => {
+                            let method_res = SourceMethod::from_ast(
+                                self.context.clone(),
+                                EnumMethodClosure {
+                                    enum_: self.clone(),
+                                },
+                                (**method).clone(),
+                            );
+                            Some(MethodEntry {
+                                access: method_res.access,
+                                method: method_res.result,
+                            })
+                        }
+                        ast::EnumBodyStmt::FunctionDeclaration(_)
+                        | ast::EnumBodyStmt::EnumVariant(_) => None,
+                    })
+                    .collect(),
+            )
+        })
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        self.vtable.initialize(|| {
+            Arc::new(build_vtable(
+                self.context.clone(),
+                MethodOwner::Enum(self.clone()),
+                self.access_token(),
+                self.decl.name.location.clone(),
+            ))
+        })
+    }
+}
+
+struct EnumMethodClosure {
+    enum_: Arc<SourceEnum>,
+}
+
+impl MethodClosure for EnumMethodClosure {
+    fn owner(&self) -> MethodOwner {
+        MethodOwner::Enum(self.enum_.clone())
+    }
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let enum_ref: Arc<dyn Enum> = self.enum_.clone();
+        ParameterScope::new(
+            self.enum_.closure.scope(),
+            ExpressionOwner::Enum(enum_ref),
+            &self.enum_.clone().signature().parameters,
+        )
+    }
+    fn access_token(&self) -> AccessToken {
+        self.enum_.access_token()
+    }
 }
 
 pub struct SourceEnumVariant {
@@ -150,6 +221,8 @@ pub struct SourceEnumVariant {
     metadata: EnumVariantMetadata,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl SourceEnumVariant {
@@ -186,6 +259,8 @@ impl SourceEnumVariant {
             metadata,
             signature: UnloadCell::new(),
             fields: UnloadCell::new(),
+            methods: UnloadCell::new(),
+            vtable: UnloadCell::new(),
         })
     }
 }
@@ -200,10 +275,15 @@ impl Unload for SourceEnumVariant {
     fn unload(&self) {
         self.signature.unload();
         self.fields.unload();
+        self.methods.unload();
+        self.vtable.unload();
     }
 }
 
 impl EnumVariant for SourceEnumVariant {
+    fn location(&self) -> parse18_runtime::Location {
+        self.metadata_location()
+    }
     fn owning_enum(&self) -> Arc<dyn Enum> {
         self.owner.clone()
     }
@@ -347,11 +427,92 @@ impl EnumVariant for SourceEnumVariant {
                         )));
                     }
 
-                    _ => todo!(),
+                    ast::RecordBodyStmt::FunctionDeclaration(_)
+                    | ast::RecordBodyStmt::MethodDeclaration(_) => {}
                 }
             }
 
             Arc::new(fields)
         })
+    }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        self.methods.initialize(|| {
+            let methods: Vec<&ast::MethodDeclarationStmt> = match &self.decl {
+                ast::EnumVariant::Constructor { body, .. } => body
+                    .iter()
+                    .map(|stmt| match &stmt.value {
+                        ast::EnumVariantBodyStmt::MethodDeclaration(method) => method.as_ref(),
+                    })
+                    .collect(),
+                ast::EnumVariant::Record(record) => record
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::RecordBodyStmt::MethodDeclaration(method) => Some(method.as_ref()),
+                        _ => None,
+                    })
+                    .collect(),
+            };
+            Arc::new(
+                methods
+                    .into_iter()
+                    .map(|method| {
+                        let method_res = SourceMethod::from_ast(
+                            self.owner.context.clone(),
+                            EnumVariantMethodClosure {
+                                variant: self.clone(),
+                            },
+                            method.clone(),
+                        );
+                        MethodEntry {
+                            access: method_res.access,
+                            method: method_res.result,
+                        }
+                    })
+                    .collect(),
+            )
+        })
+    }
+
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        self.vtable.initialize(|| {
+            Arc::new(build_vtable(
+                self.owner.context.clone(),
+                MethodOwner::EnumVariant(self.clone()),
+                self.owner.access_token(),
+                self.metadata_location(),
+            ))
+        })
+    }
+}
+
+impl SourceEnumVariant {
+    fn metadata_location(&self) -> parse18_runtime::Location {
+        match &self.decl {
+            ast::EnumVariant::Constructor { name, .. } => name.location.clone(),
+            ast::EnumVariant::Record(record) => record.name.location.clone(),
+        }
+    }
+}
+
+struct EnumVariantMethodClosure {
+    variant: Arc<SourceEnumVariant>,
+}
+
+impl MethodClosure for EnumVariantMethodClosure {
+    fn owner(&self) -> MethodOwner {
+        MethodOwner::EnumVariant(self.variant.clone())
+    }
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let variant_ref: Arc<dyn EnumVariant> = self.variant.clone();
+        ParameterScope::new(
+            self.variant.owner.closure.scope(),
+            ExpressionOwner::EnumVariant(variant_ref),
+            &self.variant.clone().signature().parameters,
+        )
+    }
+    fn access_token(&self) -> AccessToken {
+        self.variant.owner.access_token()
     }
 }

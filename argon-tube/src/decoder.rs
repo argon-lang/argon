@@ -53,8 +53,12 @@ struct TubeDecoder {
     module_references: HashMap<BigUint, (BigUint, tf::ModulePath)>,
     function_entries: HashMap<BigUint, FunctionEntry>,
     record_entries: HashMap<BigUint, RecordEntry>,
+    record_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     enum_entries: HashMap<BigUint, EnumEntry>,
+    enum_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     enum_variant_references: HashMap<BigUint, (BigUint, tf::Identifier)>,
+    enum_variant_method_references:
+        HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     record_field_references: HashMap<BigUint, (BigUint, tf::Identifier)>,
     enum_variant_record_field_references: HashMap<BigUint, (BigUint, tf::Identifier)>,
     trait_entries: HashMap<BigUint, TraitEntry>,
@@ -159,6 +163,18 @@ enum InstanceEntry {
 
 #[derive(Clone)]
 enum MethodEntryDefinition {
+    Record {
+        record_id: BigUint,
+        entry: tf::MethodEntry,
+    },
+    Enum {
+        enum_id: BigUint,
+        entry: tf::MethodEntry,
+    },
+    EnumVariant {
+        variant_id: BigUint,
+        entry: tf::MethodEntry,
+    },
     Trait {
         trait_id: BigUint,
         entry: tf::MethodEntry,
@@ -182,8 +198,11 @@ impl TubeDecoder {
             module_references: HashMap::new(),
             function_entries: HashMap::new(),
             record_entries: HashMap::new(),
+            record_method_references: HashMap::new(),
             enum_entries: HashMap::new(),
+            enum_method_references: HashMap::new(),
             enum_variant_references: HashMap::new(),
+            enum_variant_method_references: HashMap::new(),
             record_field_references: HashMap::new(),
             enum_variant_record_field_references: HashMap::new(),
             trait_entries: HashMap::new(),
@@ -250,6 +269,17 @@ impl TubeDecoder {
                 );
             }
             tf::TubeFileEntry::RecordDefinition { definition } => {
+                for method in &definition.methods {
+                    insert_unique(
+                        &mut self.method_entries,
+                        method.method.method_id.clone(),
+                        MethodEntryDefinition::Record {
+                            record_id: definition.record_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "method entry",
+                    );
+                }
                 for field in &definition.fields {
                     insert_unique(
                         &mut self.record_field_references,
@@ -273,7 +303,31 @@ impl TubeDecoder {
                     "record entry",
                 );
             }
+            tf::TubeFileEntry::RecordMethodReference {
+                method_id,
+                record_id,
+                name,
+                signature,
+            } => {
+                insert_unique(
+                    &mut self.record_method_references,
+                    method_id,
+                    (record_id, *name, *signature),
+                    "record method reference",
+                );
+            }
             tf::TubeFileEntry::EnumDefinition { definition } => {
+                for method in &definition.methods {
+                    insert_unique(
+                        &mut self.method_entries,
+                        method.method.method_id.clone(),
+                        MethodEntryDefinition::Enum {
+                            enum_id: definition.enum_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "method entry",
+                    );
+                }
                 for variant in &definition.variants {
                     insert_unique(
                         &mut self.enum_variant_references,
@@ -281,6 +335,17 @@ impl TubeDecoder {
                         (definition.enum_id.clone(), (*variant.name).clone()),
                         "enum variant reference",
                     );
+                    for method in &variant.methods {
+                        insert_unique(
+                            &mut self.method_entries,
+                            method.method.method_id.clone(),
+                            MethodEntryDefinition::EnumVariant {
+                                variant_id: variant.variant_id.clone(),
+                                entry: (**method).clone(),
+                            },
+                            "method entry",
+                        );
+                    }
                     for field in &variant.fields {
                         insert_unique(
                             &mut self.enum_variant_record_field_references,
@@ -305,6 +370,19 @@ impl TubeDecoder {
                     "enum entry",
                 );
             }
+            tf::TubeFileEntry::EnumMethodReference {
+                method_id,
+                enum_id,
+                name,
+                signature,
+            } => {
+                insert_unique(
+                    &mut self.enum_method_references,
+                    method_id,
+                    (enum_id, *name, *signature),
+                    "enum method reference",
+                );
+            }
             tf::TubeFileEntry::EnumVariantReference {
                 variant_id,
                 enum_id,
@@ -315,6 +393,19 @@ impl TubeDecoder {
                     variant_id,
                     (enum_id, *name),
                     "enum variant reference",
+                );
+            }
+            tf::TubeFileEntry::EnumVariantMethodReference {
+                method_id,
+                variant_id,
+                name,
+                signature,
+            } => {
+                insert_unique(
+                    &mut self.enum_variant_method_references,
+                    method_id,
+                    (variant_id, *name, *signature),
+                    "enum variant method reference",
                 );
             }
             tf::TubeFileEntry::RecordFieldReference {
@@ -877,6 +968,25 @@ impl TubeDecoder {
 
         let method = if let Some(entry) = self.method_entries.get(&id).cloned() {
             match entry {
+                MethodEntryDefinition::Record { record_id, entry } => Arc::new(DecodedMethod::new(
+                    self.clone(),
+                    MethodOwner::Record(self.record(record_id)),
+                    entry,
+                ))
+                    as Arc<dyn Method>,
+                MethodEntryDefinition::Enum { enum_id, entry } => Arc::new(DecodedMethod::new(
+                    self.clone(),
+                    MethodOwner::Enum(self.enum_decl(enum_id)),
+                    entry,
+                ))
+                    as Arc<dyn Method>,
+                MethodEntryDefinition::EnumVariant { variant_id, entry } => {
+                    Arc::new(DecodedMethod::new(
+                        self.clone(),
+                        MethodOwner::EnumVariant(self.enum_variant(variant_id)),
+                        entry,
+                    )) as Arc<dyn Method>
+                }
                 MethodEntryDefinition::Trait { trait_id, entry } => Arc::new(DecodedMethod::new(
                     self.clone(),
                     MethodOwner::Trait(self.trait_decl(trait_id)),
@@ -891,6 +1001,26 @@ impl TubeDecoder {
                     )) as Arc<dyn Method>
                 }
             }
+        } else if let Some((record_id, name, signature)) = self.record_method_references.get(&id) {
+            self.resolve_method_reference(
+                self.record(record_id.clone()).methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else if let Some((enum_id, name, signature)) = self.enum_method_references.get(&id) {
+            self.resolve_method_reference(
+                self.enum_decl(enum_id.clone()).methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else if let Some((variant_id, name, signature)) =
+            self.enum_variant_method_references.get(&id)
+        {
+            self.resolve_method_reference(
+                self.enum_variant(variant_id.clone()).methods(),
+                name.clone(),
+                signature.clone(),
+            )
         } else if let Some((trait_id, name, signature)) = self.trait_method_references.get(&id) {
             self.resolve_method_reference(
                 self.trait_decl(trait_id.clone()).methods(),
@@ -1864,11 +1994,45 @@ impl TubeDecoder {
         }
     }
 
+    fn decode_record_type(
+        self: &Arc<Self>,
+        record_type: tf::RecordType,
+    ) -> argon_expr::RecordType<DefaultExprContext> {
+        argon_expr::RecordType {
+            record: self.record(record_type.id),
+            arguments: record_type
+                .args
+                .into_iter()
+                .map(|arg| self.decode_located_expr(*arg))
+                .collect(),
+        }
+    }
+
+    fn decode_enum_type(
+        self: &Arc<Self>,
+        enum_type: tf::EnumType,
+    ) -> argon_expr::EnumType<DefaultExprContext> {
+        argon_expr::EnumType {
+            enum_: self.enum_decl(enum_type.id),
+            arguments: enum_type
+                .args
+                .into_iter()
+                .map(|arg| self.decode_located_expr(*arg))
+                .collect(),
+        }
+    }
+
     fn decode_method_instance_type(
         self: &Arc<Self>,
         instance_type: tf::MethodInstanceType,
     ) -> MethodInstanceType<DefaultExprContext> {
         match instance_type {
+            tf::MethodInstanceType::RecordType { record_type } => {
+                MethodInstanceType::Record(self.decode_record_type(*record_type))
+            }
+            tf::MethodInstanceType::EnumType { enum_type } => {
+                MethodInstanceType::Enum(self.decode_enum_type(*enum_type))
+            }
             tf::MethodInstanceType::TraitType { trait_type } => {
                 MethodInstanceType::Trait(self.decode_trait_type(*trait_type))
             }
@@ -2389,6 +2553,8 @@ struct DecodedEnum {
     import: UnloadCell<ImportSpecifier>,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     variants: UnloadCell<Arc<Vec<Arc<dyn EnumVariant>>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl DecodedEnum {
@@ -2399,6 +2565,8 @@ impl DecodedEnum {
             import: UnloadCell::new(),
             signature: UnloadCell::new(),
             variants: UnloadCell::new(),
+            methods: UnloadCell::new(),
+            vtable: UnloadCell::new(),
         }
     }
 }
@@ -2414,11 +2582,16 @@ impl Unload for DecodedEnum {
         self.import.unload();
         self.signature.unload();
         self.variants.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.decoder.unload();
     }
 }
 
 impl Enum for DecodedEnum {
+    fn location(&self) -> Location {
+        TubeDecoder::decode_location((*self.definition.location).clone())
+    }
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
         get_or_init_cached(&self.import, || {
             self.decoder
@@ -2449,6 +2622,34 @@ impl Enum for DecodedEnum {
             )
         })
     }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        get_or_init_cached(&self.methods, || {
+            Arc::new(
+                self.definition
+                    .methods
+                    .iter()
+                    .map(|entry| MethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self.decoder.method(entry.method.method_id.clone()),
+                    })
+                    .collect(),
+            )
+        })
+    }
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        get_or_init_cached(&self.vtable, || {
+            let owner: Arc<dyn Enum> = self.clone();
+            let mut access = access_token_for_import(owner.clone().import_specifier());
+            access.add_type_permissions(TypeDeclaration::Enum(owner.clone()));
+            Arc::new(build_vtable(
+                self.decoder.context.clone(),
+                MethodOwner::Enum(owner),
+                access,
+                self.location(),
+            ))
+        })
+    }
 }
 
 struct DecodedEnumVariant {
@@ -2457,6 +2658,8 @@ struct DecodedEnumVariant {
     metadata: EnumVariantMetadata,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl DecodedEnumVariant {
@@ -2471,6 +2674,8 @@ impl DecodedEnumVariant {
             metadata,
             signature: UnloadCell::new(),
             fields: UnloadCell::new(),
+            methods: UnloadCell::new(),
+            vtable: UnloadCell::new(),
         }
     }
 }
@@ -2485,11 +2690,16 @@ impl Unload for DecodedEnumVariant {
     fn unload(&self) {
         self.signature.unload();
         self.fields.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.owner.decoder.unload();
     }
 }
 
 impl EnumVariant for DecodedEnumVariant {
+    fn location(&self) -> Location {
+        TubeDecoder::decode_location((*self.definition.location).clone())
+    }
     fn owning_enum(&self) -> Arc<dyn Enum> {
         self.owner.clone()
     }
@@ -2522,6 +2732,34 @@ impl EnumVariant for DecodedEnumVariant {
                     })
                     .collect(),
             )
+        })
+    }
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        get_or_init_cached(&self.methods, || {
+            Arc::new(
+                self.definition
+                    .methods
+                    .iter()
+                    .map(|entry| MethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self.owner.decoder.method(entry.method.method_id.clone()),
+                    })
+                    .collect(),
+            )
+        })
+    }
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        get_or_init_cached(&self.vtable, || {
+            let owner: Arc<dyn EnumVariant> = self.clone();
+            let enum_ = owner.owning_enum();
+            let mut access = access_token_for_import(enum_.clone().import_specifier());
+            access.add_type_permissions(TypeDeclaration::Enum(enum_));
+            Arc::new(build_vtable(
+                self.owner.decoder.context.clone(),
+                MethodOwner::EnumVariant(owner),
+                access,
+                self.location(),
+            ))
         })
     }
 }
@@ -2590,6 +2828,8 @@ struct DecodedRecord {
     import: UnloadCell<ImportSpecifier>,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
+    methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    vtable: UnloadCell<Arc<VTable>>,
 }
 
 impl DecodedRecord {
@@ -2600,6 +2840,8 @@ impl DecodedRecord {
             import: UnloadCell::new(),
             signature: UnloadCell::new(),
             fields: UnloadCell::new(),
+            methods: UnloadCell::new(),
+            vtable: UnloadCell::new(),
         }
     }
 }
@@ -2615,11 +2857,16 @@ impl Unload for DecodedRecord {
         self.import.unload();
         self.signature.unload();
         self.fields.unload();
+        self.methods.unload();
+        self.vtable.unload();
         self.decoder.unload();
     }
 }
 
 impl Record for DecodedRecord {
+    fn location(&self) -> Location {
+        TubeDecoder::decode_location((*self.definition.location).clone())
+    }
     fn import_specifier(self: Arc<Self>) -> ImportSpecifier {
         get_or_init_cached(&self.import, || {
             self.decoder
@@ -2648,6 +2895,33 @@ impl Record for DecodedRecord {
                     })
                     .collect(),
             )
+        })
+    }
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> {
+        get_or_init_cached(&self.methods, || {
+            Arc::new(
+                self.definition
+                    .methods
+                    .iter()
+                    .map(|entry| MethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self.decoder.method(entry.method.method_id.clone()),
+                    })
+                    .collect(),
+            )
+        })
+    }
+    fn vtable(self: Arc<Self>) -> Arc<VTable> {
+        get_or_init_cached(&self.vtable, || {
+            let owner: Arc<dyn Record> = self.clone();
+            let mut access = access_token_for_import(owner.clone().import_specifier());
+            access.add_type_permissions(TypeDeclaration::Record(owner.clone()));
+            Arc::new(build_vtable(
+                self.decoder.context.clone(),
+                MethodOwner::Record(owner),
+                access,
+                self.location(),
+            ))
         })
     }
 }

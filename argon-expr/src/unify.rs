@@ -510,9 +510,16 @@ pub trait Unify {
         b: MethodInstanceType<Self::EC>,
     ) -> bool {
         match (a, b) {
+            (MethodInstanceType::Record(a), MethodInstanceType::Record(b)) => {
+                a.record == b.record && self.unify_all(a.arguments, b.arguments)
+            }
+            (MethodInstanceType::Enum(a), MethodInstanceType::Enum(b)) => {
+                a.enum_ == b.enum_ && self.unify_all(a.arguments, b.arguments)
+            }
             (MethodInstanceType::Trait(a), MethodInstanceType::Trait(b)) => {
                 a.trait_ == b.trait_ && self.unify_all(a.arguments, b.arguments)
             }
+            _ => false,
         }
     }
 

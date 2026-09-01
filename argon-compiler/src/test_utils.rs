@@ -3,8 +3,10 @@ use crate::platform::PlatformExtern;
 use crate::scope::{ImplicitGivens, Lookup, Scope};
 use crate::{
     CompileErrorReporter, Context, ContextObject, DefaultExprContext, Enum, EnumVariant,
-    EnumVariantMetadata, FunctionSignature, RecordField, Tube, TubeName, Unload, erased_sig,
+    EnumVariantMetadata, FunctionSignature, MethodEntry, RecordField, Tube, TubeName, Unload,
+    erased_sig,
 };
+use crate::vtable::VTable;
 use alloc::{string::String, sync::Arc, vec::Vec};
 use argon_expr::{
     BlockLabel, BlockLabelDeclaration, Expr, ExprLocationExt, LocatedExpr, LoopLabels, Variable,
@@ -105,6 +107,7 @@ impl Unload for TestEnum {
 }
 
 impl Enum for TestEnum {
+    fn location(&self) -> Location { test_location() }
     fn import_specifier(self: Arc<Self>) -> erased_sig::ImportSpecifier {
         panic!("test enum import_specifier should not be called")
     }
@@ -116,6 +119,9 @@ impl Enum for TestEnum {
     fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>> {
         self.variants.clone()
     }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> { Arc::new(Vec::new()) }
+    fn vtable(self: Arc<Self>) -> Arc<VTable> { Arc::new(VTable::empty()) }
 }
 
 pub struct TestEnumVariant {
@@ -145,6 +151,7 @@ impl Unload for TestEnumVariant {
 }
 
 impl EnumVariant for TestEnumVariant {
+    fn location(&self) -> Location { test_location() }
     fn owning_enum(&self) -> Arc<dyn Enum> {
         panic!("test variant owning_enum should not be called")
     }
@@ -164,6 +171,9 @@ impl EnumVariant for TestEnumVariant {
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>> {
         Arc::new(Vec::new())
     }
+
+    fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>> { Arc::new(Vec::new()) }
+    fn vtable(self: Arc<Self>) -> Arc<VTable> { Arc::new(VTable::empty()) }
 }
 
 fn test_location() -> Location {

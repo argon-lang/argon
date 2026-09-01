@@ -38,7 +38,7 @@ class IrReader {
     readonly enumMap = new Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>();
     readonly enumVariantMap = new Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>();
     readonly traitMap = new Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>();
-    readonly methodMap = new Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" | "instance-method-reference" })>();
+    readonly methodMap = new Map<bigint, (TubeFileEntry & { $type: "record-method-reference" | "enum-method-reference" | "enum-variant-method-reference" | "trait-method-reference" | "instance-method-reference" })>();
     readonly instanceMap = new Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>();
 
 
@@ -135,6 +135,10 @@ class IrReader {
                 this.recordMap.set(entry.definition.recordId, entry);
                 importSpec = entry.definition.import;
                 exportEntry = entry;
+                for(const method of entry.definition.methods) {
+                    this.methodMap.set(method.methodId, { $type: "record-method-reference", recordId: entry.definition.recordId,
+                        methodId: method.methodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
+                }
                 for(const field of entry.definition.fields) {
                     this.recordFieldMap.set(field.fieldId, {
                         $type: "record-field-reference",
@@ -150,10 +154,20 @@ class IrReader {
                 this.recordMap.set(entry.recordId, entry);
                 return;
 
+            case "record-method-reference":
+            case "enum-method-reference":
+            case "enum-variant-method-reference":
+                this.methodMap.set(entry.methodId, entry);
+                return;
+
             case "enum-definition":
                 this.enumMap.set(entry.definition.enumId, entry);
                 importSpec = entry.definition.import;
                 exportEntry = entry;
+                for(const method of entry.definition.methods) {
+                    this.methodMap.set(method.methodId, { $type: "enum-method-reference", enumId: entry.definition.enumId,
+                        methodId: method.methodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
+                }
                 for(const variant of entry.definition.variants) {
                     this.enumVariantMap.set(variant.variantId, {
                         $type: "enum-variant-reference",
@@ -162,6 +176,10 @@ class IrReader {
                         name: variant.name,
                         signature: variant.signature,
                     });
+                    for(const method of variant.methods) {
+                        this.methodMap.set(method.methodId, { $type: "enum-variant-method-reference", variantId: variant.variantId,
+                            methodId: method.methodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
+                    }
                     for(const field of variant.fields) {
                         this.recordFieldMap.set(field.fieldId, {
                             $type: "enum-variant-record-field-reference",
@@ -319,7 +337,7 @@ type ProgramModelOptions = Pick<ProgramModel, "header" | "metadata" | "modules">
     readonly enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
     readonly enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
     readonly traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
-    readonly methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" | "instance-method-reference" })>;
+    readonly methodMap: Map<bigint, (TubeFileEntry & { $type: "record-method-reference" | "enum-method-reference" | "enum-variant-method-reference" | "trait-method-reference" | "instance-method-reference" })>;
     readonly instanceMap: Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>;
 };
 
@@ -353,7 +371,7 @@ class ProgramModelImpl implements ProgramModel {
     readonly #enumMap: Map<bigint, (TubeFileEntry & { $type: "enum-reference" | "enum-definition" })>;
     readonly #enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
     readonly #traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
-    readonly #methodMap: Map<bigint, (TubeFileEntry & { $type: "trait-method-reference" | "instance-method-reference" })>;
+    readonly #methodMap: Map<bigint, (TubeFileEntry & { $type: "record-method-reference" | "enum-method-reference" | "enum-variant-method-reference" | "trait-method-reference" | "instance-method-reference" })>;
     readonly #instanceMap: Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>;
 
     getTubeInfo(id: bigint): TubeInfo {
@@ -530,6 +548,19 @@ class ProgramModelImpl implements ProgramModel {
         }
 
         switch(entry.$type) {
+            case "record-method-reference": {
+                const info = this.getRecordInfo(entry.recordId);
+                return { parentImportSpecifier: info.importSpecifier, name: entry.name, signature: entry.erasedSignature };
+            }
+            case "enum-method-reference": {
+                const info = this.getEnumInfo(entry.enumId);
+                return { parentImportSpecifier: info.importSpecifier, name: entry.name, signature: entry.erasedSignature };
+            }
+            case "enum-variant-method-reference": {
+                const variant = this.getEnumVariantInfo(entry.variantId);
+                const info = this.getEnumInfo(variant.enumId);
+                return { parentImportSpecifier: info.importSpecifier, name: entry.name, signature: entry.erasedSignature };
+            }
             case "trait-method-reference":
             {
                 const traitInfo = this.getTraitInfo(entry.traitId);
@@ -573,5 +604,3 @@ class ProgramModelImpl implements ProgramModel {
         };
     }
 }
-
-

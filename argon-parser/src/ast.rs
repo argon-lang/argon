@@ -48,6 +48,11 @@ pub enum EnumBodyStmt {
 }
 
 #[derive(Debug, Clone)]
+pub enum EnumVariantBodyStmt {
+    MethodDeclaration(Box<MethodDeclarationStmt>),
+}
+
+#[derive(Debug, Clone)]
 pub enum TraitBodyStmt {
     FunctionDeclaration(Box<FunctionDeclarationStmt>),
     MethodDeclaration(Box<MethodDeclarationStmt>),
@@ -145,6 +150,7 @@ pub enum EnumVariant {
         name: WithLocation<Identifier>,
         parameters: Vec<WithLocation<FunctionParameterList>>,
         return_type: Option<WithLocation<Expr>>,
+        body: Vec<WithLocation<EnumVariantBodyStmt>>,
     },
     Record(RecordDeclarationStmt),
 }

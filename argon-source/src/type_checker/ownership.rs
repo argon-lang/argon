@@ -67,7 +67,7 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
         if !self.tc.enable_ownership {
             return;
         }
-        
+
         self.scan(expr);
     }
 
@@ -766,6 +766,16 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
                 ..
             } => {
                 match instance_type {
+                    argon_expr::MethodInstanceType::Record(record_type) => {
+                        for argument in &record_type.arguments {
+                            self.scan(argument);
+                        }
+                    }
+                    argon_expr::MethodInstanceType::Enum(enum_type) => {
+                        for argument in &enum_type.arguments {
+                            self.scan(argument);
+                        }
+                    }
                     argon_expr::MethodInstanceType::Trait(trait_type) => {
                         for argument in &trait_type.arguments {
                             self.scan(argument);

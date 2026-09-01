@@ -89,6 +89,13 @@ fn declaration_stmt_to_enum_body_stmt(decl: DeclarationStmt) -> EnumBodyStmt {
     }
 }
 
+fn declaration_stmt_to_enum_variant_body_stmt(decl: DeclarationStmt) -> EnumVariantBodyStmt {
+    match decl {
+        DeclarationStmt::Method(stmt) => EnumVariantBodyStmt::MethodDeclaration(stmt),
+        _ => panic!("unsupported declaration in enum variant body"),
+    }
+}
+
 fn declaration_stmt_to_trait_body_stmt(decl: DeclarationStmt) -> TraitBodyStmt {
     match decl {
         DeclarationStmt::Function(stmt) => TraitBodyStmt::FunctionDeclaration(stmt),
@@ -264,13 +271,14 @@ fn variable_declaration_rest_builder(
 }
 
 fn method_declaration_stmt_rest_from_named_instance(
+    purity: bool,
     instance_name: WithLocation<Identifier>,
     name: WithLocation<Identifier>,
     parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
-) -> Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt> {
-    Box::new(move |(modifiers, purity)| {
+) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt> {
+    Box::new(move |modifiers| {
         method_declaration_stmt(
             modifiers,
             purity,
@@ -285,13 +293,14 @@ fn method_declaration_stmt_rest_from_named_instance(
 }
 
 fn method_declaration_stmt_rest_from_discard_instance(
+    purity: bool,
     instance_name: WithLocation<Token>,
     name: WithLocation<Identifier>,
     parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: Option<FunctionBody>,
-) -> Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt> {
-    Box::new(move |(modifiers, purity)| {
+) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt> {
+    Box::new(move |modifiers| {
         method_declaration_stmt(
             modifiers,
             purity,
@@ -306,12 +315,13 @@ fn method_declaration_stmt_rest_from_discard_instance(
 }
 
 fn method_declaration_stmt_rest_function(
+    purity: bool,
     name: WithLocation<Identifier>,
     parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: WithLocation<ReturnTypeSpecifier>,
     body: FunctionBody,
-) -> Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt> {
-    Box::new(move |(modifiers, purity)| {
+) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt> {
+    Box::new(move |modifiers| {
         function_declaration_stmt(modifiers, purity, name, parameters, return_type, body)
     })
 }
@@ -347,12 +357,9 @@ fn record_body_stmt_record_field_builder(
 }
 
 fn record_body_stmt_from_declaration_rest_builder(
-    method_purity: bool,
-    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
+    build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordBodyStmt> {
-    Box::new(move |modifiers| {
-        declaration_stmt_to_record_body_stmt(build_decl((modifiers, method_purity)))
-    })
+    Box::new(move |modifiers| declaration_stmt_to_record_body_stmt(build_decl(modifiers)))
 }
 
 fn enum_declaration_stmt_rest_builder(
@@ -382,20 +389,27 @@ fn enum_body_stmt_from_record_builder(
 
 fn enum_body_stmt_from_declaration_builder(
     modifiers: Vec<WithLocation<Modifier>>,
-    method_purity: bool,
-    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
+    build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>,
 ) -> EnumBodyStmt {
-    declaration_stmt_to_enum_body_stmt(build_decl((modifiers, method_purity)))
+    declaration_stmt_to_enum_body_stmt(build_decl(modifiers))
 }
 
 fn enum_constructor_variant_builder(
     name: WithLocation<Identifier>,
     parameters: VecDeque<WithLocation<FunctionParameterList>>,
     type_annotation: Option<WithLocation<Expr>>,
+    body: VecDeque<WithLocation<EnumVariantBodyStmt>>,
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> EnumBodyStmt> {
     Box::new(move |modifiers| {
-        enum_variant_constructor(modifiers, name, parameters, type_annotation)
+        enum_variant_constructor(modifiers, name, parameters, type_annotation, body)
     })
+}
+
+fn enum_variant_body_stmt(
+    modifiers: Vec<WithLocation<Modifier>>,
+    build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>,
+) -> EnumVariantBodyStmt {
+    declaration_stmt_to_enum_variant_body_stmt(build_decl(modifiers))
 }
 
 fn trait_declaration_stmt_rest_builder(
@@ -479,10 +493,9 @@ fn statement_apply_builder(
 
 fn statement_declaration_builder(
     modifiers: Vec<WithLocation<Modifier>>,
-    method_purity: bool,
-    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
+    build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>,
 ) -> Stmt {
-    declaration_stmt_to_stmt(build_decl((modifiers, method_purity)))
+    declaration_stmt_to_stmt(build_decl(modifiers))
 }
 
 fn statement_record_builder(
@@ -494,18 +507,16 @@ fn statement_record_builder(
 
 fn trait_body_stmt_from_declaration_builder(
     modifiers: Vec<WithLocation<Modifier>>,
-    method_purity: bool,
-    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
+    build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>,
 ) -> TraitBodyStmt {
-    declaration_stmt_to_trait_body_stmt(build_decl((modifiers, method_purity)))
+    declaration_stmt_to_trait_body_stmt(build_decl(modifiers))
 }
 
 fn new_trait_object_body_stmt_from_declaration_builder(
     modifiers: Vec<WithLocation<Modifier>>,
-    method_purity: bool,
-    build_decl: Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>,
+    build_decl: Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>,
 ) -> NewTraitObjectBodyStmt {
-    declaration_stmt_to_new_trait_object_body_stmt(build_decl((modifiers, method_purity)))
+    declaration_stmt_to_new_trait_object_body_stmt(build_decl(modifiers))
 }
 
 fn module_path_prepend(name: Box<str>, tail: VecDeque<String>) -> VecDeque<String> {
@@ -1026,12 +1037,14 @@ fn enum_variant_constructor(
     name: WithLocation<Identifier>,
     parameters: VecDeque<WithLocation<FunctionParameterList>>,
     return_type: Option<WithLocation<Expr>>,
+    body: VecDeque<WithLocation<EnumVariantBodyStmt>>,
 ) -> EnumBodyStmt {
     EnumBodyStmt::EnumVariant(Box::new(EnumVariant::Constructor {
         modifiers,
         name,
         parameters: vec_deque_to_vec(parameters),
         return_type,
+        body: vec_deque_to_vec(body),
     }))
 }
 

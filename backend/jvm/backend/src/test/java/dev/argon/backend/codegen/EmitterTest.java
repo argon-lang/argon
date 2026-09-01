@@ -385,6 +385,8 @@ final class EmitterTest {
 				List.of(),
 				new Token.Builtin(new BuiltinType.String())
 			),
+			new Vtable(List.of()),
+			List.of(),
 			List.of(
 				new RecordFieldDefinition(
 					UnsignedBigInteger.ZERO,
@@ -1182,6 +1184,8 @@ final class EmitterTest {
 				List.of(),
 				recordType
 			),
+			new Vtable(List.of()),
+			List.of(),
 			List.of(
 				new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("flag"), boolType, true),
 				new RecordFieldDefinition(UnsignedBigInteger.ONE, new Identifier.Named("count"), intType, true)
@@ -1317,6 +1321,8 @@ final class EmitterTest {
 				List.of(),
 				enumType
 			),
+			new Vtable(List.of()),
+			List.of(),
 			List.of(new EnumVariantDefinition(
 				UnsignedBigInteger.ZERO,
 				new Identifier.Named("Some"),
@@ -1325,6 +1331,8 @@ final class EmitterTest {
 					List.of(new SignatureParameter(Optional.empty(), intType)),
 					enumType
 				),
+				new Vtable(List.of()),
+				List.of(),
 				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, false))
 			))
 		);
@@ -1421,6 +1429,8 @@ final class EmitterTest {
 				List.of(),
 				enumType
 			),
+			new Vtable(List.of()),
+			List.of(),
 			List.of(new EnumVariantDefinition(
 				UnsignedBigInteger.ZERO,
 				new Identifier.Named("Some"),
@@ -1429,6 +1439,8 @@ final class EmitterTest {
 					List.of(new SignatureParameter(Optional.empty(), intType)),
 					enumType
 				),
+				new Vtable(List.of()),
+				List.of(),
 				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, false))
 			))
 		);

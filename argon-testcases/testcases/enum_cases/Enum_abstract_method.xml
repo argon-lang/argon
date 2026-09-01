@@ -1,0 +1,21 @@
+<ArgonTest>
+    <Name>Enum abstract method</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        enum Greeting
+            public def self.message(): String = abstract
+
+            Hello with
+                public override def self.message(): String = "hello"
+            end
+        end
+
+        proc main(): () do
+            let greeting = Greeting.Hello
+            puts (greeting.message ())
+        end
+    ]]></InputSource>
+    <ExpectedOutput>hello</ExpectedOutput>
+</ArgonTest>

@@ -26,7 +26,7 @@ pub(super) enum Overloadable<'a> {
     Base(scope::Overloadable),
     InstanceMethod {
         method: Arc<dyn Method>,
-        trait_type: TraitType<TypeCheckExprContext>,
+        instance_type: MethodInstanceType<TypeCheckExprContext>,
         obj: LocatedExpr<TypeCheckExprContext>,
     },
     ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
@@ -86,7 +86,9 @@ impl<'a> Overloadable<'a> {
                 base.signature().as_ref().clone().shift(&mut shifter)
             }
             Overloadable::InstanceMethod {
-                method, trait_type, ..
+                method,
+                instance_type,
+                ..
             } => {
                 let mut sig = method
                     .clone()
@@ -94,9 +96,7 @@ impl<'a> Overloadable<'a> {
                     .as_ref()
                     .clone()
                     .shift(&mut default_to_type_check_shifter());
-                sig.substitute_method_instance_type_parameters(&MethodInstanceType::Trait(
-                    trait_type.clone(),
-                ));
+                sig.substitute_method_instance_type_parameters(instance_type);
 
                 sig
             }
@@ -713,11 +713,11 @@ impl<'a> SelectedOverload<'a> {
             },
             Overloadable::InstanceMethod {
                 method,
-                trait_type,
+                instance_type,
                 obj,
             } => Expr::MethodCall {
                 method,
-                instance_type: MethodInstanceType::Trait(trait_type),
+                instance_type,
                 receiver: Box::new(obj),
                 arguments: self.args,
             },

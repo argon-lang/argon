@@ -1,7 +1,7 @@
-use parse18_ll_gen::codegen::rust::{emit_rust, RustSettings};
+use parse18_ll_gen::codegen::rust::{RustSettings, emit_rust};
 use parse18_ll_gen::grammar::{
-    error, nonterm, rule as base_rule, ruleset as base_ruleset, term, Grammar, GrammarFactory,
-    GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, TerminalInfo,
+    Grammar, GrammarFactory, GrammarTypes, RuleInfo, RuleSetInfo, SymbolInfo, TerminalInfo, error,
+    nonterm, rule as base_rule, ruleset as base_ruleset, term,
 };
 use std::io::{self, Write};
 
@@ -423,6 +423,9 @@ enum Rule {
     EnumBody,
     EnumBodyStmt,
     EnumConstructorVariant,
+    EnumVariantBody,
+    EnumVariantBodyStmts,
+    EnumVariantBodyStmt,
     TraitDeclarationStmtRest,
     TraitBody,
     TraitBodyStmt,
@@ -1503,10 +1506,11 @@ impl GrammarFactory for ParserFactory {
             ).lex_mode("LexerMode::Normal"),
 
             MethodOrFunctionDeclarationStmtRest => ruleset(
-                "Box<dyn FnOnce((Vec<WithLocation<Modifier>>, bool)) -> DeclarationStmt>",
+                "Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>",
                 [
                     rule(
                         [
+                            nonterm(MethodPurity),
                             nonterm(Identifier).with_location(),
                             term(SymDot).discard(),
                             nonterm(MethodName).with_location(),
@@ -1519,6 +1523,7 @@ impl GrammarFactory for ParserFactory {
                     ),
                     rule(
                         [
+                            nonterm(MethodPurity),
                             term(KwUnderscore).with_location(),
                             term(SymDot).discard(),
                             nonterm(MethodName).with_location(),
@@ -1531,6 +1536,7 @@ impl GrammarFactory for ParserFactory {
                     ),
                     rule(
                         [
+                            nonterm(MethodPurity),
                             nonterm(Identifier).with_location(),
                             nonterm(MethodParameters),
                             term(SymColon).discard(),
@@ -1711,7 +1717,7 @@ impl GrammarFactory for ParserFactory {
                 "Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> RecordBodyStmt>",
                 [
                     rule([ nonterm(RecordField) ], "record_body_stmt_record_field_builder"),
-                    rule([ nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "record_body_stmt_from_declaration_rest_builder"),
+                    rule([ nonterm(MethodOrFunctionDeclarationStmtRest) ], "record_body_stmt_from_declaration_rest_builder"),
                 ],
             ),
             RecordField => ruleset(
@@ -1761,7 +1767,7 @@ impl GrammarFactory for ParserFactory {
                 [
                     rule([ nonterm(Modifiers), nonterm(EnumConstructorVariant) ], "enum_body_stmt_from_variant_builder"),
                     rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "enum_body_stmt_from_record_builder"),
-                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "enum_body_stmt_from_declaration_builder"),
+                    rule([ nonterm(Modifiers), nonterm(MethodOrFunctionDeclarationStmtRest) ], "enum_body_stmt_from_declaration_builder"),
                 ],
             ),
             EnumConstructorVariant => ruleset(
@@ -1772,8 +1778,45 @@ impl GrammarFactory for ParserFactory {
                             nonterm(Identifier).with_location(),
                             nonterm(MethodParameters),
                             nonterm(TypeDeclarationTypeAnnotation),
+                            nonterm(EnumVariantBody),
                         ],
                         "enum_constructor_variant_builder",
+                    ),
+                ],
+            ),
+            EnumVariantBody => ruleset(
+                "VecDeque<WithLocation<EnumVariantBodyStmt>>",
+                [
+                    rule([], "empty_seq"),
+                    rule(
+                        [
+                            term(KwWith).discard(),
+                            nonterm(StatementSeparator).discard(),
+                            nonterm(EnumVariantBodyStmts),
+                            term(KwEnd).discard(),
+                        ],
+                        "identity",
+                    ),
+                ],
+            ),
+            EnumVariantBodyStmts => ruleset(
+                "VecDeque<WithLocation<EnumVariantBodyStmt>>",
+                [
+                    rule([], "empty_seq"),
+                    rule([ nonterm(EnumVariantBodyStmt).with_location() ], "seq1"),
+                    rule([ nonterm(EnumVariantBodyStmt).with_location(), nonterm(StatementSeparator).discard(), nonterm(EnumVariantBodyStmts) ], "(move |h, t| prepend(h, t))"),
+                    rule([ nonterm(StatementSeparator).discard(), nonterm(EnumVariantBodyStmts) ], "identity"),
+                ],
+            ),
+            EnumVariantBodyStmt => ruleset(
+                "EnumVariantBodyStmt",
+                [
+                    rule(
+                        [
+                            nonterm(Modifiers),
+                            nonterm(MethodOrFunctionDeclarationStmtRest),
+                        ],
+                        "enum_variant_body_stmt",
                     ),
                 ],
             ),
@@ -1806,7 +1849,7 @@ impl GrammarFactory for ParserFactory {
             TraitBodyStmt => ruleset(
                 "TraitBodyStmt",
                 [
-                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "trait_body_stmt_from_declaration_builder"),
+                    rule([ nonterm(Modifiers), nonterm(MethodOrFunctionDeclarationStmtRest) ], "trait_body_stmt_from_declaration_builder"),
                 ],
             ),
             NewTraitObjectBody => ruleset(
@@ -1821,7 +1864,7 @@ impl GrammarFactory for ParserFactory {
             NewTraitObjectBodyStmt => ruleset(
                 "NewTraitObjectBodyStmt",
                 [
-                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "new_trait_object_body_stmt_from_declaration_builder"),
+                    rule([ nonterm(Modifiers), nonterm(MethodOrFunctionDeclarationStmtRest) ], "new_trait_object_body_stmt_from_declaration_builder"),
                 ],
             ),
             TypeDeclarationTypeAnnotation => ruleset(
@@ -1920,7 +1963,7 @@ impl GrammarFactory for ParserFactory {
                     rule([ nonterm(ExportStmt) ], "stmt_export"),
                     rule([ term(SymAt).discard(), nonterm(Identifier).with_location(), term(SymColon).discard() ], "stmt_label"),
                     rule([ nonterm(Modifiers), nonterm(VariableDeclarationRest) ], "statement_apply_builder"),
-                    rule([ nonterm(Modifiers), nonterm(MethodPurity), nonterm(MethodOrFunctionDeclarationStmtRest) ], "statement_declaration_builder"),
+                    rule([ nonterm(Modifiers), nonterm(MethodOrFunctionDeclarationStmtRest) ], "statement_declaration_builder"),
                     rule([ nonterm(Modifiers), nonterm(RecordDeclarationStmtRest) ], "statement_record_builder"),
                     rule([ nonterm(Modifiers), nonterm(EnumDeclarationStmtRest) ], "statement_apply_builder"),
                     rule([ nonterm(Modifiers), nonterm(TraitDeclarationStmtRest) ], "statement_apply_builder"),

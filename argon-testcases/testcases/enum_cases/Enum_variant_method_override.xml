@@ -1,0 +1,34 @@
+<ArgonTest>
+    <Name>Enum variant method override</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        enum Greeting
+            public virtual def self.message(): String = "default"
+
+            Default
+
+            Custom with
+                public override def self.message(): String = "custom"
+            end
+
+            record Named
+                value: String
+                public override def self.message(): String = "record variant"
+            end
+        end
+
+        proc main(): () do
+            let default = Greeting.Default
+            let custom = Greeting.Custom
+            let named = Greeting.Named { value: "ignored" }
+            puts (default.message ())
+            puts (custom.message ())
+            puts (named.message ())
+        end
+    ]]></InputSource>
+    <ExpectedOutput>default
+custom
+record variant</ExpectedOutput>
+</ArgonTest>
