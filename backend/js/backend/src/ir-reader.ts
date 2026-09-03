@@ -5,6 +5,7 @@ import type {
     FunctionInfo,
     InstanceInfo,
     MethodInfo,
+    StaticMethodInfo,
     ModuleExportEntry,
     ModuleInfo,
     ModuleModel,
@@ -39,6 +40,7 @@ class IrReader {
     readonly enumVariantMap = new Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>();
     readonly traitMap = new Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>();
     readonly methodMap = new Map<bigint, (TubeFileEntry & { $type: "record-method-reference" | "enum-method-reference" | "enum-variant-method-reference" | "trait-method-reference" | "instance-method-reference" })>();
+    readonly staticMethodMap = new Map<bigint, (TubeFileEntry & { $type: "record-static-method-reference" | "enum-static-method-reference" | "trait-static-method-reference" })>();
     readonly instanceMap = new Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>();
 
 
@@ -81,6 +83,7 @@ class IrReader {
             enumVariantMap: this.enumVariantMap,
             traitMap: this.traitMap,
             methodMap: this.methodMap,
+            staticMethodMap: this.staticMethodMap,
             instanceMap: this.instanceMap,
         });
     }
@@ -139,6 +142,7 @@ class IrReader {
                     this.methodMap.set(method.methodId, { $type: "record-method-reference", recordId: entry.definition.recordId,
                         methodId: method.methodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
                 }
+                for(const method of entry.definition.staticMethods) this.staticMethodMap.set(method.staticMethodId, { $type: "record-static-method-reference", recordId: entry.definition.recordId, staticMethodId: method.staticMethodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
                 for(const field of entry.definition.fields) {
                     this.recordFieldMap.set(field.fieldId, {
                         $type: "record-field-reference",
@@ -159,6 +163,11 @@ class IrReader {
             case "enum-variant-method-reference":
                 this.methodMap.set(entry.methodId, entry);
                 return;
+            case "record-static-method-reference":
+            case "enum-static-method-reference":
+            case "trait-static-method-reference":
+                this.staticMethodMap.set(entry.staticMethodId, entry);
+                return;
 
             case "enum-definition":
                 this.enumMap.set(entry.definition.enumId, entry);
@@ -168,6 +177,7 @@ class IrReader {
                     this.methodMap.set(method.methodId, { $type: "enum-method-reference", enumId: entry.definition.enumId,
                         methodId: method.methodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
                 }
+                for(const method of entry.definition.staticMethods) this.staticMethodMap.set(method.staticMethodId, { $type: "enum-static-method-reference", enumId: entry.definition.enumId, staticMethodId: method.staticMethodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
                 for(const variant of entry.definition.variants) {
                     this.enumVariantMap.set(variant.variantId, {
                         $type: "enum-variant-reference",
@@ -222,6 +232,7 @@ class IrReader {
                         signature: method.signature,
                     });
                 }
+                for(const method of entry.definition.staticMethods) this.staticMethodMap.set(method.staticMethodId, { $type: "trait-static-method-reference", traitId: entry.definition.traitId, staticMethodId: method.staticMethodId, name: method.name, erasedSignature: method.erasedSignature, signature: method.signature });
                 break;
 
             case "trait-reference":
@@ -338,6 +349,7 @@ type ProgramModelOptions = Pick<ProgramModel, "header" | "metadata" | "modules">
     readonly enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
     readonly traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
     readonly methodMap: Map<bigint, (TubeFileEntry & { $type: "record-method-reference" | "enum-method-reference" | "enum-variant-method-reference" | "trait-method-reference" | "instance-method-reference" })>;
+    readonly staticMethodMap: Map<bigint, (TubeFileEntry & { $type: "record-static-method-reference" | "enum-static-method-reference" | "trait-static-method-reference" })>;
     readonly instanceMap: Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>;
 };
 
@@ -356,6 +368,7 @@ class ProgramModelImpl implements ProgramModel {
         this.#enumVariantMap = options.enumVariantMap;
         this.#traitMap = options.traitMap;
         this.#methodMap = options.methodMap;
+        this.#staticMethodMap = options.staticMethodMap;
         this.#instanceMap = options.instanceMap;
     }
 
@@ -372,6 +385,7 @@ class ProgramModelImpl implements ProgramModel {
     readonly #enumVariantMap: Map<bigint, (TubeFileEntry & { $type: "enum-variant-reference" })>;
     readonly #traitMap: Map<bigint, (TubeFileEntry & { $type: "trait-reference" | "trait-definition" })>;
     readonly #methodMap: Map<bigint, (TubeFileEntry & { $type: "record-method-reference" | "enum-method-reference" | "enum-variant-method-reference" | "trait-method-reference" | "instance-method-reference" })>;
+    readonly #staticMethodMap: Map<bigint, (TubeFileEntry & { $type: "record-static-method-reference" | "enum-static-method-reference" | "trait-static-method-reference" })>;
     readonly #instanceMap: Map<bigint, (TubeFileEntry & { $type: "instance-reference" | "instance-definition" })>;
 
     getTubeInfo(id: bigint): TubeInfo {
@@ -582,6 +596,16 @@ class ProgramModelImpl implements ProgramModel {
                     signature: entry.erasedSignature,
                 };
             }
+        }
+    }
+
+    getStaticMethodInfo(id: bigint): StaticMethodInfo {
+        const entry = this.#staticMethodMap.get(id);
+        if(entry === undefined) throw new Error("Invalid static method id");
+        switch(entry.$type) {
+            case "record-static-method-reference": return { parentImportSpecifier: this.getRecordInfo(entry.recordId).importSpecifier, name: entry.name, signature: entry.erasedSignature };
+            case "enum-static-method-reference": return { parentImportSpecifier: this.getEnumInfo(entry.enumId).importSpecifier, name: entry.name, signature: entry.erasedSignature };
+            case "trait-static-method-reference": return { parentImportSpecifier: this.getTraitInfo(entry.traitId).importSpecifier, name: entry.name, signature: entry.erasedSignature };
         }
     }
 

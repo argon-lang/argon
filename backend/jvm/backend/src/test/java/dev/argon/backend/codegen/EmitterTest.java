@@ -387,6 +387,7 @@ final class EmitterTest {
 			),
 			new Vtable(List.of()),
 			List.of(),
+			List.of(),
 			List.of(
 				new RecordFieldDefinition(
 					UnsignedBigInteger.ZERO,
@@ -1186,6 +1187,7 @@ final class EmitterTest {
 			),
 			new Vtable(List.of()),
 			List.of(),
+			List.of(),
 			List.of(
 				new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("flag"), boolType, true),
 				new RecordFieldDefinition(UnsignedBigInteger.ONE, new Identifier.Named("count"), intType, true)
@@ -1323,6 +1325,7 @@ final class EmitterTest {
 			),
 			new Vtable(List.of()),
 			List.of(),
+			List.of(),
 			List.of(new EnumVariantDefinition(
 				UnsignedBigInteger.ZERO,
 				new Identifier.Named("Some"),
@@ -1430,6 +1433,7 @@ final class EmitterTest {
 				enumType
 			),
 			new Vtable(List.of()),
+			List.of(),
 			List.of(),
 			List.of(new EnumVariantDefinition(
 				UnsignedBigInteger.ZERO,
@@ -1626,6 +1630,7 @@ final class EmitterTest {
 				new Token.Trait(UnsignedBigInteger.ZERO, List.of())
 			),
 			new Vtable(List.of()),
+			List.of(),
 			List.of(
 				new MethodDefinition(
 					UnsignedBigInteger.ZERO,
@@ -2292,6 +2297,11 @@ final class EmitterTest {
 		Map<UnsignedBigInteger, ModuleInfo> moduleInfos
 	) implements ProgramModel {
 		private static final TubeName TUBE_NAME = new TubeName("Test", List.of());
+
+		@Override
+		public StaticMethodInfo getStaticMethodInfo(UnsignedBigInteger id) {
+			throw new IllegalArgumentException("Unknown static method id: " + id);
+		}
 
 		private TestProgramModel(
 			JvmPlatformTubeMetadata platformMetadata,

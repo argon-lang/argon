@@ -12,7 +12,8 @@ use argon_compiler::{
     BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
     EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
     MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
-    RecordField, RecordFieldOwner, Trait, Tube, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
+    RecordField, RecordFieldOwner, StaticMethod, StaticMethodOwner, Trait, Tube, TubeName,
+    TypeDeclaration, UnaryOperatorIdentifier,
 };
 use argon_expr::{
     BlockLabel, EnumType, ErasureMode, Expr, ExprLocationExt, ExprScanner, ExpressionOwner,
@@ -219,6 +220,15 @@ impl VmEncoder {
         id
     }
 
+    fn get_static_method_id(&mut self, method: Arc<dyn StaticMethod>) -> usize {
+        let (id, is_new) = self.ids.static_method_ids.get_with_new(method.clone());
+        if is_new {
+            self.entry_emitters
+                .push_back(EntryEmitter::StaticMethod(method));
+        }
+        id
+    }
+
     fn encode_entry(
         &mut self,
         emitter: EntryEmitter,
@@ -386,6 +396,15 @@ impl VmEncoder {
                                 .map(Box::new)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
+                    let static_methods = record
+                        .clone()
+                        .static_methods()
+                        .iter()
+                        .map(|entry| {
+                            self.emit_static_method_definition(entry.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
                     let vtable =
                         self.emit_vtable(MethodOwner::Record(record.clone()), methods.as_ref())?;
 
@@ -396,6 +415,7 @@ impl VmEncoder {
                             signature: Box::new(signature.sig),
                             vtable: Box::new(vtable),
                             methods: method_definitions,
+                            static_methods,
                             fields,
                         }),
                     }
@@ -466,6 +486,15 @@ impl VmEncoder {
                         .iter()
                         .map(|entry| {
                             self.emit_method_definition(entry.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let static_methods = enum_
+                        .clone()
+                        .static_methods()
+                        .iter()
+                        .map(|entry| {
+                            self.emit_static_method_definition(entry.method.clone())
                                 .map(Box::new)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
@@ -546,6 +575,7 @@ impl VmEncoder {
                             signature: Box::new(signature.sig),
                             vtable: Box::new(enum_vtable),
                             methods: enum_method_definitions,
+                            static_methods,
                             variants,
                         }),
                     }
@@ -647,6 +677,54 @@ impl VmEncoder {
                     }
                 }
 
+                EntryEmitter::StaticMethod(method) => {
+                    if import_specifier_tube(&method.clone().owner().import_specifier())
+                        == self.tube.name()
+                    {
+                        return Ok(None);
+                    }
+                    let static_method_id =
+                        BigUint::from(self.ids.static_method_ids.get(method.clone()));
+                    let name = Box::new(encode_identifier(&method.metadata().name));
+                    let erased_signature = Box::new(self.encode_erased_signature(
+                        &argon_compiler::erased_sig::erase_signature(
+                            self.context.clone(),
+                            method.clone().signature().as_ref(),
+                        ),
+                    )?);
+                    let signature =
+                        Box::new(self.emit_static_method_signature(method.clone())?.sig);
+                    match method.clone().owner() {
+                        StaticMethodOwner::Record(r) => {
+                            vf::TubeFileEntry::RecordStaticMethodReference {
+                                static_method_id,
+                                record_id: BigUint::from(self.get_record_id(r)),
+                                name,
+                                erased_signature,
+                                signature,
+                            }
+                        }
+                        StaticMethodOwner::Enum(e) => {
+                            vf::TubeFileEntry::EnumStaticMethodReference {
+                                static_method_id,
+                                enum_id: BigUint::from(self.get_enum_id(e)),
+                                name,
+                                erased_signature,
+                                signature,
+                            }
+                        }
+                        StaticMethodOwner::Trait(t) => {
+                            vf::TubeFileEntry::TraitStaticMethodReference {
+                                static_method_id,
+                                trait_id: BigUint::from(self.get_trait_id(t)),
+                                name,
+                                erased_signature,
+                                signature,
+                            }
+                        }
+                    }
+                }
+
                 EntryEmitter::Trait(trait_) => {
                     let trait_id = BigUint::from(self.ids.trait_ids.get(trait_.clone()));
                     let import_specifier = trait_.clone().import_specifier();
@@ -676,6 +754,15 @@ impl VmEncoder {
                                 .map(Box::new)
                         })
                         .collect::<Result<Vec<_>, _>>()?;
+                    let static_methods = trait_
+                        .clone()
+                        .static_methods()
+                        .iter()
+                        .map(|entry| {
+                            self.emit_static_method_definition(entry.method.clone())
+                                .map(Box::new)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
                     let vtable =
                         self.emit_vtable(MethodOwner::Trait(trait_.clone()), methods.as_ref())?;
 
@@ -686,6 +773,7 @@ impl VmEncoder {
                             signature: Box::new(signature.sig),
                             vtable: Box::new(vtable),
                             methods: method_definitions,
+                            static_methods,
                         }),
                     }
                 }
@@ -964,6 +1052,72 @@ impl VmEncoder {
         })
     }
 
+    fn emit_static_method_definition(
+        &mut self,
+        method: Arc<dyn StaticMethod>,
+    ) -> Result<vf::StaticMethodDefinition, InternalCompilerError> {
+        let metadata = method.metadata();
+        let sig = method.clone().signature();
+        let erased_signature = self.encode_erased_signature(
+            &argon_compiler::erased_sig::erase_signature(self.context.clone(), sig.as_ref()),
+        )?;
+        let mut signature = self.emit_static_method_signature(method.clone())?;
+        let implementation = method
+            .clone()
+            .implementation()
+            .map(|implementation| {
+                self.emit_function_implementation(
+                    &implementation,
+                    &mut signature,
+                    method.clone().owner().import_specifier(),
+                )
+            })
+            .transpose()?
+            .map(Box::new);
+        Ok(vf::StaticMethodDefinition {
+            static_method_id: BigUint::from(self.ids.static_method_ids.get(method.clone())),
+            name: Box::new(encode_identifier(&metadata.name)),
+            erased_signature: Box::new(erased_signature),
+            signature: Box::new(signature.sig),
+            implementation,
+        })
+    }
+
+    fn emit_static_method_signature(
+        &mut self,
+        method: Arc<dyn StaticMethod>,
+    ) -> Result<FunctionSignatureWithMapping, InternalCompilerError> {
+        let owner = ExpressionOwner::StaticMethod(method.clone());
+        let mut builder = FunctionSignatureBuilder::new();
+        let owner_decl = match method.clone().owner() {
+            StaticMethodOwner::Record(r) => TypeDeclaration::Record(r),
+            StaticMethodOwner::Enum(e) => TypeDeclaration::Enum(e),
+            StaticMethodOwner::Trait(t) => TypeDeclaration::Trait(t),
+        };
+        let owner_signature = owner_decl.clone().signature();
+        let owner_expr = owner_decl.into_expression_owner();
+        for (index, param) in owner_signature.parameters.iter().enumerate() {
+            builder.add_parameter(
+                self,
+                Variable::Parameter(Box::new(
+                    param.clone().to_parameter_var(owner_expr.clone(), index),
+                )),
+                false,
+            )?;
+        }
+        let sig = method.clone().signature();
+        for (index, param) in sig.parameters.iter().enumerate() {
+            builder.add_parameter(
+                self,
+                Variable::Parameter(Box::new(
+                    param.clone().to_parameter_var(owner.clone(), index),
+                )),
+                false,
+            )?;
+        }
+        builder.finish(self, &sig.return_type)
+    }
+
     fn emit_vtable(
         &mut self,
         owner: MethodOwner,
@@ -1117,6 +1271,7 @@ enum EntryEmitter {
     Enum(Arc<dyn Enum>),
     EnumVariant(Arc<dyn EnumVariant>),
     Method(Arc<dyn Method>),
+    StaticMethod(Arc<dyn StaticMethod>),
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
     SyntheticFunction {
@@ -2596,6 +2751,62 @@ impl<'a> ExprEmitter<'a> {
                     args: args.arguments,
                 });
 
+                frb.into_result(self)?
+            }
+
+            Expr::StaticMethodCall {
+                method,
+                owner_type,
+                arguments,
+            } => {
+                let frb = output.output_function_result(self, e)?;
+                let owner_type_expr = owner_type
+                    .clone()
+                    .into_expr()
+                    .with_location(e.location.clone());
+                let owner_type_token = self.token_expr(&owner_type_expr)?;
+                let (owner_signature, owner_arguments) = match owner_type {
+                    argon_expr::MethodInstanceType::Record(t) => {
+                        (t.record.clone().signature(), &t.arguments)
+                    }
+                    argon_expr::MethodInstanceType::Enum(t) => {
+                        (t.enum_.clone().signature(), &t.arguments)
+                    }
+                    argon_expr::MethodInstanceType::Trait(t) => {
+                        (t.trait_.clone().signature(), &t.arguments)
+                    }
+                };
+                let mut args = Vec::new();
+                for (param, argument) in owner_signature
+                    .parameters
+                    .iter()
+                    .zip(owner_arguments.iter())
+                {
+                    match param.erasure_mode {
+                        ErasureMode::Token => {}
+                        ErasureMode::Concrete => {
+                            args.push(Box::new(self.expr(argument, AnyRegister)?))
+                        }
+                        ErasureMode::Erased => {}
+                    }
+                }
+                let mut sig = method.clone().signature().as_ref().clone();
+                sig.substitute_method_instance_type_parameters(owner_type);
+                let method_args = self.emit_arguments(
+                    ExpressionOwner::StaticMethod(method.clone()),
+                    &sig,
+                    arguments,
+                )?;
+                args.extend(method_args.arguments);
+                let static_method_id =
+                    BigUint::from(self.encoder.get_static_method_id(method.clone()));
+                self.emit(vf::Instruction::StaticMethodCall {
+                    static_method_id,
+                    owner_type: Box::new(owner_type_token),
+                    dest: Box::new(frb.function_result()),
+                    token_args: method_args.token_arguments,
+                    args,
+                });
                 frb.into_result(self)?
             }
 

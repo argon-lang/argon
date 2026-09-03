@@ -144,6 +144,16 @@ function specialize(options = {}) {
     return getSpecialization;
 }
 
+function bindStaticMethods(methods, tokenArgs) {
+    const boundMethods = Object.create(null);
+    for(const name of Object.keys(methods)) {
+        if(Object.hasOwn(methods, name)) {
+            boundMethods[name] = methods[name].bind(undefined, ...tokenArgs);
+        }
+    }
+    return boundMethods;
+}
+
 function defineTokenArgSymbols(t, info) {
     t.tokenParameterSymbols = Array.from({ length: info.tokenParameterCount }, () => Symbol());
 }
@@ -159,6 +169,10 @@ function storeTokenArgs(t, c, args) {
             },
         );
     }
+}
+
+function loadTokenArgs(t, c) {
+    return t.tokenParameterSymbols.map(symbol => c.prototype[symbol]);
 }
 
 export function createRecordType(recordInfo) {
@@ -197,6 +211,7 @@ export function createRecordType(recordInfo) {
 
     recordType.specialize = specialize({
         customize(specialized) {
+            specialized.staticMethods = bindStaticMethods(recordInfo.staticMethods, loadTokenArgs(recordType, specialized));
             specialized.methods = Object.create(null);
             applyVTable(specialized, recordInfo.methods, recordInfo.vtable);
         },
@@ -226,6 +241,7 @@ export function createEnumType(enumInfo) {
 
     enumType.specialize = specialize({
         customize(specialization) {
+            specialization.staticMethods = bindStaticMethods(enumInfo.staticMethods, loadTokenArgs(enumType, specialization));
             specialization.methods = Object.create(null);
             applyVTable(specialization, enumInfo.methods, enumInfo.vtable);
             setupVariants(specialization);
@@ -304,6 +320,7 @@ export function createTraitType(traitInfo) {
 
     traitType.specialize = specialize({
         customize(c) {
+            c.staticMethods = bindStaticMethods(traitInfo.staticMethods, loadTokenArgs(traitType, c));
             c.methods = Object.create(null);
             applyVTable(c, traitInfo.methods, traitInfo.vtable);
 

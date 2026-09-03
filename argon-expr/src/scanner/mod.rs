@@ -172,6 +172,14 @@ where
                 && scanner.scan(receiver)
                 && arguments.iter().all(|argument| scanner.scan(argument))
         }
+        Expr::StaticMethodCall {
+            owner_type,
+            arguments,
+            ..
+        } => {
+            default_scan_method_instance_type(scanner, owner_type)
+                && arguments.iter().all(|argument| scanner.scan(argument))
+        }
         Expr::NewInstance { arguments, .. } => {
             arguments.iter().all(|argument| scanner.scan(argument))
         }
@@ -523,6 +531,14 @@ where
                 && scanner.scan(receiver.as_mut())
                 && arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
+        Expr::StaticMethodCall {
+            owner_type,
+            arguments,
+            ..
+        } => {
+            default_scan_method_instance_type_mut(scanner, owner_type)
+                && arguments.iter_mut().all(|argument| scanner.scan(argument))
+        }
         Expr::NewInstance { arguments, .. } => {
             arguments.iter_mut().all(|argument| scanner.scan(argument))
         }
@@ -780,6 +796,7 @@ mod tests {
         type Trait = ();
         type EnumVariant = ();
         type Method = ();
+        type StaticMethod = ();
         type Instance = ();
     }
 

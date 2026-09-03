@@ -948,6 +948,7 @@ class ModuleEmitter extends EmitterBase {
                                 this.objectProperty("tokenParameterCount", { type: "Literal", value: rec.signature.tokenParameters.length }),
                                 this.objectProperty("fields", jsonToExpression(rec.fields.map(field => ({ name: this.getExportNameForId(field.name), mutable: field.mutable })))),
                                 this.objectProperty("methods", methods),
+                                this.objectProperty("staticMethods", this.emitStaticMethods(rec.staticMethods, nameId)),
                                 this.objectProperty("vtable", vtable),
                             ] },
                         ],
@@ -991,6 +992,7 @@ class ModuleEmitter extends EmitterBase {
                                 this.objectProperty("name", { type: "Literal", value: name }),
                                 this.objectProperty("tokenParameterCount", { type: "Literal", value: enumDef.signature.tokenParameters.length }),
                                 this.objectProperty("methods", this.emitMethods(enumDef.methods, nameId)),
+                                this.objectProperty("staticMethods", this.emitStaticMethods(enumDef.staticMethods, nameId)),
                                 this.objectProperty("vtable", this.emitVTable(enumDef.vtable, nameId)),
                                 this.objectProperty("variants", { type: "ObjectExpression", properties: variantProperties }),
                             ] },
@@ -1067,6 +1069,7 @@ class ModuleEmitter extends EmitterBase {
                 value: vtable,
             },
         ];
+        traitInfoProps.push(this.objectProperty("staticMethods", this.emitStaticMethods(traitDef.staticMethods, nameId)));
 
 
         const metadata = this.options.program.metadata;
@@ -1171,6 +1174,20 @@ class ModuleEmitter extends EmitterBase {
         return {
             type: "ObjectExpression",
             properties: methodFuncs,
+        };
+    }
+
+    private emitStaticMethods(methods: readonly ir.StaticMethodDefinition[], parentExpr: estree.Expression): ReadonlyDeep<estree.Expression> {
+        return {
+            type: "ObjectExpression",
+            properties: methods.map(method => {
+                const name = this.getExportNameForIdSig(method.name, method.erasedSignature);
+                const valid = isValidIdName(name) && name !== "__proto__";
+                if(method.implementation === undefined) throw new Error("Static method has no implementation");
+                const impl = this.emitFunctionImpl(false, method.signature, method.implementation, parentExpr);
+                const value = impl.type === "FunctionDeclaration" ? { type: "FunctionExpression" as const, params: impl.params, body: impl.body } : impl;
+                return { type: "Property" as const, computed: !valid, shorthand: false, method: false, kind: "init" as const, key: valid ? { type: "Identifier" as const, name } : { type: "Literal" as const, value: name }, value };
+            }),
         };
     }
 
@@ -2230,6 +2247,28 @@ class BlockEmitter extends EmitterBase {
                 };
 
                 functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "static-method-call":
+            {
+                const info = this.options.program.getStaticMethodInfo(insn.staticMethodId);
+                switch(insn.ownerType.$type) {
+                    case "record":
+                    case "enum":
+                    case "trait":
+                        break;
+                    default:
+                        throw new Error("Static method owner must be a record, enum, or trait type");
+                }
+                const callee: estree.Expression = {
+                    type: "MemberExpression", computed: true, optional: false,
+                    object: { type: "MemberExpression", computed: false, optional: false, object: this.buildTokenValue(insn.ownerType), property: { type: "Identifier", name: "staticMethods" } },
+                    property: { type: "Literal", value: this.getExportNameForIdSig(info.name, info.signature) },
+                };
+                const args: estree.Expression[] = insn.tokenArgs.map(arg => this.buildTokenValue(arg));
+                args.push(...insn.args.map(arg => this.getReg(arg)));
+                functionOutput(insn.dest, { type: "CallExpression", callee, arguments: args, optional: false });
                 break;
             }
 

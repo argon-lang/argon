@@ -1,4 +1,4 @@
-import type { ModulePath, TubeFileEntry, TubeHeader, TubeMetadata, TubeName, ImportSpecifier, Identifier, ErasedSignature, MethodDefinition } from "@argon-lang/js-backend-api/vm.js";
+import type { ModulePath, TubeFileEntry, TubeHeader, TubeMetadata, TubeName, ImportSpecifier, Identifier, ErasedSignature, MethodDefinition, StaticMethodDefinition } from "@argon-lang/js-backend-api/vm.js";
 import type {JsPlatformTubeMetadata} from "@argon-lang/js-backend-api";
 
 export interface ProgramModel {
@@ -16,6 +16,7 @@ export interface ProgramModel {
     getEnumVariantInfo(id: bigint): EnumVariantInfo;
     getTraitInfo(id: bigint): TraitInfo;
     getMethodInfo(id: bigint): MethodInfo;
+    getStaticMethodInfo(id: bigint): StaticMethodInfo;
     getInstanceInfo(id: bigint): InstanceInfo;
 }
 
@@ -79,8 +80,13 @@ export interface MethodInfo {
 
     readonly definition?: MethodDefinition | undefined;
 }
+export interface StaticMethodInfo {
+    readonly parentImportSpecifier: ImportSpecifier;
+    readonly name: Identifier;
+    readonly signature: ErasedSignature;
+    readonly definition?: StaticMethodDefinition | undefined;
+}
 
 export interface InstanceInfo {
     readonly importSpecifier: ImportSpecifier;
 }
-

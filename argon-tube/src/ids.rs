@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use argon_compiler::{
     DefaultExprContext, Enum, EnumVariant, Function, Instance, Method, ModulePath, Record,
-    RecordField, Trait, TubeName,
+    RecordField, StaticMethod, Trait, TubeName,
 };
 use argon_expr::BlockLabel;
 use argon_util::UniqueIdentifier;
@@ -19,6 +19,7 @@ pub struct TubeIdProvider {
     pub record_field_ids: IdStore<Arc<dyn RecordField>>,
     pub trait_ids: IdStore<Arc<dyn Trait>>,
     pub method_ids: IdStore<Arc<dyn Method>>,
+    pub static_method_ids: IdStore<Arc<dyn StaticMethod>>,
     pub instance_ids: IdStore<Arc<dyn Instance>>,
     pub local_variable_ids: IdStore<UniqueIdentifier>,
     pub closure_parameter_ids: IdStore<UniqueIdentifier>,

@@ -1,0 +1,21 @@
+<ArgonTest>
+    <Name>Static method owner token</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        def generic_identity(token T: type)(value: T): T = value
+
+        record GenericOwner(token T: type)
+            public def static.identity(value: T): T = generic_identity T value
+            public def static.method_identity(token U: type)(value: U): U = generic_identity U value
+        end
+
+        proc main(): () do
+            puts (GenericOwner(String).identity "owner token")
+            puts (GenericOwner(String).method_identity String "method token")
+        end
+    ]]></InputSource>
+    <ExpectedOutput>owner token
+method token</ExpectedOutput>
+</ArgonTest>

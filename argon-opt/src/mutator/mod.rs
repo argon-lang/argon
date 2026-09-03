@@ -80,6 +80,10 @@ fn visit_instruction(
             visit_result(dest, register_type, mutate);
             visit_registers(args, InstructionRegisterType::Use, register_type, mutate);
         }
+        vf::Instruction::StaticMethodCall { dest, args, .. } => {
+            visit_result(dest, register_type, mutate);
+            visit_registers(args, InstructionRegisterType::Use, register_type, mutate);
+        }
         vf::Instruction::FunctionObjectCall {
             dest,
             function,

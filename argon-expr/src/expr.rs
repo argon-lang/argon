@@ -84,6 +84,7 @@ pub trait ExprContext {
     type RecordField: Clone + Debug + Eq + Hash;
     type EnumVariant: Clone + Debug + Eq + Hash;
     type Method: Clone + Debug + Eq + Hash;
+    type StaticMethod: Clone + Debug + Eq + Hash;
     type Instance: Clone + Debug + Eq + Hash;
 }
 
@@ -101,6 +102,7 @@ pub enum ExpressionOwner<EC: ExprContext + ?Sized> {
     Trait(EC::Trait),
     EnumVariant(EC::EnumVariant),
     Method(EC::Method),
+    StaticMethod(EC::StaticMethod),
     Instance(EC::Instance),
     Field(EC::RecordField),
 }
@@ -114,6 +116,7 @@ impl<EC: ExprContext + ?Sized> Clone for ExpressionOwner<EC> {
             ExpressionOwner::Trait(t) => ExpressionOwner::Trait(t.clone()),
             ExpressionOwner::EnumVariant(v) => ExpressionOwner::EnumVariant(v.clone()),
             ExpressionOwner::Method(m) => ExpressionOwner::Method(m.clone()),
+            ExpressionOwner::StaticMethod(m) => ExpressionOwner::StaticMethod(m.clone()),
             ExpressionOwner::Instance(i) => ExpressionOwner::Instance(i.clone()),
             ExpressionOwner::Field(f) => ExpressionOwner::Field(f.clone()),
         }
@@ -225,6 +228,11 @@ pub enum Expr<EC: ExprContext + ?Sized> {
         method: EC::Method,
         instance_type: MethodInstanceType<EC>,
         receiver: Box<LocatedExpr<EC>>,
+        arguments: Vec<LocatedExpr<EC>>,
+    },
+    StaticMethodCall {
+        method: EC::StaticMethod,
+        owner_type: MethodInstanceType<EC>,
         arguments: Vec<LocatedExpr<EC>>,
     },
     NewInstance {
@@ -1110,6 +1118,7 @@ mod tests {
         type Trait = u8;
         type EnumVariant = u8;
         type Method = u8;
+        type StaticMethod = u8;
         type Instance = u8;
     }
 

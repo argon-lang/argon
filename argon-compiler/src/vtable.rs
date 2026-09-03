@@ -27,7 +27,9 @@ impl Unload for VTable {
 
 impl VTable {
     pub fn empty() -> Self {
-        Self { entries: HashMap::new() }
+        Self {
+            entries: HashMap::new(),
+        }
     }
 
     fn scan_mut<S>(&mut self, scan: &mut S)

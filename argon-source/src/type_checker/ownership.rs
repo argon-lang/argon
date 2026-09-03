@@ -785,6 +785,30 @@ impl<'a, 'access, 'scope, 'model> OwnershipChecker<'a, 'access, 'scope, 'model> 
                 self.scan(receiver);
                 self.scan_call_arguments(arguments);
             }
+            Expr::StaticMethodCall {
+                owner_type,
+                arguments,
+                ..
+            } => {
+                match owner_type {
+                    argon_expr::MethodInstanceType::Record(t) => {
+                        for argument in &t.arguments {
+                            self.scan(argument);
+                        }
+                    }
+                    argon_expr::MethodInstanceType::Enum(t) => {
+                        for argument in &t.arguments {
+                            self.scan(argument);
+                        }
+                    }
+                    argon_expr::MethodInstanceType::Trait(t) => {
+                        for argument in &t.arguments {
+                            self.scan(argument);
+                        }
+                    }
+                }
+                self.scan_call_arguments(arguments);
+            }
             Expr::Not(value) | Expr::Raise { ex: value } => {
                 self.scan(value);
             }

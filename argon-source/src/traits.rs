@@ -2,6 +2,7 @@ use crate::method::{MethodClosure, SourceMethod};
 use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
+use crate::static_method::{SourceStaticMethod, StaticMethodClosure};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
 use argon_compiler::erased_sig::{ImportSpecifier, erase_signature};
@@ -9,7 +10,8 @@ use argon_compiler::scope::{ParameterScope, Scope};
 use argon_compiler::signature::FunctionSignature;
 use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
-    Context, DefaultExprContext, MethodEntry, MethodOwner, Trait, TypeDeclaration, Unload,
+    Context, DefaultExprContext, MethodEntry, MethodOwner, StaticMethodEntry, StaticMethodOwner,
+    Trait, TypeDeclaration, Unload,
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
@@ -22,6 +24,7 @@ pub struct SourceTrait {
     closure: Box<dyn DeclarationClosure>,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    static_methods: UnloadCell<Arc<Vec<StaticMethodEntry>>>,
     vtable: UnloadCell<Arc<VTable>>,
 }
 
@@ -44,6 +47,7 @@ impl SourceTrait {
                 closure,
                 signature: UnloadCell::new(),
                 methods: UnloadCell::new(),
+                static_methods: UnloadCell::new(),
                 vtable: UnloadCell::new(),
             }),
         }
@@ -67,6 +71,7 @@ impl Unload for SourceTrait {
     fn unload(&self) {
         self.signature.unload();
         self.methods.unload();
+        self.static_methods.unload();
         self.vtable.unload();
         self.closure.unload();
     }
@@ -128,9 +133,37 @@ impl Trait for SourceTrait {
                                 method: method_res.result,
                             })
                         }
-                        ast::TraitBodyStmt::FunctionDeclaration(_) => None,
+                        ast::TraitBodyStmt::FunctionDeclaration(_)
+                        | ast::TraitBodyStmt::StaticMethodDeclaration(_) => None,
                     })
                     .collect::<Vec<_>>(),
+            )
+        })
+    }
+
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>> {
+        self.static_methods.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::TraitBodyStmt::StaticMethodDeclaration(method) => {
+                            let result = SourceStaticMethod::from_ast(
+                                self.context.clone(),
+                                TraitStaticMethodClosure {
+                                    trait_: self.clone(),
+                                },
+                                (**method).clone(),
+                            );
+                            Some(StaticMethodEntry {
+                                access: result.access,
+                                method: result.result,
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect(),
             )
         })
     }
@@ -145,6 +178,27 @@ impl Trait for SourceTrait {
                 self.location(),
             ))
         })
+    }
+}
+
+struct TraitStaticMethodClosure {
+    trait_: Arc<SourceTrait>,
+}
+
+impl StaticMethodClosure for TraitStaticMethodClosure {
+    fn owner(&self) -> StaticMethodOwner {
+        StaticMethodOwner::Trait(self.trait_.clone())
+    }
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let owner: Arc<dyn Trait> = self.trait_.clone();
+        ParameterScope::new(
+            self.trait_.closure.scope(),
+            ExpressionOwner::Trait(owner),
+            &self.trait_.clone().signature().parameters,
+        )
+    }
+    fn access_token(&self) -> AccessToken {
+        self.trait_.access_token()
     }
 }
 

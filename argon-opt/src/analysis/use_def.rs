@@ -114,6 +114,10 @@ fn instruction_use_def(instruction: &vf::Instruction) -> UseDef {
             define_result(&mut definitions, dest);
             use_registers(&mut uses, args);
         }
+        vf::Instruction::StaticMethodCall { dest, args, .. } => {
+            define_result(&mut definitions, dest);
+            use_registers(&mut uses, args);
+        }
 
         vf::Instruction::FunctionObjectCall {
             dest,

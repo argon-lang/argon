@@ -5,8 +5,9 @@ use argon_compiler::{
     EffectInfo, Enum, EnumVariant, ErasureMode, Expr, Function, FunctionImplementation,
     FunctionParameterListType, FunctionSignature, Identifier, Instance, Method, MethodEntry,
     MethodInstanceParameter, MethodOwner, MethodSlot, Module, ModuleExportBinding,
-    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, Trait, Tube, TubeName,
-    UnaryOperatorIdentifier, access::AccessModifier,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, StaticMethod,
+    StaticMethodEntry, StaticMethodOwner, Trait, Tube, TubeName, UnaryOperatorIdentifier,
+    access::AccessModifier,
 };
 use core::mem;
 use num_bigint::{BigInt, BigUint};
@@ -214,6 +215,36 @@ impl TubeEncoder {
         id
     }
 
+    fn get_static_method_id(&mut self, method: Arc<dyn StaticMethod>) -> usize {
+        let (id, is_new) = self.ids.static_method_ids.get_with_new(method.clone());
+        if is_new {
+            match method.clone().owner() {
+                StaticMethodOwner::Record(r) => {
+                    self.get_record_id(r.clone());
+                    if import_specifier_tube(&r.import_specifier()) != self.tube.name() {
+                        self.entry_emitters
+                            .push_back(EntryEmitter::StaticMethod(method));
+                    }
+                }
+                StaticMethodOwner::Enum(e) => {
+                    self.get_enum_id(e.clone());
+                    if import_specifier_tube(&e.import_specifier()) != self.tube.name() {
+                        self.entry_emitters
+                            .push_back(EntryEmitter::StaticMethod(method));
+                    }
+                }
+                StaticMethodOwner::Trait(t) => {
+                    self.get_trait_id(t.clone());
+                    if import_specifier_tube(&t.import_specifier()) != self.tube.name() {
+                        self.entry_emitters
+                            .push_back(EntryEmitter::StaticMethod(method));
+                    }
+                }
+            }
+        }
+        id
+    }
+
     fn get_block_label_id(&mut self, label: &BlockLabel<DefaultExprContext>) -> usize {
         self.ids.block_label_ids.get(label.clone())
     }
@@ -362,6 +393,12 @@ impl TubeEncoder {
                         .iter()
                         .map(|method| self.emit_method_entry(method).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?;
+                    let static_methods = record
+                        .clone()
+                        .static_methods()
+                        .iter()
+                        .map(|method| self.emit_static_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
                     record.clone().vtable();
                     let fields = record
                         .clone()
@@ -389,6 +426,7 @@ impl TubeEncoder {
                             location: Box::new(Self::emit_location(&record.location())),
                             signature: Box::new(self.emit_function_signature(&record.signature())?),
                             methods,
+                            static_methods,
                             fields,
                         }),
                     }
@@ -446,6 +484,12 @@ impl TubeEncoder {
                         .iter()
                         .map(|method| self.emit_method_entry(method).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?;
+                    let static_methods = enum_
+                        .clone()
+                        .static_methods()
+                        .iter()
+                        .map(|method| self.emit_static_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
                     enum_.clone().vtable();
                     let variants = enum_
                         .clone()
@@ -499,6 +543,7 @@ impl TubeEncoder {
                             location: Box::new(Self::emit_location(&enum_.location())),
                             signature: Box::new(self.emit_function_signature(&enum_.signature())?),
                             methods,
+                            static_methods,
                             variants,
                         }),
                     }
@@ -541,6 +586,12 @@ impl TubeEncoder {
                         .iter()
                         .map(|method| self.emit_method_entry(method).map(Box::new))
                         .collect::<Result<Vec<_>, _>>()?;
+                    let static_methods = trait_
+                        .clone()
+                        .static_methods()
+                        .iter()
+                        .map(|method| self.emit_static_method_entry(method).map(Box::new))
+                        .collect::<Result<Vec<_>, _>>()?;
 
                     // Force VTable creation to trigger any errors.
                     trait_.clone().vtable();
@@ -552,6 +603,7 @@ impl TubeEncoder {
                             location: Box::new(Self::emit_location(&trait_.location())),
                             signature: Box::new(self.emit_function_signature(&trait_.signature())?),
                             methods,
+                            static_methods,
                         }),
                     }
                 }
@@ -637,6 +689,42 @@ impl TubeEncoder {
                     MethodOwner::Instance(instance) => tf::TubeFileEntry::InstanceMethodReference {
                         method_id,
                         instance_id: BigUint::from(self.ids.instance_ids.get(instance)),
+                        name: Box::new(encode_identifier(&metadata.name)?),
+                        signature: Box::new(signature),
+                    },
+                }
+            }
+            EntryEmitter::StaticMethod(method) => {
+                let static_method_id =
+                    BigUint::from(self.ids.static_method_ids.get(method.clone()));
+                let metadata = method.metadata();
+                let signature = self.encode_erased_signature(&erase_signature(
+                    self.context.clone(),
+                    method.clone().signature().as_ref(),
+                ))?;
+                if import_specifier_tube(&method.clone().owner().import_specifier())
+                    == self.tube.name()
+                {
+                    return Ok(None);
+                }
+                match method.clone().owner() {
+                    StaticMethodOwner::Record(r) => {
+                        tf::TubeFileEntry::RecordStaticMethodReference {
+                            static_method_id,
+                            record_id: BigUint::from(self.ids.record_ids.get(r)),
+                            name: Box::new(encode_identifier(&metadata.name)?),
+                            signature: Box::new(signature),
+                        }
+                    }
+                    StaticMethodOwner::Enum(e) => tf::TubeFileEntry::EnumStaticMethodReference {
+                        static_method_id,
+                        enum_id: BigUint::from(self.ids.enum_ids.get(e)),
+                        name: Box::new(encode_identifier(&metadata.name)?),
+                        signature: Box::new(signature),
+                    },
+                    StaticMethodOwner::Trait(t) => tf::TubeFileEntry::TraitStaticMethodReference {
+                        static_method_id,
+                        trait_id: BigUint::from(self.ids.trait_ids.get(t)),
                         name: Box::new(encode_identifier(&metadata.name)?),
                         signature: Box::new(signature),
                     },
@@ -936,6 +1024,39 @@ impl TubeEncoder {
         })
     }
 
+    fn emit_static_method_entry(
+        &mut self,
+        entry: &StaticMethodEntry,
+    ) -> Result<tf::StaticMethodEntry, InternalCompilerError> {
+        let id = self.get_static_method_id(entry.method.clone());
+        let method = entry.method.clone();
+        let metadata = method.metadata();
+        let sig = method.clone().signature();
+        let implementation = method
+            .clone()
+            .implementation()
+            .map(|implementation| self.emit_method_implementation(&implementation))
+            .transpose()?
+            .map(Box::new);
+        Ok(tf::StaticMethodEntry {
+            access: Box::new(encode_access_modifier(entry.access)),
+            method: Box::new(tf::StaticMethodDefinition {
+                static_method_id: BigUint::from(id),
+                name: Box::new(encode_identifier(&metadata.name)?),
+                erased_signature: Box::new(self.encode_erased_signature(&erase_signature(
+                    self.context.clone(),
+                    sig.as_ref(),
+                ))?),
+                inline: metadata.is_inline,
+                erased: metadata.erasure_mode == ErasureMode::Erased,
+                witness: metadata.is_witness,
+                effects: Box::new(encode_effect_info(metadata.effect_info)),
+                signature: Box::new(self.emit_function_signature(&sig)?),
+                implementation,
+            }),
+        })
+    }
+
     fn emit_method_implementation(
         &mut self,
         implementation: &FunctionImplementation,
@@ -1126,6 +1247,18 @@ impl TubeEncoder {
                 method_id: self.get_method_id(method.clone()).into(),
                 instance_type: Box::new(self.emit_method_instance_type(instance_type)?),
                 instance: Box::new(self.emit_located_expr(receiver)?),
+                args: arguments
+                    .iter()
+                    .map(|arg| self.emit_located_expr(arg).map(Box::new))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+            Expr::StaticMethodCall {
+                method,
+                owner_type,
+                arguments,
+            } => tf::Expr::StaticMethodCall {
+                static_method_id: self.get_static_method_id(method.clone()).into(),
+                owner_type: Box::new(self.emit_method_instance_type(owner_type)?),
                 args: arguments
                     .iter()
                     .map(|arg| self.emit_located_expr(arg).map(Box::new))
@@ -1753,6 +1886,9 @@ impl TubeEncoder {
             ExpressionOwner::Method(method) => tf::ExpressionOwner::Method {
                 index: self.get_method_id(method.clone()).into(),
             },
+            ExpressionOwner::StaticMethod(method) => tf::ExpressionOwner::StaticMethod {
+                index: self.get_static_method_id(method.clone()).into(),
+            },
             ExpressionOwner::Instance(instance) => tf::ExpressionOwner::Instance {
                 index: self.get_instance_id(instance.clone()).into(),
             },
@@ -1830,6 +1966,7 @@ enum EntryEmitter {
     Trait(Arc<dyn Trait>),
     Instance(Arc<dyn Instance>),
     Method(Arc<dyn Method>),
+    StaticMethod(Arc<dyn StaticMethod>),
 }
 
 fn encode_module_path(path: &argon_compiler::ModulePath) -> tf::ModulePath {

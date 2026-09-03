@@ -1,0 +1,12 @@
+<ArgonTest>
+    <Name>Static method invalid</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        record Owner
+            public virtual def static.bad(): String = "bad"
+        end
+    ]]></InputSource>
+    <ExpectedError>AR0004</ExpectedError>
+</ArgonTest>

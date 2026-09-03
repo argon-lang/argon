@@ -636,6 +636,7 @@ final class Emitter {
 				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
 					recordInfo.recordClassDesc(), ClassNaming.typeTokenParameterFieldName(index), tokenParameterDescs.get(index)));
 			}
+			for(var method : definition.staticMethods()) emitStaticMethod(classBuilder, method);
 		});
 
 		writeEntry(classEntryName(recordInfo.recordClassDesc()), bytes);
@@ -782,6 +783,7 @@ final class Emitter {
 				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
 					enumInfo.enumClassDesc(), ClassNaming.typeTokenParameterFieldName(index), tokenParameterDescs.get(index)));
 			}
+			for(var method : definition.staticMethods()) emitStaticMethod(classBuilder, method);
 		});
 		writeEntry(classEntryName(enumInfo.enumClassDesc()), baseBytes);
 
@@ -1051,6 +1053,7 @@ final class Emitter {
 						)
 				);
 			}
+			for(var method : definition.staticMethods()) emitStaticMethod(classBuilder, method);
 		});
 
 		writeEntry(classEntryName(traitInfo.traitDesc()), bytes);
@@ -1227,6 +1230,13 @@ final class Emitter {
 				)
 			);
 		}
+	}
+
+	private void emitStaticMethod(ClassBuilder classBuilder, StaticMethodDefinition method) {
+		var info = program.getStaticMethodInfo(method.staticMethodId());
+		var implementation = method.implementation().orElseThrow(() -> new RuntimeException("Static method implementation is missing"));
+		classBuilder.withMethodBody(info.methodName(), info.descriptor(), ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
+			cb -> emitFunctionImplementationBody(cb, method.signature(), implementation, Optional.empty(), index -> { throw new UnsupportedOperationException("Static method has no parent token parameter"); }));
 	}
 
 	private boolean isCoreExceptionTrait(Token.Trait trait) {
@@ -1598,6 +1608,22 @@ final class Emitter {
 							MethodTypeDesc.of(CD_TRAMPOLINE)
 						))
 					);
+				}
+
+				case Instruction.StaticMethodCall call -> {
+					var method = program.getStaticMethodInfo(call.staticMethodId());
+					var ownerTokenArgs = switch(call.ownerType()) {
+						case Token.Record owner -> owner.args();
+						case Token.Enum owner -> owner.args();
+						case Token.Trait owner -> owner.args();
+						default -> throw new IllegalArgumentException("Static method owner must be a record, enum, or trait type");
+					};
+					for(var tokenArg : ownerTokenArgs) emitTokenValue(tokenArg);
+					for(var tokenArg : call.tokenArgs()) emitTokenValue(tokenArg);
+					for(var arg : call.args()) loadRegister(arg);
+					emitFunctionResult(call.dest(),
+						() -> cb.invokestatic(method.definingClass(), method.methodName(), method.descriptor(), method.isInterface()),
+						() -> cb.invokedynamic(DynamicCallSiteDesc.of(BSM_LAMBDA_METAFACTORY, "step", MethodTypeDesc.of(CD_TRAMPOLINE_THUNK, method.descriptor().parameterArray()), MethodTypeDesc.of(CD_TRAMPOLINE), MethodHandleDesc.ofMethod(method.isInterface() ? DirectMethodHandleDesc.Kind.INTERFACE_STATIC : DirectMethodHandleDesc.Kind.STATIC, method.definingClass(), method.methodName(), method.descriptor()), MethodTypeDesc.of(CD_TRAMPOLINE))));
 				}
 
 				case Instruction.FunctionObjectCall call -> {

@@ -44,6 +44,7 @@ public final class IrReader {
 	private final Map<UnsignedBigInteger, TubeFileEntry.EnumVariantReference> enumVariantMap = new HashMap<>();
 	private final Map<UnsignedBigInteger, TraitEntry> traitMap = new HashMap<>();
 	private final Map<UnsignedBigInteger, MethodEntry> methodMap = new HashMap<>();
+	private final Map<UnsignedBigInteger, StaticMethodEntry> staticMethodMap = new HashMap<>();
 	private final Map<UnsignedBigInteger, InstanceEntry> instanceMap = new HashMap<>();
 
 	public static ProgramModel readFile(InputFile file) throws IOException, SyntaxException, DecodeException {
@@ -120,6 +121,7 @@ public final class IrReader {
 			Map.copyOf(enumVariantMap),
 			Map.copyOf(traitMap),
 			Map.copyOf(methodMap),
+			Map.copyOf(staticMethodMap),
 			Map.copyOf(instanceMap)
 		);
 	}
@@ -180,6 +182,7 @@ public final class IrReader {
 				exportEntry = new ProgramModel.ModuleExportEntry.RecordDefinition(recordDefinition);
 				for(var method : recordDefinition.definition().methods()) methodMap.put(method.methodId(),
 					new MethodEntry.RecordOwner(new TubeFileEntry.RecordMethodReference(method.methodId(), recordDefinition.definition().recordId(), method.name(), method.erasedSignature(), method.signature())));
+				for(var method : recordDefinition.definition().staticMethods()) staticMethodMap.put(method.staticMethodId(), new StaticMethodEntry.RecordOwner(new TubeFileEntry.RecordStaticMethodReference(method.staticMethodId(), recordDefinition.definition().recordId(), method.name(), method.erasedSignature(), method.signature())));
 
 				for(var field : recordDefinition.definition().fields()) {
 					recordFieldMap.put(
@@ -199,6 +202,7 @@ public final class IrReader {
 				return;
 			}
 			case TubeFileEntry.RecordMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.RecordOwner(methodRef)); return; }
+			case TubeFileEntry.RecordStaticMethodReference ref -> { staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.RecordOwner(ref)); return; }
 
 			case TubeFileEntry.EnumDefinition enumDefinition -> {
 				enumMap.put(
@@ -209,6 +213,7 @@ public final class IrReader {
 				exportEntry = new ProgramModel.ModuleExportEntry.EnumDefinition(enumDefinition);
 				for(var method : enumDefinition.definition().methods()) methodMap.put(method.methodId(),
 					new MethodEntry.EnumOwner(new TubeFileEntry.EnumMethodReference(method.methodId(), enumDefinition.definition().enumId(), method.name(), method.erasedSignature(), method.signature())));
+				for(var method : enumDefinition.definition().staticMethods()) staticMethodMap.put(method.staticMethodId(), new StaticMethodEntry.EnumOwner(new TubeFileEntry.EnumStaticMethodReference(method.staticMethodId(), enumDefinition.definition().enumId(), method.name(), method.erasedSignature(), method.signature())));
 				for(var variant : enumDefinition.definition().variants()) {
 					enumVariantMap.put(
 						variant.variantId(),
@@ -241,6 +246,7 @@ public final class IrReader {
 				return;
 			}
 			case TubeFileEntry.EnumMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.EnumOwner(methodRef)); return; }
+			case TubeFileEntry.EnumStaticMethodReference ref -> { staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.EnumOwner(ref)); return; }
 
 			case TubeFileEntry.EnumVariantReference enumVariantRef -> {
 				enumVariantMap.put(enumVariantRef.variantId(), enumVariantRef);
@@ -283,6 +289,7 @@ public final class IrReader {
 						))
 					);
 				}
+				for(var method : traitDefinition.definition().staticMethods()) staticMethodMap.put(method.staticMethodId(), new StaticMethodEntry.TraitOwner(new TubeFileEntry.TraitStaticMethodReference(method.staticMethodId(), traitDefinition.definition().traitId(), method.name(), method.erasedSignature(), method.signature())));
 			}
 
 			case TubeFileEntry.TraitReference traitRef -> {
@@ -294,6 +301,7 @@ public final class IrReader {
 				methodMap.put(traitMethodRef.methodId(), new MethodEntry.Trait(traitMethodRef));
 				return;
 			}
+			case TubeFileEntry.TraitStaticMethodReference ref -> { staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.TraitOwner(ref)); return; }
 
 			case TubeFileEntry.InstanceDefinition instanceDefinition -> {
 				instanceMap.put(
@@ -405,6 +413,11 @@ public final class IrReader {
 		record Instance(TubeFileEntry.InstanceMethodReference entry) implements MethodEntry {
 		}
 	}
+	private sealed interface StaticMethodEntry {
+		record RecordOwner(TubeFileEntry.RecordStaticMethodReference entry) implements StaticMethodEntry {}
+		record EnumOwner(TubeFileEntry.EnumStaticMethodReference entry) implements StaticMethodEntry {}
+		record TraitOwner(TubeFileEntry.TraitStaticMethodReference entry) implements StaticMethodEntry {}
+	}
 
 	private sealed interface InstanceEntry {
 		record Definition(TubeFileEntry.InstanceDefinition entry) implements InstanceEntry {
@@ -431,6 +444,7 @@ public final class IrReader {
 		private final Map<UnsignedBigInteger, TubeFileEntry.EnumVariantReference> enumVariantMap;
 		private final Map<UnsignedBigInteger, TraitEntry> traitMap;
 		private final Map<UnsignedBigInteger, MethodEntry> methodMap;
+		private final Map<UnsignedBigInteger, StaticMethodEntry> staticMethodMap;
 		private final Map<UnsignedBigInteger, InstanceEntry> instanceMap;
 
 		private final ConcurrentMap<UnsignedBigInteger, TubeInfo> tubeInfoCache = new ConcurrentHashMap<>();
@@ -442,6 +456,7 @@ public final class IrReader {
 		private final ConcurrentMap<UnsignedBigInteger, EnumVariantInfo> enumVariantInfoCache = new ConcurrentHashMap<>();
 		private final ConcurrentMap<UnsignedBigInteger, TraitInfo> traitInfoCache = new ConcurrentHashMap<>();
 		private final ConcurrentMap<UnsignedBigInteger, MethodInfo> methodInfoCache = new ConcurrentHashMap<>();
+		private final ConcurrentMap<UnsignedBigInteger, StaticMethodInfo> staticMethodInfoCache = new ConcurrentHashMap<>();
 		private final ConcurrentMap<UnsignedBigInteger, InstanceInfo> instanceInfoCache = new ConcurrentHashMap<>();
 
 		private ProgramModelImpl(
@@ -457,6 +472,7 @@ public final class IrReader {
 			Map<UnsignedBigInteger, TubeFileEntry.EnumVariantReference> enumVariantMap,
 			Map<UnsignedBigInteger, TraitEntry> traitMap,
 			Map<UnsignedBigInteger, MethodEntry> methodMap,
+			Map<UnsignedBigInteger, StaticMethodEntry> staticMethodMap,
 			Map<UnsignedBigInteger, InstanceEntry> instanceMap
 		) {
 			this.header = header;
@@ -471,6 +487,7 @@ public final class IrReader {
 			this.enumVariantMap = enumVariantMap;
 			this.traitMap = traitMap;
 			this.methodMap = methodMap;
+			this.staticMethodMap = staticMethodMap;
 			this.instanceMap = instanceMap;
 		}
 
@@ -709,6 +726,16 @@ public final class IrReader {
 		public MethodInfo getMethodInfo(UnsignedBigInteger id) {
 			return methodInfoCache.computeIfAbsent(id, this::computeMethodInfo);
 		}
+
+		@Override public StaticMethodInfo getStaticMethodInfo(UnsignedBigInteger id) { return staticMethodInfoCache.computeIfAbsent(id, this::computeStaticMethodInfo); }
+		private StaticMethodInfo computeStaticMethodInfo(UnsignedBigInteger id) {
+			return switch(require(staticMethodMap, id, "Invalid static method id")) {
+				case StaticMethodEntry.RecordOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getRecordInfo(ref.recordId()).recordClassDesc(), false);
+				case StaticMethodEntry.EnumOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getEnumInfo(ref.enumId()).enumClassDesc(), false);
+				case StaticMethodEntry.TraitOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getTraitInfo(ref.traitId()).traitDesc(), true);
+			};
+		}
+		private StaticMethodInfo staticMethodInfo(Identifier name, ErasedSignature erased, FunctionSignature signature, ClassDesc owner, boolean isInterface) { return new StaticMethodInfo(name, erased, signature, owner, "$static$" + ClassNaming.methodName(name, erased), functionSignatureDescriptor(signature), isInterface); }
 
 		private MethodInfo computeMethodInfo(UnsignedBigInteger id) {
 			return switch(require(methodMap, id, "Invalid method id")) {

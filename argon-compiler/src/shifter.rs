@@ -1,6 +1,6 @@
 use crate::{
     DefaultExprContext, EmptyHole, Enum, EnumVariant, Function, Instance, Method, Record,
-    RecordField, Trait,
+    RecordField, StaticMethod, Trait,
 };
 use alloc::sync::Arc;
 use argon_expr::{Expr, ExprContext, ExprContextShifter};
@@ -28,6 +28,7 @@ pub trait DefaultExprAssociatedTypes:
     ExprContext<
         Function = Arc<dyn Function>,
         Method = Arc<dyn Method>,
+        StaticMethod = Arc<dyn StaticMethod>,
         Record = Arc<dyn Record>,
         RecordField = Arc<dyn RecordField>,
         Enum = Arc<dyn Enum>,
@@ -42,6 +43,7 @@ impl<EC> DefaultExprAssociatedTypes for EC where
     EC: ExprContext<
             Function = Arc<dyn Function>,
             Method = Arc<dyn Method>,
+            StaticMethod = Arc<dyn StaticMethod>,
             Record = Arc<dyn Record>,
             RecordField = Arc<dyn RecordField>,
             Enum = Arc<dyn Enum>,

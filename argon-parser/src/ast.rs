@@ -25,6 +25,7 @@ pub enum Stmt {
     EnumDeclaration(Box<EnumDeclarationStmt>),
     TraitDeclaration(Box<TraitDeclarationStmt>),
     MethodDeclaration(Box<MethodDeclarationStmt>),
+    StaticMethodDeclaration(Box<StaticMethodDeclarationStmt>),
     InstanceDeclaration(Box<InstanceDeclarationStmt>),
     Import(Box<ImportStmt>),
     Export(Box<ExportStmt>),
@@ -38,30 +39,35 @@ pub enum RecordBodyStmt {
     FunctionDeclaration(Box<FunctionDeclarationStmt>),
     RecordField(Box<RecordField>),
     MethodDeclaration(Box<MethodDeclarationStmt>),
+    StaticMethodDeclaration(Box<StaticMethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
 pub enum EnumBodyStmt {
     FunctionDeclaration(Box<FunctionDeclarationStmt>),
     MethodDeclaration(Box<MethodDeclarationStmt>),
+    StaticMethodDeclaration(Box<StaticMethodDeclarationStmt>),
     EnumVariant(Box<EnumVariant>),
 }
 
 #[derive(Debug, Clone)]
 pub enum EnumVariantBodyStmt {
     MethodDeclaration(Box<MethodDeclarationStmt>),
+    StaticMethodDeclaration(Box<StaticMethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
 pub enum TraitBodyStmt {
     FunctionDeclaration(Box<FunctionDeclarationStmt>),
     MethodDeclaration(Box<MethodDeclarationStmt>),
+    StaticMethodDeclaration(Box<StaticMethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
 pub enum NewTraitObjectBodyStmt {
     FunctionDeclaration(Box<FunctionDeclarationStmt>),
     MethodDeclaration(Box<MethodDeclarationStmt>),
+    StaticMethodDeclaration(Box<StaticMethodDeclarationStmt>),
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +77,7 @@ pub enum DeclarationStmt {
     Enum(Box<EnumDeclarationStmt>),
     Trait(Box<TraitDeclarationStmt>),
     Method(Box<MethodDeclarationStmt>),
+    StaticMethod(Box<StaticMethodDeclarationStmt>),
     Instance(Box<InstanceDeclarationStmt>),
 }
 
@@ -82,6 +89,7 @@ impl DeclarationStmt {
             DeclarationStmt::Enum(x) => &x.modifiers,
             DeclarationStmt::Trait(x) => &x.modifiers,
             DeclarationStmt::Method(x) => &x.modifiers,
+            DeclarationStmt::StaticMethod(x) => &x.modifiers,
             DeclarationStmt::Instance(x) => &x.modifiers,
         }
     }
@@ -93,6 +101,7 @@ impl DeclarationStmt {
             DeclarationStmt::Enum(x) => &x.name,
             DeclarationStmt::Trait(x) => &x.name,
             DeclarationStmt::Method(x) => &x.name,
+            DeclarationStmt::StaticMethod(x) => &x.name,
             DeclarationStmt::Instance(x) => &x.name,
         }
     }
@@ -170,6 +179,16 @@ pub struct MethodDeclarationStmt {
     pub purity: bool,
     pub instance_name: WithLocation<Option<Identifier>>,
     pub instance_type: Option<WithLocation<Expr>>,
+    pub name: WithLocation<Identifier>,
+    pub parameters: Vec<WithLocation<FunctionParameterList>>,
+    pub return_type: WithLocation<ReturnTypeSpecifier>,
+    pub body: Option<FunctionBody>,
+}
+
+#[derive(Debug, Clone)]
+pub struct StaticMethodDeclarationStmt {
+    pub modifiers: Vec<WithLocation<Modifier>>,
+    pub purity: bool,
     pub name: WithLocation<Identifier>,
     pub parameters: Vec<WithLocation<FunctionParameterList>>,
     pub return_type: WithLocation<ReturnTypeSpecifier>,

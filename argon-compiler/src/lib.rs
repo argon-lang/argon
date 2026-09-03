@@ -80,6 +80,7 @@ impl ExprContext for DefaultExprContext {
     type Hole = EmptyHole;
     type Function = Arc<dyn Function>;
     type Method = Arc<dyn Method>;
+    type StaticMethod = Arc<dyn StaticMethod>;
     type Record = Arc<dyn Record>;
     type RecordField = Arc<dyn RecordField>;
     type Enum = Arc<dyn Enum>;
@@ -439,6 +440,59 @@ pub trait Method: Debug + Unload + ThreadSafe {
     fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>>;
 }
 
+pub trait StaticMethod: Debug + Unload + ThreadSafe {
+    fn owner(self: Arc<Self>) -> StaticMethodOwner;
+    fn metadata(&self) -> &StaticMethodMetadata;
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
+    fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>>;
+}
+
+pub struct StaticMethodMetadata {
+    pub access: access::AccessModifier,
+    pub name: Identifier,
+    pub is_inline: bool,
+    pub erasure_mode: ErasureMode,
+    pub is_witness: bool,
+    pub effect_info: EffectInfo,
+}
+
+#[derive(Clone)]
+pub enum StaticMethodOwner {
+    Record(Arc<dyn Record>),
+    Enum(Arc<dyn Enum>),
+    Trait(Arc<dyn Trait>),
+}
+
+impl StaticMethodOwner {
+    pub fn import_specifier(self) -> ImportSpecifier {
+        match self {
+            Self::Record(r) => r.import_specifier(),
+            Self::Enum(e) => e.import_specifier(),
+            Self::Trait(t) => t.import_specifier(),
+        }
+    }
+
+    pub fn into_expression_owner(self) -> ExpressionOwner<DefaultExprContext> {
+        match self {
+            Self::Record(r) => ExpressionOwner::Record(r),
+            Self::Enum(e) => ExpressionOwner::Enum(e),
+            Self::Trait(t) => ExpressionOwner::Trait(t),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct StaticMethodEntry {
+    pub access: access::AccessModifier,
+    pub method: Arc<dyn StaticMethod>,
+}
+
+impl Unload for StaticMethodEntry {
+    fn unload(&self) {
+        self.method.unload();
+    }
+}
+
 pub struct MethodMetadata {
     pub access: access::AccessModifier,
     pub name: Identifier,
@@ -524,6 +578,7 @@ pub trait Record: Debug + Unload + ThreadSafe {
 
     fn fields(self: Arc<Self>) -> Arc<Vec<Arc<dyn RecordField>>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>>;
     fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
@@ -560,6 +615,7 @@ pub trait Enum: Debug + Unload + ThreadSafe {
 
     fn variants(self: Arc<Self>) -> Arc<Vec<Arc<dyn EnumVariant>>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>>;
     fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
@@ -582,6 +638,7 @@ pub trait Trait: Debug + Unload + ThreadSafe {
     fn location(&self) -> parse18_runtime::Location;
     fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>>;
     fn methods(self: Arc<Self>) -> Arc<Vec<MethodEntry>>;
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>>;
     fn vtable(self: Arc<Self>) -> Arc<vtable::VTable>;
 }
 
@@ -614,6 +671,7 @@ macro_rules! impl_dyn_stub_traits {
 
 impl_dyn_stub_traits!(Function);
 impl_dyn_stub_traits!(Method);
+impl_dyn_stub_traits!(StaticMethod);
 impl_dyn_stub_traits!(Record);
 impl_dyn_stub_traits!(RecordField);
 impl_dyn_stub_traits!(Enum);
@@ -629,6 +687,7 @@ const DECL_HASH_INSTANCE: u8 = 4;
 const DECL_HASH_METHOD: u8 = 5;
 const DECL_HASH_RECORD_FIELD: u8 = 6;
 const DECL_HASH_ENUM_VARIANT: u8 = 7;
+const DECL_HASH_STATIC_METHOD: u8 = 8;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeDeclaration {
@@ -713,6 +772,7 @@ impl Hash for TypeDeclaration {
 pub enum Declaration {
     Function(Arc<dyn Function>),
     Method(Arc<dyn Method>),
+    StaticMethod(Arc<dyn StaticMethod>),
     Record(Arc<dyn Record>),
     RecordField(Arc<dyn RecordField>),
     Enum(Arc<dyn Enum>),
@@ -726,6 +786,11 @@ impl Declaration {
         match self {
             Self::Function(_) => None,
             Self::Method(m) => Some(TypeDeclaration::from(m.owner())),
+            Self::StaticMethod(m) => Some(match m.owner() {
+                StaticMethodOwner::Record(r) => TypeDeclaration::Record(r),
+                StaticMethodOwner::Enum(e) => TypeDeclaration::Enum(e),
+                StaticMethodOwner::Trait(t) => TypeDeclaration::Trait(t),
+            }),
             Self::Record(r) => Some(TypeDeclaration::Record(r)),
             Self::RecordField(f) => Some(TypeDeclaration::from(f.owning_record())),
             Self::Enum(e) => Some(TypeDeclaration::Enum(e)),
@@ -739,6 +804,7 @@ impl Declaration {
         match self {
             Declaration::Function(f) => f.import_specifier(),
             Declaration::Method(m) => m.owner().import_specifier(),
+            Declaration::StaticMethod(m) => m.owner().import_specifier(),
             Declaration::Record(r) => r.import_specifier(),
             Declaration::RecordField(f) => f.owning_record().import_specifier(),
             Declaration::Enum(e) => e.import_specifier(),
@@ -758,6 +824,10 @@ impl Hash for Declaration {
             }
             Declaration::Method(m) => {
                 DECL_HASH_METHOD.hash(state);
+                m.hash(state);
+            }
+            Declaration::StaticMethod(m) => {
+                DECL_HASH_STATIC_METHOD.hash(state);
                 m.hash(state);
             }
             Declaration::Record(r) => {

@@ -13,6 +13,7 @@ mod modifiers;
 mod module;
 mod record;
 mod signature;
+mod static_method;
 mod traits;
 mod type_checker;
 

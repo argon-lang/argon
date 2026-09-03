@@ -69,6 +69,7 @@ fn declaration_stmt_to_stmt(decl: DeclarationStmt) -> Stmt {
         DeclarationStmt::Enum(stmt) => Stmt::EnumDeclaration(stmt),
         DeclarationStmt::Trait(stmt) => Stmt::TraitDeclaration(stmt),
         DeclarationStmt::Method(stmt) => Stmt::MethodDeclaration(stmt),
+        DeclarationStmt::StaticMethod(stmt) => Stmt::StaticMethodDeclaration(stmt),
         DeclarationStmt::Instance(stmt) => Stmt::InstanceDeclaration(stmt),
     }
 }
@@ -77,6 +78,7 @@ fn declaration_stmt_to_record_body_stmt(decl: DeclarationStmt) -> RecordBodyStmt
     match decl {
         DeclarationStmt::Function(stmt) => RecordBodyStmt::FunctionDeclaration(stmt),
         DeclarationStmt::Method(stmt) => RecordBodyStmt::MethodDeclaration(stmt),
+        DeclarationStmt::StaticMethod(stmt) => RecordBodyStmt::StaticMethodDeclaration(stmt),
         _ => panic!("unsupported declaration in record body"),
     }
 }
@@ -85,6 +87,7 @@ fn declaration_stmt_to_enum_body_stmt(decl: DeclarationStmt) -> EnumBodyStmt {
     match decl {
         DeclarationStmt::Function(stmt) => EnumBodyStmt::FunctionDeclaration(stmt),
         DeclarationStmt::Method(stmt) => EnumBodyStmt::MethodDeclaration(stmt),
+        DeclarationStmt::StaticMethod(stmt) => EnumBodyStmt::StaticMethodDeclaration(stmt),
         _ => panic!("unsupported declaration in enum body"),
     }
 }
@@ -92,6 +95,7 @@ fn declaration_stmt_to_enum_body_stmt(decl: DeclarationStmt) -> EnumBodyStmt {
 fn declaration_stmt_to_enum_variant_body_stmt(decl: DeclarationStmt) -> EnumVariantBodyStmt {
     match decl {
         DeclarationStmt::Method(stmt) => EnumVariantBodyStmt::MethodDeclaration(stmt),
+        DeclarationStmt::StaticMethod(stmt) => EnumVariantBodyStmt::StaticMethodDeclaration(stmt),
         _ => panic!("unsupported declaration in enum variant body"),
     }
 }
@@ -100,6 +104,7 @@ fn declaration_stmt_to_trait_body_stmt(decl: DeclarationStmt) -> TraitBodyStmt {
     match decl {
         DeclarationStmt::Function(stmt) => TraitBodyStmt::FunctionDeclaration(stmt),
         DeclarationStmt::Method(stmt) => TraitBodyStmt::MethodDeclaration(stmt),
+        DeclarationStmt::StaticMethod(stmt) => TraitBodyStmt::StaticMethodDeclaration(stmt),
         _ => panic!("unsupported declaration in trait body"),
     }
 }
@@ -108,6 +113,9 @@ fn declaration_stmt_to_new_trait_object_body_stmt(decl: DeclarationStmt) -> NewT
     match decl {
         DeclarationStmt::Function(stmt) => NewTraitObjectBodyStmt::FunctionDeclaration(stmt),
         DeclarationStmt::Method(stmt) => NewTraitObjectBodyStmt::MethodDeclaration(stmt),
+        DeclarationStmt::StaticMethod(stmt) => {
+            NewTraitObjectBodyStmt::StaticMethodDeclaration(stmt)
+        }
         _ => panic!("unsupported declaration in new-trait-object body"),
     }
 }
@@ -323,6 +331,25 @@ fn method_declaration_stmt_rest_function(
 ) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt> {
     Box::new(move |modifiers| {
         function_declaration_stmt(modifiers, purity, name, parameters, return_type, body)
+    })
+}
+
+fn static_method_declaration_stmt_rest(
+    purity: bool,
+    name: WithLocation<Identifier>,
+    parameters: VecDeque<WithLocation<FunctionParameterList>>,
+    return_type: WithLocation<ReturnTypeSpecifier>,
+    body: Option<FunctionBody>,
+) -> Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt> {
+    Box::new(move |modifiers| {
+        DeclarationStmt::StaticMethod(Box::new(StaticMethodDeclarationStmt {
+            modifiers,
+            purity,
+            name,
+            parameters: vec_deque_to_vec(parameters),
+            return_type,
+            body,
+        }))
     })
 }
 

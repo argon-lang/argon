@@ -10,9 +10,9 @@ use argon_compiler::{
     FunctionImplementation, FunctionMetadata, FunctionParameterListType, FunctionSignature,
     Identifier, Instance, Method, MethodEntry, MethodInstanceParameter, MethodMetadata,
     MethodOwner, MethodSlot, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
-    RecordField, RecordFieldMetadata, RecordFieldOwner, Trait, Tube, TubeCollection,
-    TubeCollectionBuilder, TubeMetadata, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
-    Unload,
+    RecordField, RecordFieldMetadata, RecordFieldOwner, StaticMethod, StaticMethodEntry,
+    StaticMethodMetadata, StaticMethodOwner, Trait, Tube, TubeCollection, TubeCollectionBuilder,
+    TubeMetadata, TubeName, TypeDeclaration, UnaryOperatorIdentifier, Unload,
     access::{AccessModifier, AccessToken},
     vtable::{VTable, build_vtable},
 };
@@ -64,6 +64,12 @@ struct TubeDecoder {
     trait_entries: HashMap<BigUint, TraitEntry>,
     trait_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     method_entries: HashMap<BigUint, MethodEntryDefinition>,
+    static_method_entries: HashMap<BigUint, StaticMethodEntryDefinition>,
+    record_static_method_references:
+        HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
+    enum_static_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
+    trait_static_method_references:
+        HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     instance_entries: HashMap<BigUint, InstanceEntry>,
     instance_method_references: HashMap<BigUint, (BigUint, tf::Identifier, tf::ErasedSignature)>,
     tube_ids: RwLock<HashMap<BigUint, TubeName>>,
@@ -75,6 +81,7 @@ struct TubeDecoder {
     traits: RwLock<HashMap<BigUint, Arc<dyn Trait>>>,
     instances: RwLock<HashMap<BigUint, Arc<dyn Instance>>>,
     methods: RwLock<HashMap<BigUint, Arc<dyn Method>>>,
+    static_methods: RwLock<HashMap<BigUint, Arc<dyn StaticMethod>>>,
     record_fields: RwLock<HashMap<BigUint, Arc<dyn RecordField>>>,
     local_import_ids: RwLock<HashMap<BigUint, UniqueIdentifier>>,
     local_variables: RwLock<HashMap<BigUint, Box<LocalVariable<DefaultExprContext>>>>,
@@ -91,6 +98,7 @@ impl Unload for TubeDecoder {
         let traits = core::mem::take(&mut *rwlock_write(&self.traits));
         let instances = core::mem::take(&mut *rwlock_write(&self.instances));
         let methods = core::mem::take(&mut *rwlock_write(&self.methods));
+        let static_methods = core::mem::take(&mut *rwlock_write(&self.static_methods));
         let record_fields = core::mem::take(&mut *rwlock_write(&self.record_fields));
 
         rwlock_write(&self.tube_ids).clear();
@@ -119,6 +127,9 @@ impl Unload for TubeDecoder {
             value.unload();
         }
         for value in methods.into_values() {
+            value.unload();
+        }
+        for value in static_methods.into_values() {
             value.unload();
         }
         for value in record_fields.into_values() {
@@ -185,6 +196,22 @@ enum MethodEntryDefinition {
     },
 }
 
+#[derive(Clone)]
+enum StaticMethodEntryDefinition {
+    Record {
+        record_id: BigUint,
+        entry: tf::StaticMethodEntry,
+    },
+    Enum {
+        enum_id: BigUint,
+        entry: tf::StaticMethodEntry,
+    },
+    Trait {
+        trait_id: BigUint,
+        entry: tf::StaticMethodEntry,
+    },
+}
+
 impl TubeDecoder {
     fn new(
         context: Context,
@@ -208,6 +235,10 @@ impl TubeDecoder {
             trait_entries: HashMap::new(),
             trait_method_references: HashMap::new(),
             method_entries: HashMap::new(),
+            static_method_entries: HashMap::new(),
+            record_static_method_references: HashMap::new(),
+            enum_static_method_references: HashMap::new(),
+            trait_static_method_references: HashMap::new(),
             instance_entries: HashMap::new(),
             instance_method_references: HashMap::new(),
             tube_ids: RwLock::new(HashMap::new()),
@@ -219,6 +250,7 @@ impl TubeDecoder {
             traits: RwLock::new(HashMap::new()),
             instances: RwLock::new(HashMap::new()),
             methods: RwLock::new(HashMap::new()),
+            static_methods: RwLock::new(HashMap::new()),
             record_fields: RwLock::new(HashMap::new()),
             local_import_ids: RwLock::new(HashMap::new()),
             local_variables: RwLock::new(HashMap::new()),
@@ -280,6 +312,17 @@ impl TubeDecoder {
                         "method entry",
                     );
                 }
+                for method in &definition.static_methods {
+                    insert_unique(
+                        &mut self.static_method_entries,
+                        method.method.static_method_id.clone(),
+                        StaticMethodEntryDefinition::Record {
+                            record_id: definition.record_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "static method entry",
+                    );
+                }
                 for field in &definition.fields {
                     insert_unique(
                         &mut self.record_field_references,
@@ -316,6 +359,19 @@ impl TubeDecoder {
                     "record method reference",
                 );
             }
+            tf::TubeFileEntry::RecordStaticMethodReference {
+                static_method_id,
+                record_id,
+                name,
+                signature,
+            } => {
+                insert_unique(
+                    &mut self.record_static_method_references,
+                    static_method_id,
+                    (record_id, *name, *signature),
+                    "record static method reference",
+                );
+            }
             tf::TubeFileEntry::EnumDefinition { definition } => {
                 for method in &definition.methods {
                     insert_unique(
@@ -326,6 +382,17 @@ impl TubeDecoder {
                             entry: (**method).clone(),
                         },
                         "method entry",
+                    );
+                }
+                for method in &definition.static_methods {
+                    insert_unique(
+                        &mut self.static_method_entries,
+                        method.method.static_method_id.clone(),
+                        StaticMethodEntryDefinition::Enum {
+                            enum_id: definition.enum_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "static method entry",
                     );
                 }
                 for variant in &definition.variants {
@@ -381,6 +448,19 @@ impl TubeDecoder {
                     method_id,
                     (enum_id, *name, *signature),
                     "enum method reference",
+                );
+            }
+            tf::TubeFileEntry::EnumStaticMethodReference {
+                static_method_id,
+                enum_id,
+                name,
+                signature,
+            } => {
+                insert_unique(
+                    &mut self.enum_static_method_references,
+                    static_method_id,
+                    (enum_id, *name, *signature),
+                    "enum static method reference",
                 );
             }
             tf::TubeFileEntry::EnumVariantReference {
@@ -445,6 +525,17 @@ impl TubeDecoder {
                         "method entry",
                     );
                 }
+                for method in &definition.static_methods {
+                    insert_unique(
+                        &mut self.static_method_entries,
+                        method.method.static_method_id.clone(),
+                        StaticMethodEntryDefinition::Trait {
+                            trait_id: definition.trait_id.clone(),
+                            entry: (**method).clone(),
+                        },
+                        "static method entry",
+                    );
+                }
                 insert_unique(
                     &mut self.trait_entries,
                     definition.trait_id.clone(),
@@ -471,6 +562,19 @@ impl TubeDecoder {
                     method_id,
                     (trait_id, *name, *signature),
                     "trait method reference",
+                );
+            }
+            tf::TubeFileEntry::TraitStaticMethodReference {
+                static_method_id,
+                trait_id,
+                name,
+                signature,
+            } => {
+                insert_unique(
+                    &mut self.trait_static_method_references,
+                    static_method_id,
+                    (trait_id, *name, *signature),
+                    "trait static method reference",
                 );
             }
             tf::TubeFileEntry::InstanceDefinition { definition } => {
@@ -1067,6 +1171,83 @@ impl TubeDecoder {
             .unwrap_or_else(|| panic!("method reference has unknown overload {name:?}"))
     }
 
+    fn static_method(self: &Arc<Self>, id: BigUint) -> Arc<dyn StaticMethod> {
+        if let Some(method) = rwlock_read(&self.static_methods).get(&id) {
+            return method.clone();
+        }
+        let method: Arc<dyn StaticMethod> = if let Some(entry) =
+            self.static_method_entries.get(&id).cloned()
+        {
+            match entry {
+                StaticMethodEntryDefinition::Record { record_id, entry } => {
+                    Arc::new(DecodedStaticMethod::new(
+                        self.clone(),
+                        StaticMethodOwner::Record(self.record(record_id)),
+                        entry,
+                    ))
+                }
+                StaticMethodEntryDefinition::Enum { enum_id, entry } => {
+                    Arc::new(DecodedStaticMethod::new(
+                        self.clone(),
+                        StaticMethodOwner::Enum(self.enum_decl(enum_id)),
+                        entry,
+                    ))
+                }
+                StaticMethodEntryDefinition::Trait { trait_id, entry } => {
+                    Arc::new(DecodedStaticMethod::new(
+                        self.clone(),
+                        StaticMethodOwner::Trait(self.trait_decl(trait_id)),
+                        entry,
+                    ))
+                }
+            }
+        } else if let Some((owner, name, signature)) = self.record_static_method_references.get(&id)
+        {
+            self.resolve_static_method_reference(
+                self.record(owner.clone()).static_methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else if let Some((owner, name, signature)) = self.enum_static_method_references.get(&id) {
+            self.resolve_static_method_reference(
+                self.enum_decl(owner.clone()).static_methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else if let Some((owner, name, signature)) = self.trait_static_method_references.get(&id)
+        {
+            self.resolve_static_method_reference(
+                self.trait_decl(owner.clone()).static_methods(),
+                name.clone(),
+                signature.clone(),
+            )
+        } else {
+            panic!("unknown static method id {id}")
+        };
+        rwlock_write(&self.static_methods).insert(id, method.clone());
+        method
+    }
+
+    fn resolve_static_method_reference(
+        self: &Arc<Self>,
+        methods: Arc<Vec<StaticMethodEntry>>,
+        name: tf::Identifier,
+        signature: tf::ErasedSignature,
+    ) -> Arc<dyn StaticMethod> {
+        let name = decode_identifier(name);
+        let signature = self.decode_erased_signature(signature);
+        methods
+            .iter()
+            .find_map(|entry| {
+                let method = entry.method.clone();
+                (method.metadata().name == name
+                    && erase_signature(self.context.clone(), method.clone().signature().as_ref())
+                        == signature)
+                    .then_some(method)
+            })
+            .unwrap_or_else(|| panic!("static method reference has unknown overload {name:?}"))
+    }
+
     fn instance(self: &Arc<Self>, id: BigUint) -> Arc<dyn argon_compiler::Instance> {
         if let Some(instance) = rwlock_read(&self.instances).get(&id).cloned() {
             return instance;
@@ -1531,6 +1712,18 @@ impl TubeDecoder {
                 method: self.method(method_id),
                 instance_type: self.decode_method_instance_type(*instance_type),
                 receiver: Box::new(self.decode_located_expr(*instance)),
+                arguments: args
+                    .into_iter()
+                    .map(|arg| self.decode_located_expr(*arg))
+                    .collect(),
+            },
+            tf::Expr::StaticMethodCall {
+                static_method_id,
+                owner_type,
+                args,
+            } => Expr::StaticMethodCall {
+                method: self.static_method(static_method_id),
+                owner_type: self.decode_method_instance_type(*owner_type),
                 arguments: args
                     .into_iter()
                     .map(|arg| self.decode_located_expr(*arg))
@@ -2144,6 +2337,9 @@ impl TubeDecoder {
             tf::ExpressionOwner::Method { index } => {
                 argon_expr::ExpressionOwner::Method(self.method(index))
             }
+            tf::ExpressionOwner::StaticMethod { index } => {
+                argon_expr::ExpressionOwner::StaticMethod(self.static_method(index))
+            }
             tf::ExpressionOwner::Field { index } => {
                 argon_expr::ExpressionOwner::Field(self.record_field(index))
             }
@@ -2286,6 +2482,7 @@ struct DecodedTrait {
     import: UnloadCell<ImportSpecifier>,
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    static_methods: UnloadCell<Arc<Vec<StaticMethodEntry>>>,
     vtable: UnloadCell<Arc<VTable>>,
 }
 
@@ -2297,6 +2494,7 @@ impl DecodedTrait {
             import: UnloadCell::new(),
             signature: UnloadCell::new(),
             methods: UnloadCell::new(),
+            static_methods: UnloadCell::new(),
             vtable: UnloadCell::new(),
         }
     }
@@ -2313,6 +2511,7 @@ impl Unload for DecodedTrait {
         self.import.unload();
         self.signature.unload();
         self.methods.unload();
+        self.static_methods.unload();
         self.vtable.unload();
         self.decoder.unload();
     }
@@ -2348,6 +2547,22 @@ impl Trait for DecodedTrait {
                     .map(|entry| MethodEntry {
                         access: decode_access_modifier((*entry.access).clone()),
                         method: self.decoder.method(entry.method.method_id.clone()),
+                    })
+                    .collect(),
+            )
+        })
+    }
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>> {
+        get_or_init_cached(&self.static_methods, || {
+            Arc::new(
+                self.definition
+                    .static_methods
+                    .iter()
+                    .map(|entry| StaticMethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self
+                            .decoder
+                            .static_method(entry.method.static_method_id.clone()),
                     })
                     .collect(),
             )
@@ -2454,6 +2669,81 @@ impl Method for DecodedMethod {
     }
 }
 
+struct DecodedStaticMethod {
+    decoder: Arc<TubeDecoder>,
+    owner: StaticMethodOwner,
+    entry: tf::StaticMethodEntry,
+    metadata: StaticMethodMetadata,
+    signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
+    implementation: UnloadCell<Option<Arc<FunctionImplementation>>>,
+}
+
+impl DecodedStaticMethod {
+    fn new(
+        decoder: Arc<TubeDecoder>,
+        owner: StaticMethodOwner,
+        entry: tf::StaticMethodEntry,
+    ) -> Self {
+        let d = &entry.method;
+        Self {
+            decoder,
+            owner,
+            metadata: StaticMethodMetadata {
+                access: decode_access_modifier((*entry.access).clone()),
+                name: decode_identifier((*d.name).clone()),
+                is_inline: d.inline,
+                erasure_mode: if d.erased {
+                    ErasureMode::Erased
+                } else {
+                    ErasureMode::Concrete
+                },
+                is_witness: d.witness,
+                effect_info: decode_effect_info((*d.effects).clone()),
+            },
+            entry,
+            signature: UnloadCell::new(),
+            implementation: UnloadCell::new(),
+        }
+    }
+}
+impl Debug for DecodedStaticMethod {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "static method {:?}", self.entry.method.name)
+    }
+}
+impl Unload for DecodedStaticMethod {
+    fn unload(&self) {
+        self.signature.unload();
+        self.implementation.unload();
+        self.decoder.unload();
+    }
+}
+impl StaticMethod for DecodedStaticMethod {
+    fn owner(self: Arc<Self>) -> StaticMethodOwner {
+        self.owner.clone()
+    }
+    fn metadata(&self) -> &StaticMethodMetadata {
+        &self.metadata
+    }
+    fn signature(self: Arc<Self>) -> Arc<FunctionSignature<DefaultExprContext>> {
+        get_or_init_cached(&self.signature, || {
+            Arc::new(
+                self.decoder
+                    .decode_function_signature((*self.entry.method.signature).clone()),
+            )
+        })
+    }
+    fn implementation(self: Arc<Self>) -> Option<Arc<FunctionImplementation>> {
+        get_or_init_cached(&self.implementation, || {
+            self.entry
+                .method
+                .implementation
+                .clone()
+                .map(|i| Arc::new(self.decoder.decode_method_implementation(*i)))
+        })
+    }
+}
+
 struct DecodedInstance {
     decoder: Arc<TubeDecoder>,
     definition: tf::InstanceDefinition,
@@ -2554,6 +2844,7 @@ struct DecodedEnum {
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     variants: UnloadCell<Arc<Vec<Arc<dyn EnumVariant>>>>,
     methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    static_methods: UnloadCell<Arc<Vec<StaticMethodEntry>>>,
     vtable: UnloadCell<Arc<VTable>>,
 }
 
@@ -2566,6 +2857,7 @@ impl DecodedEnum {
             signature: UnloadCell::new(),
             variants: UnloadCell::new(),
             methods: UnloadCell::new(),
+            static_methods: UnloadCell::new(),
             vtable: UnloadCell::new(),
         }
     }
@@ -2583,6 +2875,7 @@ impl Unload for DecodedEnum {
         self.signature.unload();
         self.variants.unload();
         self.methods.unload();
+        self.static_methods.unload();
         self.vtable.unload();
         self.decoder.unload();
     }
@@ -2632,6 +2925,22 @@ impl Enum for DecodedEnum {
                     .map(|entry| MethodEntry {
                         access: decode_access_modifier((*entry.access).clone()),
                         method: self.decoder.method(entry.method.method_id.clone()),
+                    })
+                    .collect(),
+            )
+        })
+    }
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>> {
+        get_or_init_cached(&self.static_methods, || {
+            Arc::new(
+                self.definition
+                    .static_methods
+                    .iter()
+                    .map(|entry| StaticMethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self
+                            .decoder
+                            .static_method(entry.method.static_method_id.clone()),
                     })
                     .collect(),
             )
@@ -2829,6 +3138,7 @@ struct DecodedRecord {
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
     methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    static_methods: UnloadCell<Arc<Vec<StaticMethodEntry>>>,
     vtable: UnloadCell<Arc<VTable>>,
 }
 
@@ -2841,6 +3151,7 @@ impl DecodedRecord {
             signature: UnloadCell::new(),
             fields: UnloadCell::new(),
             methods: UnloadCell::new(),
+            static_methods: UnloadCell::new(),
             vtable: UnloadCell::new(),
         }
     }
@@ -2858,6 +3169,7 @@ impl Unload for DecodedRecord {
         self.signature.unload();
         self.fields.unload();
         self.methods.unload();
+        self.static_methods.unload();
         self.vtable.unload();
         self.decoder.unload();
     }
@@ -2906,6 +3218,22 @@ impl Record for DecodedRecord {
                     .map(|entry| MethodEntry {
                         access: decode_access_modifier((*entry.access).clone()),
                         method: self.decoder.method(entry.method.method_id.clone()),
+                    })
+                    .collect(),
+            )
+        })
+    }
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>> {
+        get_or_init_cached(&self.static_methods, || {
+            Arc::new(
+                self.definition
+                    .static_methods
+                    .iter()
+                    .map(|entry| StaticMethodEntry {
+                        access: decode_access_modifier((*entry.access).clone()),
+                        method: self
+                            .decoder
+                            .static_method(entry.method.static_method_id.clone()),
                     })
                     .collect(),
             )

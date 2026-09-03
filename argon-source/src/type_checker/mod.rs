@@ -211,6 +211,7 @@ impl ExprContext for TypeCheckExprContext {
     type Hole = Hole;
     type Function = <DefaultExprContext as ExprContext>::Function;
     type Method = <DefaultExprContext as ExprContext>::Method;
+    type StaticMethod = <DefaultExprContext as ExprContext>::StaticMethod;
     type Record = <DefaultExprContext as ExprContext>::Record;
     type RecordField = <DefaultExprContext as ExprContext>::RecordField;
     type Enum = <DefaultExprContext as ExprContext>::Enum;
@@ -3377,6 +3378,43 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         }
 
         let mut instance = self.infer_call(instance).infer_fully();
+
+        let static_methods = match &instance.checked_expr.value {
+            Expr::RecordType(record_type) => Some((
+                record_type.record.clone().static_methods(),
+                MethodInstanceType::Record(record_type.clone()),
+            )),
+            Expr::EnumType(enum_type) => Some((
+                enum_type.enum_.clone().static_methods(),
+                MethodInstanceType::Enum(enum_type.clone()),
+            )),
+            Expr::TraitType(trait_type) => Some((
+                trait_type.trait_.clone().static_methods(),
+                MethodInstanceType::Trait(trait_type.clone()),
+            )),
+            _ => None,
+        };
+        if let Some((methods, owner_type)) = static_methods {
+            let static_overloads = methods
+                .iter()
+                .filter(|entry| {
+                    entry.method.metadata().name == adjusted_member_name
+                        && self.access.allows_access(
+                            &Declaration::StaticMethod(entry.method.clone()),
+                            None,
+                            entry.access,
+                        )
+                })
+                .map(|entry| Overloadable::StaticMethod {
+                    method: entry.method.clone(),
+                    owner_type: owner_type.clone(),
+                })
+                .collect::<Vec<_>>();
+            if !static_overloads.is_empty() {
+                overload_groups.push(static_overloads);
+            }
+        }
+
         loop {
             {
                 let mut norm = NormalizerScanner::new(

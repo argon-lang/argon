@@ -21,6 +21,7 @@ pub trait ExprContextShifter {
             RecordField = <Self::EC1 as ExprContext>::RecordField,
             EnumVariant = <Self::EC1 as ExprContext>::EnumVariant,
             Method = <Self::EC1 as ExprContext>::Method,
+            StaticMethod = <Self::EC1 as ExprContext>::StaticMethod,
             Instance = <Self::EC1 as ExprContext>::Instance,
         > + ?Sized;
 
@@ -203,6 +204,18 @@ where
             method,
             instance_type: default_shift_method_instance_type(shifter, instance_type),
             receiver: Box::new(shifter.shift(*receiver)),
+            arguments: arguments
+                .into_iter()
+                .map(|argument| shifter.shift(argument))
+                .collect(),
+        },
+        Expr::StaticMethodCall {
+            method,
+            owner_type,
+            arguments,
+        } => Expr::StaticMethodCall {
+            method,
+            owner_type: default_shift_method_instance_type(shifter, owner_type),
             arguments: arguments
                 .into_iter()
                 .map(|argument| shifter.shift(argument))
@@ -746,6 +759,7 @@ where
         ExpressionOwner::Trait(trait_ec) => ExpressionOwner::Trait(trait_ec),
         ExpressionOwner::EnumVariant(enum_variant) => ExpressionOwner::EnumVariant(enum_variant),
         ExpressionOwner::Method(method) => ExpressionOwner::Method(method),
+        ExpressionOwner::StaticMethod(method) => ExpressionOwner::StaticMethod(method),
         ExpressionOwner::Instance(instance) => ExpressionOwner::Instance(instance),
         ExpressionOwner::Field(field) => ExpressionOwner::Field(field),
     }

@@ -73,6 +73,7 @@ fn build_dfa() -> parse18_lexer_gen::fsm::DFA<String> {
     );
     b.add(Regex::str("new"), "TokenType::Token(Token::KwNew)");
     b.add(Regex::str("with"), "TokenType::Token(Token::KwWith)");
+    b.add(Regex::str("static"), "TokenType::Token(Token::KwStatic)");
     b.add(Regex::str("true"), "TokenType::Token(Token::KwTrue)");
     b.add(Regex::str("false"), "TokenType::Token(Token::KwFalse)");
     b.add(Regex::str("as"), "TokenType::Token(Token::KwAs)");

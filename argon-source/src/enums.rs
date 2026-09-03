@@ -3,6 +3,7 @@ use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::record::{SourceRecordField, SourceRecordFieldOwner};
 use crate::signature::SignatureParser;
+use crate::static_method::{SourceStaticMethod, StaticMethodClosure};
 use alloc::borrow::Cow;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
@@ -12,12 +13,12 @@ use argon_compiler::signature::FunctionSignature;
 use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
     Context, DefaultExprContext, Enum, EnumVariant, EnumVariantMetadata, MethodEntry, MethodOwner,
-    RecordField, TypeDeclaration, Unload,
+    RecordField, StaticMethodEntry, StaticMethodOwner, TypeDeclaration, Unload,
 };
 use argon_expr::{EnumType, Expr, ExprLocationExt, ExpressionOwner, SubstScanner, Variable};
 use argon_parser::ast;
 use argon_parser::ast::FunctionParameterListType;
-use argon_util::{MultiSlice, UnloadCell};
+use argon_util::{CompileError, MultiSlice, UnloadCell};
 use core::fmt::Debug;
 use num_bigint::BigUint;
 use parse18_runtime::WithLocation;
@@ -29,6 +30,7 @@ pub struct SourceEnum {
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     variants: UnloadCell<Arc<Vec<Arc<dyn EnumVariant>>>>,
     methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    static_methods: UnloadCell<Arc<Vec<StaticMethodEntry>>>,
     vtable: UnloadCell<Arc<VTable>>,
 }
 
@@ -52,6 +54,7 @@ impl SourceEnum {
                 signature: UnloadCell::new(),
                 variants: UnloadCell::new(),
                 methods: UnloadCell::new(),
+                static_methods: UnloadCell::new(),
                 vtable: UnloadCell::new(),
             }),
         }
@@ -98,6 +101,7 @@ impl Unload for SourceEnum {
         self.signature.unload();
         self.variants.unload();
         self.methods.unload();
+        self.static_methods.unload();
         self.vtable.unload();
         self.closure.unload();
     }
@@ -147,7 +151,8 @@ impl Enum for SourceEnum {
                             SourceEnumVariant::from_ast(self.clone(), (**variant).clone()),
                         ),
                         ast::EnumBodyStmt::FunctionDeclaration(_)
-                        | ast::EnumBodyStmt::MethodDeclaration(_) => None,
+                        | ast::EnumBodyStmt::MethodDeclaration(_)
+                        | ast::EnumBodyStmt::StaticMethodDeclaration(_) => None,
                     })
                     .collect::<Vec<_>>(),
             )
@@ -175,7 +180,35 @@ impl Enum for SourceEnum {
                             })
                         }
                         ast::EnumBodyStmt::FunctionDeclaration(_)
-                        | ast::EnumBodyStmt::EnumVariant(_) => None,
+                        | ast::EnumBodyStmt::EnumVariant(_)
+                        | ast::EnumBodyStmt::StaticMethodDeclaration(_) => None,
+                    })
+                    .collect(),
+            )
+        })
+    }
+
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>> {
+        self.static_methods.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::EnumBodyStmt::StaticMethodDeclaration(method) => {
+                            let result = SourceStaticMethod::from_ast(
+                                self.context.clone(),
+                                EnumStaticMethodClosure {
+                                    enum_: self.clone(),
+                                },
+                                (**method).clone(),
+                            );
+                            Some(StaticMethodEntry {
+                                access: result.access,
+                                method: result.result,
+                            })
+                        }
+                        _ => None,
                     })
                     .collect(),
             )
@@ -196,6 +229,27 @@ impl Enum for SourceEnum {
 
 struct EnumMethodClosure {
     enum_: Arc<SourceEnum>,
+}
+
+struct EnumStaticMethodClosure {
+    enum_: Arc<SourceEnum>,
+}
+
+impl StaticMethodClosure for EnumStaticMethodClosure {
+    fn owner(&self) -> StaticMethodOwner {
+        StaticMethodOwner::Enum(self.enum_.clone())
+    }
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let owner: Arc<dyn Enum> = self.enum_.clone();
+        ParameterScope::new(
+            self.enum_.closure.scope(),
+            ExpressionOwner::Enum(owner),
+            &self.enum_.clone().signature().parameters,
+        )
+    }
+    fn access_token(&self) -> AccessToken {
+        self.enum_.access_token()
+    }
 }
 
 impl MethodClosure for EnumMethodClosure {
@@ -428,7 +482,8 @@ impl EnumVariant for SourceEnumVariant {
                     }
 
                     ast::RecordBodyStmt::FunctionDeclaration(_)
-                    | ast::RecordBodyStmt::MethodDeclaration(_) => {}
+                    | ast::RecordBodyStmt::MethodDeclaration(_)
+                    | ast::RecordBodyStmt::StaticMethodDeclaration(_) => {}
                 }
             }
 
@@ -441,8 +496,19 @@ impl EnumVariant for SourceEnumVariant {
             let methods: Vec<&ast::MethodDeclarationStmt> = match &self.decl {
                 ast::EnumVariant::Constructor { body, .. } => body
                     .iter()
-                    .map(|stmt| match &stmt.value {
-                        ast::EnumVariantBodyStmt::MethodDeclaration(method) => method.as_ref(),
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::EnumVariantBodyStmt::MethodDeclaration(method) => {
+                            Some(method.as_ref())
+                        }
+                        ast::EnumVariantBodyStmt::StaticMethodDeclaration(method) => {
+                            self.owner.context.reporter().report_error(
+                                CompileError::invalid_modifier(
+                                    method.name.location.clone(),
+                                    ["static"],
+                                ),
+                            );
+                            None
+                        }
                     })
                     .collect(),
                 ast::EnumVariant::Record(record) => record
@@ -450,6 +516,15 @@ impl EnumVariant for SourceEnumVariant {
                     .iter()
                     .filter_map(|stmt| match &stmt.value {
                         ast::RecordBodyStmt::MethodDeclaration(method) => Some(method.as_ref()),
+                        ast::RecordBodyStmt::StaticMethodDeclaration(method) => {
+                            self.owner.context.reporter().report_error(
+                                CompileError::invalid_modifier(
+                                    method.name.location.clone(),
+                                    ["static"],
+                                ),
+                            );
+                            None
+                        }
                         _ => None,
                     })
                     .collect(),

@@ -51,6 +51,13 @@ enum tube-file-entry {
         erased-signature: erased-signature;
         signature: function-signature;
     },
+    record-static-method-reference {
+        static-method-id: nat;
+        record-id: nat;
+        name: identifier;
+        erased-signature: erased-signature;
+        signature: function-signature;
+    },
 
     @esexpr:(inline-value)
     enum-definition {
@@ -65,6 +72,13 @@ enum tube-file-entry {
 
     enum-method-reference {
         method-id: nat;
+        enum-id: nat;
+        name: identifier;
+        erased-signature: erased-signature;
+        signature: function-signature;
+    },
+    enum-static-method-reference {
+        static-method-id: nat;
         enum-id: nat;
         name: identifier;
         erased-signature: erased-signature;
@@ -116,6 +130,13 @@ enum tube-file-entry {
 
     trait-method-reference {
         method-id: nat;
+        trait-id: nat;
+        name: identifier;
+        erased-signature: erased-signature;
+        signature: function-signature;
+    },
+    trait-static-method-reference {
+        static-method-id: nat;
         trait-id: nat;
         name: identifier;
         erased-signature: erased-signature;
@@ -400,6 +421,8 @@ record record-definition {
 
     @esexpr:(keyword)
     methods: list[method-definition];
+    @esexpr:(keyword)
+    static-methods: list[static-method-definition];
 
     @esexpr:(vararg)
     fields: list[record-field-definition];
@@ -431,6 +454,8 @@ record enum-definition {
 
     @esexpr:(keyword)
     methods: list[method-definition];
+    @esexpr:(keyword)
+    static-methods: list[static-method-definition];
 
     @esexpr:(vararg)
     variants: list[enum-variant-definition];
@@ -465,6 +490,9 @@ record trait-definition {
     @esexpr:(keyword)
     vtable: vtable;
 
+    @esexpr:(keyword)
+    static-methods: list[static-method-definition];
+
     @esexpr:(vararg)
     methods: list[method-definition];
 }
@@ -482,6 +510,15 @@ record method-definition {
     @esexpr:(keyword)
     @esexpr:(optional)
     implementation: optional-field[function-implementation];
+}
+
+@esexpr:(derive-codec)
+record static-method-definition {
+    static-method-id: nat;
+    name: identifier;
+    erased-signature: erased-signature;
+    @esexpr:(keyword) signature: function-signature;
+    @esexpr:(keyword) @esexpr:(optional) implementation: optional-field[function-implementation];
 }
 
 @esexpr:(derive-codec)
@@ -749,6 +786,16 @@ enum instruction {
 
     function-call {
         function-id: nat;
+        dest: function-result;
+        @esexpr:(vararg)
+        token-args: list[token];
+        @esexpr:(vararg)
+        args: list[register-id];
+    },
+
+    static-method-call {
+        static-method-id: nat;
+        owner-type: token;
         dest: function-result;
         @esexpr:(vararg)
         token-args: list[token];

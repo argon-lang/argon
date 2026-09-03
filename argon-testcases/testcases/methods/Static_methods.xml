@@ -1,0 +1,36 @@
+<ArgonTest>
+    <Name>Static methods</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::*
+
+        record RecordOwner
+            public def static.message(): String = "record static"
+            public def self.message(): String = "record instance"
+        end
+
+        enum EnumOwner
+            public def static.message(): String = "enum static"
+            Value
+        end
+
+        trait TraitOwner
+            public def static.message(): String = "trait static"
+        end
+
+        record GenericOwner(token T: type)
+            public def static.identity(value: T): T = value
+        end
+
+        proc main(): () do
+            puts (RecordOwner.message ())
+            puts (EnumOwner.message ())
+            puts (TraitOwner.message ())
+            puts (GenericOwner(String).identity "generic static")
+        end
+    ]]></InputSource>
+    <ExpectedOutput>record static
+enum static
+trait static
+generic static</ExpectedOutput>
+</ArgonTest>

@@ -14,7 +14,7 @@ use argon_compiler::{
 };
 use argon_expr::ExpressionOwner;
 use argon_parser::ast;
-use argon_util::{MultiSlice, UnloadCell};
+use argon_util::{CompileError, MultiSlice, UnloadCell};
 use core::fmt::Debug;
 use parse18_runtime::WithLocation;
 
@@ -153,6 +153,15 @@ impl Instance for SourceInstance {
                             })
                         }
                         ast::TraitBodyStmt::FunctionDeclaration(_) => todo!(),
+                        ast::TraitBodyStmt::StaticMethodDeclaration(method) => {
+                            self.context
+                                .reporter()
+                                .report_error(CompileError::invalid_modifier(
+                                    method.name.location.clone(),
+                                    ["static"],
+                                ));
+                            None
+                        }
                     })
                     .collect::<Vec<_>>(),
             )

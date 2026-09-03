@@ -26,6 +26,7 @@ public interface ProgramModel {
 	EnumVariantInfo getEnumVariantInfo(UnsignedBigInteger id);
 	TraitInfo getTraitInfo(UnsignedBigInteger id);
 	MethodInfo getMethodInfo(UnsignedBigInteger id);
+	StaticMethodInfo getStaticMethodInfo(UnsignedBigInteger id);
 	InstanceInfo getInstanceInfo(UnsignedBigInteger id);
 
 
@@ -149,6 +150,8 @@ public interface ProgramModel {
 		MethodTypeDesc descriptor
 	) {
 	}
+
+	record StaticMethodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature, ClassDesc definingClass, String methodName, MethodTypeDesc descriptor, boolean isInterface) {}
 
 	record InstanceInfo(
 		ImportSpecifier importSpecifier,

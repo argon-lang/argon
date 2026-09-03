@@ -69,6 +69,8 @@ pub enum Token {
     KwNew,
     #[strum(serialize = "KwWith")]
     KwWith,
+    #[strum(serialize = "KwStatic")]
+    KwStatic,
     #[strum(serialize = "KwTrue")]
     KwTrue,
     #[strum(serialize = "KwFalse")]
@@ -1508,6 +1510,19 @@ impl GrammarFactory for ParserFactory {
             MethodOrFunctionDeclarationStmtRest => ruleset(
                 "Box<dyn FnOnce(Vec<WithLocation<Modifier>>) -> DeclarationStmt>",
                 [
+                    rule(
+                        [
+                            nonterm(MethodPurity),
+                            term(KwStatic).discard(),
+                            term(SymDot).discard(),
+                            nonterm(MethodName).with_location(),
+                            nonterm(MethodParameters),
+                            term(SymColon).discard(),
+                            nonterm(MethodReturnType).with_location(),
+                            nonterm(MethodBody),
+                        ],
+                        "static_method_declaration_stmt_rest"
+                    ),
                     rule(
                         [
                             nonterm(MethodPurity),

@@ -48,6 +48,7 @@ mod tests {
         type Trait = ();
         type EnumVariant = ();
         type Method = ();
+        type StaticMethod = ();
         type Instance = ();
     }
 

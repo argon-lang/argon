@@ -12,6 +12,7 @@ pub fn is_instruction_pure(instruction: &vf::Instruction) -> bool {
         | vf::Instruction::FunctionObjectTokenCall { .. }
         | vf::Instruction::FunctionObjectErasedCall { .. }
         | vf::Instruction::InstanceMethodCall { .. }
+        | vf::Instruction::StaticMethodCall { .. }
         | vf::Instruction::IsEnumVariantOrBreak { .. }
         | vf::Instruction::Raise { .. }
         | vf::Instruction::RecordFieldStore { .. }

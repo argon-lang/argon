@@ -48,6 +48,12 @@ enum tube-file-entry {
         name: identifier;
         signature: erased-signature;
     },
+    record-static-method-reference {
+        static-method-id: nat;
+        record-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
 
     @esexpr:(inline-value)
     enum-definition {
@@ -61,6 +67,12 @@ enum tube-file-entry {
 
     enum-method-reference {
         method-id: nat;
+        enum-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+    enum-static-method-reference {
+        static-method-id: nat;
         enum-id: nat;
         name: identifier;
         signature: erased-signature;
@@ -106,6 +118,12 @@ enum tube-file-entry {
 
     trait-method-reference {
         method-id: nat;
+        trait-id: nat;
+        name: identifier;
+        signature: erased-signature;
+    },
+    trait-static-method-reference {
+        static-method-id: nat;
         trait-id: nat;
         name: identifier;
         signature: erased-signature;
@@ -480,6 +498,8 @@ record record-definition {
 
     @esexpr:(keyword)
     methods: list[method-entry];
+    @esexpr:(keyword)
+    static-methods: list[static-method-entry];
 
     @esexpr:(vararg)
     fields: list[record-field-definition];
@@ -512,6 +532,8 @@ record enum-definition {
 
     @esexpr:(keyword)
     methods: list[method-entry];
+    @esexpr:(keyword)
+    static-methods: list[static-method-entry];
 
     @esexpr:(vararg)
     variants: list[enum-variant-definition];
@@ -542,6 +564,9 @@ record trait-definition {
     @esexpr:(keyword)
     signature: function-signature;
 
+    @esexpr:(keyword)
+    static-methods: list[static-method-entry];
+
     @esexpr:(vararg)
     methods: list[method-entry];
 }
@@ -550,6 +575,25 @@ record trait-definition {
 record method-entry {
     access: access-modifier;
     method: method-definition;
+}
+
+@esexpr:(derive-codec)
+record static-method-entry {
+    access: access-modifier;
+    method: static-method-definition;
+}
+
+@esexpr:(derive-codec)
+record static-method-definition {
+    static-method-id: nat;
+    name: identifier;
+    erased-signature: erased-signature;
+    @esexpr:(keyword) @esexpr:(default-value #false) inline: bool;
+    @esexpr:(keyword) @esexpr:(default-value #false) erased: bool;
+    @esexpr:(keyword) @esexpr:(default-value #false) witness: bool;
+    @esexpr:(keyword) @esexpr:(default-value (pure)) effects: effect-info;
+    @esexpr:(keyword) signature: function-signature;
+    @esexpr:(keyword) @esexpr:(optional) implementation: optional-field[method-implementation];
 }
 
 @esexpr:(derive-codec)
@@ -772,6 +816,12 @@ enum expr {
         instance-type: method-instance-type;
         instance: located-expr;
 
+        @esexpr:(vararg)
+        args: list[located-expr];
+    },
+    static-method-call {
+        static-method-id: nat;
+        owner-type: method-instance-type;
         @esexpr:(vararg)
         args: list[located-expr];
     },
@@ -1174,6 +1224,9 @@ enum expression-owner {
         index: nat;
     },
     method {
+        index: nat;
+    },
+    static-method {
         index: nat;
     },
     field {

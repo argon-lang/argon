@@ -125,6 +125,19 @@ where
             arguments,
             ..
         } => method_call_return_type(method.clone(), instance_type, arguments),
+        Expr::StaticMethodCall {
+            method,
+            owner_type,
+            arguments,
+        } => {
+            let mut sig = shift_signature(method.clone().signature());
+            sig.substitute_method_instance_type_parameters(owner_type);
+            return_type_for_args(
+                ExpressionOwner::StaticMethod(method.clone()),
+                sig,
+                arguments,
+            )
+        }
 
         Expr::Sequence(items) => get_expr_type(items.last()),
 

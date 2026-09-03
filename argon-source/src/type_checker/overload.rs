@@ -10,7 +10,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use argon_compiler::scope::{self, LocalVariableScope, Scope};
 use argon_compiler::signature::SignatureParameter;
-use argon_compiler::{Function, FunctionSignature, Method, RecordField};
+use argon_compiler::{Function, FunctionSignature, Method, RecordField, StaticMethod};
 use argon_expr::{
     EnumType, ErasureMode, Expr, ExprLocationExt, ExprScannerMut, ExpressionOwner,
     FunctionResultValueSubstScanner, LocalVariable, LocatedExpr, MethodInstanceType, RecordType,
@@ -28,6 +28,10 @@ pub(super) enum Overloadable<'a> {
         method: Arc<dyn Method>,
         instance_type: MethodInstanceType<TypeCheckExprContext>,
         obj: LocatedExpr<TypeCheckExprContext>,
+    },
+    StaticMethod {
+        method: Arc<dyn StaticMethod>,
+        owner_type: MethodInstanceType<TypeCheckExprContext>,
     },
     ExtensionMethod(Arc<dyn Function>, ArgumentInfo<'a>, InferredType),
     RecordField {
@@ -49,6 +53,7 @@ impl<'a> Overloadable<'a> {
         match self {
             Overloadable::Base(_) => vec![],
             Overloadable::InstanceMethod { .. } => vec![],
+            Overloadable::StaticMethod { .. } => vec![],
             Overloadable::ExtensionMethod(_, arg_info, _) => vec![arg_info.clone()],
             Overloadable::RecordField { .. } => vec![],
             Overloadable::RecordFieldStore { .. } => vec![],
@@ -59,6 +64,7 @@ impl<'a> Overloadable<'a> {
         match self {
             Overloadable::Base(_) => vec![],
             Overloadable::InstanceMethod { .. } => vec![],
+            Overloadable::StaticMethod { .. } => vec![],
             Overloadable::ExtensionMethod(_, _, arg) => {
                 vec![TypeInferResult::Complete(arg.clone())]
             }
@@ -72,6 +78,9 @@ impl<'a> Overloadable<'a> {
             Overloadable::Base(base) => Some(base.as_expression_owner()),
             Overloadable::InstanceMethod { method, .. } => {
                 Some(ExpressionOwner::Method(method.clone()))
+            }
+            Overloadable::StaticMethod { method, .. } => {
+                Some(ExpressionOwner::StaticMethod(method.clone()))
             }
             Overloadable::ExtensionMethod(f, _, _) => Some(ExpressionOwner::Function(f.clone())),
             Overloadable::RecordField { .. } => None,
@@ -98,6 +107,16 @@ impl<'a> Overloadable<'a> {
                     .shift(&mut default_to_type_check_shifter());
                 sig.substitute_method_instance_type_parameters(instance_type);
 
+                sig
+            }
+            Overloadable::StaticMethod { method, owner_type } => {
+                let mut sig = method
+                    .clone()
+                    .signature()
+                    .as_ref()
+                    .clone()
+                    .shift(&mut default_to_type_check_shifter());
+                sig.substitute_method_instance_type_parameters(owner_type);
                 sig
             }
             Overloadable::ExtensionMethod(f, _, _) => {
@@ -719,6 +738,11 @@ impl<'a> SelectedOverload<'a> {
                 method,
                 instance_type,
                 receiver: Box::new(obj),
+                arguments: self.args,
+            },
+            Overloadable::StaticMethod { method, owner_type } => Expr::StaticMethodCall {
+                method,
+                owner_type,
                 arguments: self.args,
             },
             Overloadable::ExtensionMethod(f, _, _) => Expr::FunctionCall {

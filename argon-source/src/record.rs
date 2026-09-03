@@ -3,6 +3,7 @@ use crate::method::{MethodClosure, SourceMethod};
 use crate::modifiers::{ACCESS_MODIFIER_GLOBAL, ModifierParser, RECORD_FIELD_ACCESS_MODIFIER};
 use crate::module::{DeclarationClosure, DeclarationResult};
 use crate::signature::SignatureParser;
+use crate::static_method::{SourceStaticMethod, StaticMethodClosure};
 use crate::type_checker::{TypeCheckOptions, type_check_type_expr};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use argon_compiler::access::AccessToken;
@@ -12,7 +13,8 @@ use argon_compiler::signature::FunctionSignature;
 use argon_compiler::vtable::{VTable, build_vtable};
 use argon_compiler::{
     Context, DefaultExprContext, EnumVariant, MethodEntry, MethodOwner, Record, RecordField,
-    RecordFieldMetadata, RecordFieldOwner, TypeDeclaration, Unload,
+    RecordFieldMetadata, RecordFieldOwner, StaticMethodEntry, StaticMethodOwner, TypeDeclaration,
+    Unload,
 };
 use argon_expr::{ErasureMode, ExpressionOwner, LocatedExpr};
 use argon_parser::ast;
@@ -26,6 +28,7 @@ pub struct SourceRecord {
     signature: UnloadCell<Arc<FunctionSignature<DefaultExprContext>>>,
     fields: UnloadCell<Arc<Vec<Arc<dyn RecordField>>>>,
     methods: UnloadCell<Arc<Vec<MethodEntry>>>,
+    static_methods: UnloadCell<Arc<Vec<StaticMethodEntry>>>,
     vtable: UnloadCell<Arc<VTable>>,
 }
 
@@ -49,6 +52,7 @@ impl SourceRecord {
                 signature: UnloadCell::new(),
                 fields: UnloadCell::new(),
                 methods: UnloadCell::new(),
+                static_methods: UnloadCell::new(),
                 vtable: UnloadCell::new(),
             }),
         }
@@ -73,6 +77,7 @@ impl Unload for SourceRecord {
         self.signature.unload();
         self.fields.unload();
         self.methods.unload();
+        self.static_methods.unload();
         self.vtable.unload();
         self.closure.unload();
     }
@@ -126,7 +131,8 @@ impl Record for SourceRecord {
                             )) as Arc<dyn RecordField>)
                         }
                         ast::RecordBodyStmt::FunctionDeclaration(_)
-                        | ast::RecordBodyStmt::MethodDeclaration(_) => None,
+                        | ast::RecordBodyStmt::MethodDeclaration(_)
+                        | ast::RecordBodyStmt::StaticMethodDeclaration(_) => None,
                     })
                     .collect(),
             )
@@ -154,7 +160,35 @@ impl Record for SourceRecord {
                             })
                         }
                         ast::RecordBodyStmt::FunctionDeclaration(_)
-                        | ast::RecordBodyStmt::RecordField(_) => None,
+                        | ast::RecordBodyStmt::RecordField(_)
+                        | ast::RecordBodyStmt::StaticMethodDeclaration(_) => None,
+                    })
+                    .collect(),
+            )
+        })
+    }
+
+    fn static_methods(self: Arc<Self>) -> Arc<Vec<StaticMethodEntry>> {
+        self.static_methods.initialize(|| {
+            Arc::new(
+                self.decl
+                    .body
+                    .iter()
+                    .filter_map(|stmt| match &stmt.value {
+                        ast::RecordBodyStmt::StaticMethodDeclaration(method) => {
+                            let result = SourceStaticMethod::from_ast(
+                                self.context.clone(),
+                                RecordStaticMethodClosure {
+                                    record: self.clone(),
+                                },
+                                (**method).clone(),
+                            );
+                            Some(StaticMethodEntry {
+                                access: result.access,
+                                method: result.result,
+                            })
+                        }
+                        _ => None,
                     })
                     .collect(),
             )
@@ -170,6 +204,27 @@ impl Record for SourceRecord {
                 self.decl.name.location.clone(),
             ))
         })
+    }
+}
+
+struct RecordStaticMethodClosure {
+    record: Arc<SourceRecord>,
+}
+
+impl StaticMethodClosure for RecordStaticMethodClosure {
+    fn owner(&self) -> StaticMethodOwner {
+        StaticMethodOwner::Record(self.record.clone())
+    }
+    fn scope(&self) -> impl Scope<ExprContext = DefaultExprContext> {
+        let owner: Arc<dyn Record> = self.record.clone();
+        ParameterScope::new(
+            self.record.closure.scope(),
+            ExpressionOwner::Record(owner),
+            &self.record.clone().signature().parameters,
+        )
+    }
+    fn access_token(&self) -> AccessToken {
+        self.record.access_token()
     }
 }
 

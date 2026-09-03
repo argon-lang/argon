@@ -88,6 +88,7 @@ pub struct TubeModel {
     pub enum_variant_info: HashMap<BigUint, EnumVariantInfo>,
     pub trait_info: HashMap<BigUint, TraitInfo>,
     pub method_info: HashMap<BigUint, MethodInfo>,
+    pub static_method_info: HashMap<BigUint, StaticMethodInfo>,
     pub instance_info: HashMap<BigUint, InstanceInfo>,
 }
 
@@ -124,6 +125,7 @@ impl TubeModel {
             enum_variant_info: HashMap::new(),
             trait_info: HashMap::new(),
             method_info: HashMap::new(),
+            static_method_info: HashMap::new(),
             instance_info: HashMap::new(),
         };
 
@@ -187,6 +189,7 @@ impl TubeModel {
         let mut record_field_definitions = HashSet::new();
         let mut trait_definitions = HashSet::new();
         let mut method_definitions = HashSet::new();
+        let mut static_method_definitions = HashSet::new();
         let mut instance_definitions = HashSet::new();
 
         for module in self.modules {
@@ -201,6 +204,8 @@ impl TubeModel {
                     ModuleExportEntry::RecordDefinition(definition) => {
                         record_definitions.insert(definition.record_id.clone());
                         method_definitions.extend(definition_methods(&definition.methods));
+                        static_method_definitions
+                            .extend(definition_static_methods(&definition.static_methods));
                         record_field_definitions
                             .extend(definition.fields.iter().map(|field| field.field_id.clone()));
                         entries.push(vf::TubeFileEntry::RecordDefinition {
@@ -210,6 +215,8 @@ impl TubeModel {
                     ModuleExportEntry::EnumDefinition(definition) => {
                         enum_definitions.insert(definition.enum_id.clone());
                         method_definitions.extend(definition_methods(&definition.methods));
+                        static_method_definitions
+                            .extend(definition_static_methods(&definition.static_methods));
                         for variant in &definition.variants {
                             enum_variant_definitions.insert(variant.variant_id.clone());
                             method_definitions.extend(definition_methods(&variant.methods));
@@ -223,6 +230,8 @@ impl TubeModel {
                     ModuleExportEntry::TraitDefinition(definition) => {
                         trait_definitions.insert(definition.trait_id.clone());
                         method_definitions.extend(definition_methods(&definition.methods));
+                        static_method_definitions
+                            .extend(definition_static_methods(&definition.static_methods));
                         entries.push(vf::TubeFileEntry::TraitDefinition {
                             definition: Box::new(definition),
                         });
@@ -387,6 +396,40 @@ impl TubeModel {
                 }
             }
         }
+        for (id, info) in sorted_entries(&self.static_method_info) {
+            if static_method_definitions.contains(id) {
+                continue;
+            }
+            match &info.owner {
+                StaticMethodOwner::Record(owner) => {
+                    entries.push(vf::TubeFileEntry::RecordStaticMethodReference {
+                        static_method_id: id.clone(),
+                        record_id: owner.clone(),
+                        name: Box::new(info.name.clone()),
+                        erased_signature: Box::new(info.erased_signature.clone()),
+                        signature: Box::new(info.signature.clone()),
+                    })
+                }
+                StaticMethodOwner::Enum(owner) => {
+                    entries.push(vf::TubeFileEntry::EnumStaticMethodReference {
+                        static_method_id: id.clone(),
+                        enum_id: owner.clone(),
+                        name: Box::new(info.name.clone()),
+                        erased_signature: Box::new(info.erased_signature.clone()),
+                        signature: Box::new(info.signature.clone()),
+                    })
+                }
+                StaticMethodOwner::Trait(owner) => {
+                    entries.push(vf::TubeFileEntry::TraitStaticMethodReference {
+                        static_method_id: id.clone(),
+                        trait_id: owner.clone(),
+                        name: Box::new(info.name.clone()),
+                        erased_signature: Box::new(info.erased_signature.clone()),
+                        signature: Box::new(info.signature.clone()),
+                    })
+                }
+            }
+        }
 
         entries
     }
@@ -441,6 +484,19 @@ impl TubeModel {
                         method.method_id.clone(),
                         MethodInfo {
                             owner: MethodOwner::Record(definition.record_id.clone()),
+                            parent_import_specifier: import.clone(),
+                            name: (*method.name).clone(),
+                            erased_signature: (*method.erased_signature).clone(),
+                            signature: (*method.signature).clone(),
+                            definition: Some((**method).clone()),
+                        },
+                    );
+                }
+                for method in &definition.static_methods {
+                    self.static_method_info.insert(
+                        method.static_method_id.clone(),
+                        StaticMethodInfo {
+                            owner: StaticMethodOwner::Record(definition.record_id.clone()),
                             parent_import_specifier: import.clone(),
                             name: (*method.name).clone(),
                             erased_signature: (*method.erased_signature).clone(),
@@ -507,6 +563,31 @@ impl TubeModel {
                     },
                 );
             }
+            vf::TubeFileEntry::RecordStaticMethodReference {
+                static_method_id,
+                record_id,
+                name,
+                erased_signature,
+                signature,
+            } => {
+                let parent_import_specifier = self
+                    .record_info
+                    .get(&record_id)
+                    .expect("record reference before static method")
+                    .import_specifier
+                    .clone();
+                self.static_method_info.insert(
+                    static_method_id,
+                    StaticMethodInfo {
+                        owner: StaticMethodOwner::Record(record_id),
+                        parent_import_specifier,
+                        name: *name,
+                        erased_signature: *erased_signature,
+                        signature: *signature,
+                        definition: None,
+                    },
+                );
+            }
             vf::TubeFileEntry::EnumDefinition { definition } => {
                 let definition = *definition;
                 let import = (*definition.import).clone();
@@ -515,6 +596,19 @@ impl TubeModel {
                         method.method_id.clone(),
                         MethodInfo {
                             owner: MethodOwner::Enum(definition.enum_id.clone()),
+                            parent_import_specifier: import.clone(),
+                            name: (*method.name).clone(),
+                            erased_signature: (*method.erased_signature).clone(),
+                            signature: (*method.signature).clone(),
+                            definition: Some((**method).clone()),
+                        },
+                    );
+                }
+                for method in &definition.static_methods {
+                    self.static_method_info.insert(
+                        method.static_method_id.clone(),
+                        StaticMethodInfo {
+                            owner: StaticMethodOwner::Enum(definition.enum_id.clone()),
                             parent_import_specifier: import.clone(),
                             name: (*method.name).clone(),
                             erased_signature: (*method.erased_signature).clone(),
@@ -596,6 +690,31 @@ impl TubeModel {
                     method_id,
                     MethodInfo {
                         owner: MethodOwner::Enum(enum_id),
+                        parent_import_specifier,
+                        name: *name,
+                        erased_signature: *erased_signature,
+                        signature: *signature,
+                        definition: None,
+                    },
+                );
+            }
+            vf::TubeFileEntry::EnumStaticMethodReference {
+                static_method_id,
+                enum_id,
+                name,
+                erased_signature,
+                signature,
+            } => {
+                let parent_import_specifier = self
+                    .enum_info
+                    .get(&enum_id)
+                    .expect("enum reference before static method")
+                    .import_specifier
+                    .clone();
+                self.static_method_info.insert(
+                    static_method_id,
+                    StaticMethodInfo {
+                        owner: StaticMethodOwner::Enum(enum_id),
                         parent_import_specifier,
                         name: *name,
                         erased_signature: *erased_signature,
@@ -698,6 +817,19 @@ impl TubeModel {
                         },
                     );
                 }
+                for method in &definition.static_methods {
+                    self.static_method_info.insert(
+                        method.static_method_id.clone(),
+                        StaticMethodInfo {
+                            owner: StaticMethodOwner::Trait(definition.trait_id.clone()),
+                            parent_import_specifier: import.clone(),
+                            name: (*method.name).clone(),
+                            erased_signature: (*method.erased_signature).clone(),
+                            signature: (*method.signature).clone(),
+                            definition: Some((**method).clone()),
+                        },
+                    );
+                }
                 self.trait_info.insert(
                     definition.trait_id.clone(),
                     TraitInfo {
@@ -743,6 +875,31 @@ impl TubeModel {
                                 }),
                                 index: BigUint::from(0u32),
                             }),
+                        name: *name,
+                        erased_signature: *erased_signature,
+                        signature: *signature,
+                        definition: None,
+                    },
+                );
+            }
+            vf::TubeFileEntry::TraitStaticMethodReference {
+                static_method_id,
+                trait_id,
+                name,
+                erased_signature,
+                signature,
+            } => {
+                let parent_import_specifier = self
+                    .trait_info
+                    .get(&trait_id)
+                    .expect("trait reference before static method")
+                    .import_specifier
+                    .clone();
+                self.static_method_info.insert(
+                    static_method_id,
+                    StaticMethodInfo {
+                        owner: StaticMethodOwner::Trait(trait_id),
+                        parent_import_specifier,
                         name: *name,
                         erased_signature: *erased_signature,
                         signature: *signature,
@@ -1335,6 +1492,20 @@ impl TubeModel {
                 method_id: self.convert_method_id_from(source_tube, method_id)?,
                 instance_type: Box::new(self.convert_token_from(source_tube, instance_type)?),
                 instance_object: instance_object.clone(),
+                token_args: self.convert_token_args_from(source_tube, token_args)?,
+                args: args.clone(),
+            }),
+            vf::Instruction::StaticMethodCall {
+                static_method_id,
+                owner_type,
+                dest,
+                token_args,
+                args,
+            } => Some(vf::Instruction::StaticMethodCall {
+                static_method_id: self
+                    .convert_static_method_id_from(source_tube, static_method_id)?,
+                owner_type: Box::new(self.convert_token_from(source_tube, owner_type)?),
+                dest: dest.clone(),
                 token_args: self.convert_token_args_from(source_tube, token_args)?,
                 args: args.clone(),
             }),
@@ -1999,6 +2170,49 @@ impl TubeModel {
         Some(method_id)
     }
 
+    pub fn convert_static_method_id_from(
+        &mut self,
+        source_tube: &TubeModel,
+        id: &BigUint,
+    ) -> Option<BigUint> {
+        let source = source_tube.static_method_info.get(id)?;
+        let owner = match &source.owner {
+            StaticMethodOwner::Record(x) => {
+                StaticMethodOwner::Record(self.convert_record_id_from(source_tube, x)?)
+            }
+            StaticMethodOwner::Enum(x) => {
+                StaticMethodOwner::Enum(self.convert_enum_id_from(source_tube, x)?)
+            }
+            StaticMethodOwner::Trait(x) => {
+                StaticMethodOwner::Trait(self.convert_trait_id_from(source_tube, x)?)
+            }
+        };
+        let erased_signature =
+            self.convert_erased_signature_from(source_tube, &source.erased_signature)?;
+        if let Some(id) = self.static_method_info.iter().find_map(|(id, info)| {
+            (info.owner == owner
+                && info.name == source.name
+                && info.erased_signature == erased_signature)
+                .then(|| id.clone())
+        }) {
+            return Some(id);
+        }
+        let id = next_id(&self.static_method_info);
+        let signature = self.convert_function_signature_from(source_tube, &source.signature)?;
+        self.static_method_info.insert(
+            id.clone(),
+            StaticMethodInfo {
+                owner,
+                parent_import_specifier: source.parent_import_specifier.clone(),
+                name: source.name.clone(),
+                erased_signature,
+                signature,
+                definition: None,
+            },
+        );
+        Some(id)
+    }
+
     fn convert_token_args_from(
         &mut self,
         source_tube: &TubeModel,
@@ -2101,6 +2315,22 @@ pub enum MethodOwner {
     EnumVariant(BigUint),
     Trait(BigUint),
     Instance(BigUint),
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum StaticMethodOwner {
+    Record(BigUint),
+    Enum(BigUint),
+    Trait(BigUint),
+}
+
+pub struct StaticMethodInfo {
+    pub owner: StaticMethodOwner,
+    pub parent_import_specifier: vf::ImportSpecifier,
+    pub name: vf::Identifier,
+    pub erased_signature: vf::ErasedSignature,
+    pub signature: vf::FunctionSignature,
+    pub definition: Option<vf::StaticMethodDefinition>,
 }
 
 pub struct MethodInfo {
@@ -2580,6 +2810,23 @@ fn prepare_instruction_for_inline(
             method_id: method_id.clone(),
             instance_type: Box::new(substitute_token_arguments(instance_type, token_args)?),
             instance_object: Box::new(remap_register(instance_object, register_replacements)?),
+            token_args: substitute_token_argument_list(instruction_token_args, token_args)?,
+            args: remap_register_list(args, register_replacements)?,
+        }),
+        vf::Instruction::StaticMethodCall {
+            static_method_id,
+            owner_type,
+            dest,
+            token_args: instruction_token_args,
+            args,
+        } => Some(vf::Instruction::StaticMethodCall {
+            static_method_id: static_method_id.clone(),
+            owner_type: Box::new(substitute_token_arguments(owner_type, token_args)?),
+            dest: Box::new(prepare_function_result_for_inline(
+                dest,
+                register_replacements,
+                return_register,
+            )?),
             token_args: substitute_token_argument_list(instruction_token_args, token_args)?,
             args: remap_register_list(args, register_replacements)?,
         }),
@@ -3147,6 +3394,12 @@ fn prepare_field_extractors_for_inline(
 
 fn definition_methods(methods: &[Box<vf::MethodDefinition>]) -> impl Iterator<Item = BigUint> + '_ {
     methods.iter().map(|method| method.method_id.clone())
+}
+
+fn definition_static_methods(
+    methods: &[Box<vf::StaticMethodDefinition>],
+) -> impl Iterator<Item = BigUint> + '_ {
+    methods.iter().map(|method| method.static_method_id.clone())
 }
 
 fn sorted_entries<V>(map: &HashMap<BigUint, V>) -> Vec<(&BigUint, &V)> {
