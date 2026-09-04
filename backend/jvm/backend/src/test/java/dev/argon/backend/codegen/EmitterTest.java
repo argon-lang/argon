@@ -380,6 +380,7 @@ final class EmitterTest {
 				new Identifier.Named("Person"),
 				new ErasedSignature(List.of(), new ErasedSignatureType.String())
 			),
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 				List.of(),
@@ -393,12 +394,14 @@ final class EmitterTest {
 					UnsignedBigInteger.ZERO,
 					new Identifier.Named("name"),
 					new Token.Builtin(new BuiltinType.String()),
+					new AccessModifier.Public(),
 					false
 				),
 				new RecordFieldDefinition(
 					UnsignedBigInteger.ONE,
 					new Identifier.Named("active"),
 					new Token.Builtin(new BuiltinType.Bool()),
+					new AccessModifier.Public(),
 					true
 				)
 			)
@@ -1180,6 +1183,7 @@ final class EmitterTest {
 		var record = new RecordDefinition(
 			UnsignedBigInteger.ZERO,
 			recordImport,
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 				List.of(),
@@ -1189,8 +1193,8 @@ final class EmitterTest {
 			List.of(),
 			List.of(),
 			List.of(
-				new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("flag"), boolType, true),
-				new RecordFieldDefinition(UnsignedBigInteger.ONE, new Identifier.Named("count"), intType, true)
+				new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("flag"), boolType, new AccessModifier.Public(), true),
+				new RecordFieldDefinition(UnsignedBigInteger.ONE, new Identifier.Named("count"), intType, new AccessModifier.Public(), true)
 			)
 		);
 		var caller = functionDefinition(
@@ -1318,6 +1322,7 @@ final class EmitterTest {
 		var enumDef = new EnumDefinition(
 			UnsignedBigInteger.ZERO,
 			enumImport,
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 				List.of(),
@@ -1336,7 +1341,7 @@ final class EmitterTest {
 				),
 				new Vtable(List.of()),
 				List.of(),
-				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, false))
+				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, new AccessModifier.Public(), false))
 			))
 		);
 		var modules = List.of(new ProgramModel.ModuleModel(
@@ -1427,6 +1432,7 @@ final class EmitterTest {
 		var enumDef = new EnumDefinition(
 			UnsignedBigInteger.ZERO,
 			enumImport,
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 				List.of(),
@@ -1445,7 +1451,7 @@ final class EmitterTest {
 				),
 				new Vtable(List.of()),
 				List.of(),
-				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, false))
+				List.of(new RecordFieldDefinition(UnsignedBigInteger.ZERO, new Identifier.Named("active"), boolType, new AccessModifier.Public(), false))
 			))
 		);
 		var countRegister = new RegisterId(UnsignedBigInteger.ZERO);
@@ -1621,6 +1627,7 @@ final class EmitterTest {
 		var traitDefinition = new TraitDefinition(
 			UnsignedBigInteger.ZERO,
 			traitImport,
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(
 					new SignatureTokenParameter(Optional.empty(), new Token.Boxed()),
@@ -1637,6 +1644,7 @@ final class EmitterTest {
 					new Identifier.Named("compare"),
 					compareSignature,
 					new MethodFlags(true, false),
+					new AccessModifier.Public(),
 					new FunctionSignature(
 						List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 						List.of(new SignatureParameter(Optional.empty(), new Token.Builtin(new BuiltinType.Int(IntegerType.INT)))),
@@ -1649,6 +1657,7 @@ final class EmitterTest {
 					new Identifier.Named("answer"),
 					answerSignature,
 					new MethodFlags(false, false),
+					new AccessModifier.Public(),
 					new FunctionSignature(
 						List.of(),
 						List.of(new SignatureParameter(Optional.empty(), new Token.FunctionToken(
@@ -1777,6 +1786,7 @@ final class EmitterTest {
 		var instanceDefinition = new InstanceDefinition(
 			UnsignedBigInteger.ZERO,
 			instanceImport,
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(new SignatureTokenParameter(Optional.empty(), new Token.Boxed())),
 				List.of(new SignatureParameter(Optional.empty(), intType)),
@@ -1788,6 +1798,7 @@ final class EmitterTest {
 				new Identifier.Named("show"),
 				methodSignature,
 				new MethodFlags(false, false),
+				new AccessModifier.Public(),
 				new FunctionSignature(
 					List.of(),
 					List.of(new SignatureParameter(Optional.empty(), new Token.FunctionToken(
@@ -1817,6 +1828,7 @@ final class EmitterTest {
 				new Identifier.Named("MyException"),
 				new ErasedSignature(List.of(), new ErasedSignatureType.Erased())
 			),
+			new AccessModifierGlobal.Public(),
 			new FunctionSignature(
 				List.of(),
 				List.of(),
@@ -2270,6 +2282,7 @@ final class EmitterTest {
 				new ErasedSignature(List.of(), new ErasedSignatureType.Int())
 			),
 			new FunctionFlags(false),
+			new AccessModifierGlobal.Public(),
 			signature,
 			Optional.of(new FunctionImplementation.VmIr(body))
 		);

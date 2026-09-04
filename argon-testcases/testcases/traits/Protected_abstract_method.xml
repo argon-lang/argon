@@ -1,0 +1,33 @@
+<ArgonTest>
+
+    <Name>Protected abstract trait method</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        module _
+
+        import Argon.Core::*
+
+        trait MyTrait
+            protected proc _.say_hello(): () = abstract
+
+            public proc self.run(): () do
+                self.say_hello()
+            end
+        end
+
+        instance MyInst: MyTrait
+            public override proc _.say_hello(): () =
+                puts "Hello World"
+        end
+
+        proc main(): () do
+            let o = MyInst
+            o.run()
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

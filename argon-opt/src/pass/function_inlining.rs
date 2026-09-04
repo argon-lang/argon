@@ -237,7 +237,10 @@ fn function_definitions(tube: &TubeModel) -> impl Iterator<Item = &vf::FunctionD
 }
 
 fn should_inline(candidate: &InlineCandidate<'_>, cross_tube: bool) -> bool {
-    if cross_tube && !candidate.definition.flags.inline {
+    // A cross-tube body can legally refer to module-private declarations in its
+    // defining tube. Moving that body into another JVM module would turn those
+    // references into illegal package accesses, so keep the call boundary.
+    if cross_tube {
         return false;
     }
 

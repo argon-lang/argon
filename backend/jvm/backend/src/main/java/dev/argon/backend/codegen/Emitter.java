@@ -15,6 +15,7 @@ import java.lang.classfile.attribute.InnerClassesAttribute;
 import java.lang.classfile.attribute.InnerClassInfo;
 import java.lang.classfile.attribute.ModuleAttribute;
 import java.lang.classfile.attribute.PermittedSubclassesAttribute;
+import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.DirectMethodHandleDesc;
@@ -36,6 +37,8 @@ final class Emitter {
 	private static final ModuleDesc MD_ARGON_RUNTIME = ModuleDesc.of("dev.argon.runtime");
 	private static final ClassDesc CD_LAMBDA_METAFACTORY = ClassDesc.of("java.lang.invoke.LambdaMetafactory");
 	private static final ClassDesc CD_PARTIAL_APPLICATION_SUPPORT = ClassDesc.of("dev.argon.runtime.PartialApplicationSupport");
+	private static final ClassDesc CD_ARGON_ACCESS = ClassDesc.of("dev.argon.runtime.ArgonAccess");
+	private static final ClassDesc CD_ARGON_ACCESS_MODIFIER = ClassDesc.of("dev.argon.runtime.ArgonAccessModifier");
 	private static final ClassDesc CD_STRING_CONCAT_FACTORY = ClassDesc.of("java.lang.invoke.StringConcatFactory");
 	private static final DirectMethodHandleDesc BSM_LAMBDA_METAFACTORY = MethodHandleDesc.ofMethod(
 		DirectMethodHandleDesc.Kind.STATIC,
@@ -90,6 +93,62 @@ final class Emitter {
 	private final ZipOutputStream zos;
 	private boolean executable = false;
 	private boolean emittedModuleInfo = false;
+
+	private int visibility(AccessModifierGlobal access) {
+		return switch(access) {
+			case AccessModifierGlobal.Public(), AccessModifierGlobal.Internal() -> ClassFile.ACC_PUBLIC;
+			case AccessModifierGlobal.ModulePrivate() -> 0;
+		};
+	}
+
+	private int visibility(AccessModifier access) {
+		return switch(access) {
+			case AccessModifier.Public(), AccessModifier.Internal(), AccessModifier.ProtectedOrInternal() -> ClassFile.ACC_PUBLIC;
+			case AccessModifier.Private() -> ClassFile.ACC_PRIVATE;
+			case AccessModifier.Protected(), AccessModifier.ProtectedAndInternal() -> ClassFile.ACC_PROTECTED;
+			case AccessModifier.ModulePrivate() -> 0;
+		};
+	}
+
+	private String annotationValue(AccessModifierGlobal access) {
+		return switch(access) {
+			case AccessModifierGlobal.Public() -> "PUBLIC";
+			case AccessModifierGlobal.Internal() -> "INTERNAL";
+			case AccessModifierGlobal.ModulePrivate() -> "MODULE_PRIVATE";
+		};
+	}
+
+	private String annotationValue(AccessModifier access) {
+		return switch(access) {
+			case AccessModifier.Public() -> "PUBLIC";
+			case AccessModifier.Private() -> "PRIVATE";
+			case AccessModifier.Protected() -> "PROTECTED";
+			case AccessModifier.Internal() -> "INTERNAL";
+			case AccessModifier.ProtectedOrInternal() -> "PROTECTED_OR_INTERNAL";
+			case AccessModifier.ProtectedAndInternal() -> "PROTECTED_AND_INTERNAL";
+			case AccessModifier.ModulePrivate() -> "MODULE_PRIVATE";
+		};
+	}
+
+	private RuntimeInvisibleAnnotationsAttribute accessAnnotation(String value) {
+		return RuntimeInvisibleAnnotationsAttribute.of(Annotation.of(
+			CD_ARGON_ACCESS,
+			AnnotationElement.of("value", AnnotationValue.ofEnum(CD_ARGON_ACCESS_MODIFIER, value))
+		));
+	}
+
+	private void emitAnnotatedMethodBody(
+		ClassBuilder classBuilder,
+		String name,
+		MethodTypeDesc descriptor,
+		int flags,
+		AccessModifier access,
+		Consumer<CodeBuilder> body
+	) {
+		classBuilder.withMethod(name, descriptor, flags, methodBuilder -> methodBuilder
+			.with(accessAnnotation(annotationValue(access)))
+			.withCode(body));
+	}
 
 	public void emit() throws IOException {
 		emitClassFiles();
@@ -160,7 +219,7 @@ final class Emitter {
 		}
 
 		for(var module : program.modules()) {
-			if(!module.exports().isEmpty()) {
+			if(module.exports().stream().anyMatch(this::isPublicTopLevelDeclaration)) {
 				emittedPackages.add(program.getModuleInfo(module.moduleId()).packageName());
 			}
 		}
@@ -175,6 +234,16 @@ final class Emitter {
 		}
 
 		return exports;
+	}
+
+	private boolean isPublicTopLevelDeclaration(ProgramModel.ModuleExportEntry entry) {
+		return switch(entry) {
+			case ProgramModel.ModuleExportEntry.FunctionDefinition(var value) -> value.definition().access() instanceof AccessModifierGlobal.Public;
+			case ProgramModel.ModuleExportEntry.RecordDefinition(var value) -> value.definition().access() instanceof AccessModifierGlobal.Public;
+			case ProgramModel.ModuleExportEntry.EnumDefinition(var value) -> value.definition().access() instanceof AccessModifierGlobal.Public;
+			case ProgramModel.ModuleExportEntry.TraitDefinition(var value) -> value.definition().access() instanceof AccessModifierGlobal.Public;
+			case ProgramModel.ModuleExportEntry.InstanceDefinition(var value) -> value.definition().access() instanceof AccessModifierGlobal.Public;
+		};
 	}
 
 	private Set<ModuleDesc> requiredRequires() {
@@ -300,8 +369,10 @@ final class Emitter {
 	private void emitGlobalFunctions(ProgramModel.ModuleInfo module, List<TubeFileEntry.FunctionDefinition> functions) throws IOException {
 		var classDesc = ClassNaming.moduleGlobalFunctionsClassName(module);
 		var bytes = CLASS_FILE.build(classDesc, classBuilder -> {
+			var holderVisibility = functions.stream().anyMatch(function -> visibility(function.definition().access()) != 0)
+				? ClassFile.ACC_PUBLIC : 0;
 			classBuilder
-				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withFlags(holderVisibility | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
 				.withSuperclass(ConstantDescs.CD_Object);
 
 			classBuilder.withMethodBody(
@@ -318,11 +389,13 @@ final class Emitter {
 				var function = entry.definition();
 				var functionInfo = program.getFunctionInfo(function.functionId());
 
-				classBuilder.withMethodBody(
+				classBuilder.withMethod(
 					functionInfo.name(),
 					functionInfo.descriptor(),
-					ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
-					codeBuilder -> emitGlobalFunctionBody(codeBuilder, function)
+					visibility(entry.definition().access()) | ClassFile.ACC_STATIC,
+					methodBuilder -> methodBuilder
+						.with(accessAnnotation(annotationValue(entry.definition().access())))
+						.withCode(codeBuilder -> emitGlobalFunctionBody(codeBuilder, function))
 				);
 			}
 		});
@@ -560,8 +633,9 @@ final class Emitter {
 
 		var bytes = CLASS_FILE.build(recordInfo.recordClassDesc(), classBuilder -> {
 			classBuilder
-				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
-				.withSuperclass(ConstantDescs.CD_Object);
+				.withFlags(visibility(definition.access()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withSuperclass(ConstantDescs.CD_Object)
+				.with(accessAnnotation(annotationValue(definition.access())));
 
 			for(int i = 0; i < tokenParameterDescs.size(); ++i) {
 				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
@@ -569,12 +643,9 @@ final class Emitter {
 
 			for(var field : fields) {
 				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
-				var flags = ClassFile.ACC_PUBLIC;
-				if(!field.mutable()) {
-					flags |= ClassFile.ACC_FINAL;
-				}
-
-				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), flags);
+				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), fieldBuilder -> fieldBuilder
+					.withFlags(visibility(field.access()) | (field.mutable() ? 0 : ClassFile.ACC_FINAL))
+					.with(accessAnnotation(annotationValue(field.access()))));
 			}
 
 			classBuilder.withMethodBody(
@@ -633,7 +704,7 @@ final class Emitter {
 			);
 
 			for(var method : definition.methods()) {
-				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
+				emitMethod(classBuilder, method, false, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
 					recordInfo.recordClassDesc(), ClassNaming.typeTokenParameterFieldName(index), tokenParameterDescs.get(index)));
 			}
 			for(var method : definition.staticMethods()) emitStaticMethod(classBuilder, method);
@@ -736,8 +807,9 @@ final class Emitter {
 
 		var baseBytes = CLASS_FILE.build(enumInfo.enumClassDesc(), classBuilder -> {
 			classBuilder
-				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SUPER)
+				.withFlags(visibility(definition.access()) | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SUPER)
 				.withSuperclass(ConstantDescs.CD_Object)
+				.with(accessAnnotation(annotationValue(definition.access())))
 				.with(PermittedSubclassesAttribute.ofSymbols(variantDescs))
 				.with(InnerClassesAttribute.of(definition.variants().stream()
 					.map(variant -> {
@@ -780,7 +852,7 @@ final class Emitter {
 			);
 
 			for(var method : definition.methods()) {
-				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
+				emitMethod(classBuilder, method, false, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
 					enumInfo.enumClassDesc(), ClassNaming.typeTokenParameterFieldName(index), tokenParameterDescs.get(index)));
 			}
 			for(var method : definition.staticMethods()) emitStaticMethod(classBuilder, method);
@@ -788,11 +860,11 @@ final class Emitter {
 		writeEntry(classEntryName(enumInfo.enumClassDesc()), baseBytes);
 
 		for(var variant : definition.variants()) {
-			emitEnumVariant(enumInfo, tokenParameterDescs, variant);
+			emitEnumVariant(enumInfo, tokenParameterDescs, definition.access(), variant);
 		}
 	}
 
-	private void emitEnumVariant(ProgramModel.EnumInfo enumInfo, List<ClassDesc> enumTokenParameterDescs, EnumVariantDefinition variant) throws IOException {
+	private void emitEnumVariant(ProgramModel.EnumInfo enumInfo, List<ClassDesc> enumTokenParameterDescs, AccessModifierGlobal enumAccess, EnumVariantDefinition variant) throws IOException {
 		var variantInfo = program.getEnumVariantInfo(variant.variantId());
 
 		var argDescs = new ArrayList<ClassDesc>();
@@ -803,8 +875,9 @@ final class Emitter {
 
 		var bytes = CLASS_FILE.build(variantInfo.variantClassDesc(), classBuilder -> {
 			classBuilder
-				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withFlags(visibility(enumAccess) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
 				.withSuperclass(enumInfo.enumClassDesc())
+				.with(accessAnnotation(annotationValue(enumAccess)))
 				.with(InnerClassesAttribute.of(
 					InnerClassInfo.of(
 						variantInfo.variantClassDesc(),
@@ -827,15 +900,13 @@ final class Emitter {
 			for(int i = 0; i < variant.fields().size(); ++i) {
 				var field = variant.fields().get(i);
 				var fieldInfo = program.getRecordFieldInfo(field.fieldId());
-				var flags = ClassFile.ACC_PUBLIC;
-				if(!field.mutable()) {
-					flags |= ClassFile.ACC_FINAL;
-				}
-				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), flags);
+				classBuilder.withField(fieldInfo.fieldName(), fieldInfo.fieldType(), fieldBuilder -> fieldBuilder
+					.withFlags(visibility(field.access()) | (field.mutable() ? 0 : ClassFile.ACC_FINAL))
+					.with(accessAnnotation(annotationValue(field.access()))));
 			}
 
 			for(var method : variant.methods()) {
-				emitMethod(classBuilder, method, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
+				emitMethod(classBuilder, method, false, cb -> index -> cb.aload(cb.receiverSlot()).getfield(
 					variantInfo.variantClassDesc(), ClassNaming.instanceParameterFieldName(index), argDescs.get(index)));
 			}
 
@@ -1026,8 +1097,9 @@ final class Emitter {
 
 		var bytes = CLASS_FILE.build(traitInfo.traitDesc(), classBuilder -> {
 			classBuilder
-				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT)
-				.withSuperclass(ConstantDescs.CD_Object);
+				.withFlags(visibility(definition.access()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT)
+				.withSuperclass(ConstantDescs.CD_Object)
+				.with(accessAnnotation(annotationValue(definition.access())));
 
 			var tokenParameterDescs = tokenParameterDescs(definition.signature());
 			for(int i = 0; i < definition.signature().tokenParameters().size(); ++i) {
@@ -1041,9 +1113,10 @@ final class Emitter {
 			}
 
 			for(var method : definition.methods()) {
-				emitMethod(
+					emitMethod(
 					classBuilder,
 					method,
+					true,
 					cb -> index -> cb
 						.aload(cb.receiverSlot())
 						.invokeinterface(
@@ -1082,9 +1155,10 @@ final class Emitter {
 
 		var bytes = CLASS_FILE.build(instanceInfo.instanceClassDesc(), classBuilder -> {
 			classBuilder
-				.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
+				.withFlags(visibility(definition.access()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER)
 				.withSuperclass(superclassDesc)
-				.withInterfaceSymbols(traitInfo.traitDesc());
+				.withInterfaceSymbols(traitInfo.traitDesc())
+				.with(accessAnnotation(annotationValue(definition.access())));
 
 			for(int i = 0; i < tokenParameterCount; ++i) {
 				classBuilder.withField(ClassNaming.typeTokenParameterFieldName(i), tokenParameterDescs.get(i), ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL);
@@ -1131,6 +1205,7 @@ final class Emitter {
 				emitMethod(
 					classBuilder,
 					method,
+					false,
 					cb -> index -> cb
 						.aload(cb.receiverSlot())
 						.getfield(
@@ -1202,25 +1277,31 @@ final class Emitter {
 	private void emitMethod(
 		ClassBuilder classBuilder,
 		MethodDefinition method,
+		boolean isInterface,
 	    Function<CodeBuilder, BlockEmitter.ParentTokenParameterLoader> parentTokenParameterLoaderProvider
 	) {
 		var methodInfo = program.getMethodInfo(method.methodId());
+		var methodVisibility = isInterface && (method.flags()._abstract() || !(method.access() instanceof AccessModifier.Private))
+			? ClassFile.ACC_PUBLIC
+			: visibility(method.access());
 
 		if(method.flags()._abstract()) {
 			classBuilder.withMethod(
 				methodInfo.methodName(),
 				methodInfo.descriptor(),
-				ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT,
-				methodBuilder -> {}
+				methodVisibility | ClassFile.ACC_ABSTRACT,
+				methodBuilder -> methodBuilder.with(accessAnnotation(annotationValue(method.access())))
 			);
 		}
 		else {
 			var implementation = method.implementation()
 				.orElseThrow(() -> new RuntimeException("Trait method implementation is missing"));
-			classBuilder.withMethodBody(
+			emitAnnotatedMethodBody(
+				classBuilder,
 				methodInfo.methodName(),
 				methodInfo.descriptor(),
-				ClassFile.ACC_PUBLIC,
+				methodVisibility,
+				method.access(),
 				cb -> emitFunctionImplementationBody(
 					cb,
 					method.signature(),
@@ -1235,8 +1316,11 @@ final class Emitter {
 	private void emitStaticMethod(ClassBuilder classBuilder, StaticMethodDefinition method) {
 		var info = program.getStaticMethodInfo(method.staticMethodId());
 		var implementation = method.implementation().orElseThrow(() -> new RuntimeException("Static method implementation is missing"));
-		classBuilder.withMethodBody(info.methodName(), info.descriptor(), ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
-			cb -> emitFunctionImplementationBody(cb, method.signature(), implementation, Optional.empty(), index -> { throw new UnsupportedOperationException("Static method has no parent token parameter"); }));
+		var methodVisibility = info.isInterface() && !(method.access() instanceof AccessModifier.Private)
+			? ClassFile.ACC_PUBLIC
+			: visibility(method.access());
+		emitAnnotatedMethodBody(classBuilder, info.methodName(), info.descriptor(), methodVisibility | ClassFile.ACC_STATIC,
+			method.access(), cb -> emitFunctionImplementationBody(cb, method.signature(), implementation, Optional.empty(), index -> { throw new UnsupportedOperationException("Static method has no parent token parameter"); }));
 	}
 
 	private boolean isCoreExceptionTrait(Token.Trait trait) {

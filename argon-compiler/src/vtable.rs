@@ -330,11 +330,21 @@ impl VTableBuilder {
                 continue;
             }
 
-            if !self.access_token.allows_access(
-                &Declaration::Method(slot.method.clone()),
-                Some(&method.clone().owner()),
-                slot_value.slot_access,
-            ) {
+            let slot_declaration = Declaration::Method(slot.method.clone());
+            let override_accessible = match slot_value.slot_access {
+                AccessModifier::Protected | AccessModifier::ProtectedOrInternal => true,
+                AccessModifier::ProtectedAndInternal => self.access_token.allows_access(
+                    &slot_declaration,
+                    Some(&method.clone().owner()),
+                    AccessModifier::Internal,
+                ),
+                access => self.access_token.allows_access(
+                    &slot_declaration,
+                    Some(&method.clone().owner()),
+                    access,
+                ),
+            };
+            if !override_accessible {
                 continue;
             }
 

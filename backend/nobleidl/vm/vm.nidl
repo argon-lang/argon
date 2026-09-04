@@ -378,6 +378,24 @@ record parameter-binding {
     param-type: token;
 }
 
+@esexpr:(derive-codec)
+enum access-modifier-global {
+    public,
+    internal,
+    module-private,
+}
+
+@esexpr:(derive-codec)
+enum access-modifier {
+    public,
+    private,
+    protected,
+    internal,
+    protected-or-internal,
+    protected-and-internal,
+    module-private,
+}
+
 
 
 @esexpr:(derive-codec)
@@ -385,6 +403,10 @@ record function-definition {
     function-id: nat;
     import: import-specifier;
     flags: function-flags;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier-global;
 
     @esexpr:(keyword)
     signature: function-signature;
@@ -414,6 +436,10 @@ record record-definition {
     import: import-specifier;
 
     @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier-global;
+
+    @esexpr:(keyword)
     signature: function-signature;
 
     @esexpr:(keyword)
@@ -436,6 +462,10 @@ record record-field-definition {
     field-type: token;
 
     @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier;
+
+    @esexpr:(keyword)
     @esexpr:(default-value #false)
     mutable: bool;
 }
@@ -445,6 +475,10 @@ record record-field-definition {
 record enum-definition {
     enum-id: nat;
     import: import-specifier;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier-global;
 
     @esexpr:(keyword)
     signature: function-signature;
@@ -485,6 +519,10 @@ record trait-definition {
     import: import-specifier;
 
     @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier-global;
+
+    @esexpr:(keyword)
     signature: function-signature;
 
     @esexpr:(keyword)
@@ -505,6 +543,10 @@ record method-definition {
     flags: method-flags;
 
     @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier;
+
+    @esexpr:(keyword)
     signature: function-signature;
 
     @esexpr:(keyword)
@@ -517,6 +559,7 @@ record static-method-definition {
     static-method-id: nat;
     name: identifier;
     erased-signature: erased-signature;
+    @esexpr:(keyword) @esexpr:(default-value (public)) access: access-modifier;
     @esexpr:(keyword) signature: function-signature;
     @esexpr:(keyword) @esexpr:(optional) implementation: optional-field[function-implementation];
 }
@@ -554,6 +597,10 @@ enum vtable-target {
 record instance-definition {
     instance-id: nat;
     import: import-specifier;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (public))
+    access: access-modifier-global;
 
     @esexpr:(keyword)
     signature: function-signature;

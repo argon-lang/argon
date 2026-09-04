@@ -4,16 +4,17 @@ use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::vec;
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use argon_compiler::access::AccessModifier;
 use argon_compiler::erased_sig::{ErasedSignature, ErasedSignatureType, ImportSpecifier};
 use argon_compiler::expr_type::get_expr_type;
 use argon_compiler::scanner::{CaptureScanner, FreeVariableScanner};
 use argon_compiler::vtable::VTableTarget;
 use argon_compiler::{
-    BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext, DefaultExprNormalizer, Enum,
-    EnumVariant, Function, FunctionImplementation, FunctionSignature, Identifier, Instance, Method,
-    MethodEntry, MethodOwner, Module, ModuleExportBinding, ModuleExportEntry, ModulePath, Record,
-    RecordField, RecordFieldOwner, StaticMethod, StaticMethodOwner, Trait, Tube, TubeName,
-    TypeDeclaration, UnaryOperatorIdentifier,
+    AccessModifierGlobal, BinaryOperatorIdentifier, Builtin, Context, DefaultExprContext,
+    DefaultExprNormalizer, Enum, EnumVariant, Function, FunctionImplementation, FunctionSignature,
+    Identifier, Instance, Method, MethodEntry, MethodOwner, Module, ModuleExportBinding,
+    ModuleExportEntry, ModulePath, Record, RecordField, RecordFieldOwner, StaticMethod,
+    StaticMethodOwner, Trait, Tube, TubeName, TypeDeclaration, UnaryOperatorIdentifier,
 };
 use argon_expr::{
     BlockLabel, EnumType, ErasureMode, Expr, ExprLocationExt, ExprScanner, ExpressionOwner,
@@ -35,6 +36,26 @@ mod condition;
 mod pattern;
 
 use crate::vm::condition::ConditionEmitter;
+
+fn encode_access_modifier_global(access: AccessModifierGlobal) -> vf::AccessModifierGlobal {
+    match access {
+        AccessModifierGlobal::Public => vf::AccessModifierGlobal::Public {},
+        AccessModifierGlobal::Internal => vf::AccessModifierGlobal::Internal {},
+        AccessModifierGlobal::ModulePrivate => vf::AccessModifierGlobal::ModulePrivate {},
+    }
+}
+
+fn encode_access_modifier(access: AccessModifier) -> vf::AccessModifier {
+    match access {
+        AccessModifier::Public => vf::AccessModifier::Public {},
+        AccessModifier::Private => vf::AccessModifier::Private {},
+        AccessModifier::Protected => vf::AccessModifier::Protected {},
+        AccessModifier::Internal => vf::AccessModifier::Internal {},
+        AccessModifier::ProtectedOrInternal => vf::AccessModifier::ProtectedOrInternal {},
+        AccessModifier::ProtectedAndInternal => vf::AccessModifier::ProtectedAndInternal {},
+        AccessModifier::ModulePrivate => vf::AccessModifier::ModulePrivate {},
+    }
+}
 
 pub fn encode_vm_tube<W>(
     out: &mut W,
@@ -79,6 +100,11 @@ pub struct VmEncoder {
 
     ids: TubeIdProvider,
     entry_emitters: VecDeque<EntryEmitter>,
+    function_access: HashMap<usize, AccessModifierGlobal>,
+    record_access: HashMap<usize, AccessModifierGlobal>,
+    enum_access: HashMap<usize, AccessModifierGlobal>,
+    trait_access: HashMap<usize, AccessModifierGlobal>,
+    instance_access: HashMap<usize, AccessModifierGlobal>,
 }
 
 impl VmEncoder {
@@ -98,6 +124,11 @@ impl VmEncoder {
             modules,
             ids: TubeIdProvider::default(),
             entry_emitters: VecDeque::new(),
+            function_access: HashMap::new(),
+            record_access: HashMap::new(),
+            enum_access: HashMap::new(),
+            trait_access: HashMap::new(),
+            instance_access: HashMap::new(),
         };
 
         encoder.ids.tube_ids.get(encoder.tube.name().clone());
@@ -324,6 +355,12 @@ impl VmEncoder {
                         })
                         .transpose()?
                         .map(Box::new);
+                    let access = encode_access_modifier_global(
+                        *self
+                            .function_access
+                            .get(&function_id.to_usize().unwrap())
+                            .unwrap_or(&AccessModifierGlobal::ModulePrivate),
+                    );
 
                     vf::TubeFileEntry::FunctionDefinition {
                         definition: Box::new(vf::FunctionDefinition {
@@ -332,6 +369,7 @@ impl VmEncoder {
                             flags: vf::FunctionFlags {
                                 inline: function.metadata().is_inline,
                             },
+                            access: Box::new(access),
                             signature: Box::new(signature.sig),
                             implementation,
                         }),
@@ -382,6 +420,7 @@ impl VmEncoder {
                                 field_id: BigUint::from(field_id),
                                 name: Box::new(encode_identifier(&metadata.name)),
                                 field_type: Box::new(field_type),
+                                access: Box::new(encode_access_modifier(metadata.access)),
                                 mutable: metadata.is_mutable,
                             }))
                         })
@@ -407,11 +446,18 @@ impl VmEncoder {
                         .collect::<Result<Vec<_>, _>>()?;
                     let vtable =
                         self.emit_vtable(MethodOwner::Record(record.clone()), methods.as_ref())?;
+                    let access = encode_access_modifier_global(
+                        *self
+                            .record_access
+                            .get(&record_id.to_usize().unwrap())
+                            .unwrap_or(&AccessModifierGlobal::ModulePrivate),
+                    );
 
                     vf::TubeFileEntry::RecordDefinition {
                         definition: Box::new(vf::RecordDefinition {
                             record_id,
                             import: Box::new(import),
+                            access: Box::new(access),
                             signature: Box::new(signature.sig),
                             vtable: Box::new(vtable),
                             methods: method_definitions,
@@ -537,6 +583,7 @@ impl VmEncoder {
                                         field_id: BigUint::from(field_id),
                                         name: Box::new(encode_identifier(&metadata.name)),
                                         field_type: Box::new(field_type),
+                                        access: Box::new(encode_access_modifier(metadata.access)),
                                         mutable: metadata.is_mutable,
                                     }))
                                 })
@@ -567,11 +614,18 @@ impl VmEncoder {
                             }))
                         })
                         .collect::<Result<Vec<_>, InternalCompilerError>>()?;
+                    let access = encode_access_modifier_global(
+                        *self
+                            .enum_access
+                            .get(&enum_id.to_usize().unwrap())
+                            .unwrap_or(&AccessModifierGlobal::ModulePrivate),
+                    );
 
                     vf::TubeFileEntry::EnumDefinition {
                         definition: Box::new(vf::EnumDefinition {
                             enum_id,
                             import: Box::new(import),
+                            access: Box::new(access),
                             signature: Box::new(signature.sig),
                             vtable: Box::new(enum_vtable),
                             methods: enum_method_definitions,
@@ -765,11 +819,18 @@ impl VmEncoder {
                         .collect::<Result<Vec<_>, _>>()?;
                     let vtable =
                         self.emit_vtable(MethodOwner::Trait(trait_.clone()), methods.as_ref())?;
+                    let access = encode_access_modifier_global(
+                        *self
+                            .trait_access
+                            .get(&trait_id.to_usize().unwrap())
+                            .unwrap_or(&AccessModifierGlobal::ModulePrivate),
+                    );
 
                     vf::TubeFileEntry::TraitDefinition {
                         definition: Box::new(vf::TraitDefinition {
                             trait_id,
                             import: Box::new(import),
+                            access: Box::new(access),
                             signature: Box::new(signature.sig),
                             vtable: Box::new(vtable),
                             methods: method_definitions,
@@ -809,11 +870,18 @@ impl VmEncoder {
                         .collect::<Result<Vec<_>, _>>()?;
                     let vtable = self
                         .emit_vtable(MethodOwner::Instance(instance.clone()), methods.as_ref())?;
+                    let access = encode_access_modifier_global(
+                        *self
+                            .instance_access
+                            .get(&instance_id.to_usize().unwrap())
+                            .unwrap_or(&AccessModifierGlobal::ModulePrivate),
+                    );
 
                     vf::TubeFileEntry::InstanceDefinition {
                         definition: Box::new(vf::InstanceDefinition {
                             instance_id,
                             import: Box::new(import),
+                            access: Box::new(access),
                             signature: Box::new(signature.sig),
                             vtable: Box::new(vtable),
                             methods: method_definitions,
@@ -835,6 +903,7 @@ impl VmEncoder {
                             function_id: BigUint::from(syn_id),
                             import: Box::new(import_spec),
                             flags: vf::FunctionFlags { inline: false },
+                            access: Box::new(vf::AccessModifierGlobal::ModulePrivate {}),
                             signature: Box::new(sig.sig),
                             implementation: Some(Box::new(vf::FunctionImplementation::VmIr {
                                 body: Box::new(block),
@@ -868,21 +937,38 @@ impl VmEncoder {
     }
 
     fn emit_module_export(&mut self, exp: ModuleExportEntry) {
+        let preserve_access = !exp.is_reexport;
+        let access = exp.access;
         match exp.binding {
             ModuleExportBinding::Function(function) => {
-                self.get_function_id(function);
+                let id = self.get_function_id(function);
+                if preserve_access {
+                    self.function_access.insert(id, access);
+                }
             }
             ModuleExportBinding::Record(record) => {
-                self.get_record_id(record);
+                let id = self.get_record_id(record);
+                if preserve_access {
+                    self.record_access.insert(id, access);
+                }
             }
             ModuleExportBinding::Enum(enum_) => {
-                self.get_enum_id(enum_);
+                let id = self.get_enum_id(enum_);
+                if preserve_access {
+                    self.enum_access.insert(id, access);
+                }
             }
             ModuleExportBinding::Trait(trait_) => {
-                self.get_trait_id(trait_);
+                let id = self.get_trait_id(trait_);
+                if preserve_access {
+                    self.trait_access.insert(id, access);
+                }
             }
             ModuleExportBinding::Instance(instance) => {
-                self.get_instance_id(instance);
+                let id = self.get_instance_id(instance);
+                if preserve_access {
+                    self.instance_access.insert(id, access);
+                }
             }
         }
     }
@@ -1047,6 +1133,7 @@ impl VmEncoder {
                 r#abstract: metadata.is_abstract,
                 inline: metadata.is_inline,
             },
+            access: Box::new(encode_access_modifier(metadata.access)),
             signature: Box::new(signature.sig),
             implementation,
         })
@@ -1078,6 +1165,7 @@ impl VmEncoder {
             static_method_id: BigUint::from(self.ids.static_method_ids.get(method.clone())),
             name: Box::new(encode_identifier(&metadata.name)),
             erased_signature: Box::new(erased_signature),
+            access: Box::new(encode_access_modifier(metadata.access)),
             signature: Box::new(signature.sig),
             implementation,
         })
