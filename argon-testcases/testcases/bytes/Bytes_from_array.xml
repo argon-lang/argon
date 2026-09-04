@@ -1,0 +1,38 @@
+<ArgonTest>
+
+    <Name>Bytes from array</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+
+        def read(bytes: Bytes)(index: Int)(requires erased ev: ((index >= 0 && index < bytes.length) == true)): U8 =
+            bytes[index]
+
+        proc main(): () do
+            let array = Array.newFilled 3 10u8
+            array[1] := 20u8
+            array[2] := 30u8
+
+            let bytes = Bytes.from_array array
+            array[0] := 40u8
+            array[1] := 50u8
+            array[2] := 60u8
+
+            puts (bytes.length.to_s())
+
+            if bytes.length >= 3 then
+                puts ((read bytes 0).to_s())
+                puts ((read bytes 1).to_s())
+                puts ((read bytes 2).to_s())
+            end
+        end
+    ]]></InputSource>
+
+    <ExpectedOutput>3
+10
+20
+30</ExpectedOutput>
+
+</ArgonTest>

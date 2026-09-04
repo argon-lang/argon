@@ -1,0 +1,31 @@
+module Bytes
+
+import ::Array::*
+import ::Bool::*
+import ::Int::*
+import ::U8::*
+
+
+public record Bytes
+    private internal data: Array U8
+
+    public proc static.from_array(array: Array U8): Bytes do
+        let data = Array.newFilled array.length 0u8
+
+        let mut i = 0
+        while i < array.length do
+            data[i] := array[i]
+            i := i + 1
+        end
+
+        Bytes {
+            data: data
+        }
+    end
+
+    public inline def bytes.length: Int =
+        bytes.data.length
+
+    public inline __argon_unsafe_assume_pure proc bytes.operator[] (index: Int)(requires erased ev: ((index >= 0 && index < bytes.length) == true)): U8 =
+        bytes.data[index]
+end

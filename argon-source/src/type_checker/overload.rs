@@ -13,8 +13,8 @@ use argon_compiler::signature::SignatureParameter;
 use argon_compiler::{Function, FunctionSignature, Method, RecordField, StaticMethod};
 use argon_expr::{
     EnumType, ErasureMode, Expr, ExprLocationExt, ExprScannerMut, ExpressionOwner,
-    FunctionResultValueSubstScanner, LocalVariable, LocatedExpr, MethodInstanceType, RecordType,
-    SubstScanner, TraitType, TypeComparer, Variable,
+    FunctionResultValueSubstScanner, InstanceParameterVariable, LocalVariable, LocatedExpr,
+    MethodInstanceType, RecordType, SubstScanner, TraitType, TypeComparer, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
 use argon_util::{CompileError, MultiSlice, UniqueIdentifier};
@@ -97,7 +97,7 @@ impl<'a> Overloadable<'a> {
             Overloadable::InstanceMethod {
                 method,
                 instance_type,
-                ..
+                obj,
             } => {
                 let mut sig = method
                     .clone()
@@ -106,6 +106,15 @@ impl<'a> Overloadable<'a> {
                     .clone()
                     .shift(&mut default_to_type_check_shifter());
                 sig.substitute_method_instance_type_parameters(instance_type);
+
+                let receiver = Variable::InstanceParameter(Box::new(InstanceParameterVariable {
+                    owner: ExpressionOwner::Method(method.clone()),
+                    var_type: Expr::Error.with_location(obj.location.clone()),
+                    name: method.metadata().instance_parameter.name.clone(),
+                }));
+                let mut subst = SubstScanner::new();
+                subst.add_substitution(receiver, Cow::Borrowed(obj));
+                sig.scan_mut(&mut subst);
 
                 sig
             }

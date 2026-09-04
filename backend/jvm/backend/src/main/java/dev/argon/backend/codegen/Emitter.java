@@ -1583,12 +1583,18 @@ final class Emitter {
 					var owner = function.definingClass();
 					var name = function.name();
 					var methodType = function.descriptor();
+					var parameterTypes = methodType.parameterList();
 
 					for(var tokenArg : tokenArgs) {
 						emitTokenValue(tokenArg);
 					}
-					for(var arg : args) {
+					for(int i = 0; i < args.size(); ++i) {
+						var arg = args.get(i);
 						loadRegister(arg);
+						var expectedType = parameterTypes.get(tokenArgs.size() + i);
+						if(expectedType.equals(ConstantDescs.CD_Object) && !registerType(arg).equals(ConstantDescs.CD_Object)) {
+							boxValue(registerToken(arg));
+						}
 					}
 
 					emitFunctionResult(
@@ -1612,6 +1618,7 @@ final class Emitter {
 
 				case Instruction.StaticMethodCall call -> {
 					var method = program.getStaticMethodInfo(call.staticMethodId());
+					var parameterTypes = method.descriptor().parameterList();
 					var ownerTokenArgs = switch(call.ownerType()) {
 						case Token.Record owner -> owner.args();
 						case Token.Enum owner -> owner.args();
@@ -1620,7 +1627,15 @@ final class Emitter {
 					};
 					for(var tokenArg : ownerTokenArgs) emitTokenValue(tokenArg);
 					for(var tokenArg : call.tokenArgs()) emitTokenValue(tokenArg);
-					for(var arg : call.args()) loadRegister(arg);
+					var tokenArgCount = ownerTokenArgs.size() + call.tokenArgs().size();
+					for(int i = 0; i < call.args().size(); ++i) {
+						var arg = call.args().get(i);
+						loadRegister(arg);
+						var expectedType = parameterTypes.get(tokenArgCount + i);
+						if(expectedType.equals(ConstantDescs.CD_Object) && !registerType(arg).equals(ConstantDescs.CD_Object)) {
+							boxValue(registerToken(arg));
+						}
+					}
 					emitFunctionResult(call.dest(),
 						() -> cb.invokestatic(method.definingClass(), method.methodName(), method.descriptor(), method.isInterface()),
 						() -> cb.invokedynamic(DynamicCallSiteDesc.of(BSM_LAMBDA_METAFACTORY, "step", MethodTypeDesc.of(CD_TRAMPOLINE_THUNK, method.descriptor().parameterArray()), MethodTypeDesc.of(CD_TRAMPOLINE), MethodHandleDesc.ofMethod(method.isInterface() ? DirectMethodHandleDesc.Kind.INTERFACE_STATIC : DirectMethodHandleDesc.Kind.STATIC, method.definingClass(), method.methodName(), method.descriptor()), MethodTypeDesc.of(CD_TRAMPOLINE))));
@@ -1683,13 +1698,19 @@ final class Emitter {
 				case Instruction.InstanceMethodCall call -> {
 					var methodInfo = program.getMethodInfo(call.methodId());
 					var ownerIsInterface = call.instanceType() instanceof Token.Trait;
+					var parameterTypes = methodInfo.descriptor().parameterList();
 
 					loadRegister(call.instanceObject());
 					for(var tokenArg : call.tokenArgs()) {
 						emitTokenValue(tokenArg);
 					}
-					for(var arg : call.args()) {
+					for(int i = 0; i < call.args().size(); ++i) {
+						var arg = call.args().get(i);
 						loadRegister(arg);
+						var expectedType = parameterTypes.get(call.tokenArgs().size() + i);
+						if(expectedType.equals(ConstantDescs.CD_Object) && !registerType(arg).equals(ConstantDescs.CD_Object)) {
+							boxValue(registerToken(arg));
+						}
 					}
 
 					emitFunctionResult(
@@ -2342,7 +2363,7 @@ final class Emitter {
 					}
 					else {
 						var elementType = tokenAsClassDesc(arrayCreate.elementType());
-						var elementKind = TypeKind.from(elementType).asLoadable();
+						var elementKind = TypeKind.from(elementType);
 
 						loadBigIntegerAsInt(arrayCreate.length());
 						if(elementKind == TypeKind.REFERENCE) {
@@ -3414,7 +3435,7 @@ final class Emitter {
 		}
 
 		private TypeKind arrayElementKind(Token elementType) {
-			return TypeKind.from(tokenAsClassDesc(elementType)).asLoadable();
+			return TypeKind.from(tokenAsClassDesc(elementType));
 		}
 
 		private void emitFinally(Region.Finally finallyRegion) {

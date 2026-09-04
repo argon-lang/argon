@@ -192,12 +192,21 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
             let scope = self.closure.scope();
             let access_token = self.access_token();
             let owner_ref: Arc<dyn Method> = self.clone();
-            let owner: ExpressionOwner<DefaultExprContext> = ExpressionOwner::Method(owner_ref);
+            let owner: ExpressionOwner<DefaultExprContext> =
+                ExpressionOwner::Method(owner_ref.clone());
+            let receiver_scope = InstanceParameterScope::new(
+                scope,
+                InstanceParameterVariable {
+                    owner: ExpressionOwner::Method(owner_ref),
+                    var_type: self.receiver_type(),
+                    name: self.metadata.instance_parameter.name.clone(),
+                },
+            );
 
             Arc::new(
                 SignatureParser {
                     context: self.context.clone(),
-                    scope: &scope,
+                    scope: &receiver_scope,
                     access_token,
                     owner,
                 }
