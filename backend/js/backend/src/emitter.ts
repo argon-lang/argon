@@ -20,7 +20,6 @@ export interface EmitOptions {
     readonly executable?: string | undefined,
 }
 
-
 abstract class TokenEmitter {
     constructor(moduleEmitter: ModuleEmitter) {
         this.#moduleEmitter = moduleEmitter;
@@ -837,7 +836,6 @@ class ModuleEmitter extends EmitterBase {
 
 
     private getExprForImports(extern: JsExtern): ReadonlyDeep<estree.Expression> {
-        const node = extern.declaration;
         const body: ReadonlyDeep<estree.Statement>[] = [];
 
         for(const importedId of extern.imports) {
@@ -884,38 +882,87 @@ class ModuleEmitter extends EmitterBase {
             });
         }
 
-        const funcExpr: ReadonlyDeep<estree.FunctionExpression> = {
-            type: "FunctionExpression",
-            id: node.id,
-            params: node.params,
-            body: node.body,
-            generator: node.generator,
-            async: node.async,
-        };
+        body.push({ type: "ReturnStatement", argument: extern.declaration });
 
-        if(body.length === 0) {
-            return funcExpr;
-        }
-        else {
-            body.push({
-                type: "ReturnStatement",
-                argument: funcExpr,
-            });
-
-            return {
-                type: "CallExpression",
-                callee: {
-                    type: "FunctionExpression",
-                    params: [],
-                    body: {
-                        type: "BlockStatement",
-                        body,
-                    },
+        const implementationName = "__argonExternImplementation";
+        const argumentsName = "__argonExternArguments";
+        return {
+            type: "CallExpression",
+            callee: {
+                type: "FunctionExpression",
+                params: [],
+                body: {
+                    type: "BlockStatement",
+                    body: [
+                        {
+                            type: "VariableDeclaration",
+                            kind: "let",
+                            declarations: [{
+                                type: "VariableDeclarator",
+                                id: { type: "Identifier", name: implementationName },
+                                init: { type: "Literal", value: null },
+                            }],
+                        },
+                        {
+                            type: "ReturnStatement",
+                            argument: {
+                                type: "FunctionExpression",
+                                params: [{
+                                    type: "RestElement",
+                                    argument: { type: "Identifier", name: argumentsName },
+                                }],
+                                body: {
+                                    type: "BlockStatement",
+                                    body: [
+                                        {
+                                            type: "IfStatement",
+                                            test: {
+                                                type: "BinaryExpression",
+                                                operator: "===",
+                                                left: { type: "Identifier", name: implementationName },
+                                                right: { type: "Literal", value: null },
+                                            },
+                                            consequent: {
+                                                type: "ExpressionStatement",
+                                                expression: {
+                                                    type: "AssignmentExpression",
+                                                    operator: "=",
+                                                    left: { type: "Identifier", name: implementationName },
+                                                    right: {
+                                                        type: "CallExpression",
+                                                        callee: {
+                                                            type: "FunctionExpression",
+                                                            params: [],
+                                                            body: { type: "BlockStatement", body },
+                                                        },
+                                                        arguments: [],
+                                                        optional: false,
+                                                    },
+                                                },
+                                            },
+                                        },
+                                        {
+                                            type: "ReturnStatement",
+                                            argument: {
+                                                type: "CallExpression",
+                                                callee: { type: "Identifier", name: implementationName },
+                                                arguments: [{
+                                                    type: "SpreadElement",
+                                                    argument: { type: "Identifier", name: argumentsName },
+                                                }],
+                                                optional: false,
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    ],
                 },
-                arguments: [],
-                optional: false,
-            };
-        }
+            },
+            arguments: [],
+            optional: false,
+        };
     }
 
     private objectProperty(name: string, value: ReadonlyDeep<estree.Expression>): ReadonlyDeep<estree.Property> {

@@ -171,33 +171,20 @@ class ModuleExternLoader {
             throw new Error("externFunction name must be a string literal.");
         }
 
-        if(funcArg.type !== "FunctionExpression") {
-            throw new Error("externFunction implementation must be a function expression.");
+        if(funcArg.type === "SpreadElement") {
+            throw new Error("externFunction implementation must be an expression.");
         }
-
-        const funcDecl = this.functionExpressionToDeclaration(funcArg);
 
         return {
             name: nameArg.value,
-            extern: this.buildExternFunction(funcDecl),
+            extern: this.buildExternFunction(funcArg),
         };
     }
 
-    private functionExpressionToDeclaration(func: ReadonlyDeep<estree.FunctionExpression>): ReadonlyDeep<estree.FunctionDeclaration> {
-        return {
-            type: "FunctionDeclaration",
-            id: func.id ?? { type: "Identifier", name: "__argonExtern" },
-            params: func.params,
-            body: func.body,
-            generator: func.generator,
-            async: func.async,
-        };
-    }
-
-    private buildExternFunction(func: ReadonlyDeep<estree.FunctionDeclaration>): JsExtern {
+    private buildExternFunction(declaration: ReadonlyDeep<estree.Expression>): JsExtern {
         const freeVars = new Set<string>();
         const scanner = new FreeVariableScanner(new Set(), freeVars);
-        scanner.scan(func);
+        scanner.scan(declaration);
 
         const referencedImports: ImportedId[] = [];
 
@@ -212,7 +199,7 @@ class ModuleExternLoader {
 
         return {
             $type: "js-function",
-            declaration: func,
+            declaration,
             imports: referencedImports,
         };
     }
@@ -400,7 +387,7 @@ abstract class VariableScannerBase {
                         continue;
                     }
                     
-                    this.traverse(node);
+                    this.traverse(element);
                 }
                 break;
 

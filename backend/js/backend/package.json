@@ -7,7 +7,8 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc --project ."
+    "build": "tsc --project .",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "exports": {
     ".": "./lib/index.js"

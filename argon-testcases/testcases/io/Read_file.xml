@@ -1,0 +1,46 @@
+<ArgonTest>
+    <Name>Read file</Name>
+    <Libraries>
+        <Library>Argon.IO</Library>
+    </Libraries>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+
+        import Argon.Core::*
+        import Argon.IO::*
+
+        proc main(): () do
+            let path = Path.from_string "input.bin"
+            puts path.display
+
+            let resource = path.open_read
+            let stream = resource.resource
+            let data = Array.newFilled 7 42u8
+            if data.length >= 7 then
+                let count = stream.read data 1 5
+                puts (count.to_s())
+                puts (data[0].to_s())
+                puts (data[1].to_s())
+                puts (data[2].to_s())
+                puts (data[3].to_s())
+                puts (data[4].to_s())
+                puts (data[5].to_s())
+                puts (data[6].to_s())
+                let eof_count = stream.read data 0 1
+                puts (eof_count.to_s())
+            end
+            resource.close ()
+        end
+    ]]></InputSource>
+    <ResourceFile name="input.bin" encoding="base64">AAF/gP8=</ResourceFile>
+    <ExpectedOutput>input.bin
+5
+42
+0
+1
+127
+128
+255
+42
+0</ExpectedOutput>
+</ArgonTest>

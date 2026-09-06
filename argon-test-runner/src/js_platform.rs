@@ -195,6 +195,7 @@ impl CompileTargetPlatform for JSPlatform {
 
         let output = subprocess::Exec::cmd("node")
             .arg(&main_path)
+            .cwd(test_context.run_dir())
             .stderr(subprocess::Redirection::Merge)
             .capture()
             .unwrap();

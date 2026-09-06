@@ -1,7 +1,6 @@
 import type * as estree from "estree";
 import {type DecodeResult, ESExpr, type ESExprCodec, type ESExprTagSet} from "@argon-lang/esexpr";
 import * as esexpr from "@argon-lang/esexpr";
-import type {FunctionDeclaration} from "estree";
 import type {ReadonlyDeep} from "type-fest";
 
 
@@ -311,32 +310,61 @@ const nodeCodec: ESExprCodec<ReadonlyDeep<estree.Node>> = {
 } satisfies ESExprCodec<EStreeRepr> as unknown as ESExprCodec<estree.Node>;
 
 
-export type EstreeFunctionDeclaration = ReadonlyDeep<estree.FunctionDeclaration>;
+export type EstreeExpression = ReadonlyDeep<estree.Expression>;
 
-export namespace EstreeFunctionDeclaration {
-    export const codec: ESExprCodec<ReadonlyDeep<estree.FunctionDeclaration>> = {
+export namespace EstreeExpression {
+
+    const estreeExprTypes = Object.keys({
+        ArrayExpression: "ArrayExpression",
+        ArrowFunctionExpression: "ArrowFunctionExpression",
+        AssignmentExpression: "AssignmentExpression",
+        AwaitExpression: "AwaitExpression",
+        BinaryExpression: "BinaryExpression",
+        CallExpression: "CallExpression",
+        ChainExpression: "ChainExpression",
+        ClassExpression: "ClassExpression",
+        ConditionalExpression: "ConditionalExpression",
+        FunctionExpression: "FunctionExpression",
+        Identifier: "Identifier",
+        ImportExpression: "ImportExpression",
+        Literal: "Literal",
+        LogicalExpression: "LogicalExpression",
+        MemberExpression: "MemberExpression",
+        MetaProperty: "MetaProperty",
+        NewExpression: "NewExpression",
+        ObjectExpression: "ObjectExpression",
+        SequenceExpression: "SequenceExpression",
+        TaggedTemplateExpression: "TaggedTemplateExpression",
+        TemplateLiteral: "TemplateLiteral",
+        ThisExpression: "ThisExpression",
+        UnaryExpression: "UnaryExpression",
+        UpdateExpression: "UpdateExpression",
+        YieldExpression: "YieldExpression",
+    } satisfies { [Type in estree.Expression["type"]]: Type }) as readonly estree.Expression["type"][];
+
+    export const codec: ESExprCodec<ReadonlyDeep<estree.Expression>> = {
         get tags(): ESExprTagSet {
-            return new Set(["FunctionDeclaration"]);
+            return new Set(estreeExprTypes);
         },
 
-        isEncodedEqual(a: FunctionDeclaration, b: FunctionDeclaration): boolean {
+        isEncodedEqual(a: ReadonlyDeep<estree.Expression>, b: ReadonlyDeep<estree.Expression>): boolean {
             return nodeCodec.isEncodedEqual(a, b);
         },
 
-        encode(value: FunctionDeclaration): ESExpr {
+        encode(value: ReadonlyDeep<estree.Expression>): ESExpr {
             return nodeCodec.encode(value);
         },
 
-        decode(expr: ESExpr): DecodeResult<ReadonlyDeep<FunctionDeclaration>> {
-            let result = nodeCodec.decode(expr);
+        decode(expr: ESExpr): DecodeResult<ReadonlyDeep<estree.Expression>> {
+            const result = nodeCodec.decode(expr);
             if(!result.success) {
                 return result;
             }
 
-            if(result.value.type !== "FunctionDeclaration") {
+            if(!estreeExprTypes.includes(result.value.type as estree.Expression["type"])) {
                 return {
                     success: false,
-                    message: "Expected FunctionDeclaration node, got " + result.value.type,
+                    message: "Expected expression node, got " + result.value.type,
                     path: {
                         type: "current",
                     },
@@ -345,9 +373,8 @@ export namespace EstreeFunctionDeclaration {
 
             return {
                 success: true,
-                value: result.value,
+                value: result.value as ReadonlyDeep<estree.Expression>,
             };
         },
     };
 }
-

@@ -324,6 +324,35 @@ pub struct TestContext<P: CompileTargetPlatform, R: CommandRunner + CommandRunne
 }
 
 impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> TestContext<P, R> {
+    pub fn run_dir(&self) -> PathBuf {
+        self.test_data_dir.join("run")
+    }
+
+    pub fn stage_resource_files(&self) {
+        let run_dir = self.run_dir();
+        std::fs::create_dir_all(&run_dir).unwrap_or_else(|err| {
+            panic!(
+                "Creating test working directory {} failed: {err}",
+                run_dir.display()
+            )
+        });
+
+        for resource in &self.test_case.1.resource_files {
+            let path = run_dir.join(&resource.name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).unwrap_or_else(|err| {
+                    panic!(
+                        "Creating resource directory {} failed: {err}",
+                        parent.display()
+                    )
+                });
+            }
+            std::fs::write(&path, &resource.contents).unwrap_or_else(|err| {
+                panic!("Writing resource file {} failed: {err}", path.display())
+            });
+        }
+    }
+
     pub fn referenced_libraries(&self) -> Vec<String> {
         self.test_suite_context
             .referenced_libraries(&self.test_case.1.libraries)
@@ -542,6 +571,7 @@ fn run_test<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P
     };
     let platform = context.test_suite_context.platform.clone();
     platform.clone().codegen(&context);
+    context.stage_resource_files();
     let result = platform.run(&context);
 
     assert!(

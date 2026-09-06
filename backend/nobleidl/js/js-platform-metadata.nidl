@@ -10,12 +10,13 @@ record js-platform-tube-metadata {
 }
 
 @esexpr:(derive-codec)
-extern type estree-function-declaration;
+extern type estree-expression;
+
 
 @esexpr:(derive-codec)
 enum js-extern {
     js-function {
-        declaration: estree-function-declaration;
+        declaration: estree-expression;
         @esexpr:(keyword)
         imports: list[imported-id];
     },

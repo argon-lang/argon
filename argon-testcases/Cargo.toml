@@ -4,6 +4,7 @@ publish = false
 edition = "2024"
 
 [dependencies]
+base64 = { workspace = true }
 quick-xml = { workspace = true, features = ["serialize"] }
 rstest = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

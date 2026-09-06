@@ -2,6 +2,7 @@ module _
 
 import Argon.Core::Array::*
 import Argon.Core::Int::*
+import Argon.Core::String::*
 import Argon.Core::U8::*
 
 public trait Resource (token T: type)
@@ -10,9 +11,17 @@ public trait Resource (token T: type)
 end
 
 public trait InputStream
-    public proc _.read(array: use mut Array U8)(offset: Int)(count: Int)(requires erased ev: ((offset >= 0 && count >= 0 && offset + count <= array.length) == true)): Int ensures ((result >= 0 && result <= count) == true) = abstract
+    public proc _.read(array: Array U8)(offset: Int)(count: Int)(requires erased ev: ((offset >= 0 && count >= 0 && offset + count <= array.length) == true)): Int = abstract
 end
 
 public trait OutputStream
-    public proc _.write(array: use Array U8)(offset: Int)(count: Int)(requires erased ev: ((offset >= 0 && count >= 0 && offset + count <= array.length) == true)): () = abstract
+    public proc _.write(array: Array U8)(offset: Int)(count: Int)(requires erased ev: ((offset >= 0 && count >= 0 && offset + count <= array.length) == true)): () = abstract
+end
+
+public trait Path
+    public def _.display: String = abstract
+    public proc _.open_read: Resource InputStream = abstract
+    public proc _.open_write: Resource OutputStream = abstract
+
+    public def static.from_string(path: String): Path = extern path_from_string
 end
