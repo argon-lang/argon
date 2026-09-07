@@ -1,0 +1,10 @@
+[package]
+name = "argon-z3"
+publish = false
+edition = "2024"
+
+[dependencies]
+z3-sys = { workspace = true }
+
+[lints]
+workspace = true

@@ -6,51 +6,52 @@ use alloc::vec::Vec;
 use argon_expr::{
     Builtin, Expr, ExprContext, IntegerType, LocatedExpr, RecordFieldLiteral, Variable,
 };
-use core::str::FromStr;
-use hashbrown::{HashMap, HashSet};
-use z3::ast::{self, Ast, BV, Bool, Dynamic, Int, Seq, String as Z3String};
-use z3::{
-    DatatypeAccessor, DatatypeBuilder, DatatypeSort, DatatypeVariant, FuncDecl, Params, Pattern,
-    Solver, Sort,
+use argon_z3::ast::{self, Ast, BV, Bool, Dynamic, Int, Seq, String as Z3String};
+use argon_z3::{
+    Context as Z3Context, DatatypeAccessor, DatatypeBuilder, DatatypeSort, DatatypeVariant,
+    FuncDecl, Params, Pattern, Solver, Sort,
 };
+use hashbrown::{HashMap, HashSet};
 
 const EXPECTED_TYPE: &str = "ExpectedType";
 
 pub struct Z3Expr<
+    'z3,
     EC: ExprContext<Enum = Arc<dyn Enum>, EnumVariant = Arc<dyn EnumVariant>> + ?Sized,
 > {
-    solver: Solver,
-    argon_value_sort: ArgonValueSort,
-    expected_type_sort: ExpectedTypeSort,
-    is_variant_of_enum: FuncDecl,
-    inhabited: FuncDecl,
-    opaque_values: HashMap<LocatedExpr<EC>, Dynamic>,
+    solver: Solver<'z3>,
+    argon_value_sort: ArgonValueSort<'z3>,
+    expected_type_sort: ExpectedTypeSort<'z3>,
+    is_variant_of_enum: FuncDecl<'z3>,
+    inhabited: FuncDecl<'z3>,
+    opaque_values: HashMap<LocatedExpr<EC>, Dynamic<'z3>>,
     asserted_enums: HashSet<Arc<dyn Enum>>,
-    enum_terms: HashMap<Arc<dyn Enum>, Dynamic>,
-    enum_variant_terms: HashMap<Arc<dyn EnumVariant>, Dynamic>,
-    instance_terms: HashMap<EC::Instance, Dynamic>,
-    record_terms: HashMap<EC::Record, Dynamic>,
-    variable_terms: HashMap<Variable<EC>, Dynamic>,
+    enum_terms: HashMap<Arc<dyn Enum>, Dynamic<'z3>>,
+    enum_variant_terms: HashMap<Arc<dyn EnumVariant>, Dynamic<'z3>>,
+    instance_terms: HashMap<EC::Instance, Dynamic<'z3>>,
+    record_terms: HashMap<EC::Record, Dynamic<'z3>>,
+    variable_terms: HashMap<Variable<EC>, Dynamic<'z3>>,
 }
 
-struct ConstructorAxiomArg<'a> {
+struct ConstructorAxiomArg<'a, 'z3> {
     name: &'static str,
-    sort: Sort,
-    accessor: Option<&'a FuncDecl>,
+    sort: Sort<'z3>,
+    accessor: Option<&'a FuncDecl<'z3>>,
 }
 
 impl<
+    'z3,
     EC: ExprContext<
             Enum = Arc<dyn Enum>,
             EnumVariant = Arc<dyn EnumVariant>,
             Record = Arc<dyn Record>,
             RecordField = Arc<dyn RecordField>,
         > + ?Sized,
-> Z3Expr<EC>
+> Z3Expr<'z3, EC>
 {
     #[must_use]
-    pub fn new(context: Context) -> Self {
-        let argon_value_sort = ArgonValueSort::new();
+    pub fn new(z3: &'z3 Z3Context, context: Context) -> Self {
+        let argon_value_sort = ArgonValueSort::new(z3);
         let expected_type_sort = ExpectedTypeSort::new(&argon_value_sort.value);
         let is_variant_of_enum = FuncDecl::new(
             "is_variant_of_enum",
@@ -58,16 +59,16 @@ impl<
                 &argon_value_sort.enum_sort,
                 &argon_value_sort.enum_variant_sort,
             ],
-            &Sort::bool(),
+            &Sort::bool(z3),
         );
         let inhabited = FuncDecl::new(
             "argon_value_inhabited",
             &[&argon_value_sort.value],
-            &Sort::bool(),
+            &Sort::bool(z3),
         );
 
         let result = Self {
-            solver: Solver::new(),
+            solver: Solver::new(z3),
             argon_value_sort,
             expected_type_sort,
             is_variant_of_enum,
@@ -80,7 +81,7 @@ impl<
             record_terms: HashMap::new(),
             variable_terms: HashMap::new(),
         };
-        let mut params = Params::new();
+        let mut params = Params::new(z3);
         params.set_u32("rlimit", context.z3_rlimit());
         result.solver.set_params(&params);
         result.assert_argon_value_constructor_disjointness();
@@ -89,38 +90,47 @@ impl<
     }
 
     #[must_use]
-    pub fn solver(&self) -> &Solver {
+    pub fn solver(&self) -> &Solver<'z3> {
         &self.solver
     }
 
+    fn z3(&self) -> &'z3 Z3Context {
+        self.argon_value_sort.value.context()
+    }
+
     #[must_use]
-    pub fn argon_value_sort(&self) -> &ArgonValueSort {
+    pub fn z3_context(&self) -> &'z3 Z3Context {
+        self.z3()
+    }
+
+    #[must_use]
+    pub fn argon_value_sort(&self) -> &ArgonValueSort<'z3> {
         &self.argon_value_sort
     }
 
     #[must_use]
-    pub fn expected_type_sort(&self) -> &ExpectedTypeSort {
+    pub fn expected_type_sort(&self) -> &ExpectedTypeSort<'z3> {
         &self.expected_type_sort
     }
 
     #[must_use]
-    pub fn is_variant_of_enum_func(&self) -> &FuncDecl {
+    pub fn is_variant_of_enum_func(&self) -> &FuncDecl<'z3> {
         &self.is_variant_of_enum
     }
 
     #[must_use]
-    pub fn inhabited_func(&self) -> &FuncDecl {
+    pub fn inhabited_func(&self) -> &FuncDecl<'z3> {
         &self.inhabited
     }
 
     #[must_use]
-    pub fn is_variant_of_enum(&self, enum_: &impl Ast, variant: &impl Ast) -> Bool {
+    pub fn is_variant_of_enum(&self, enum_: &impl Ast<'z3>, variant: &impl Ast<'z3>) -> Bool<'z3> {
         dynamic_to_bool(self.is_variant_of_enum.apply(&[enum_, variant]))
     }
 
-    pub fn inhabited(&mut self, expr: &LocatedExpr<EC>) -> Bool {
+    pub fn inhabited(&mut self, expr: &LocatedExpr<EC>) -> Bool<'z3> {
         match &expr.value {
-            Expr::Builtin(Builtin::NeverType) => Bool::from_bool(false),
+            Expr::Builtin(Builtin::NeverType) => Bool::from_bool(self.z3(), false),
             Expr::ConjunctionType { lhs, rhs } => {
                 let lhs = self.inhabited(lhs);
                 let rhs = self.inhabited(rhs);
@@ -139,7 +149,7 @@ impl<
             Expr::EqualToType { lhs, rhs, .. } => {
                 let lhs = self.expr_to_z3(lhs);
                 let rhs = self.expr_to_z3(rhs);
-                lhs.eq(&rhs)
+                lhs.equals(&rhs)
             }
             Expr::BoxedType(t) => self.inhabited(t),
             Expr::BindEnsures { value, .. } | Expr::BindErasedAlias { value, .. } => {
@@ -157,7 +167,7 @@ impl<
         }
     }
 
-    pub fn enum_variant_arg(&self, value: &impl Ast, index: usize) -> Dynamic {
+    pub fn enum_variant_arg(&self, value: &impl Ast<'z3>, index: usize) -> Dynamic<'z3> {
         let args = self
             .argon_value_sort
             .value_accessors
@@ -168,7 +178,11 @@ impl<
         args.nth(index as u64)
     }
 
-    pub fn enum_field(&mut self, value: &impl Ast, field: &Arc<dyn RecordField>) -> Dynamic {
+    pub fn enum_field(
+        &mut self,
+        value: &impl Ast<'z3>,
+        field: &Arc<dyn RecordField>,
+    ) -> Dynamic<'z3> {
         let fields = self
             .argon_value_sort
             .value_accessors
@@ -179,7 +193,7 @@ impl<
         fields.nth(record_field_index(field) as u64)
     }
 
-    fn enum_cached_term(&mut self, enum_: &Arc<dyn Enum>) -> Dynamic {
+    fn enum_cached_term(&mut self, enum_: &Arc<dyn Enum>) -> Dynamic<'z3> {
         let id = self.enum_terms.len();
         self.enum_terms
             .entry(enum_.clone())
@@ -189,7 +203,7 @@ impl<
             .clone()
     }
 
-    fn enum_variant_cached_term(&mut self, variant: &Arc<dyn EnumVariant>) -> Dynamic {
+    fn enum_variant_cached_term(&mut self, variant: &Arc<dyn EnumVariant>) -> Dynamic<'z3> {
         let id = self.enum_variant_terms.len();
         self.enum_variant_terms
             .entry(variant.clone())
@@ -202,7 +216,7 @@ impl<
             .clone()
     }
 
-    fn instance_term(&mut self, instance: &EC::Instance) -> Dynamic {
+    fn instance_term(&mut self, instance: &EC::Instance) -> Dynamic<'z3> {
         let id = self.instance_terms.len();
         self.instance_terms
             .entry(instance.clone())
@@ -215,7 +229,7 @@ impl<
             .clone()
     }
 
-    fn record_term(&mut self, record: &EC::Record) -> Dynamic {
+    fn record_term(&mut self, record: &EC::Record) -> Dynamic<'z3> {
         let id = self.record_terms.len();
         self.record_terms
             .entry(record.clone())
@@ -228,7 +242,7 @@ impl<
             .clone()
     }
 
-    fn variable_term(&mut self, variable: &Variable<EC>) -> Dynamic {
+    fn variable_term(&mut self, variable: &Variable<EC>) -> Dynamic<'z3> {
         let id = self.variable_terms.len();
         let mut is_new = false;
 
@@ -248,17 +262,17 @@ impl<
         c
     }
 
-    pub fn enum_term(&mut self, enum_: &Arc<dyn Enum>) -> Dynamic {
+    pub fn enum_term(&mut self, enum_: &Arc<dyn Enum>) -> Dynamic<'z3> {
         let term = self.enum_cached_term(enum_);
         self.assert_exactly_one_variant_of_enum(enum_.clone());
         term
     }
 
-    pub fn enum_variant_term(&mut self, variant: &Arc<dyn EnumVariant>) -> Dynamic {
+    pub fn enum_variant_term(&mut self, variant: &Arc<dyn EnumVariant>) -> Dynamic<'z3> {
         self.enum_variant_cached_term(variant)
     }
 
-    fn assert_variable_type(&mut self, c: &Dynamic, t: &LocatedExpr<EC>) {
+    fn assert_variable_type(&mut self, c: &Dynamic<'z3>, t: &LocatedExpr<EC>) {
         match &t.value {
             Expr::Builtin(Builtin::IntType { integer_type }) => {
                 let tester = match integer_type {
@@ -300,7 +314,7 @@ impl<
                     .value_accessors
                     .record_literal_record
                     .apply(&[c])
-                    .eq(&self.record_term(&record_type.record));
+                    .equals(&self.record_term(&record_type.record));
 
                 self.solver.assert(record_assertion);
             }
@@ -317,7 +331,7 @@ impl<
                     .value_accessors
                     .enum_variant_literal_enum
                     .apply(&[c])
-                    .eq(&self.enum_term(&enum_type.enum_));
+                    .equals(&self.enum_term(&enum_type.enum_));
 
                 self.solver.assert(enum_assertion);
             }
@@ -366,12 +380,16 @@ impl<
             .iter()
             .map(|declared_variant| {
                 let declared_variant = self.enum_variant_term(declared_variant);
-                variant.eq(&declared_variant)
+                variant.equals(&declared_variant)
             })
             .collect::<Vec<_>>();
         let declared_variant_match_refs = declared_variant_matches.iter().collect::<Vec<_>>();
-        let declared_variant_match = Bool::or(&declared_variant_match_refs);
-        let body = membership.eq(&declared_variant_match);
+        let declared_variant_match = if declared_variant_match_refs.is_empty() {
+            Bool::from_bool(self.z3(), false)
+        } else {
+            Bool::or(&declared_variant_match_refs)
+        };
+        let body = membership.equals(&declared_variant_match);
         let pattern = Pattern::new(&[&membership]);
 
         self.solver
@@ -408,14 +426,14 @@ impl<
         );
         let lhs_testers = self.argon_value_sort.value_tester_terms(&lhs);
         let rhs_testers = self.argon_value_sort.value_tester_terms(&rhs);
-        let same_constructor_results = Bool::and(
-            &lhs_testers
-                .iter()
-                .zip(&rhs_testers)
-                .map(|(lhs_tester, rhs_tester)| lhs_tester.eq(rhs_tester))
-                .collect::<Vec<_>>(),
-        );
-        let assertion = lhs.eq(&rhs).implies(&same_constructor_results);
+        let same_constructor_results = lhs_testers
+            .iter()
+            .zip(&rhs_testers)
+            .map(|(lhs_tester, rhs_tester)| lhs_tester.equals(rhs_tester))
+            .collect::<Vec<_>>();
+        let same_constructor_results =
+            Bool::and(&same_constructor_results.iter().collect::<Vec<_>>());
+        let assertion = lhs.equals(&rhs).implies(&same_constructor_results);
 
         self.solver
             .assert(ast::forall_const(&[&lhs, &rhs], &[], &assertion));
@@ -430,7 +448,7 @@ impl<
             &sort.value_testers.bool_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bool(),
+                sort: Sort::bool(self.argon_value_sort.value.context()),
                 accessor: Some(&sort.value_accessors.bool_literal_value),
             }],
         );
@@ -440,7 +458,7 @@ impl<
             &sort.value_testers.int_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::int(),
+                sort: Sort::int(self.argon_value_sort.value.context()),
                 accessor: Some(&sort.value_accessors.int_literal_value),
             }],
         );
@@ -450,7 +468,7 @@ impl<
             &sort.value_testers.u8_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(8),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 8),
                 accessor: Some(&sort.value_accessors.u8_literal_value),
             }],
         );
@@ -460,7 +478,7 @@ impl<
             &sort.value_testers.i8_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(8),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 8),
                 accessor: Some(&sort.value_accessors.i8_literal_value),
             }],
         );
@@ -470,7 +488,7 @@ impl<
             &sort.value_testers.u16_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(16),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 16),
                 accessor: Some(&sort.value_accessors.u16_literal_value),
             }],
         );
@@ -480,7 +498,7 @@ impl<
             &sort.value_testers.i16_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(16),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 16),
                 accessor: Some(&sort.value_accessors.i16_literal_value),
             }],
         );
@@ -490,7 +508,7 @@ impl<
             &sort.value_testers.u32_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(32),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 32),
                 accessor: Some(&sort.value_accessors.u32_literal_value),
             }],
         );
@@ -500,7 +518,7 @@ impl<
             &sort.value_testers.i32_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(32),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 32),
                 accessor: Some(&sort.value_accessors.i32_literal_value),
             }],
         );
@@ -510,7 +528,7 @@ impl<
             &sort.value_testers.u64_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(64),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 64),
                 accessor: Some(&sort.value_accessors.u64_literal_value),
             }],
         );
@@ -520,7 +538,7 @@ impl<
             &sort.value_testers.i64_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::bitvector(64),
+                sort: Sort::bitvector(self.argon_value_sort.value.context(), 64),
                 accessor: Some(&sort.value_accessors.i64_literal_value),
             }],
         );
@@ -530,7 +548,7 @@ impl<
             &sort.value_testers.string_literal,
             &[ConstructorAxiomArg {
                 name: "value",
-                sort: Sort::string(),
+                sort: Sort::string(self.argon_value_sort.value.context()),
                 accessor: Some(&sort.value_accessors.string_literal_value),
             }],
         );
@@ -621,7 +639,7 @@ impl<
             &sort.value_testers.big_type,
             &[ConstructorAxiomArg {
                 name: "level",
-                sort: Sort::int(),
+                sort: Sort::int(self.argon_value_sort.value.context()),
                 accessor: Some(&sort.value_accessors.big_type_level),
             }],
         );
@@ -647,9 +665,9 @@ impl<
     fn assert_value_constructor_axiom(
         &self,
         name: &str,
-        constructor: &FuncDecl,
-        tester: &FuncDecl,
-        args: &[ConstructorAxiomArg<'_>],
+        constructor: &FuncDecl<'z3>,
+        tester: &FuncDecl<'z3>,
+        args: &[ConstructorAxiomArg<'_, 'z3>],
     ) {
         let values = args
             .iter()
@@ -659,7 +677,7 @@ impl<
             .collect::<Vec<_>>();
         let value_refs = values
             .iter()
-            .map(|value| value as &dyn Ast)
+            .map(|value| value as &dyn Ast<'z3>)
             .collect::<Vec<_>>();
         let constructed = constructor.apply(&value_refs);
 
@@ -669,7 +687,7 @@ impl<
         assertions.push(tester_assertion);
         assertions.extend(args.iter().zip(&values).filter_map(|(arg, value)| {
             arg.accessor
-                .map(|accessor| accessor.apply(&[&constructed]).eq(value))
+                .map(|accessor| accessor.apply(&[&constructed]).equals(value))
         }));
 
         let assertion_refs = assertions.iter().collect::<Vec<_>>();
@@ -697,11 +715,11 @@ impl<
         {
             let accessed_value_refs = accessed_values
                 .iter()
-                .map(|value| value as &dyn Ast)
+                .map(|value| value as &dyn Ast<'z3>)
                 .collect::<Vec<_>>();
             let reconstructed = constructor.apply(&accessed_value_refs);
             let tester_assertion = dynamic_to_bool(tester.apply(&[&inverse_value]));
-            let inverse_assertion = tester_assertion.implies(&inverse_value.eq(&reconstructed));
+            let inverse_assertion = tester_assertion.implies(&inverse_value.equals(&reconstructed));
             let pattern = Pattern::new(&[&tester_assertion]);
 
             self.solver.assert(ast::forall_const(
@@ -723,19 +741,18 @@ impl<
                 .collect::<Vec<_>>();
             let value_refs_other = values_other
                 .iter()
-                .map(|value| value as &dyn Ast)
+                .map(|value| value as &dyn Ast<'z3>)
                 .collect::<Vec<_>>();
             let constructed_other = constructor.apply(&value_refs_other);
 
-            let args_equal = Bool::and(
-                &values
-                    .iter()
-                    .zip(&values_other)
-                    .map(|(value, value_other)| value.eq(value_other))
-                    .collect::<Vec<_>>(),
-            );
+            let args_equal = values
+                .iter()
+                .zip(&values_other)
+                .map(|(value, value_other)| value.equals(value_other))
+                .collect::<Vec<_>>();
+            let args_equal = Bool::and(&args_equal.iter().collect::<Vec<_>>());
 
-            let injective_assertion = constructed.eq(constructed_other).implies(args_equal);
+            let injective_assertion = constructed.equals(&constructed_other).implies(&args_equal);
 
             let both_value_refs = value_refs
                 .iter()
@@ -752,22 +769,22 @@ impl<
     }
 
     #[must_use]
-    pub fn expr_to_z3(&mut self, expr: &LocatedExpr<EC>) -> Dynamic {
+    pub fn expr_to_z3(&mut self, expr: &LocatedExpr<EC>) -> Dynamic<'z3> {
         self.expr_to_z3_value(expr)
             .unwrap_or_else(|| self.opaque_expr_value(expr))
     }
 
     #[must_use]
-    pub fn opaque_value_for_expr(&self, expr: &LocatedExpr<EC>) -> Option<&Dynamic> {
+    pub fn opaque_value_for_expr(&self, expr: &LocatedExpr<EC>) -> Option<&Dynamic<'z3>> {
         self.opaque_values.get(expr)
     }
 
     #[must_use]
-    pub fn opaque_values(&self) -> &HashMap<LocatedExpr<EC>, Dynamic> {
+    pub fn opaque_values(&self) -> &HashMap<LocatedExpr<EC>, Dynamic<'z3>> {
         &self.opaque_values
     }
 
-    fn expr_to_z3_value(&mut self, expr: &LocatedExpr<EC>) -> Option<Dynamic> {
+    fn expr_to_z3_value(&mut self, expr: &LocatedExpr<EC>) -> Option<Dynamic<'z3>> {
         match &expr.value {
             Expr::And(a, b) => {
                 let a = self.expr_to_z3(a);
@@ -781,7 +798,7 @@ impl<
                 ))
             }
             Expr::BoolLiteral(value) => {
-                let value = Bool::from_bool(*value);
+                let value = Bool::from_bool(self.z3(), *value);
                 Some(self.construct_value(
                     &self.argon_value_sort.value_constructors.bool_literal,
                     &[&value],
@@ -959,7 +976,7 @@ impl<
                         IntegerType::Int => {
                             let lhs = self.int_literal_value(&lhs);
                             let rhs = self.int_literal_value(&rhs);
-                            let value = Int::add(&[lhs, rhs]);
+                            let value = Int::add(&[&lhs, &rhs]);
                             Some(self.wrap_int_literal(&value))
                         }
                         IntegerType::I8 => {
@@ -1023,7 +1040,7 @@ impl<
                         IntegerType::Int => {
                             let lhs = self.int_literal_value(&lhs);
                             let rhs = self.int_literal_value(&rhs);
-                            let value = Int::sub(&[lhs, rhs]);
+                            let value = Int::sub(&[&lhs, &rhs]);
                             Some(self.wrap_int_literal(&value))
                         }
                         IntegerType::I8 => {
@@ -1087,7 +1104,7 @@ impl<
                         IntegerType::Int => {
                             let lhs = self.int_literal_value(&lhs);
                             let rhs = self.int_literal_value(&rhs);
-                            let value = Int::mul(&[lhs, rhs]);
+                            let value = Int::mul(&[&lhs, &rhs]);
                             Some(self.wrap_int_literal(&value))
                         }
                         IntegerType::I8 => {
@@ -1445,31 +1462,31 @@ impl<
                     let value = match integer_type {
                         IntegerType::Int => self
                             .int_literal_value(&lhs)
-                            .eq(&self.int_literal_value(&rhs)),
-                        IntegerType::I8 => {
-                            self.i8_literal_value(&lhs).eq(&self.i8_literal_value(&rhs))
-                        }
-                        IntegerType::U8 => {
-                            self.u8_literal_value(&lhs).eq(&self.u8_literal_value(&rhs))
-                        }
+                            .equals(&self.int_literal_value(&rhs)),
+                        IntegerType::I8 => self
+                            .i8_literal_value(&lhs)
+                            .equals(&self.i8_literal_value(&rhs)),
+                        IntegerType::U8 => self
+                            .u8_literal_value(&lhs)
+                            .equals(&self.u8_literal_value(&rhs)),
                         IntegerType::I16 => self
                             .i16_literal_value(&lhs)
-                            .eq(&self.i16_literal_value(&rhs)),
+                            .equals(&self.i16_literal_value(&rhs)),
                         IntegerType::U16 => self
                             .u16_literal_value(&lhs)
-                            .eq(&self.u16_literal_value(&rhs)),
+                            .equals(&self.u16_literal_value(&rhs)),
                         IntegerType::I32 => self
                             .i32_literal_value(&lhs)
-                            .eq(&self.i32_literal_value(&rhs)),
+                            .equals(&self.i32_literal_value(&rhs)),
                         IntegerType::U32 => self
                             .u32_literal_value(&lhs)
-                            .eq(&self.u32_literal_value(&rhs)),
+                            .equals(&self.u32_literal_value(&rhs)),
                         IntegerType::I64 => self
                             .i64_literal_value(&lhs)
-                            .eq(&self.i64_literal_value(&rhs)),
+                            .equals(&self.i64_literal_value(&rhs)),
                         IntegerType::U64 => self
                             .u64_literal_value(&lhs)
-                            .eq(&self.u64_literal_value(&rhs)),
+                            .equals(&self.u64_literal_value(&rhs)),
                     };
                     Some(self.wrap_bool_literal(&value))
                 }
@@ -1634,11 +1651,10 @@ impl<
                         })
                         .collect::<Vec<_>>();
                     let value = match values.as_slice() {
-                        [] => {
-                            Z3String::from_str("").expect("empty string must be a valid Z3 string")
-                        }
+                        [] => Z3String::from_str(self.z3(), "")
+                            .expect("empty string must be a valid Z3 string"),
                         [value] => value.clone(),
-                        values => Z3String::concat(values),
+                        values => Z3String::concat(&values.iter().collect::<Vec<_>>()),
                     };
                     Some(self.wrap_string_literal(&value))
                 }
@@ -1647,7 +1663,7 @@ impl<
                     let rhs = self.expr_to_z3(rhs);
                     let lhs = self.string_literal_value(&lhs);
                     let rhs = self.string_literal_value(&rhs);
-                    let value = lhs.eq(&rhs);
+                    let value = lhs.equals(&rhs);
                     Some(self.wrap_bool_literal(&value))
                 }
                 Builtin::BoolEq { lhs, rhs } => {
@@ -1655,48 +1671,48 @@ impl<
                     let rhs = self.expr_to_z3(rhs);
                     let lhs = self.bool_literal_value(&lhs);
                     let rhs = self.bool_literal_value(&rhs);
-                    let value = lhs.eq(&rhs);
+                    let value = lhs.equals(&rhs);
                     Some(self.wrap_bool_literal(&value))
                 }
                 _ => None,
             },
             Expr::IntLiteral(value) => {
-                let value = z3_int_from_big_int(value);
+                let value = z3_int_from_big_int(self.z3(), value);
                 Some(self.wrap_int_literal(&value))
             }
             Expr::I8Literal(value) => {
-                let value = BV::from_i64((*value).into(), 8);
+                let value = BV::from_i64(self.z3(), (*value).into(), 8);
                 Some(self.wrap_i8_literal(&value))
             }
             Expr::U8Literal(value) => {
-                let value = BV::from_u64((*value).into(), 8);
+                let value = BV::from_u64(self.z3(), (*value).into(), 8);
                 Some(self.wrap_u8_literal(&value))
             }
             Expr::I16Literal(value) => {
-                let value = BV::from_i64((*value).into(), 16);
+                let value = BV::from_i64(self.z3(), (*value).into(), 16);
                 Some(self.wrap_i16_literal(&value))
             }
             Expr::U16Literal(value) => {
-                let value = BV::from_u64((*value).into(), 16);
+                let value = BV::from_u64(self.z3(), (*value).into(), 16);
                 Some(self.wrap_u16_literal(&value))
             }
             Expr::I32Literal(value) => {
-                let value = BV::from_i64((*value).into(), 32);
+                let value = BV::from_i64(self.z3(), (*value).into(), 32);
                 Some(self.wrap_i32_literal(&value))
             }
             Expr::U32Literal(value) => {
-                let value = BV::from_u64((*value).into(), 32);
+                let value = BV::from_u64(self.z3(), (*value).into(), 32);
                 Some(self.wrap_u32_literal(&value))
             }
             Expr::I64Literal(value) => {
-                let value = BV::from_i64(*value, 64);
+                let value = BV::from_i64(self.z3(), *value, 64);
                 Some(self.wrap_i64_literal(&value))
             }
             Expr::U64Literal(value) => {
-                let value = BV::from_u64(*value, 64);
+                let value = BV::from_u64(self.z3(), *value, 64);
                 Some(self.wrap_u64_literal(&value))
             }
-            Expr::StringLiteral(value) => match Z3String::from_str(value) {
+            Expr::StringLiteral(value) => match Z3String::from_str(self.z3(), value) {
                 Ok(value) => Some(self.wrap_string_literal(&value)),
                 Err(_) => None,
             },
@@ -1776,7 +1792,7 @@ impl<
                 )
             }
             Expr::BigType(level) => {
-                let level = z3_int_from_big_int(level);
+                let level = z3_int_from_big_int(self.z3(), level);
                 Some(self.construct_value(
                     &self.argon_value_sort.value_constructors.big_type,
                     &[&level],
@@ -1803,7 +1819,7 @@ impl<
         }
     }
 
-    fn value_seq<'a>(&mut self, values: impl IntoIterator<Item = &'a LocatedExpr<EC>>) -> Seq
+    fn value_seq<'a>(&mut self, values: impl IntoIterator<Item = &'a LocatedExpr<EC>>) -> Seq<'z3>
     where
         EC: 'a,
     {
@@ -1821,7 +1837,7 @@ impl<
         &mut self,
         field_order: &[Arc<dyn RecordField>],
         values: &[RecordFieldLiteral<EC>],
-    ) -> Seq {
+    ) -> Seq<'z3> {
         let units = field_order
             .iter()
             .filter_map(|field| {
@@ -1837,7 +1853,7 @@ impl<
         concat_seq(&self.argon_value_sort.value, &units)
     }
 
-    fn bool_literal_value(&self, value: &impl Ast) -> Bool {
+    fn bool_literal_value(&self, value: &impl Ast<'z3>) -> Bool<'z3> {
         self.argon_value_sort
             .value_accessors
             .bool_literal_value
@@ -1846,7 +1862,7 @@ impl<
             .expect("bool literal accessor must return a Z3 bool")
     }
 
-    fn int_literal_value(&self, value: &impl Ast) -> Int {
+    fn int_literal_value(&self, value: &impl Ast<'z3>) -> Int<'z3> {
         self.argon_value_sort
             .value_accessors
             .int_literal_value
@@ -1855,7 +1871,7 @@ impl<
             .expect("int literal accessor must return a Z3 int")
     }
 
-    fn u8_literal_value(&self, value: &impl Ast) -> BV {
+    fn u8_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .u8_literal_value
@@ -1864,7 +1880,7 @@ impl<
             .expect("u8 literal accessor must return a Z3 bitvector")
     }
 
-    fn i8_literal_value(&self, value: &impl Ast) -> BV {
+    fn i8_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .i8_literal_value
@@ -1873,7 +1889,7 @@ impl<
             .expect("i8 literal accessor must return a Z3 bitvector")
     }
 
-    fn u16_literal_value(&self, value: &impl Ast) -> BV {
+    fn u16_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .u16_literal_value
@@ -1882,7 +1898,7 @@ impl<
             .expect("u16 literal accessor must return a Z3 bitvector")
     }
 
-    fn i16_literal_value(&self, value: &impl Ast) -> BV {
+    fn i16_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .i16_literal_value
@@ -1891,7 +1907,7 @@ impl<
             .expect("i16 literal accessor must return a Z3 bitvector")
     }
 
-    fn u32_literal_value(&self, value: &impl Ast) -> BV {
+    fn u32_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .u32_literal_value
@@ -1900,7 +1916,7 @@ impl<
             .expect("u32 literal accessor must return a Z3 bitvector")
     }
 
-    fn i32_literal_value(&self, value: &impl Ast) -> BV {
+    fn i32_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .i32_literal_value
@@ -1909,7 +1925,7 @@ impl<
             .expect("i32 literal accessor must return a Z3 bitvector")
     }
 
-    fn u64_literal_value(&self, value: &impl Ast) -> BV {
+    fn u64_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .u64_literal_value
@@ -1918,7 +1934,7 @@ impl<
             .expect("u64 literal accessor must return a Z3 bitvector")
     }
 
-    fn i64_literal_value(&self, value: &impl Ast) -> BV {
+    fn i64_literal_value(&self, value: &impl Ast<'z3>) -> BV<'z3> {
         self.argon_value_sort
             .value_accessors
             .i64_literal_value
@@ -1927,7 +1943,11 @@ impl<
             .expect("i64 literal accessor must return a Z3 bitvector")
     }
 
-    fn fixed_integer_literal_value(&self, integer_type: IntegerType, value: &impl Ast) -> BV {
+    fn fixed_integer_literal_value(
+        &self,
+        integer_type: IntegerType,
+        value: &impl Ast<'z3>,
+    ) -> BV<'z3> {
         match integer_type {
             IntegerType::I8 => self.i8_literal_value(value),
             IntegerType::U8 => self.u8_literal_value(value),
@@ -1961,7 +1981,11 @@ impl<
         }
     }
 
-    fn convert_fixed_integer_bv(source_type: IntegerType, dest_type: IntegerType, value: BV) -> BV {
+    fn convert_fixed_integer_bv(
+        source_type: IntegerType,
+        dest_type: IntegerType,
+        value: BV<'z3>,
+    ) -> BV<'z3> {
         let source_width = Self::fixed_integer_bit_width(source_type);
         let dest_width = Self::fixed_integer_bit_width(dest_type);
 
@@ -1979,7 +2003,7 @@ impl<
         }
     }
 
-    fn string_literal_value(&self, value: &impl Ast) -> Z3String {
+    fn string_literal_value(&self, value: &impl Ast<'z3>) -> Z3String<'z3> {
         self.argon_value_sort
             .value_accessors
             .string_literal_value
@@ -1988,77 +2012,81 @@ impl<
             .expect("string literal accessor must return a Z3 string")
     }
 
-    fn wrap_bool_literal(&self, value: &Bool) -> Dynamic {
+    fn wrap_bool_literal(&self, value: &Bool<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.bool_literal,
             &[value],
         )
     }
 
-    fn wrap_int_literal(&self, value: &Int) -> Dynamic {
+    fn wrap_int_literal(&self, value: &Int<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.int_literal,
             &[value],
         )
     }
 
-    fn wrap_u8_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_u8_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.u8_literal,
             &[value],
         )
     }
 
-    fn wrap_i8_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_i8_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.i8_literal,
             &[value],
         )
     }
 
-    fn wrap_u16_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_u16_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.u16_literal,
             &[value],
         )
     }
 
-    fn wrap_i16_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_i16_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.i16_literal,
             &[value],
         )
     }
 
-    fn wrap_u32_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_u32_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.u32_literal,
             &[value],
         )
     }
 
-    fn wrap_i32_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_i32_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.i32_literal,
             &[value],
         )
     }
 
-    fn wrap_u64_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_u64_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.u64_literal,
             &[value],
         )
     }
 
-    fn wrap_i64_literal(&self, value: &BV) -> Dynamic {
+    fn wrap_i64_literal(&self, value: &BV<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.i64_literal,
             &[value],
         )
     }
 
-    fn wrap_fixed_integer_literal(&self, integer_type: IntegerType, value: &BV) -> Dynamic {
+    fn wrap_fixed_integer_literal(
+        &self,
+        integer_type: IntegerType,
+        value: &BV<'z3>,
+    ) -> Dynamic<'z3> {
         match integer_type {
             IntegerType::I8 => self.wrap_i8_literal(value),
             IntegerType::U8 => self.wrap_u8_literal(value),
@@ -2072,14 +2100,14 @@ impl<
         }
     }
 
-    fn wrap_string_literal(&self, value: &Z3String) -> Dynamic {
+    fn wrap_string_literal(&self, value: &Z3String<'z3>) -> Dynamic<'z3> {
         self.construct_value(
             &self.argon_value_sort.value_constructors.string_literal,
             &[value],
         )
     }
 
-    fn opaque_expr_value(&mut self, expr: &LocatedExpr<EC>) -> Dynamic {
+    fn opaque_expr_value(&mut self, expr: &LocatedExpr<EC>) -> Dynamic<'z3> {
         let id = self.opaque_values.len();
         self.opaque_values
             .entry(expr.clone())
@@ -2089,135 +2117,175 @@ impl<
             .clone()
     }
 
-    fn construct_value(&self, constructor: &FuncDecl, args: &[&dyn Ast]) -> Dynamic {
+    fn construct_value(&self, constructor: &FuncDecl<'z3>, args: &[&dyn Ast<'z3>]) -> Dynamic<'z3> {
         constructor.apply(args)
     }
 }
 
-pub struct ArgonValueSort {
-    pub value: Sort,
-    pub value_seq: Sort,
-    pub value_constructors: ArgonValueConstructors,
-    pub value_testers: ArgonValueTesters,
-    pub value_accessors: ArgonValueAccessors,
-    pub record_sort: Sort,
-    pub enum_sort: Sort,
-    pub enum_variant_sort: Sort,
-    pub instance_sort: Sort,
+pub struct ArgonValueSort<'z3> {
+    pub value: Sort<'z3>,
+    pub value_seq: Sort<'z3>,
+    pub value_constructors: ArgonValueConstructors<'z3>,
+    pub value_testers: ArgonValueTesters<'z3>,
+    pub value_accessors: ArgonValueAccessors<'z3>,
+    pub record_sort: Sort<'z3>,
+    pub enum_sort: Sort<'z3>,
+    pub enum_variant_sort: Sort<'z3>,
+    pub instance_sort: Sort<'z3>,
 }
 
-pub struct ArgonValueConstructors {
-    pub bool_literal: FuncDecl,
-    pub int_literal: FuncDecl,
-    pub i8_literal: FuncDecl,
-    pub u8_literal: FuncDecl,
-    pub i16_literal: FuncDecl,
-    pub u16_literal: FuncDecl,
-    pub i32_literal: FuncDecl,
-    pub u32_literal: FuncDecl,
-    pub i64_literal: FuncDecl,
-    pub u64_literal: FuncDecl,
-    pub string_literal: FuncDecl,
-    pub record_literal: FuncDecl,
-    pub enum_variant_literal: FuncDecl,
-    pub new_instance: FuncDecl,
-    pub tuple: FuncDecl,
-    pub r#type: FuncDecl,
-    pub big_type: FuncDecl,
-    pub boxed: FuncDecl,
+pub struct ArgonValueConstructors<'z3> {
+    pub bool_literal: FuncDecl<'z3>,
+    pub int_literal: FuncDecl<'z3>,
+    pub i8_literal: FuncDecl<'z3>,
+    pub u8_literal: FuncDecl<'z3>,
+    pub i16_literal: FuncDecl<'z3>,
+    pub u16_literal: FuncDecl<'z3>,
+    pub i32_literal: FuncDecl<'z3>,
+    pub u32_literal: FuncDecl<'z3>,
+    pub i64_literal: FuncDecl<'z3>,
+    pub u64_literal: FuncDecl<'z3>,
+    pub string_literal: FuncDecl<'z3>,
+    pub record_literal: FuncDecl<'z3>,
+    pub enum_variant_literal: FuncDecl<'z3>,
+    pub new_instance: FuncDecl<'z3>,
+    pub tuple: FuncDecl<'z3>,
+    pub r#type: FuncDecl<'z3>,
+    pub big_type: FuncDecl<'z3>,
+    pub boxed: FuncDecl<'z3>,
 }
 
-pub struct ArgonValueTesters {
-    pub bool_literal: FuncDecl,
-    pub int_literal: FuncDecl,
-    pub i8_literal: FuncDecl,
-    pub u8_literal: FuncDecl,
-    pub i16_literal: FuncDecl,
-    pub u16_literal: FuncDecl,
-    pub i32_literal: FuncDecl,
-    pub u32_literal: FuncDecl,
-    pub i64_literal: FuncDecl,
-    pub u64_literal: FuncDecl,
-    pub string_literal: FuncDecl,
-    pub record_literal: FuncDecl,
-    pub enum_variant_literal: FuncDecl,
-    pub new_instance: FuncDecl,
-    pub tuple: FuncDecl,
-    pub r#type: FuncDecl,
-    pub big_type: FuncDecl,
-    pub boxed: FuncDecl,
+pub struct ArgonValueTesters<'z3> {
+    pub bool_literal: FuncDecl<'z3>,
+    pub int_literal: FuncDecl<'z3>,
+    pub i8_literal: FuncDecl<'z3>,
+    pub u8_literal: FuncDecl<'z3>,
+    pub i16_literal: FuncDecl<'z3>,
+    pub u16_literal: FuncDecl<'z3>,
+    pub i32_literal: FuncDecl<'z3>,
+    pub u32_literal: FuncDecl<'z3>,
+    pub i64_literal: FuncDecl<'z3>,
+    pub u64_literal: FuncDecl<'z3>,
+    pub string_literal: FuncDecl<'z3>,
+    pub record_literal: FuncDecl<'z3>,
+    pub enum_variant_literal: FuncDecl<'z3>,
+    pub new_instance: FuncDecl<'z3>,
+    pub tuple: FuncDecl<'z3>,
+    pub r#type: FuncDecl<'z3>,
+    pub big_type: FuncDecl<'z3>,
+    pub boxed: FuncDecl<'z3>,
 }
 
-pub struct ArgonValueAccessors {
-    pub bool_literal_value: FuncDecl,
-    pub int_literal_value: FuncDecl,
-    pub i8_literal_value: FuncDecl,
-    pub u8_literal_value: FuncDecl,
-    pub i16_literal_value: FuncDecl,
-    pub u16_literal_value: FuncDecl,
-    pub i32_literal_value: FuncDecl,
-    pub u32_literal_value: FuncDecl,
-    pub i64_literal_value: FuncDecl,
-    pub u64_literal_value: FuncDecl,
-    pub string_literal_value: FuncDecl,
-    pub record_literal_record: FuncDecl,
-    pub record_literal_fields: FuncDecl,
-    pub enum_variant_literal_enum: FuncDecl,
-    pub enum_variant_literal_variant: FuncDecl,
-    pub enum_variant_literal_arguments: FuncDecl,
-    pub enum_variant_literal_fields: FuncDecl,
-    pub new_instance_instance: FuncDecl,
-    pub new_instance_arguments: FuncDecl,
-    pub tuple_items: FuncDecl,
-    pub type_level: FuncDecl,
-    pub big_type_level: FuncDecl,
-    pub boxed_type: FuncDecl,
-    pub boxed_value: FuncDecl,
+pub struct ArgonValueAccessors<'z3> {
+    pub bool_literal_value: FuncDecl<'z3>,
+    pub int_literal_value: FuncDecl<'z3>,
+    pub i8_literal_value: FuncDecl<'z3>,
+    pub u8_literal_value: FuncDecl<'z3>,
+    pub i16_literal_value: FuncDecl<'z3>,
+    pub u16_literal_value: FuncDecl<'z3>,
+    pub i32_literal_value: FuncDecl<'z3>,
+    pub u32_literal_value: FuncDecl<'z3>,
+    pub i64_literal_value: FuncDecl<'z3>,
+    pub u64_literal_value: FuncDecl<'z3>,
+    pub string_literal_value: FuncDecl<'z3>,
+    pub record_literal_record: FuncDecl<'z3>,
+    pub record_literal_fields: FuncDecl<'z3>,
+    pub enum_variant_literal_enum: FuncDecl<'z3>,
+    pub enum_variant_literal_variant: FuncDecl<'z3>,
+    pub enum_variant_literal_arguments: FuncDecl<'z3>,
+    pub enum_variant_literal_fields: FuncDecl<'z3>,
+    pub new_instance_instance: FuncDecl<'z3>,
+    pub new_instance_arguments: FuncDecl<'z3>,
+    pub tuple_items: FuncDecl<'z3>,
+    pub type_level: FuncDecl<'z3>,
+    pub big_type_level: FuncDecl<'z3>,
+    pub boxed_type: FuncDecl<'z3>,
+    pub boxed_value: FuncDecl<'z3>,
 }
 
-pub struct ExpectedTypeSort {
-    pub sort: Sort,
-    pub constructors: ExpectedTypeConstructors,
-    pub testers: ExpectedTypeTesters,
-    pub accessors: ExpectedTypeAccessors,
+pub struct ExpectedTypeSort<'z3> {
+    pub sort: Sort<'z3>,
+    pub constructors: ExpectedTypeConstructors<'z3>,
+    pub testers: ExpectedTypeTesters<'z3>,
+    pub accessors: ExpectedTypeAccessors<'z3>,
 }
 
-pub struct ExpectedTypeConstructors {
-    pub exact: FuncDecl,
-    pub any_meta_type: FuncDecl,
+pub struct ExpectedTypeConstructors<'z3> {
+    pub exact: FuncDecl<'z3>,
+    pub any_meta_type: FuncDecl<'z3>,
 }
 
-pub struct ExpectedTypeTesters {
-    pub exact: FuncDecl,
-    pub any_meta_type: FuncDecl,
+pub struct ExpectedTypeTesters<'z3> {
+    pub exact: FuncDecl<'z3>,
+    pub any_meta_type: FuncDecl<'z3>,
 }
 
-pub struct ExpectedTypeAccessors {
-    pub exact_type: FuncDecl,
+pub struct ExpectedTypeAccessors<'z3> {
+    pub exact_type: FuncDecl<'z3>,
 }
 
-impl ArgonValueSort {
+impl<'z3> ArgonValueSort<'z3> {
     #[must_use]
-    pub fn new() -> Self {
-        let value = Sort::uninterpreted("ArgonValue".into());
+    pub fn new(context: &'z3 Z3Context) -> Self {
+        let value = Sort::uninterpreted(context, "ArgonValue".into());
         let value_seq = Sort::seq(&value);
-        let record_sort = Sort::uninterpreted("ArgonRecord".into());
-        let enum_sort = Sort::uninterpreted("ArgonEnum".into());
-        let enum_variant_sort = Sort::uninterpreted("ArgonEnumVariant".into());
-        let instance_sort = Sort::uninterpreted("ArgonInstance".into());
+        let record_sort = Sort::uninterpreted(context, "ArgonRecord".into());
+        let enum_sort = Sort::uninterpreted(context, "ArgonEnum".into());
+        let enum_variant_sort = Sort::uninterpreted(context, "ArgonEnumVariant".into());
+        let instance_sort = Sort::uninterpreted(context, "ArgonInstance".into());
 
         let value_constructors = ArgonValueConstructors {
-            bool_literal: FuncDecl::new("argon_value_bool_literal", &[&Sort::bool()], &value),
-            int_literal: FuncDecl::new("argon_value_int_literal", &[&Sort::int()], &value),
-            i8_literal: FuncDecl::new("argon_value_i8_literal", &[&Sort::bitvector(8)], &value),
-            u8_literal: FuncDecl::new("argon_value_u8_literal", &[&Sort::bitvector(8)], &value),
-            i16_literal: FuncDecl::new("argon_value_i16_literal", &[&Sort::bitvector(16)], &value),
-            u16_literal: FuncDecl::new("argon_value_u16_literal", &[&Sort::bitvector(16)], &value),
-            i32_literal: FuncDecl::new("argon_value_i32_literal", &[&Sort::bitvector(32)], &value),
-            u32_literal: FuncDecl::new("argon_value_u32_literal", &[&Sort::bitvector(32)], &value),
-            i64_literal: FuncDecl::new("argon_value_i64_literal", &[&Sort::bitvector(64)], &value),
-            u64_literal: FuncDecl::new("argon_value_u64_literal", &[&Sort::bitvector(64)], &value),
-            string_literal: FuncDecl::new("argon_value_string_literal", &[&Sort::string()], &value),
+            bool_literal: FuncDecl::new(
+                "argon_value_bool_literal",
+                &[&Sort::bool(context)],
+                &value,
+            ),
+            int_literal: FuncDecl::new("argon_value_int_literal", &[&Sort::int(context)], &value),
+            i8_literal: FuncDecl::new(
+                "argon_value_i8_literal",
+                &[&Sort::bitvector(context, 8)],
+                &value,
+            ),
+            u8_literal: FuncDecl::new(
+                "argon_value_u8_literal",
+                &[&Sort::bitvector(context, 8)],
+                &value,
+            ),
+            i16_literal: FuncDecl::new(
+                "argon_value_i16_literal",
+                &[&Sort::bitvector(context, 16)],
+                &value,
+            ),
+            u16_literal: FuncDecl::new(
+                "argon_value_u16_literal",
+                &[&Sort::bitvector(context, 16)],
+                &value,
+            ),
+            i32_literal: FuncDecl::new(
+                "argon_value_i32_literal",
+                &[&Sort::bitvector(context, 32)],
+                &value,
+            ),
+            u32_literal: FuncDecl::new(
+                "argon_value_u32_literal",
+                &[&Sort::bitvector(context, 32)],
+                &value,
+            ),
+            i64_literal: FuncDecl::new(
+                "argon_value_i64_literal",
+                &[&Sort::bitvector(context, 64)],
+                &value,
+            ),
+            u64_literal: FuncDecl::new(
+                "argon_value_u64_literal",
+                &[&Sort::bitvector(context, 64)],
+                &value,
+            ),
+            string_literal: FuncDecl::new(
+                "argon_value_string_literal",
+                &[&Sort::string(context)],
+                &value,
+            ),
             record_literal: FuncDecl::new(
                 "argon_value_record_literal",
                 &[&record_sort, &value_seq],
@@ -2235,7 +2303,7 @@ impl ArgonValueSort {
             ),
             tuple: FuncDecl::new("argon_value_tuple", &[&value_seq], &value),
             r#type: FuncDecl::new("argon_value_type", &[&value], &value),
-            big_type: FuncDecl::new("argon_value_big_type", &[&Sort::int()], &value),
+            big_type: FuncDecl::new("argon_value_big_type", &[&Sort::int(context)], &value),
             boxed: FuncDecl::new("argon_value_boxed", &[&value, &value], &value),
         };
 
@@ -2261,44 +2329,60 @@ impl ArgonValueSort {
         };
 
         let value_accessors = ArgonValueAccessors {
-            bool_literal_value: accessor("argon_value_bool_literal_value", &value, &Sort::bool()),
-            int_literal_value: accessor("argon_value_int_literal_value", &value, &Sort::int()),
-            i8_literal_value: accessor("argon_value_i8_literal_value", &value, &Sort::bitvector(8)),
-            u8_literal_value: accessor("argon_value_u8_literal_value", &value, &Sort::bitvector(8)),
+            bool_literal_value: accessor(
+                "argon_value_bool_literal_value",
+                &value,
+                &Sort::bool(context),
+            ),
+            int_literal_value: accessor(
+                "argon_value_int_literal_value",
+                &value,
+                &Sort::int(context),
+            ),
+            i8_literal_value: accessor(
+                "argon_value_i8_literal_value",
+                &value,
+                &Sort::bitvector(context, 8),
+            ),
+            u8_literal_value: accessor(
+                "argon_value_u8_literal_value",
+                &value,
+                &Sort::bitvector(context, 8),
+            ),
             i16_literal_value: accessor(
                 "argon_value_i16_literal_value",
                 &value,
-                &Sort::bitvector(16),
+                &Sort::bitvector(context, 16),
             ),
             u16_literal_value: accessor(
                 "argon_value_u16_literal_value",
                 &value,
-                &Sort::bitvector(16),
+                &Sort::bitvector(context, 16),
             ),
             i32_literal_value: accessor(
                 "argon_value_i32_literal_value",
                 &value,
-                &Sort::bitvector(32),
+                &Sort::bitvector(context, 32),
             ),
             u32_literal_value: accessor(
                 "argon_value_u32_literal_value",
                 &value,
-                &Sort::bitvector(32),
+                &Sort::bitvector(context, 32),
             ),
             i64_literal_value: accessor(
                 "argon_value_i64_literal_value",
                 &value,
-                &Sort::bitvector(64),
+                &Sort::bitvector(context, 64),
             ),
             u64_literal_value: accessor(
                 "argon_value_u64_literal_value",
                 &value,
-                &Sort::bitvector(64),
+                &Sort::bitvector(context, 64),
             ),
             string_literal_value: accessor(
                 "argon_value_string_literal_value",
                 &value,
-                &Sort::string(),
+                &Sort::string(context),
             ),
             record_literal_record: accessor(
                 "argon_value_record_literal_record",
@@ -2342,7 +2426,7 @@ impl ArgonValueSort {
             ),
             tuple_items: accessor("argon_value_tuple_items", &value, &value_seq),
             type_level: accessor("argon_value_type_level", &value, &value),
-            big_type_level: accessor("argon_value_big_type_level", &value, &Sort::int()),
+            big_type_level: accessor("argon_value_big_type_level", &value, &Sort::int(context)),
             boxed_type: accessor("argon_value_boxed_type", &value, &value),
             boxed_value: accessor("argon_value_boxed_value", &value, &value),
         };
@@ -2360,7 +2444,7 @@ impl ArgonValueSort {
         }
     }
 
-    fn value_tester_terms(&self, value: &impl Ast) -> Vec<Bool> {
+    fn value_tester_terms(&self, value: &impl Ast<'z3>) -> Vec<Bool<'z3>> {
         [
             &self.value_testers.bool_literal,
             &self.value_testers.int_literal,
@@ -2387,10 +2471,10 @@ impl ArgonValueSort {
     }
 }
 
-impl ExpectedTypeSort {
+impl<'z3> ExpectedTypeSort<'z3> {
     #[must_use]
-    pub fn new(argon_value_sort: &Sort) -> Self {
-        let expected_type = DatatypeBuilder::new(EXPECTED_TYPE)
+    pub fn new(argon_value_sort: &Sort<'z3>) -> Self {
+        let expected_type = DatatypeBuilder::new(argon_value_sort.context(), EXPECTED_TYPE)
             .variant(
                 "exact",
                 vec![("type", DatatypeAccessor::sort(argon_value_sort.clone()))],
@@ -2420,15 +2504,15 @@ impl ExpectedTypeSort {
     }
 }
 
-fn tester(name: &str, value: &Sort) -> FuncDecl {
-    FuncDecl::new(name, &[value], &Sort::bool())
+fn tester<'z3>(name: &str, value: &Sort<'z3>) -> FuncDecl<'z3> {
+    FuncDecl::new(name, &[value], &Sort::bool(value.context()))
 }
 
-fn accessor(name: &str, value: &Sort, result: &Sort) -> FuncDecl {
+fn accessor<'z3>(name: &str, value: &Sort<'z3>, result: &Sort<'z3>) -> FuncDecl<'z3> {
     FuncDecl::new(name, &[value], result)
 }
 
-fn concat_seq(element_sort: &Sort, values: &[Seq]) -> Seq {
+fn concat_seq<'z3>(element_sort: &Sort<'z3>, values: &[Seq<'z3>]) -> Seq<'z3> {
     if values.is_empty() {
         return Seq::empty(element_sort);
     }
@@ -2437,25 +2521,27 @@ fn concat_seq(element_sort: &Sort, values: &[Seq]) -> Seq {
     Seq::concat(&values)
 }
 
-fn next_variant(variants: &mut impl Iterator<Item = DatatypeVariant>) -> DatatypeVariant {
+fn next_variant<'z3>(
+    variants: &mut impl Iterator<Item = DatatypeVariant<'z3>>,
+) -> DatatypeVariant<'z3> {
     match variants.next() {
         Some(variant) => variant,
         None => panic!("Z3 datatype is missing an expected variant"),
     }
 }
 
-fn next_accessor(accessors: &mut Vec<FuncDecl>) -> FuncDecl {
+fn next_accessor<'z3>(accessors: &mut Vec<FuncDecl<'z3>>) -> FuncDecl<'z3> {
     accessors.remove(0)
 }
 
-fn z3_int_from_big_int(value: &impl core::fmt::Display) -> Int {
-    match Int::from_str(&value.to_string()) {
+fn z3_int_from_big_int<'z3>(context: &'z3 Z3Context, value: &impl core::fmt::Display) -> Int<'z3> {
+    match Int::from_str(context, &value.to_string()) {
         Ok(value) => value,
         Err(error) => panic!("failed to create Z3 integer from Argon integer literal: {error:?}"),
     }
 }
 
-fn dynamic_to_bool(value: Dynamic) -> Bool {
+fn dynamic_to_bool<'z3>(value: Dynamic<'z3>) -> Bool<'z3> {
     match value.as_bool() {
         Some(value) => value,
         None => panic!("Z3 predicate returned a non-bool value"),
@@ -2473,12 +2559,6 @@ fn record_field_index(field: &Arc<dyn RecordField>) -> usize {
         .expect("record field should be present in its owner field list")
 }
 
-impl Default for ArgonValueSort {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2490,8 +2570,8 @@ mod tests {
     use alloc::{sync::Arc, vec};
     use argon_expr::{Builtin, ExprLocationExt};
     use argon_util::UniqueIdentifier;
+    use argon_z3::{SatResult, SortKind};
     use parse18_runtime::{FilePosition, Location};
-    use z3::{SatResult, SortKind};
 
     fn test_context() -> Context {
         TestContext::default().into()
@@ -2532,37 +2612,43 @@ mod tests {
         located(Expr::BoolLiteral(value))
     }
 
-    fn int_expr_value(z3expr: &mut Z3Expr<DefaultExprContext>, value: i64) -> Int {
+    fn int_expr_value<'z3>(z3expr: &mut Z3Expr<'z3, DefaultExprContext>, value: i64) -> Int<'z3> {
         let value = z3expr.expr_to_z3(&int_expr(value));
         z3expr.int_literal_value(&value)
     }
 
-    fn string_expr_value(z3expr: &mut Z3Expr<DefaultExprContext>, value: &str) -> Z3String {
+    fn string_expr_value<'z3>(
+        z3expr: &mut Z3Expr<'z3, DefaultExprContext>,
+        value: &str,
+    ) -> Z3String<'z3> {
         let value = z3expr.expr_to_z3(&string_expr(value));
         z3expr.string_literal_value(&value)
     }
 
-    fn bool_expr_value(z3expr: &mut Z3Expr<DefaultExprContext>, value: bool) -> Bool {
+    fn bool_expr_value<'z3>(
+        z3expr: &mut Z3Expr<'z3, DefaultExprContext>,
+        value: bool,
+    ) -> Bool<'z3> {
         let value = z3expr.expr_to_z3(&bool_expr(value));
         z3expr.bool_literal_value(&value)
     }
 
-    fn dynamic_consts(args: &[(&str, Sort)]) -> Vec<Dynamic> {
+    fn dynamic_consts<'z3>(args: &[(&str, Sort<'z3>)]) -> Vec<Dynamic<'z3>> {
         args.iter()
             .map(|(name, sort)| Dynamic::new_const(*name, sort))
             .collect()
     }
 
-    fn dynamic_refs(values: &[Dynamic]) -> Vec<&dyn Ast> {
-        values.iter().map(|value| value as &dyn Ast).collect()
+    fn dynamic_refs<'a, 'z3>(values: &'a [Dynamic<'z3>]) -> Vec<&'a dyn Ast<'z3>> {
+        values.iter().map(|value| value as &dyn Ast<'z3>).collect()
     }
 
-    fn assert_constructor_tester_axiom(
-        constructor: &FuncDecl,
-        tester: &FuncDecl,
-        args: &[(&str, Sort)],
+    fn assert_constructor_tester_axiom<'z3>(
+        constructor: &FuncDecl<'z3>,
+        tester: &FuncDecl<'z3>,
+        args: &[(&str, Sort<'z3>)],
     ) {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3expr = Z3Expr::<DefaultExprContext>::new(constructor.context(), test_context());
         let values = dynamic_consts(args);
         let refs = dynamic_refs(&values);
         let constructed = constructor.apply(&refs);
@@ -2573,13 +2659,13 @@ mod tests {
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
-    fn assert_constructor_accessor_axiom(
-        constructor: &FuncDecl,
-        accessor: &FuncDecl,
-        args: &[(&str, Sort)],
+    fn assert_constructor_accessor_axiom<'z3>(
+        constructor: &FuncDecl<'z3>,
+        accessor: &FuncDecl<'z3>,
+        args: &[(&str, Sort<'z3>)],
         accessor_arg_index: usize,
     ) {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3expr = Z3Expr::<DefaultExprContext>::new(constructor.context(), test_context());
         let values = dynamic_consts(args);
         let refs = dynamic_refs(&values);
         let constructed = constructor.apply(&refs);
@@ -2587,17 +2673,17 @@ mod tests {
 
         z3expr
             .solver()
-            .assert(accessed.eq(&values[accessor_arg_index]).not());
+            .assert(accessed.equals(&values[accessor_arg_index]).not());
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
-    fn assert_constructor_is_injective(
-        constructor: &FuncDecl,
-        args: &[(&str, Sort)],
+    fn assert_constructor_is_injective<'z3>(
+        constructor: &FuncDecl<'z3>,
+        args: &[(&str, Sort<'z3>)],
         unequal_arg_index: usize,
     ) {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3expr = Z3Expr::<DefaultExprContext>::new(constructor.context(), test_context());
         let lhs_values = dynamic_consts(args);
         let rhs_values = args
             .iter()
@@ -2608,23 +2694,23 @@ mod tests {
         let lhs = constructor.apply(&lhs_refs);
         let rhs = constructor.apply(&rhs_refs);
 
-        z3expr.solver().assert(lhs.eq(&rhs));
+        z3expr.solver().assert(lhs.equals(&rhs));
         z3expr.solver().assert(
             lhs_values[unequal_arg_index]
-                .eq(&rhs_values[unequal_arg_index])
+                .equals(&rhs_values[unequal_arg_index])
                 .not(),
         );
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
-    fn assert_constructors_are_unequal(
-        lhs_constructor: &FuncDecl,
-        lhs_args: &[(&str, Sort)],
-        rhs_constructor: &FuncDecl,
-        rhs_args: &[(&str, Sort)],
+    fn assert_constructors_are_unequal<'z3>(
+        lhs_constructor: &FuncDecl<'z3>,
+        lhs_args: &[(&str, Sort<'z3>)],
+        rhs_constructor: &FuncDecl<'z3>,
+        rhs_args: &[(&str, Sort<'z3>)],
     ) {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3expr = Z3Expr::<DefaultExprContext>::new(lhs_constructor.context(), test_context());
         let lhs_values = dynamic_consts(lhs_args);
         let rhs_values = dynamic_consts(rhs_args);
         let lhs_refs = dynamic_refs(&lhs_values);
@@ -2632,14 +2718,15 @@ mod tests {
         let lhs = lhs_constructor.apply(&lhs_refs);
         let rhs = rhs_constructor.apply(&rhs_refs);
 
-        z3expr.solver().assert(lhs.eq(&rhs));
+        z3expr.solver().assert(lhs.equals(&rhs));
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
     #[test]
     fn composite_constructors_use_seq_sorts() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
 
         assert_eq!(Some(SortKind::Seq), sort.value_constructors.tuple.domain(0));
@@ -2663,7 +2750,8 @@ mod tests {
 
     #[test]
     fn opaque_expr_conversion_reuses_cached_value() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let expr = located(Expr::Builtin(Builtin::IntBitAnd {
             integer_type: IntegerType::Int,
             lhs: Box::new(int_expr(1)),
@@ -2680,7 +2768,8 @@ mod tests {
 
     #[test]
     fn int_builtin_operations_use_z3_int_operations() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
 
         let neg = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntNegate {
             integer_type: IntegerType::Int,
@@ -2696,7 +2785,7 @@ mod tests {
         })));
         let lhs = int_expr_value(&mut z3expr, 1);
         let rhs = int_expr_value(&mut z3expr, 2);
-        let expected_add = Int::add(&[lhs, rhs]);
+        let expected_add = Int::add(&[&lhs, &rhs]);
         assert_eq!(z3expr.wrap_int_literal(&expected_add), add);
 
         let sub = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntSub {
@@ -2706,7 +2795,7 @@ mod tests {
         })));
         let lhs = int_expr_value(&mut z3expr, 5);
         let rhs = int_expr_value(&mut z3expr, 3);
-        let expected_sub = Int::sub(&[lhs, rhs]);
+        let expected_sub = Int::sub(&[&lhs, &rhs]);
         assert_eq!(z3expr.wrap_int_literal(&expected_sub), sub);
 
         let mul = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntMul {
@@ -2716,13 +2805,14 @@ mod tests {
         })));
         let lhs = int_expr_value(&mut z3expr, 6);
         let rhs = int_expr_value(&mut z3expr, 7);
-        let expected_mul = Int::mul(&[lhs, rhs]);
+        let expected_mul = Int::mul(&[&lhs, &rhs]);
         assert_eq!(z3expr.wrap_int_literal(&expected_mul), mul);
     }
 
     #[test]
     fn int_comparison_builtins_use_z3_int_comparisons() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
 
         let eq = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntEq {
             integer_type: IntegerType::Int,
@@ -2731,7 +2821,7 @@ mod tests {
         })));
         let lhs = int_expr_value(&mut z3expr, 1);
         let rhs = int_expr_value(&mut z3expr, 1);
-        let expected_eq = lhs.eq(&rhs);
+        let expected_eq = lhs.equals(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_eq), eq);
 
         let lt = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::IntLt {
@@ -2777,7 +2867,8 @@ mod tests {
 
     #[test]
     fn string_and_bool_builtins_use_z3_operations() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
 
         let concat = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::StringConcat {
             values: vec![string_expr("ab"), string_expr("cd"), string_expr("ef")],
@@ -2785,7 +2876,7 @@ mod tests {
         let lhs = string_expr_value(&mut z3expr, "ab");
         let mid = string_expr_value(&mut z3expr, "cd");
         let rhs = string_expr_value(&mut z3expr, "ef");
-        let expected_concat = Z3String::concat(&[lhs, mid, rhs]);
+        let expected_concat = Z3String::concat(&[&lhs, &mid, &rhs]);
         assert_eq!(z3expr.wrap_string_literal(&expected_concat), concat);
 
         let string_eq = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::StringEq {
@@ -2794,7 +2885,7 @@ mod tests {
         })));
         let lhs = string_expr_value(&mut z3expr, "a");
         let rhs = string_expr_value(&mut z3expr, "a");
-        let expected_string_eq = lhs.eq(&rhs);
+        let expected_string_eq = lhs.equals(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_string_eq), string_eq);
 
         let bool_eq = z3expr.expr_to_z3(&located(Expr::Builtin(Builtin::BoolEq {
@@ -2803,13 +2894,14 @@ mod tests {
         })));
         let lhs = bool_expr_value(&mut z3expr, true);
         let rhs = bool_expr_value(&mut z3expr, false);
-        let expected_bool_eq = lhs.eq(&rhs);
+        let expected_bool_eq = lhs.equals(&rhs);
         assert_eq!(z3expr.wrap_bool_literal(&expected_bool_eq), bool_eq);
     }
 
     #[test]
     fn argon_value_constructor_testers_are_disjoint() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let value = Dynamic::new_const("value", &z3expr.argon_value_sort().value);
         let is_bool = dynamic_to_bool(
             z3expr
@@ -2837,7 +2929,8 @@ mod tests {
         let variant_a = Arc::new(TestEnumVariant::new("A")) as Arc<dyn EnumVariant>;
         let variant_b = Arc::new(TestEnumVariant::new("B")) as Arc<dyn EnumVariant>;
         let enum_ = Arc::new(TestEnum::new(vec![variant_a.clone(), variant_b.clone()]));
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
 
         let enum_term = z3expr.enum_term(&(enum_.clone() as Arc<dyn Enum>));
         let variant_a_term = z3expr.enum_variant_term(&variant_a);
@@ -2855,7 +2948,8 @@ mod tests {
     #[test]
     fn empty_enum_assertion_makes_membership_false() {
         let enum_ = Arc::new(TestEnum::new(vec![]));
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
 
         let enum_term = z3expr.enum_term(&(enum_ as Arc<dyn Enum>));
         let variant =
@@ -2869,7 +2963,8 @@ mod tests {
 
     #[test]
     fn boolean_logical_operators_use_z3_bool_operations() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let a = bool_var();
         let b = bool_var();
         let a_expr = located(Expr::Variable(a));
@@ -2913,23 +3008,24 @@ mod tests {
 
     #[test]
     fn constructors_imply_their_tester() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
 
         assert_constructor_tester_axiom(
             &sort.value_constructors.bool_literal,
             &sort.value_testers.bool_literal,
-            &[("value", Sort::bool())],
+            &[("value", Sort::bool(z3expr.z3_context()))],
         );
         assert_constructor_tester_axiom(
             &sort.value_constructors.int_literal,
             &sort.value_testers.int_literal,
-            &[("value", Sort::int())],
+            &[("value", Sort::int(z3expr.z3_context()))],
         );
         assert_constructor_tester_axiom(
             &sort.value_constructors.string_literal,
             &sort.value_testers.string_literal,
-            &[("value", Sort::string())],
+            &[("value", Sort::string(z3expr.z3_context()))],
         );
         assert_constructor_tester_axiom(
             &sort.value_constructors.record_literal,
@@ -2970,7 +3066,7 @@ mod tests {
         assert_constructor_tester_axiom(
             &sort.value_constructors.big_type,
             &sort.value_testers.big_type,
-            &[("level", Sort::int())],
+            &[("level", Sort::int(z3expr.z3_context()))],
         );
         assert_constructor_tester_axiom(
             &sort.value_constructors.boxed,
@@ -2981,25 +3077,26 @@ mod tests {
 
     #[test]
     fn constructor_accessors_return_constructor_arguments() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
 
         assert_constructor_accessor_axiom(
             &sort.value_constructors.bool_literal,
             &sort.value_accessors.bool_literal_value,
-            &[("value", Sort::bool())],
+            &[("value", Sort::bool(z3expr.z3_context()))],
             0,
         );
         assert_constructor_accessor_axiom(
             &sort.value_constructors.int_literal,
             &sort.value_accessors.int_literal_value,
-            &[("value", Sort::int())],
+            &[("value", Sort::int(z3expr.z3_context()))],
             0,
         );
         assert_constructor_accessor_axiom(
             &sort.value_constructors.string_literal,
             &sort.value_accessors.string_literal_value,
-            &[("value", Sort::string())],
+            &[("value", Sort::string(z3expr.z3_context()))],
             0,
         );
         assert_constructor_accessor_axiom(
@@ -3097,7 +3194,7 @@ mod tests {
         assert_constructor_accessor_axiom(
             &sort.value_constructors.big_type,
             &sort.value_accessors.big_type_level,
-            &[("level", Sort::int())],
+            &[("level", Sort::int(z3expr.z3_context()))],
             0,
         );
         assert_constructor_accessor_axiom(
@@ -3116,32 +3213,34 @@ mod tests {
 
     #[test]
     fn tester_reconstructs_int_literal_from_accessor() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
         let value = Dynamic::new_const("value", &sort.value);
         let zero = sort
             .value_constructors
             .int_literal
-            .apply(&[&Int::from_i64(0)]);
+            .apply(&[&Int::from_i64(z3expr.z3_context(), 0)]);
         let is_int = dynamic_to_bool(sort.value_testers.int_literal.apply(&[&value]));
         let value_int = z3expr.int_literal_value(&value);
         let zero_int = z3expr.int_literal_value(&zero);
 
         z3expr.solver().assert(is_int);
-        z3expr.solver().assert(value_int.eq(&zero_int));
-        z3expr.solver().assert(value.eq(&zero).not());
+        z3expr.solver().assert(value_int.equals(&zero_int));
+        z3expr.solver().assert(value.equals(&zero).not());
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
     #[test]
     fn same_constructor_equality_requires_equal_arguments() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
 
         assert_constructor_is_injective(
             &sort.value_constructors.int_literal,
-            &[("value", Sort::int())],
+            &[("value", Sort::int(z3expr.z3_context()))],
             0,
         );
         assert_constructor_is_injective(
@@ -3153,14 +3252,15 @@ mod tests {
 
     #[test]
     fn different_constructor_values_are_not_equal() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
 
         assert_constructors_are_unequal(
             &sort.value_constructors.bool_literal,
-            &[("value", Sort::bool())],
+            &[("value", Sort::bool(z3expr.z3_context()))],
             &sort.value_constructors.int_literal,
-            &[("value", Sort::int())],
+            &[("value", Sort::int(z3expr.z3_context()))],
         );
         assert_constructors_are_unequal(
             &sort.value_constructors.record_literal,
@@ -3180,20 +3280,21 @@ mod tests {
 
     #[test]
     fn record_literal_equality_compares_field_sequence() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
         let record = Dynamic::new_const("record", &sort.record_sort);
         let lhs_fields = Seq::unit(
             &sort
                 .value_constructors
                 .int_literal
-                .apply(&[&Int::from_i64(1)]),
+                .apply(&[&Int::from_i64(z3expr.z3_context(), 1)]),
         );
         let rhs_fields = Seq::unit(
             &sort
                 .value_constructors
                 .int_literal
-                .apply(&[&Int::from_i64(2)]),
+                .apply(&[&Int::from_i64(z3expr.z3_context(), 2)]),
         );
         let lhs = sort
             .value_constructors
@@ -3204,15 +3305,16 @@ mod tests {
             .record_literal
             .apply(&[&record, &rhs_fields]);
 
-        z3expr.solver().assert(lhs.eq(&rhs));
-        z3expr.solver().assert(lhs_fields.eq(&rhs_fields).not());
+        z3expr.solver().assert(lhs.equals(&rhs));
+        z3expr.solver().assert(lhs_fields.equals(&rhs_fields).not());
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
     #[test]
     fn enum_variant_literal_equality_compares_field_sequence() {
-        let z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let sort = z3expr.argon_value_sort();
         let enum_ = Dynamic::new_const("enum", &sort.enum_sort);
         let variant = Dynamic::new_const("variant", &sort.enum_variant_sort);
@@ -3221,13 +3323,13 @@ mod tests {
             &sort
                 .value_constructors
                 .int_literal
-                .apply(&[&Int::from_i64(1)]),
+                .apply(&[&Int::from_i64(z3expr.z3_context(), 1)]),
         );
         let rhs_fields = Seq::unit(
             &sort
                 .value_constructors
                 .int_literal
-                .apply(&[&Int::from_i64(2)]),
+                .apply(&[&Int::from_i64(z3expr.z3_context(), 2)]),
         );
         let lhs = sort.value_constructors.enum_variant_literal.apply(&[
             &enum_,
@@ -3242,15 +3344,16 @@ mod tests {
             &rhs_fields,
         ]);
 
-        z3expr.solver().assert(lhs.eq(&rhs));
-        z3expr.solver().assert(lhs_fields.eq(&rhs_fields).not());
+        z3expr.solver().assert(lhs.equals(&rhs));
+        z3expr.solver().assert(lhs_fields.equals(&rhs_fields).not());
 
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 
     #[test]
     fn variable_conversion_reuses_cached_value() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let expr = located(Expr::Variable(bool_var()));
 
         let first = z3expr.expr_to_z3(&expr);
@@ -3261,7 +3364,8 @@ mod tests {
 
     #[test]
     fn inhabited_uses_predicate_for_opaque_types() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let expr = located(Expr::Builtin(Builtin::IntType {
             integer_type: IntegerType::Int,
         }));
@@ -3275,7 +3379,8 @@ mod tests {
 
     #[test]
     fn inhabited_reduces_structural_type_rules() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let lhs = located(Expr::Builtin(Builtin::IntType {
             integer_type: IntegerType::Int,
         }));
@@ -3311,7 +3416,8 @@ mod tests {
 
     #[test]
     fn equal_to_type_is_inhabited_when_operands_are_equal() {
-        let mut z3expr = Z3Expr::<DefaultExprContext>::new(test_context());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<DefaultExprContext>::new(&z3, test_context());
         let expr = located(Expr::EqualToType {
             r#type: Box::new(located(Expr::int_type())),
             lhs: Box::new(int_expr(1)),

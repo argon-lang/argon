@@ -10,9 +10,10 @@ use argon_expr::{
     SubstScanner, Variable,
 };
 use argon_parser::ast::FunctionParameterListType;
+use argon_z3::ast::{self, Ast, Bool, Dynamic};
+use argon_z3::{Context as Z3Context, SatResult};
 use hashbrown::HashMap;
 use parse18_runtime::Location;
-use z3::ast::{self, Bool, Dynamic};
 
 pub struct Z3ImplicitResolver<'a> {
     pub context: Context,
@@ -27,9 +28,9 @@ impl Z3ImplicitResolver<'_> {
         expr.with_location(self.location.clone())
     }
 
-    fn add_known_var_value_assertions(
+    fn add_known_var_value_assertions<'z3>(
         &self,
-        z3expr: &mut Z3Expr<TypeCheckExprContext>,
+        z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
         model: &mut Model,
     ) {
         for (variable, value) in self.known_var_values {
@@ -43,13 +44,13 @@ impl Z3ImplicitResolver<'_> {
 
             let variable = z3expr.expr_to_z3(&variable);
             let value = z3expr.expr_to_z3(&value);
-            z3expr.solver().assert(variable.eq(&value));
+            z3expr.solver().assert(variable.equals(&value));
         }
     }
 
-    fn add_given_assertion(
+    fn add_given_assertion<'z3>(
         &self,
-        z3expr: &mut Z3Expr<TypeCheckExprContext>,
+        z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
         assertion: &ImplicitValue<TypeCheckExprContext>,
         model: &mut Model,
     ) {
@@ -113,12 +114,12 @@ impl Z3ImplicitResolver<'_> {
         z3expr.solver().assert(assertion);
     }
 
-    fn convert_expr(
+    fn convert_expr<'z3>(
         &self,
-        z3expr: &mut Z3Expr<TypeCheckExprContext>,
+        z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
         mut expr: LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
-    ) -> Bool {
+    ) -> Bool<'z3> {
         {
             let mut norm =
                 FullNormalizer::new(self.context.normalize_fuel(), ExprNormalizer { model });
@@ -129,9 +130,9 @@ impl Z3ImplicitResolver<'_> {
     }
 }
 
-enum AssertionBinder {
-    ForAll(Dynamic),
-    Implies(Bool),
+enum AssertionBinder<'z3> {
+    ForAll(Dynamic<'z3>),
+    Implies(Bool<'z3>),
 }
 
 impl ImplicitResolver for Z3ImplicitResolver<'_> {
@@ -140,7 +141,8 @@ impl ImplicitResolver for Z3ImplicitResolver<'_> {
         t: &LocatedExpr<TypeCheckExprContext>,
         model: &mut Model,
     ) -> Option<LocatedExpr<TypeCheckExprContext>> {
-        let mut z3expr = Z3Expr::new(self.context.clone());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::new(&z3, self.context.clone());
 
         self.add_known_var_value_assertions(&mut z3expr, model);
 
@@ -154,8 +156,8 @@ impl ImplicitResolver for Z3ImplicitResolver<'_> {
         let sat_result = z3expr.solver().check();
 
         match sat_result {
-            z3::SatResult::Sat | z3::SatResult::Unknown => None,
-            z3::SatResult::Unsat => Some(self.loc(Expr::Builtin(Builtin::UnsafeAssumeErased {
+            SatResult::Sat | SatResult::Unknown => None,
+            SatResult::Unsat => Some(self.loc(Expr::Builtin(Builtin::UnsafeAssumeErased {
                 r#type: Box::new(t.clone()),
             }))),
         }

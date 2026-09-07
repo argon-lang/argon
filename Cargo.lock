@@ -105,13 +105,13 @@ dependencies = [
  "argon-expr",
  "argon-parser",
  "argon-util",
+ "argon-z3",
  "derivative",
  "esexpr",
  "hashbrown 0.17.1",
  "mitsein",
  "parse18-runtime",
  "percent-encoding",
- "z3",
 ]
 
 [[package]]
@@ -204,6 +204,7 @@ dependencies = [
  "argon-parser",
  "argon-prover",
  "argon-util",
+ "argon-z3",
  "embedded-io",
  "hashbrown 0.17.1",
  "mitsein",
@@ -211,7 +212,6 @@ dependencies = [
  "parse18-runtime",
  "tempfile",
  "walkdir",
- "z3",
 ]
 
 [[package]]
@@ -306,6 +306,13 @@ version = "0.0.0"
 dependencies = [
  "argon-format-vm",
  "num-bigint",
+]
+
+[[package]]
+name = "argon-z3"
+version = "0.0.0"
+dependencies = [
+ "z3-sys",
 ]
 
 [[package]]
@@ -1184,9 +1191,9 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pkg-config"
-version = "0.3.33"
+version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
+checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "prettyplease"
@@ -1877,16 +1884,6 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser",
-]
-
-[[package]]
-name = "z3"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9fc44c9d6bb9fe84c03dfff211cf4c9c8cfefa2de8b803facf7305067d21a23"
-dependencies = [
- "log",
- "z3-sys",
 ]
 
 [[package]]

@@ -10,11 +10,10 @@ use argon_expr::{
     Builtin, Expr, ExprContextShifter, ExprScannerMut, ExpressionOwner, LocatedExpr,
     LocatedPattern, NormalizerScanner, Pattern, SubstScanner,
 };
-use core::str::FromStr;
+use argon_z3::ast::{Ast, Bool, Dynamic, Int, Seq, String as Z3String};
+use argon_z3::{Context as Z3Context, FuncDecl, SatResult};
 use num_bigint::BigInt;
 use parse18_runtime::Location;
-use z3::ast::{Bool, Dynamic, Int, Seq, String as Z3String};
-use z3::{FuncDecl, SatResult};
 
 pub(super) struct ExhaustiveChecker<'a, 'access, 'scope, 'model> {
     pub(super) tc: &'a mut TypeChecker<'access, 'scope, 'model>,
@@ -27,7 +26,8 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
         value_type: &LocatedExpr<TypeCheckExprContext>,
         patterns: impl IntoIterator<Item = &'b LocatedPattern<TypeCheckExprContext>>,
     ) -> bool {
-        let mut z3expr = Z3Expr::<TypeCheckExprContext>::new(self.tc.context.clone());
+        let z3 = Z3Context::new();
+        let mut z3expr = Z3Expr::<TypeCheckExprContext>::new(&z3, self.tc.context.clone());
         let value = Dynamic::fresh_const("argon_match_value", &z3expr.argon_value_sort().value);
 
         let value_type_constraint = self.value_type_constraint(&mut z3expr, &value, value_type);
@@ -43,12 +43,12 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
         sat_result == SatResult::Unsat
     }
 
-    fn value_type_constraint(
+    fn value_type_constraint<'z3>(
         &mut self,
-        z3expr: &mut Z3Expr<TypeCheckExprContext>,
-        value: &Dynamic,
+        z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
+        value: &Dynamic<'z3>,
         value_type: &LocatedExpr<TypeCheckExprContext>,
-    ) -> Bool {
+    ) -> Bool<'z3> {
         let mut value_type = value_type.clone();
         {
             let mut norm = NormalizerScanner::new(
@@ -86,7 +86,9 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                     value,
                 );
                 let values = tuple_items(z3expr, value);
-                let length = values.length().eq(Int::from_u64(items.len() as u64));
+                let length = values
+                    .length()
+                    .equals(&Int::from_u64(z3expr.z3_context(), items.len() as u64));
                 let item_constraints = items
                     .iter()
                     .enumerate()
@@ -95,7 +97,10 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                         self.value_type_constraint(z3expr, &item, item_type)
                     })
                     .collect::<Vec<_>>();
-                bool_and(&[vec![tuple, length], item_constraints].concat())
+                bool_and(
+                    z3expr.z3_context(),
+                    &[vec![tuple, length], item_constraints].concat(),
+                )
             }
 
             Expr::EnumType(enum_type) => {
@@ -107,7 +112,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                 let value_enum = enum_literal_enum(z3expr, value);
                 let value_variant = enum_literal_variant(z3expr, value);
                 let expected_enum = enum_term(z3expr, enum_type.enum_.clone());
-                let enum_matches = value_enum.eq(expected_enum);
+                let enum_matches = value_enum.equals(&expected_enum);
                 let declared_variant_matches = enum_type
                     .enum_
                     .clone()
@@ -130,7 +135,7 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                         let enum_term = z3expr.enum_term(&enum_type.enum_);
                         let enum_variant_term = z3expr.enum_variant_term(&variant);
 
-                        conj.push(value_variant.eq(&enum_variant_term));
+                        conj.push(value_variant.equals(&enum_variant_term));
                         conj.push(z3expr.is_variant_of_enum(&enum_term, &enum_variant_term));
                         conj.extend(sig.parameters.into_iter().enumerate().map(|(i, param)| {
                             let param_term = z3expr.enum_variant_arg(value, i);
@@ -147,30 +152,33 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                             self.value_type_constraint(z3expr, &field_term, &field_type)
                         }));
 
-                        bool_and(&conj)
+                        bool_and(z3expr.z3_context(), &conj)
                     })
                     .collect::<Vec<_>>();
-                bool_and(&[
-                    enum_literal,
-                    enum_matches,
-                    bool_or(&declared_variant_matches),
-                ])
+                bool_and(
+                    z3expr.z3_context(),
+                    &[
+                        enum_literal,
+                        enum_matches,
+                        bool_or(z3expr.z3_context(), &declared_variant_matches),
+                    ],
+                )
             }
 
-            _ => Bool::from_bool(true),
+            _ => Bool::from_bool(z3expr.z3_context(), true),
         }
     }
 
-    fn pattern_constraint(
+    fn pattern_constraint<'z3>(
         &mut self,
-        z3expr: &mut Z3Expr<TypeCheckExprContext>,
-        value: &Dynamic,
+        z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
+        value: &Dynamic<'z3>,
         pattern: &LocatedPattern<TypeCheckExprContext>,
-    ) -> Bool {
+    ) -> Bool<'z3> {
         match &pattern.value {
-            Pattern::Error => Bool::from_bool(false),
+            Pattern::Error => Bool::from_bool(z3expr.z3_context(), false),
 
-            Pattern::Discard { .. } => Bool::from_bool(true),
+            Pattern::Discard { .. } => Bool::from_bool(z3expr.z3_context(), true),
 
             Pattern::Binding(_, inner) => self.pattern_constraint(z3expr, value, inner),
 
@@ -181,7 +189,9 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                     value,
                 );
                 let values = tuple_items(z3expr, value);
-                let length = values.length().eq(Int::from_u64(items.len() as u64));
+                let length = values
+                    .length()
+                    .equals(&Int::from_u64(z3expr.z3_context(), items.len() as u64));
                 let item_constraints = items
                     .iter()
                     .enumerate()
@@ -190,7 +200,10 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                         self.pattern_constraint(z3expr, &item, item_pattern)
                     })
                     .collect::<Vec<_>>();
-                bool_and(&[vec![tuple, length], item_constraints].concat())
+                bool_and(
+                    z3expr.z3_context(),
+                    &[vec![tuple, length], item_constraints].concat(),
+                )
             }
 
             Pattern::EnumVariant {
@@ -208,8 +221,8 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                 let value_variant = enum_literal_variant(z3expr, value);
                 let expected_enum = enum_term(z3expr, enum_type.enum_.clone());
                 let expected_variant = enum_variant_term(z3expr, variant.clone());
-                let enum_matches = value_enum.eq(expected_enum);
-                let variant_matches = value_variant.eq(expected_variant);
+                let enum_matches = value_enum.equals(&expected_enum);
+                let variant_matches = value_variant.equals(&expected_variant);
 
                 let arguments = enum_literal_arguments(z3expr, value);
 
@@ -224,28 +237,33 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
 
                 let field_constraints = fields
                     .iter()
-                    .map(|_| Bool::from_bool(true))
+                    .map(|_| Bool::from_bool(z3expr.z3_context(), true))
                     .collect::<Vec<_>>();
 
                 let mut constraints = vec![enum_literal, enum_matches, variant_matches];
                 constraints.extend(argument_constraints);
                 constraints.extend(field_constraints);
 
-                bool_and(&constraints)
+                bool_and(z3expr.z3_context(), &constraints)
             }
 
-            Pattern::String(pattern_string) => match Z3String::from_str(pattern_string) {
-                Ok(pattern_value) => {
-                    let string_literal = tester(
-                        z3expr,
-                        &z3expr.argon_value_sort().value_testers.string_literal,
-                        value,
-                    );
-                    let actual_value = string_literal_value(z3expr, value);
-                    bool_and(&[string_literal, actual_value.eq(pattern_value)])
+            Pattern::String(pattern_string) => {
+                match Z3String::from_str(z3expr.z3_context(), pattern_string) {
+                    Ok(pattern_value) => {
+                        let string_literal = tester(
+                            z3expr,
+                            &z3expr.argon_value_sort().value_testers.string_literal,
+                            value,
+                        );
+                        let actual_value = string_literal_value(z3expr, value);
+                        bool_and(
+                            z3expr.z3_context(),
+                            &[string_literal, actual_value.equals(&pattern_value)],
+                        )
+                    }
+                    Err(_) => Bool::from_bool(z3expr.z3_context(), false),
                 }
-                Err(_) => Bool::from_bool(false),
-            },
+            }
 
             Pattern::Int(pattern_int) => {
                 let int_literal = tester(
@@ -254,10 +272,13 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                     value,
                 );
                 let actual_value = int_literal_value(z3expr, value);
-                bool_and(&[
-                    int_literal,
-                    actual_value.eq(z3_int_from_big_int(pattern_int)),
-                ])
+                bool_and(
+                    z3expr.z3_context(),
+                    &[
+                        int_literal,
+                        actual_value.equals(&z3_int_from_big_int(z3expr.z3_context(), pattern_int)),
+                    ],
+                )
             }
 
             Pattern::Bool(pattern_bool) => {
@@ -267,20 +288,27 @@ impl<'a, 'access, 'scope, 'model> ExhaustiveChecker<'a, 'access, 'scope, 'model>
                     value,
                 );
                 let actual_value = bool_literal_value(z3expr, value);
-                bool_and(&[
-                    bool_literal,
-                    actual_value.eq(Bool::from_bool(*pattern_bool)),
-                ])
+                bool_and(
+                    z3expr.z3_context(),
+                    &[
+                        bool_literal,
+                        actual_value.equals(&Bool::from_bool(z3expr.z3_context(), *pattern_bool)),
+                    ],
+                )
             }
         }
     }
 }
 
-fn tester(z3expr: &Z3Expr<TypeCheckExprContext>, tester: &FuncDecl, value: &Dynamic) -> Bool {
+fn tester<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    tester: &FuncDecl<'z3>,
+    value: &Dynamic<'z3>,
+) -> Bool<'z3> {
     dynamic_to_bool(tester.apply(&[value]), z3expr)
 }
 
-fn tuple_items(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Seq {
+fn tuple_items<'z3>(z3expr: &Z3Expr<'z3, TypeCheckExprContext>, value: &Dynamic<'z3>) -> Seq<'z3> {
     dynamic_to_seq(
         z3expr
             .argon_value_sort()
@@ -290,7 +318,10 @@ fn tuple_items(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Seq {
     )
 }
 
-fn enum_literal_enum(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Dynamic {
+fn enum_literal_enum<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    value: &Dynamic<'z3>,
+) -> Dynamic<'z3> {
     z3expr
         .argon_value_sort()
         .value_accessors
@@ -298,7 +329,10 @@ fn enum_literal_enum(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> 
         .apply(&[value])
 }
 
-fn enum_literal_variant(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Dynamic {
+fn enum_literal_variant<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    value: &Dynamic<'z3>,
+) -> Dynamic<'z3> {
     z3expr
         .argon_value_sort()
         .value_accessors
@@ -306,7 +340,10 @@ fn enum_literal_variant(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) 
         .apply(&[value])
 }
 
-fn enum_literal_arguments(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Seq {
+fn enum_literal_arguments<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    value: &Dynamic<'z3>,
+) -> Seq<'z3> {
     dynamic_to_seq(
         z3expr
             .argon_value_sort()
@@ -316,7 +353,10 @@ fn enum_literal_arguments(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic
     )
 }
 
-fn string_literal_value(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Z3String {
+fn string_literal_value<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    value: &Dynamic<'z3>,
+) -> Z3String<'z3> {
     z3expr
         .argon_value_sort()
         .value_accessors
@@ -326,7 +366,10 @@ fn string_literal_value(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) 
         .expect("string literal accessor must return a Z3 string")
 }
 
-fn int_literal_value(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Int {
+fn int_literal_value<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    value: &Dynamic<'z3>,
+) -> Int<'z3> {
     z3expr
         .argon_value_sort()
         .value_accessors
@@ -336,7 +379,10 @@ fn int_literal_value(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> 
         .expect("int literal accessor must return a Z3 int")
 }
 
-fn bool_literal_value(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) -> Bool {
+fn bool_literal_value<'z3>(
+    z3expr: &Z3Expr<'z3, TypeCheckExprContext>,
+    value: &Dynamic<'z3>,
+) -> Bool<'z3> {
     z3expr
         .argon_value_sort()
         .value_accessors
@@ -346,47 +392,50 @@ fn bool_literal_value(z3expr: &Z3Expr<TypeCheckExprContext>, value: &Dynamic) ->
         .expect("bool literal accessor must return a Z3 bool")
 }
 
-fn enum_term(z3expr: &mut Z3Expr<TypeCheckExprContext>, enum_: Arc<dyn Enum>) -> Dynamic {
+fn enum_term<'z3>(
+    z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
+    enum_: Arc<dyn Enum>,
+) -> Dynamic<'z3> {
     z3expr.enum_term(&enum_)
 }
 
-fn enum_variant_term(
-    z3expr: &mut Z3Expr<TypeCheckExprContext>,
+fn enum_variant_term<'z3>(
+    z3expr: &mut Z3Expr<'z3, TypeCheckExprContext>,
     variant: Arc<dyn EnumVariant>,
-) -> Dynamic {
+) -> Dynamic<'z3> {
     z3expr.enum_variant_term(&variant)
 }
 
-fn bool_and(values: &[Bool]) -> Bool {
+fn bool_and<'z3>(context: &'z3 Z3Context, values: &[Bool<'z3>]) -> Bool<'z3> {
     if values.is_empty() {
-        Bool::from_bool(true)
+        Bool::from_bool(context, true)
     } else {
         Bool::and(&values.iter().collect::<Vec<_>>())
     }
 }
 
-fn bool_or(values: &[Bool]) -> Bool {
+fn bool_or<'z3>(context: &'z3 Z3Context, values: &[Bool<'z3>]) -> Bool<'z3> {
     if values.is_empty() {
-        Bool::from_bool(false)
+        Bool::from_bool(context, false)
     } else {
         Bool::or(&values.iter().collect::<Vec<_>>())
     }
 }
 
-fn dynamic_to_seq(value: Dynamic) -> Seq {
+fn dynamic_to_seq(value: Dynamic<'_>) -> Seq<'_> {
     value
         .as_seq()
         .expect("Argon value sequence accessor must return a Z3 sequence")
 }
 
-fn dynamic_to_bool(value: Dynamic, _: &Z3Expr<TypeCheckExprContext>) -> Bool {
+fn dynamic_to_bool<'z3>(value: Dynamic<'z3>, _: &Z3Expr<'z3, TypeCheckExprContext>) -> Bool<'z3> {
     value
         .as_bool()
         .expect("Argon value predicate must return a Z3 bool")
 }
 
-fn z3_int_from_big_int(value: &BigInt) -> Int {
-    match Int::from_str(&value.to_string()) {
+fn z3_int_from_big_int<'z3>(context: &'z3 Z3Context, value: &BigInt) -> Int<'z3> {
+    match Int::from_str(context, &value.to_string()) {
         Ok(value) => value,
         Err(error) => panic!("failed to create Z3 integer from Argon integer literal: {error:?}"),
     }

@@ -16,7 +16,7 @@ hashbrown = { workspace = true }
 mitsein = { workspace = true }
 percent-encoding = { workspace = true }
 parse18-runtime = { workspace = true }
-z3 = { workspace = true }
+argon-z3 = { workspace = true }
 
 [lints]
 workspace = true
