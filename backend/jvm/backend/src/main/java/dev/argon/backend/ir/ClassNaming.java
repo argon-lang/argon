@@ -102,59 +102,59 @@ public class ClassNaming {
 
 	private static String erasedSignatureSuffix(ErasedSignature signature) {
 		var builder = new StringBuilder();
-		builder.append("$a");
+		builder.append(":a");
 		for(var parameter : signature.params()) {
 			appendErasedSignatureType(builder, parameter);
 		}
-		builder.append("$r");
+		builder.append(":r");
 		appendErasedSignatureType(builder, signature.result());
 		return builder.toString();
 	}
 
 	private static void appendErasedSignatureType(StringBuilder builder, ErasedSignatureType type) {
 		switch(type) {
-			case ErasedSignatureType.Int _ -> builder.append("$bint$a$e");
-			case ErasedSignatureType.I8 _ -> builder.append("$bi8$a$e");
-			case ErasedSignatureType.U8 _ -> builder.append("$bu8$a$e");
-			case ErasedSignatureType.I16 _ -> builder.append("$bi16$a$e");
-			case ErasedSignatureType.U16 _ -> builder.append("$bu16$a$e");
-			case ErasedSignatureType.I32 _ -> builder.append("$bi32$a$e");
-			case ErasedSignatureType.U32 _ -> builder.append("$bu32$a$e");
-			case ErasedSignatureType.I64 _ -> builder.append("$bi64$a$e");
-			case ErasedSignatureType.U64 _ -> builder.append("$bu64$a$e");
-			case ErasedSignatureType.Bool _ -> builder.append("$bbool$a$e");
-			case ErasedSignatureType.String _ -> builder.append("$bstring$a$e");
-			case ErasedSignatureType.Never _ -> builder.append("$bnever$a$e");
+			case ErasedSignatureType.Int _ -> builder.append(":bint:a:e");
+			case ErasedSignatureType.I8 _ -> builder.append(":bi8:a:e");
+			case ErasedSignatureType.U8 _ -> builder.append(":bu8:a:e");
+			case ErasedSignatureType.I16 _ -> builder.append(":bi16:a:e");
+			case ErasedSignatureType.U16 _ -> builder.append(":bu16:a:e");
+			case ErasedSignatureType.I32 _ -> builder.append(":bi32:a:e");
+			case ErasedSignatureType.U32 _ -> builder.append(":bu32:a:e");
+			case ErasedSignatureType.I64 _ -> builder.append(":bi64:a:e");
+			case ErasedSignatureType.U64 _ -> builder.append(":bu64:a:e");
+			case ErasedSignatureType.Bool _ -> builder.append(":bbool:a:e");
+			case ErasedSignatureType.String _ -> builder.append(":bstring:a:e");
+			case ErasedSignatureType.Never _ -> builder.append(":bnever:a:e");
 			case ErasedSignatureType.Array array -> {
-				builder.append("$barray$a");
+				builder.append(":barray:a");
 				appendErasedSignatureType(builder, array.elementType());
-				builder.append("$e");
+				builder.append(":e");
 			}
 			case ErasedSignatureType.Function function -> {
-				builder.append("$f");
+				builder.append(":f");
 				appendErasedSignatureType(builder, function.input());
-				builder.append("$r");
+				builder.append(":r");
 				appendErasedSignatureType(builder, function.output());
-				builder.append("$e");
+				builder.append(":e");
 			}
 			case ErasedSignatureType.Record record -> {
 				builder
-					.append("$r")
+					.append(":r")
 					.append(importSpecifierSignatureName(record.recordImport()))
-					.append("$a");
+					.append(":a");
 				for(var arg : record.args()) {
 					appendErasedSignatureType(builder, arg);
 				}
-				builder.append("$e");
+				builder.append(":e");
 			}
 			case ErasedSignatureType.Tuple tuple -> {
-				builder.append("$t");
+				builder.append(":t");
 				for(var element : tuple.elements()) {
 					appendErasedSignatureType(builder, element);
 				}
-				builder.append("$e");
+				builder.append(":e");
 			}
-			case ErasedSignatureType.Erased _ -> builder.append("$_");
+			case ErasedSignatureType.Erased _ -> builder.append(":_");
 		}
 	}
 
@@ -163,7 +163,7 @@ public class ClassNaming {
 			case ImportSpecifier.Global global ->
 				identifierToName(global.name()) + erasedSignatureSuffix(global.sig());
 			case ImportSpecifier.Local local ->
-				importSpecifierSignatureName(local.parent()) + "$k" + local.index();
+				importSpecifierSignatureName(local.parent()) + ":k" + local.index();
 		};
 	}
 

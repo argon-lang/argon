@@ -49,9 +49,9 @@ public final class ExternSupport {
 			Object value = Proxy.newProxyInstance(
 				ExternSupport.class.getClassLoader(), new Class<?>[] { pathType },
 				(_proxy, method, _args) -> switch(method.getName()) {
-					case "display$a$r$bstring$a$e" -> new Trampoline.Result<>(path);
-					case "open_read$a$r$rResource$a$_$r$_$a$rInputStream$a$r$_$a$e$e" -> openRead(path);
-					case "open_write$a$r$rResource$a$_$r$_$a$rOutputStream$a$r$_$a$e$e" -> openWrite(path);
+					case "display:a:r:bstring:a:e" -> new Trampoline.Result<>(path);
+					case "open_read:a:r:rResource:a:_:r:_:a:rInputStream:a:r:_:a:e:e" -> openRead(path);
+					case "open_write:a:r:rResource:a:_:r:_:a:rOutputStream:a:r:_:a:e:e" -> openWrite(path);
 					default -> throw new UnsupportedOperationException(method.getName());
 				}
 			);
@@ -69,7 +69,7 @@ public final class ExternSupport {
 			Object value = Proxy.newProxyInstance(
 				ExternSupport.class.getClassLoader(), new Class<?>[] { type },
 				(_proxy, method, args) -> {
-					if(!method.getName().equals("read$a$barray$a$bu8$a$e$e$bint$a$e$bint$a$e$_$r$bint$a$e")) {
+					if(!method.getName().equals("read:a:barray:a:bu8:a:e:e:bint:a:e:bint:a:e:_:r:bint:a:e")) {
 						throw new UnsupportedOperationException(method.getName());
 					}
 					var nonNullArgs = java.util.Objects.requireNonNull(args);
@@ -93,7 +93,7 @@ public final class ExternSupport {
 			Object value = Proxy.newProxyInstance(
 				ExternSupport.class.getClassLoader(), new Class<?>[] { type },
 				(_proxy, method, args) -> {
-					if(!method.getName().equals("write$a$barray$a$bu8$a$e$e$bint$a$e$bint$a$e$_$r$t$e")) {
+					if(!method.getName().equals("write:a:barray:a:bu8:a:e:e:bint:a:e:bint:a:e:_:r:t:e")) {
 						throw new UnsupportedOperationException(method.getName());
 					}
 					var nonNullArgs = java.util.Objects.requireNonNull(args);
@@ -117,8 +117,8 @@ public final class ExternSupport {
 				ExternSupport.class.getClassLoader(), new Class<?>[] { resourceType },
 				(_proxy, method, _args) -> switch(method.getName()) {
 					case ":pt0" -> new TypeInfo(streamType);
-					case "resource$a$r$_" -> new Trampoline.Result<>(stream);
-					case "close$a$t$e$r$t$e" -> {
+					case "resource:a:r:_" -> new Trampoline.Result<>(stream);
+					case "close:a:t:e:r:t:e" -> {
 						try { close.close(); yield new Trampoline.Result<>(new Tuple0()); }
 						catch(IOException ex) { throw new UncheckedIOException(ex); }
 					}

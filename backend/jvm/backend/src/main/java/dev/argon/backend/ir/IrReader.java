@@ -735,7 +735,7 @@ public final class IrReader {
 				case StaticMethodEntry.TraitOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getTraitInfo(ref.traitId()).traitDesc(), true);
 			};
 		}
-		private StaticMethodInfo staticMethodInfo(Identifier name, ErasedSignature erased, FunctionSignature signature, ClassDesc owner, boolean isInterface) { return new StaticMethodInfo(name, erased, signature, owner, "$static$" + ClassNaming.methodName(name, erased), functionSignatureDescriptor(signature), isInterface); }
+		private StaticMethodInfo staticMethodInfo(Identifier name, ErasedSignature erased, FunctionSignature signature, ClassDesc owner, boolean isInterface) { return new StaticMethodInfo(name, erased, signature, owner, ":static:" + ClassNaming.methodName(name, erased), functionSignatureDescriptor(signature), isInterface); }
 
 		private MethodInfo computeMethodInfo(UnsignedBigInteger id) {
 			return switch(require(methodMap, id, "Invalid method id")) {
