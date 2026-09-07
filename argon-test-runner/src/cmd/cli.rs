@@ -16,7 +16,7 @@ use crate::{
     workspace::WorkspacePaths,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
-use argon_runner::{CompileOptions, GenIrOptions, OptimizeOptions};
+use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
 use std::ffi::OsStr;
 use std::path::PathBuf;

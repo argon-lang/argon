@@ -93,7 +93,7 @@ name = "argon-cli"
 version = "0.1.0"
 dependencies = [
  "argon-compiler",
- "argon-runner",
+ "argon-tasks",
  "clap",
  "windows-sys",
 ]
@@ -195,7 +195,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "argon-runner"
+name = "argon-source"
+version = "0.0.0"
+dependencies = [
+ "argon-compiler",
+ "argon-expr",
+ "argon-io",
+ "argon-parser",
+ "argon-prover",
+ "argon-util",
+ "embedded-io",
+ "hashbrown 0.17.1",
+ "mitsein",
+ "num-bigint",
+ "parse18-runtime",
+ "tempfile",
+ "walkdir",
+ "z3",
+]
+
+[[package]]
+name = "argon-tasks"
 version = "0.1.0"
 dependencies = [
  "argon-compiler",
@@ -218,32 +238,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "argon-source"
-version = "0.0.0"
-dependencies = [
- "argon-compiler",
- "argon-expr",
- "argon-io",
- "argon-parser",
- "argon-prover",
- "argon-util",
- "embedded-io",
- "hashbrown 0.17.1",
- "mitsein",
- "num-bigint",
- "parse18-runtime",
- "tempfile",
- "walkdir",
- "z3",
-]
-
-[[package]]
 name = "argon-test-runner"
 version = "0.0.0"
 dependencies = [
  "argon-io",
  "argon-opt",
- "argon-runner",
+ "argon-tasks",
  "argon-testcases",
  "argon-util",
  "clap",

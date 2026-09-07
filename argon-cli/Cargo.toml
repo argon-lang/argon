@@ -6,7 +6,7 @@ edition = "2024"
 
 [dependencies]
 argon-compiler = { workspace = true }
-argon-runner = { workspace = true }
+argon-tasks = { workspace = true }
 clap = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -14,4 +14,3 @@ windows-sys = { workspace = true, features = ["Win32_System_Environment", "Win32
 
 [lints]
 workspace = true
-

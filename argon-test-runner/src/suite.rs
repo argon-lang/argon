@@ -1,6 +1,6 @@
 use crate::cmd::{CommandRunner, CommandRunnerPlatform};
 use argon_opt::pass::ALL_OPTIMIZATIONS;
-use argon_runner::{
+use argon_tasks::{
     CompileOptions, GenIrOptions, OptimizeOptions,
     local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite},
 };

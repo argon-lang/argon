@@ -13,7 +13,7 @@ use crate::{
     workspace::WorkspacePaths,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
-use argon_runner::{CompileOptions, GenIrOptions, OptimizeOptions};
+use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
 use std::ffi::OsStr;
 use std::process::Command;
@@ -42,7 +42,7 @@ impl CommandRunner for DirectCommandRunner {
         O: OutputFile,
         W: Write,
     {
-        argon_runner::compile(options, error_output)
+        argon_tasks::compile(options, error_output)
     }
 
     fn gen_ir<IF, O, W>(&self, options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
@@ -51,7 +51,7 @@ impl CommandRunner for DirectCommandRunner {
         O: OutputFile,
         W: Write,
     {
-        argon_runner::gen_ir(options, error_output)
+        argon_tasks::gen_ir(options, error_output)
     }
 
     fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
@@ -60,7 +60,7 @@ impl CommandRunner for DirectCommandRunner {
         O: OutputFile,
         W: Write,
     {
-        argon_runner::optimize(options, error_output)
+        argon_tasks::optimize(options, error_output)
     }
 }
 

@@ -2,7 +2,7 @@ use crate::{
     CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult,
     cmd::{CommandRunner, CommandRunnerPlatform},
 };
-use argon_runner::local_io::{LocalInputFile, LocalOutputDirectory, LocalOutputFile, StdIoWrite};
+use argon_tasks::local_io::{LocalInputFile, LocalOutputDirectory, LocalOutputFile, StdIoWrite};
 use hashbrown::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["argon-cli","argon-compiler","argon-expr","argon-format", "argon-format-vm", "argon-io", "argon-opt","argon-parser", "argon-prover", "argon-runner", "argon-source","argon-test-runner","argon-testcases", "argon-tube","argon-util", "argon-vm", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-cli","argon-compiler","argon-expr","argon-format", "argon-format-vm", "argon-io", "argon-opt","argon-parser", "argon-prover", "argon-tasks", "argon-source","argon-test-runner","argon-testcases", "argon-tube","argon-util", "argon-vm", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
 
 [workspace.dependencies]
 argon-compiler = { path = "argon-compiler" }
@@ -12,7 +12,7 @@ argon-io = { path = "argon-io" }
 argon-opt = { path = "argon-opt" }
 argon-parser = { path = "argon-parser" }
 argon-prover = { path = "argon-prover" }
-argon-runner = { path = "argon-runner" }
+argon-tasks = { path = "argon-tasks" }
 argon-source = { path = "argon-source" }
 argon-testcases = { path = "argon-testcases" }
 argon-test-runner = { path = "argon-test-runner" }

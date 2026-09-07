@@ -2,7 +2,7 @@ use argon_cli::backend::Backend;
 use argon_cli::options::{
     CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
 };
-use argon_runner::local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite};
+use argon_tasks::local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite};
 use clap::Parser;
 
 fn main() {
@@ -10,7 +10,7 @@ fn main() {
     match options.command {
         Command::Compile(cmd) => {
             let output_file = LocalOutputFile::new(cmd.output_file.clone());
-            let runner_options = argon_runner::CompileOptions {
+            let runner_options = argon_tasks::CompileOptions {
                 tube_name: cmd.tube_name,
                 input_dirs: cmd
                     .input_dirs
@@ -27,12 +27,12 @@ fn main() {
             };
 
             let mut stderr = StdIoWrite::new(std::io::stderr());
-            if !argon_runner::compile(runner_options, &mut stderr) {
+            if !argon_tasks::compile(runner_options, &mut stderr) {
                 std::process::exit(1);
             }
         }
         Command::GenIR(cmd) => {
-            let runner_options = argon_runner::GenIrOptions {
+            let runner_options = argon_tasks::GenIrOptions {
                 input_tube: LocalInputFile::new(cmd.input_tube),
                 referenced_tubes: cmd
                     .referenced_tubes
@@ -44,12 +44,12 @@ fn main() {
             };
 
             let mut stderr = StdIoWrite::new(std::io::stderr());
-            if !argon_runner::gen_ir(runner_options, &mut stderr) {
+            if !argon_tasks::gen_ir(runner_options, &mut stderr) {
                 std::process::exit(1);
             }
         }
         Command::Optimize(cmd) => {
-            let runner_options = argon_runner::OptimizeOptions {
+            let runner_options = argon_tasks::OptimizeOptions {
                 input_file: LocalInputFile::new(cmd.input),
                 referenced_tubes: cmd
                     .referenced_tubes
@@ -61,7 +61,7 @@ fn main() {
             };
 
             let mut stderr = StdIoWrite::new(std::io::stderr());
-            if !argon_runner::optimize(runner_options, &mut stderr) {
+            if !argon_tasks::optimize(runner_options, &mut stderr) {
                 std::process::exit(1);
             }
         }
