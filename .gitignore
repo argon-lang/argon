@@ -2,6 +2,7 @@
 
 target/
 .emsdk/
+.z3/
 bin/
 !**/src/bin/
 src-gen/

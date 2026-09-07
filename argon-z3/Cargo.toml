@@ -3,7 +3,7 @@ name = "argon-z3"
 publish = false
 edition = "2024"
 
-[dependencies]
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 z3-sys = { workspace = true }
 
 [lints]

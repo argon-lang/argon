@@ -1,0 +1,13 @@
+[package]
+name = "argon-dist"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+walrus = { workspace = true }
+wasm-bindgen-cli-support = { workspace = true }
+wat = { workspace = true }
+
+[lints]
+workspace = true

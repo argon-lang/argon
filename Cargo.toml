@@ -1,6 +1,11 @@
 [workspace]
 resolver = "3"
-members = ["argon-cli","argon-compiler","argon-expr","argon-format", "argon-format-vm", "argon-io", "argon-opt","argon-parser", "argon-prover", "argon-tasks", "argon-source","argon-test-runner","argon-testcases", "argon-tube","argon-util", "argon-vm", "argon-z3", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+members = ["argon-cli", "argon-compiler", "argon-dist", "argon-expr", "argon-format", "argon-format-vm", "argon-io", "argon-opt", "argon-parser", "argon-prover", "argon-tasks", "argon-source", "argon-test-runner", "argon-testcases", "argon-tube", "argon-util", "argon-vm", "argon-z3", "parse18/parse18-lexer-gen", "parse18/parse18-ll-gen", "parse18/parse18-runtime"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
 
 [workspace.dependencies]
 argon-compiler = { path = "argon-compiler" }
@@ -55,6 +60,10 @@ toml_edit = { version = "0.25.11", features = ["parse", "serde"] }
 unicode-general-category = { version = "1.1.0" }
 walkdir = "2.5.0"
 windows-sys = "0.61.2"
+wasm-bindgen = "0.2.126"
+walrus = "0.26.5"
+wasm-bindgen-cli-support = "0.2.128"
+wat = "1.245.1"
 z3-sys = { version = "0.11.0", features = ["vendored"] }
 
 [workspace.lints.rust]

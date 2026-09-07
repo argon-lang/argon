@@ -4,13 +4,20 @@ version = "0.1.0"
 publish = false
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 argon-compiler = { workspace = true }
 argon-tasks = { workspace = true }
 clap = { workspace = true }
+embedded-io = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_Environment", "Win32_System_SystemInformation"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+wasm-bindgen = { workspace = true }
 
 [lints]
 workspace = true

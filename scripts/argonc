@@ -3,8 +3,12 @@
 set -eu
 
 script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-dist_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
-wasm_argonc="$dist_dir/arch/wasm32-unknown-emscripten/argonc.js"
+if [ -d "$script_dir/../arch" ]; then
+    dist_dir="$(CDPATH= cd -- "$script_dir/.." && pwd)"
+else
+    dist_dir="$(CDPATH= cd -- "$script_dir/../dist" && pwd)"
+fi
+wasm_argonc="$dist_dir/arch/wasm32-unknown-unknown/argonc.js"
 
 run_wasm() {
     if ! command -v node >/dev/null 2>&1; then
