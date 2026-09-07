@@ -14,6 +14,7 @@ pub struct JVMPlatform;
 #[derive(Default)]
 pub struct JVMPlatformState {
     library_codegen: Mutex<HashMap<String, PathBuf>>,
+    extern_codegen: Mutex<HashMap<String, Vec<PathBuf>>>,
 }
 
 pub struct JvmPlatformMetadataOptions<I, O> {
@@ -86,37 +87,29 @@ impl JVMPlatform {
         &self,
         library: &LibraryInfo<Self, R>,
     ) -> Vec<PathBuf> {
-        let extern_source_dir = library.library_path.join("jvm/externs");
-        if !extern_source_dir.exists() {
-            return Vec::new();
+        let mut extern_map = library
+            .test_suite_context
+            .platform_state
+            .extern_codegen
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(files) = extern_map.get(&library.name) {
+            return files.clone();
         }
 
-        let java_files = walkdir::WalkDir::new(&extern_source_dir)
-            .into_iter()
-            .map(|entry| entry.unwrap())
-            .filter(|entry| entry.file_type().is_file())
-            .map(|entry| entry.into_path())
-            .filter(|path| path.extension() == Some(OsStr::new("java")))
-            .collect::<Vec<_>>();
-
-        if java_files.is_empty() {
-            return Vec::new();
-        }
-
+        let extern_source_dir = library.library_path.join("jvm/extern-generators");
         let output_dir = library.library_output_path.join("jvm/externs");
-        std::fs::create_dir_all(&output_dir).unwrap();
-
-        let runtime_path = jvm_runtime_path(&library.test_suite_context.backend_dir);
-        let mut command = Command::new("javac");
+        let mut command = Command::new(
+            library
+                .test_suite_context
+                .backend_dir
+                .join("jvm/extern-compiler/build/install/extern-compiler/bin/extern-compiler"),
+        );
         command
-            .arg("-d")
-            .arg(&output_dir)
-            .arg("--module-path")
-            .arg(&runtime_path)
-            .arg("--add-modules")
-            .arg("dev.argon.runtime")
-            .args(&java_files);
-        add_javac_stub_source_path(&mut command, &library.library_path.join("jvm/stubs"));
+            .arg("--sources")
+            .arg(&extern_source_dir)
+            .arg("--output")
+            .arg(&output_dir);
 
         let output = command.output().unwrap_or_else(|err| {
             panic!(
@@ -135,22 +128,21 @@ impl JVMPlatform {
             );
         }
 
-        walkdir::WalkDir::new(&output_dir)
+        if !output_dir.is_dir() {
+            extern_map.insert(library.name.clone(), Vec::new());
+            return Vec::new();
+        }
+
+        let mut class_files = walkdir::WalkDir::new(&output_dir)
             .into_iter()
             .map(|entry| entry.unwrap())
             .filter(|entry| entry.file_type().is_file())
             .map(|entry| entry.into_path())
             .filter(|path| path.extension() == Some(OsStr::new("class")))
-            .collect()
-    }
-}
-
-fn add_javac_stub_source_path(command: &mut Command, stub_source_path: &Path) {
-    if stub_source_path.is_dir() {
-        command
-            .arg("--source-path")
-            .arg(stub_source_path)
-            .arg("-implicit:none");
+            .collect::<Vec<_>>();
+        class_files.sort();
+        extern_map.insert(library.name.clone(), class_files.clone());
+        class_files
     }
 }
 
@@ -305,45 +297,4 @@ fn format_arg(arg: &OsStr) -> String {
     }
 
     format!("'{}'", arg.replace('\'', "'\"'\"'"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::add_javac_stub_source_path;
-    use std::process::Command;
-
-    #[test]
-    fn javac_uses_stubs_without_emitting_their_classes() {
-        let temp_dir = tempfile::tempdir().expect("create temp directory");
-        let stub_dir = temp_dir.path().join("stubs/test");
-        let extern_dir = temp_dir.path().join("externs/test");
-        let output_dir = temp_dir.path().join("classes");
-        std::fs::create_dir_all(&stub_dir).expect("create stub directory");
-        std::fs::create_dir_all(&extern_dir).expect("create extern directory");
-        std::fs::create_dir_all(&output_dir).expect("create output directory");
-
-        std::fs::write(
-            stub_dir.join("Stub.java"),
-            "package test; public interface Stub { String value(); }",
-        )
-        .expect("write stub source");
-        let extern_source = extern_dir.join("Implementation.java");
-        std::fs::write(
-            &extern_source,
-            "package test; public final class Implementation implements Stub { public String value() { return \"value\"; } }",
-        )
-        .expect("write extern source");
-
-        let mut command = Command::new("javac");
-        command.arg("-d").arg(&output_dir).arg(&extern_source);
-        add_javac_stub_source_path(&mut command, &temp_dir.path().join("stubs"));
-        let output = command.output().expect("run javac");
-        assert!(
-            output.status.success(),
-            "javac failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-        assert!(output_dir.join("test/Implementation.class").is_file());
-        assert!(!output_dir.join("test/Stub.class").exists());
-    }
 }

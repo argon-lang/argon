@@ -43,7 +43,14 @@ fn main() {
     npm_install_if_needed(&backend_dir, &out_dir, "backend-js");
     npm_run_build(&backend_dir);
 
-    gradle(&jvm_dir, &[":backend:installDist", ":runtime:jar"]);
+    gradle(
+        &jvm_dir,
+        &[
+            ":backend:installDist",
+            ":extern-compiler:installDist",
+            ":runtime:jar",
+        ],
+    );
 }
 
 fn watch_js_package(package_dir: &Path) {
@@ -97,6 +104,14 @@ fn watch_jvm_project(project_dir: &Path) {
     );
     println!(
         "cargo::rerun-if-changed={}/backend/src/main/java",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/extern-compiler/build.gradle.kts",
+        project_dir.display()
+    );
+    println!(
+        "cargo::rerun-if-changed={}/extern-compiler/src/main/java",
         project_dir.display()
     );
     println!(

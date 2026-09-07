@@ -12,4 +12,5 @@ include(
     "runtime",
     "api",
     "backend",
+    "extern-compiler",
 )
