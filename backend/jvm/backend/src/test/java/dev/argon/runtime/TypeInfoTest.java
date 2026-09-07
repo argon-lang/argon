@@ -9,7 +9,7 @@ final class TypeInfoTest {
 	void equalsTreatsNullAndEmptyTypeArgsAsEquivalent() {
 		var withoutArgs = new TypeInfo(String.class);
 		var withEmptyArgs = new TypeInfo(String.class, new Token[0]);
-		var withNullArgs = new TypeInfo(String.class, (Token[])null);
+		var withNullArgs = new TypeInfo(String.class, (Token[]) null);
 
 		assertEquals(withoutArgs, withEmptyArgs);
 		assertEquals(withoutArgs, withNullArgs);

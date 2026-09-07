@@ -11,25 +11,23 @@ import java.lang.constant.ConstantDescs;
 public final class TokenTypes {
 
 	public static boolean elementTypeRequiresErasedArray(Token elementType) {
-		return switch(elementType) {
-			case Token.TokenParameter _, Token.ParentTokenParameter _ -> true;
+		return switch (elementType) {
+			case Token.TokenParameter _,Token.ParentTokenParameter _ -> true;
 			default -> false;
 		};
 	}
 
-
 	public static ClassDesc tokenAsClassDesc(ProgramModel program, Token token) {
-		return switch(token) {
+		return switch (token) {
 			case Token.Boxed _ -> ConstantDescs.CD_Object;
-			case Token.Builtin(var bt) -> switch(bt) {
-				case BuiltinType.Array(var elementType) ->
-					elementTypeRequiresErasedArray(elementType) ?
-						ConstantDescs.CD_Object :
-						tokenAsClassDesc(program, elementType).arrayType();
+			case Token.Builtin(var bt) -> switch (bt) {
+				case BuiltinType.Array(var elementType) -> elementTypeRequiresErasedArray(elementType)
+					? ConstantDescs.CD_Object
+					: tokenAsClassDesc(program, elementType).arrayType();
 				case BuiltinType.Bool() -> ConstantDescs.CD_boolean;
 				case BuiltinType.Conjunction _ -> throw new RuntimeException("Conjunction not implemented");
 				case BuiltinType.Disjunction _ -> throw new RuntimeException("Disjunction not implemented");
-				case BuiltinType.Int(var integerType) -> switch(integerType) {
+				case BuiltinType.Int(var integerType) -> switch (integerType) {
 					case INT -> ClassDesc.of("java.math.BigInteger");
 					case I8 -> ConstantDescs.CD_byte;
 					case U8 -> ConstantDescs.CD_byte;
@@ -71,7 +69,8 @@ public final class TokenTypes {
 			case Token.Tuple tuple -> {
 				if(tuple.elements().size() > 10) {
 					yield ClassDesc.of("dev.argon.runtime.TupleXL");
-				} else {
+				}
+				else {
 					yield ClassDesc.of("dev.argon.runtime.Tuple" + tuple.elements().size());
 				}
 			}

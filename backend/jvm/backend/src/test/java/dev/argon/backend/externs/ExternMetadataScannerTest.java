@@ -30,23 +30,18 @@ final class ExternMetadataScannerTest {
 
 	@Test
 	void scansPublicStaticExternFunction() throws Exception {
-		var classes = compileSources(
-			source(
-				"test/externs/Externs.java",
-				"""
-				package test.externs;
+		var classes = compileSources(source("test/externs/Externs.java", """
+			package test.externs;
 
-				import dev.argon.runtime.ExternFunction;
+			import dev.argon.runtime.ExternFunction;
 
-				public final class Externs {
-					@ExternFunction("custom_name")
-					public static String externMethod(int value) {
-						return Integer.toString(value);
-					}
+			public final class Externs {
+				@ExternFunction("custom_name")
+				public static String externMethod(int value) {
+					return Integer.toString(value);
 				}
-				"""
-			)
-		);
+			}
+			"""));
 
 		var result = ExternMetadataScanner.platformMetadata(inputFiles(classes));
 
@@ -54,10 +49,8 @@ final class ExternMetadataScannerTest {
 		var extern = assertInstanceOf(Extern.ExternFunction.class, result.externs().map().get("custom_name"));
 		assertEquals("custom_name", extern.name());
 
-		var implementation = assertInstanceOf(
-			JvmExtern.JvmFunction.class,
-			JvmExtern.codec().decode(extern.implementation())
-		);
+		var implementation = assertInstanceOf(JvmExtern.JvmFunction.class,
+			JvmExtern.codec().decode(extern.implementation()));
 		assertEquals("test/externs/Externs", implementation._class());
 		assertEquals("(I)Ljava/lang/String;", implementation.descriptor());
 
@@ -68,22 +61,17 @@ final class ExternMetadataScannerTest {
 
 	@Test
 	void usesMethodNameWhenExternFunctionValueIsEmpty() throws Exception {
-		var classes = compileSources(
-			source(
-				"test/externs/Externs.java",
-				"""
-				package test.externs;
+		var classes = compileSources(source("test/externs/Externs.java", """
+			package test.externs;
 
-				import dev.argon.runtime.ExternFunction;
+			import dev.argon.runtime.ExternFunction;
 
-				public final class Externs {
-					@ExternFunction
-					public static void defaultName() {
-					}
+			public final class Externs {
+				@ExternFunction
+				public static void defaultName() {
 				}
-				"""
-			)
-		);
+			}
+			"""));
 
 		var result = ExternMetadataScanner.platformMetadata(inputFiles(classes));
 
@@ -92,27 +80,20 @@ final class ExternMetadataScannerTest {
 
 	@Test
 	void rejectsAnnotatedNonStaticMethod() throws Exception {
-		var classes = compileSources(
-			source(
-				"test/externs/Externs.java",
-				"""
-				package test.externs;
+		var classes = compileSources(source("test/externs/Externs.java", """
+			package test.externs;
 
-				import dev.argon.runtime.ExternFunction;
+			import dev.argon.runtime.ExternFunction;
 
-				public final class Externs {
-					@ExternFunction("bad")
-					public void bad() {
-					}
+			public final class Externs {
+				@ExternFunction("bad")
+				public void bad() {
 				}
-				"""
-			)
-		);
+			}
+			"""));
 
-		var ex = assertThrows(
-			IllegalArgumentException.class,
-			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes))
-		);
+		var ex = assertThrows(IllegalArgumentException.class,
+			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes)));
 		var message = ex.getMessage();
 		assertNotNull(message);
 		assertTrue(message.contains("must be a public static method"));
@@ -120,27 +101,20 @@ final class ExternMetadataScannerTest {
 
 	@Test
 	void rejectsAnnotatedNonPublicMethod() throws Exception {
-		var classes = compileSources(
-			source(
-				"test/externs/Externs.java",
-				"""
-				package test.externs;
+		var classes = compileSources(source("test/externs/Externs.java", """
+			package test.externs;
 
-				import dev.argon.runtime.ExternFunction;
+			import dev.argon.runtime.ExternFunction;
 
-				public final class Externs {
-					@ExternFunction("bad")
-					static void bad() {
-					}
+			public final class Externs {
+				@ExternFunction("bad")
+				static void bad() {
 				}
-				"""
-			)
-		);
+			}
+			"""));
 
-		var ex = assertThrows(
-			IllegalArgumentException.class,
-			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes))
-		);
+		var ex = assertThrows(IllegalArgumentException.class,
+			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes)));
 		var message = ex.getMessage();
 		assertNotNull(message);
 		assertTrue(message.contains("must be a public static method"));
@@ -148,15 +122,10 @@ final class ExternMetadataScannerTest {
 
 	@Test
 	void moduleInfoSetsModuleName() throws Exception {
-		var classes = compileSources(
-			source(
-				"module-info.java",
-				"""
-				module scanner.fixture {
-				}
-				"""
-			)
-		);
+		var classes = compileSources(source("module-info.java", """
+			module scanner.fixture {
+			}
+			"""));
 
 		var result = ExternMetadataScanner.platformMetadata(inputFiles(classes));
 		var tubeMetadata = JvmPlatformTubeMetadata.codec().decode(result.tubeMetadata());
@@ -166,15 +135,10 @@ final class ExternMetadataScannerTest {
 
 	@Test
 	void argonModulePackageInfoAddsModulePackageMetadata() throws Exception {
-		var classes = compileSources(
-			source(
-				"test/externs/package-info.java",
-				"""
-				@dev.argon.runtime.ArgonModule({"Argon", "Core", "Puts"})
-				package test.externs;
-				"""
-			)
-		);
+		var classes = compileSources(source("test/externs/package-info.java", """
+			@dev.argon.runtime.ArgonModule({"Argon", "Core", "Puts"})
+			package test.externs;
+			"""));
 
 		var result = ExternMetadataScanner.platformMetadata(inputFiles(classes));
 		var tubeMetadata = JvmPlatformTubeMetadata.codec().decode(result.tubeMetadata());
@@ -220,12 +184,9 @@ final class ExternMetadataScannerTest {
 
 	private static List<InputFile> inputFiles(Path classes) throws IOException {
 		try(var stream = Files.walk(classes)) {
-			return stream
-				.filter(Files::isRegularFile)
-				.filter(path -> Objects.requireNonNull(path.getFileName()).toString().endsWith(".class"))
-				.sorted()
-				.map(InputFile::fromPath)
-				.toList();
+			return stream.filter(Files::isRegularFile)
+				.filter(path -> Objects.requireNonNull(path.getFileName()).toString().endsWith(".class")).sorted()
+				.map(InputFile::fromPath).toList();
 		}
 	}
 

@@ -11,13 +11,13 @@ public final class TypeInfo implements Token {
 		this.typeArgs = null;
 	}
 
-	public TypeInfo(Class<?> type, Token @Nullable ...typeArgs) {
+	public TypeInfo(Class<?> type, Token @Nullable... typeArgs) {
 		this.type = type;
 		this.typeArgs = typeArgs == null || typeArgs.length == 0 ? null : typeArgs.clone();
 	}
 
 	private final Class<?> type;
-	private final Token @Nullable[] typeArgs;
+	private final Token @Nullable [] typeArgs;
 
 	public Class<?> javaClass() {
 		return type;
@@ -41,8 +41,7 @@ public final class TypeInfo implements Token {
 			return false;
 		}
 
-		return Objects.equals(type, other.type) &&
-			Arrays.equals(typeArgsOrEmpty(), other.typeArgsOrEmpty());
+		return Objects.equals(type, other.type) && Arrays.equals(typeArgsOrEmpty(), other.typeArgsOrEmpty());
 	}
 
 	@Override

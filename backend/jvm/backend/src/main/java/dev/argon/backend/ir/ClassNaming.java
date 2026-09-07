@@ -14,50 +14,35 @@ import java.lang.constant.ClassDesc;
 import java.lang.constant.ModuleDesc;
 
 public class ClassNaming {
-	private ClassNaming() {}
+	private ClassNaming() {
+	}
 
 	static ModuleDesc tubeModuleName(TubeName tubeName, JvmPlatformTubeMetadata platformMetadata) {
-		return ModuleDesc.of(
-			platformMetadata.moduleName()
-				.orElseGet(() -> ClassNaming.defaultTubeModuleName(tubeName))
-		);
+		return ModuleDesc
+			.of(platformMetadata.moduleName().orElseGet(() -> ClassNaming.defaultTubeModuleName(tubeName)));
 	}
 
 	static String tubeModulePackageName(ProgramModel program, ModulePath modulePath, UnsignedBigInteger tubeId) {
 		var tubeInfo = program.getTubeInfo(tubeId);
 		var metadata = tubeInfo.platformMetadata();
-		var moduleMetadata = metadata.moduleMetadata()
-			.flatMap(mapping ->
-				mapping.stream()
-					.filter(mm -> mm.modulePath().equals(modulePath))
-					.flatMap(mm -> mm.packageName().stream())
-					.findAny()
-			);
+		var moduleMetadata = metadata.moduleMetadata().flatMap(mapping -> mapping.stream()
+			.filter(mm -> mm.modulePath().equals(modulePath)).flatMap(mm -> mm.packageName().stream()).findAny());
 
-		return moduleMetadata
-			.orElseGet(() -> defaultModulePackageName(tubeInfo.tubeName(), modulePath));
+		return moduleMetadata.orElseGet(() -> defaultModulePackageName(tubeInfo.tubeName(), modulePath));
 	}
 
 	static ClassDesc typeDefinitionClassDescriptor(ProgramModel program, ImportSpecifier importSpecifier) {
-		return switch(importSpecifier) {
+		return switch (importSpecifier) {
 			case ImportSpecifier.Global global -> {
 				var moduleInfo = program.getModuleInfo(global.moduleId());
 
 				var globalName = identifierToName(global.name());
-				if(
-					globalName.startsWith("_") ||
-						globalName.equals("package-info") ||
-						globalName.equals("module-info") ||
-						globalName.equals("Globals") ||
-						globalName.equals("Main")
-				) {
+				if(globalName.startsWith("_") || globalName.equals("package-info") || globalName.equals("module-info")
+					|| globalName.equals("Globals") || globalName.equals("Main")) {
 					globalName = "_" + globalName;
 				}
 
-				yield ClassDesc.of(
-					moduleInfo.packageName().name(),
-					globalName
-				);
+				yield ClassDesc.of(moduleInfo.packageName().name(), globalName);
 			}
 			case ImportSpecifier.Local local -> {
 				var parent = typeDefinitionClassDescriptor(program, local.parent());
@@ -67,10 +52,7 @@ public class ClassNaming {
 	}
 
 	public static ClassDesc moduleGlobalFunctionsClassName(ProgramModel.ModuleInfo moduleInfo) {
-		return ClassDesc.of(
-			moduleInfo.packageName().name(),
-			"Globals"
-		);
+		return ClassDesc.of(moduleInfo.packageName().name(), "Globals");
 	}
 
 	public static String typeTokenParameterFieldName(int index) {
@@ -82,7 +64,7 @@ public class ClassNaming {
 	}
 
 	static String functionName(ImportSpecifier importSpecifier) {
-		return switch(importSpecifier) {
+		return switch (importSpecifier) {
 			case ImportSpecifier.Global global -> identifierToName(global.name()) + erasedSignatureSuffix(global.sig());
 			case ImportSpecifier.Local local -> functionName(local.parent()) + ":k" + local.index();
 		};
@@ -112,7 +94,7 @@ public class ClassNaming {
 	}
 
 	private static void appendErasedSignatureType(StringBuilder builder, ErasedSignatureType type) {
-		switch(type) {
+		switch (type) {
 			case ErasedSignatureType.Int _ -> builder.append(":bint:a:e");
 			case ErasedSignatureType.I8 _ -> builder.append(":bi8:a:e");
 			case ErasedSignatureType.U8 _ -> builder.append(":bu8:a:e");
@@ -138,10 +120,7 @@ public class ClassNaming {
 				builder.append(":e");
 			}
 			case ErasedSignatureType.Record record -> {
-				builder
-					.append(":r")
-					.append(importSpecifierSignatureName(record.recordImport()))
-					.append(":a");
+				builder.append(":r").append(importSpecifierSignatureName(record.recordImport())).append(":a");
 				for(var arg : record.args()) {
 					appendErasedSignatureType(builder, arg);
 				}
@@ -159,11 +138,9 @@ public class ClassNaming {
 	}
 
 	private static String importSpecifierSignatureName(ImportSpecifier importSpecifier) {
-		return switch(importSpecifier) {
-			case ImportSpecifier.Global global ->
-				identifierToName(global.name()) + erasedSignatureSuffix(global.sig());
-			case ImportSpecifier.Local local ->
-				importSpecifierSignatureName(local.parent()) + ":k" + local.index();
+		return switch (importSpecifier) {
+			case ImportSpecifier.Global global -> identifierToName(global.name()) + erasedSignatureSuffix(global.sig());
+			case ImportSpecifier.Local local -> importSpecifierSignatureName(local.parent()) + ":k" + local.index();
 		};
 	}
 
@@ -174,10 +151,7 @@ public class ClassNaming {
 	}
 
 	private static void appendDefaultTubeBasePackage(StringBuilder builder, TubeName tubeName) {
-		builder
-			.append("argontube")
-			.append(tubeName.tail().size() + 1)
-			.append('.');
+		builder.append("argontube").append(tubeName.tail().size() + 1).append('.');
 		appendEncodedTubeName(builder, tubeName);
 	}
 
@@ -190,7 +164,8 @@ public class ClassNaming {
 		}
 	}
 
-	private static void appendDefaultModulePackageName(StringBuilder builder, TubeName tubeName, ModulePath modulePath) {
+	private static void appendDefaultModulePackageName(StringBuilder builder, TubeName tubeName,
+		ModulePath modulePath) {
 		appendDefaultTubeBasePackage(builder, tubeName);
 
 		for(var segment : modulePath.path()) {
@@ -216,7 +191,7 @@ public class ClassNaming {
 
 		for(var i = 0; i < identifier.length(); ++i) {
 			var ch = identifier.charAt(i);
-			var replacement = switch(ch) {
+			var replacement = switch (ch) {
 				case '/' -> '|';
 				case '.' -> ',';
 				case ';' -> '?';
@@ -258,7 +233,7 @@ public class ClassNaming {
 			return false;
 		}
 
-		return switch(identifier.charAt(index + 1)) {
+		return switch (identifier.charAt(index + 1)) {
 			case '|', ',', '?', '%', '^', '_', '{', '}', '!', '-' -> true;
 			case '=' -> index == 0;
 			default -> false;
@@ -266,7 +241,7 @@ public class ClassNaming {
 	}
 
 	private static String identifierToName(Identifier identifier) {
-		return switch(identifier) {
+		return switch (identifier) {
 			case Identifier.BinOp(var binOp) -> ":b" + escapedIdentifier(binaryOperatorName(binOp));
 			case Identifier.Extension(var inner) -> ":x" + identifierToName(inner);
 			case Identifier.Index() -> ":n";
@@ -282,7 +257,7 @@ public class ClassNaming {
 	}
 
 	private static String binaryOperatorName(dev.argon.vm.BinaryOperator operator) {
-		return switch(operator) {
+		return switch (operator) {
 			case PLUS -> "+";
 			case MINUS -> "-";
 			case MUL -> "*";
@@ -303,14 +278,12 @@ public class ClassNaming {
 	}
 
 	private static String unaryOperatorName(dev.argon.vm.UnaryOperator operator) {
-		return switch(operator) {
+		return switch (operator) {
 			case PLUS -> "+";
 			case MINUS -> "-";
 			case BIT_NOT -> "~~~";
 			case LOGICAL_NOT -> "!";
 		};
 	}
-
-
 
 }

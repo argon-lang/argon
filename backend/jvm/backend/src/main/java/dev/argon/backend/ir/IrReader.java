@@ -25,12 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 public final class IrReader {
-	private static final JvmPlatformTubeMetadata EMPTY_PLATFORM_METADATA =
-		new JvmPlatformTubeMetadata(
-			Optional.empty(),
-			Optional.empty(),
-			Optional.empty()
-		);
+	private static final JvmPlatformTubeMetadata EMPTY_PLATFORM_METADATA = new JvmPlatformTubeMetadata(Optional.empty(),
+		Optional.empty(), Optional.empty());
 
 	private @Nullable TubeHeader header;
 	private @Nullable TubeMetadata metadata;
@@ -58,7 +54,7 @@ public final class IrReader {
 		var binaryReader = new ESExprBinaryReader(input);
 
 		ESExpr expr;
-		while((expr = binaryReader.tryRead()) != null) {
+		while ((expr = binaryReader.tryRead()) != null) {
 			reader.recordEntry(TubeFileEntry.codec().decode(expr));
 		}
 
@@ -85,45 +81,28 @@ public final class IrReader {
 
 		var referencePlatformMetadata = ImmutableMap.<TubeName, JvmPlatformTubeMetadata>builder();
 		for(var ref : metadata.referencedTubes()) {
-			referencePlatformMetadata.put(
-				ref.name(),
-				decodePlatformMetadata(ref.metadata())
-			);
+			referencePlatformMetadata.put(ref.name(), decodePlatformMetadata(ref.metadata()));
 		}
 
-		var decodedMetadata = new ProgramModel.DecodedMetadata(
-			decodePlatformMetadata(metadata.platformMetadata()),
-			referencePlatformMetadata.build()
-		);
+		var decodedMetadata = new ProgramModel.DecodedMetadata(decodePlatformMetadata(metadata.platformMetadata()),
+			referencePlatformMetadata.build());
 
 		var moduleModels = new ArrayList<ProgramModel.ModuleModel>();
 		var declaredModules = metadata.modules();
 		for(int i = 0; i < declaredModules.size(); ++i) {
 			var moduleBuilder = modules.get(UnsignedBigInteger.valueOf(i));
-			var exports =
-				moduleBuilder == null
-					? List.<ProgramModel.ModuleExportEntry>of()
-					: List.copyOf(moduleBuilder.exports);
+			var exports = moduleBuilder == null
+				? List.<ProgramModel.ModuleExportEntry>of()
+				: List.copyOf(moduleBuilder.exports);
 
-			moduleModels.add(new ProgramModel.ModuleModel(declaredModules.get(i).path(), exports, UnsignedBigInteger.valueOf(i)));
+			moduleModels.add(
+				new ProgramModel.ModuleModel(declaredModules.get(i).path(), exports, UnsignedBigInteger.valueOf(i)));
 		}
 
-		return new ProgramModelImpl(
-			header,
-			metadata,
-			decodedMetadata,
-			List.copyOf(moduleModels),
-			Map.copyOf(moduleRefMap),
-			Map.copyOf(functionMap),
-			Map.copyOf(recordMap),
-			Map.copyOf(recordFieldMap),
-			Map.copyOf(enumMap),
-			Map.copyOf(enumVariantMap),
-			Map.copyOf(traitMap),
-			Map.copyOf(methodMap),
-			Map.copyOf(staticMethodMap),
-			Map.copyOf(instanceMap)
-		);
+		return new ProgramModelImpl(header, metadata, decodedMetadata, List.copyOf(moduleModels),
+			Map.copyOf(moduleRefMap), Map.copyOf(functionMap), Map.copyOf(recordMap), Map.copyOf(recordFieldMap),
+			Map.copyOf(enumMap), Map.copyOf(enumVariantMap), Map.copyOf(traitMap), Map.copyOf(methodMap),
+			Map.copyOf(staticMethodMap), Map.copyOf(instanceMap));
 	}
 
 	public void recordEntry(TubeFileEntry entry) {
@@ -148,7 +127,7 @@ public final class IrReader {
 		ImportSpecifier importSpec;
 		ProgramModel.ModuleExportEntry exportEntry;
 
-		switch(entry) {
+		switch (entry) {
 			case TubeFileEntry.Header ignored -> throw new IllegalStateException("Extra header not allowed in VMIR");
 
 			case TubeFileEntry.Metadata ignored ->
@@ -160,10 +139,8 @@ public final class IrReader {
 			}
 
 			case TubeFileEntry.FunctionDefinition functionDefinition -> {
-				functionMap.put(
-					functionDefinition.definition().functionId(),
-					new FunctionEntry.Definition(functionDefinition)
-				);
+				functionMap.put(functionDefinition.definition().functionId(),
+					new FunctionEntry.Definition(functionDefinition));
 				importSpec = functionDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.FunctionDefinition(functionDefinition);
 			}
@@ -174,26 +151,24 @@ public final class IrReader {
 			}
 
 			case TubeFileEntry.RecordDefinition recordDefinition -> {
-				recordMap.put(
-					recordDefinition.definition().recordId(),
-					new RecordEntry.Definition(recordDefinition)
-				);
+				recordMap.put(recordDefinition.definition().recordId(), new RecordEntry.Definition(recordDefinition));
 				importSpec = recordDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.RecordDefinition(recordDefinition);
-				for(var method : recordDefinition.definition().methods()) methodMap.put(method.methodId(),
-					new MethodEntry.RecordOwner(new TubeFileEntry.RecordMethodReference(method.methodId(), recordDefinition.definition().recordId(), method.name(), method.erasedSignature(), method.signature())));
-				for(var method : recordDefinition.definition().staticMethods()) staticMethodMap.put(method.staticMethodId(), new StaticMethodEntry.RecordOwner(new TubeFileEntry.RecordStaticMethodReference(method.staticMethodId(), recordDefinition.definition().recordId(), method.name(), method.erasedSignature(), method.signature())));
+				for(var method : recordDefinition.definition().methods())
+					methodMap.put(method.methodId(),
+						new MethodEntry.RecordOwner(new TubeFileEntry.RecordMethodReference(method.methodId(),
+							recordDefinition.definition().recordId(), method.name(), method.erasedSignature(),
+							method.signature())));
+				for(var method : recordDefinition.definition().staticMethods())
+					staticMethodMap.put(method.staticMethodId(),
+						new StaticMethodEntry.RecordOwner(new TubeFileEntry.RecordStaticMethodReference(
+							method.staticMethodId(), recordDefinition.definition().recordId(), method.name(),
+							method.erasedSignature(), method.signature())));
 
 				for(var field : recordDefinition.definition().fields()) {
-					recordFieldMap.put(
-						field.fieldId(),
-						new RecordFieldEntry.OfRecord(new TubeFileEntry.RecordFieldReference(
-							field.fieldId(),
-							recordDefinition.definition().recordId(),
-							field.name(),
-							field.fieldType()
-						))
-					);
+					recordFieldMap.put(field.fieldId(),
+						new RecordFieldEntry.OfRecord(new TubeFileEntry.RecordFieldReference(field.fieldId(),
+							recordDefinition.definition().recordId(), field.name(), field.fieldType())));
 				}
 			}
 
@@ -201,42 +176,41 @@ public final class IrReader {
 				recordMap.put(recordRef.recordId(), new RecordEntry.Reference(recordRef));
 				return;
 			}
-			case TubeFileEntry.RecordMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.RecordOwner(methodRef)); return; }
-			case TubeFileEntry.RecordStaticMethodReference ref -> { staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.RecordOwner(ref)); return; }
+			case TubeFileEntry.RecordMethodReference methodRef -> {
+				methodMap.put(methodRef.methodId(), new MethodEntry.RecordOwner(methodRef));
+				return;
+			}
+			case TubeFileEntry.RecordStaticMethodReference ref -> {
+				staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.RecordOwner(ref));
+				return;
+			}
 
 			case TubeFileEntry.EnumDefinition enumDefinition -> {
-				enumMap.put(
-					enumDefinition.definition().enumId(),
-					new EnumEntry.Definition(enumDefinition)
-				);
+				enumMap.put(enumDefinition.definition().enumId(), new EnumEntry.Definition(enumDefinition));
 				importSpec = enumDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.EnumDefinition(enumDefinition);
-				for(var method : enumDefinition.definition().methods()) methodMap.put(method.methodId(),
-					new MethodEntry.EnumOwner(new TubeFileEntry.EnumMethodReference(method.methodId(), enumDefinition.definition().enumId(), method.name(), method.erasedSignature(), method.signature())));
-				for(var method : enumDefinition.definition().staticMethods()) staticMethodMap.put(method.staticMethodId(), new StaticMethodEntry.EnumOwner(new TubeFileEntry.EnumStaticMethodReference(method.staticMethodId(), enumDefinition.definition().enumId(), method.name(), method.erasedSignature(), method.signature())));
+				for(var method : enumDefinition.definition().methods())
+					methodMap.put(method.methodId(),
+						new MethodEntry.EnumOwner(new TubeFileEntry.EnumMethodReference(method.methodId(),
+							enumDefinition.definition().enumId(), method.name(), method.erasedSignature(),
+							method.signature())));
+				for(var method : enumDefinition.definition().staticMethods())
+					staticMethodMap.put(method.staticMethodId(),
+						new StaticMethodEntry.EnumOwner(new TubeFileEntry.EnumStaticMethodReference(
+							method.staticMethodId(), enumDefinition.definition().enumId(), method.name(),
+							method.erasedSignature(), method.signature())));
 				for(var variant : enumDefinition.definition().variants()) {
-					enumVariantMap.put(
-						variant.variantId(),
-						new TubeFileEntry.EnumVariantReference(
-							variant.variantId(),
-							enumDefinition.definition().enumId(),
-							variant.name(),
-							variant.signature()
-						)
-					);
-					for(var method : variant.methods()) methodMap.put(method.methodId(),
-						new MethodEntry.EnumVariant(new TubeFileEntry.EnumVariantMethodReference(method.methodId(), variant.variantId(), method.name(), method.erasedSignature(), method.signature())));
+					enumVariantMap.put(variant.variantId(), new TubeFileEntry.EnumVariantReference(variant.variantId(),
+						enumDefinition.definition().enumId(), variant.name(), variant.signature()));
+					for(var method : variant.methods())
+						methodMap.put(method.methodId(),
+							new MethodEntry.EnumVariant(new TubeFileEntry.EnumVariantMethodReference(method.methodId(),
+								variant.variantId(), method.name(), method.erasedSignature(), method.signature())));
 
 					for(var field : variant.fields()) {
-						recordFieldMap.put(
-							field.fieldId(),
+						recordFieldMap.put(field.fieldId(),
 							new RecordFieldEntry.EnumVariant(new TubeFileEntry.EnumVariantRecordFieldReference(
-								field.fieldId(),
-								variant.variantId(),
-								field.name(),
-								field.fieldType()
-							))
-						);
+								field.fieldId(), variant.variantId(), field.name(), field.fieldType())));
 					}
 				}
 			}
@@ -245,51 +219,50 @@ public final class IrReader {
 				enumMap.put(enumRef.enumId(), new EnumEntry.Reference(enumRef));
 				return;
 			}
-			case TubeFileEntry.EnumMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.EnumOwner(methodRef)); return; }
-			case TubeFileEntry.EnumStaticMethodReference ref -> { staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.EnumOwner(ref)); return; }
+			case TubeFileEntry.EnumMethodReference methodRef -> {
+				methodMap.put(methodRef.methodId(), new MethodEntry.EnumOwner(methodRef));
+				return;
+			}
+			case TubeFileEntry.EnumStaticMethodReference ref -> {
+				staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.EnumOwner(ref));
+				return;
+			}
 
 			case TubeFileEntry.EnumVariantReference enumVariantRef -> {
 				enumVariantMap.put(enumVariantRef.variantId(), enumVariantRef);
 				return;
 			}
-			case TubeFileEntry.EnumVariantMethodReference methodRef -> { methodMap.put(methodRef.methodId(), new MethodEntry.EnumVariant(methodRef)); return; }
+			case TubeFileEntry.EnumVariantMethodReference methodRef -> {
+				methodMap.put(methodRef.methodId(), new MethodEntry.EnumVariant(methodRef));
+				return;
+			}
 
 			case TubeFileEntry.RecordFieldReference recordFieldRef -> {
-				recordFieldMap.put(
-					recordFieldRef.recordFieldId(),
-					new RecordFieldEntry.OfRecord(recordFieldRef)
-				);
+				recordFieldMap.put(recordFieldRef.recordFieldId(), new RecordFieldEntry.OfRecord(recordFieldRef));
 				return;
 			}
 
 			case TubeFileEntry.EnumVariantRecordFieldReference enumVariantRecordFieldRef -> {
-				recordFieldMap.put(
-					enumVariantRecordFieldRef.recordFieldId(),
-					new RecordFieldEntry.EnumVariant(enumVariantRecordFieldRef)
-				);
+				recordFieldMap.put(enumVariantRecordFieldRef.recordFieldId(),
+					new RecordFieldEntry.EnumVariant(enumVariantRecordFieldRef));
 				return;
 			}
 
 			case TubeFileEntry.TraitDefinition traitDefinition -> {
-				traitMap.put(
-					traitDefinition.definition().traitId(),
-					new TraitEntry.Definition(traitDefinition)
-				);
+				traitMap.put(traitDefinition.definition().traitId(), new TraitEntry.Definition(traitDefinition));
 				importSpec = traitDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.TraitDefinition(traitDefinition);
 				for(var method : traitDefinition.definition().methods()) {
-					methodMap.put(
-						method.methodId(),
-						new MethodEntry.Trait(new TubeFileEntry.TraitMethodReference(
-							method.methodId(),
-							traitDefinition.definition().traitId(),
-							method.name(),
-							method.erasedSignature(),
-							method.signature()
-						))
-					);
+					methodMap.put(method.methodId(),
+						new MethodEntry.Trait(new TubeFileEntry.TraitMethodReference(method.methodId(),
+							traitDefinition.definition().traitId(), method.name(), method.erasedSignature(),
+							method.signature())));
 				}
-				for(var method : traitDefinition.definition().staticMethods()) staticMethodMap.put(method.staticMethodId(), new StaticMethodEntry.TraitOwner(new TubeFileEntry.TraitStaticMethodReference(method.staticMethodId(), traitDefinition.definition().traitId(), method.name(), method.erasedSignature(), method.signature())));
+				for(var method : traitDefinition.definition().staticMethods())
+					staticMethodMap.put(method.staticMethodId(),
+						new StaticMethodEntry.TraitOwner(new TubeFileEntry.TraitStaticMethodReference(
+							method.staticMethodId(), traitDefinition.definition().traitId(), method.name(),
+							method.erasedSignature(), method.signature())));
 			}
 
 			case TubeFileEntry.TraitReference traitRef -> {
@@ -301,26 +274,21 @@ public final class IrReader {
 				methodMap.put(traitMethodRef.methodId(), new MethodEntry.Trait(traitMethodRef));
 				return;
 			}
-			case TubeFileEntry.TraitStaticMethodReference ref -> { staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.TraitOwner(ref)); return; }
+			case TubeFileEntry.TraitStaticMethodReference ref -> {
+				staticMethodMap.put(ref.staticMethodId(), new StaticMethodEntry.TraitOwner(ref));
+				return;
+			}
 
 			case TubeFileEntry.InstanceDefinition instanceDefinition -> {
-				instanceMap.put(
-					instanceDefinition.definition().instanceId(),
-					new InstanceEntry.Definition(instanceDefinition)
-				);
+				instanceMap.put(instanceDefinition.definition().instanceId(),
+					new InstanceEntry.Definition(instanceDefinition));
 				importSpec = instanceDefinition.definition()._import();
 				exportEntry = new ProgramModel.ModuleExportEntry.InstanceDefinition(instanceDefinition);
 				for(var method : instanceDefinition.definition().methods()) {
-					methodMap.put(
-						method.methodId(),
-						new MethodEntry.Instance(new TubeFileEntry.InstanceMethodReference(
-							method.methodId(),
-							instanceDefinition.definition().instanceId(),
-							method.name(),
-							method.erasedSignature(),
-							method.signature()
-						))
-					);
+					methodMap.put(method.methodId(),
+						new MethodEntry.Instance(new TubeFileEntry.InstanceMethodReference(method.methodId(),
+							instanceDefinition.definition().instanceId(), method.name(), method.erasedSignature(),
+							method.signature())));
 				}
 			}
 
@@ -336,22 +304,17 @@ public final class IrReader {
 		}
 
 		var moduleId = getModuleId(importSpec);
-		modules
-			.computeIfAbsent(moduleId, ignored -> new ModuleModelBuilder())
-			.exports
-			.add(exportEntry);
+		modules.computeIfAbsent(moduleId, ignored -> new ModuleModelBuilder()).exports.add(exportEntry);
 	}
 
 	private static UnsignedBigInteger getModuleId(ImportSpecifier importSpec) {
-		return switch(importSpec) {
+		return switch (importSpec) {
 			case ImportSpecifier.Global global -> global.moduleId();
 			case ImportSpecifier.Local local -> getModuleId(local.parent());
 		};
 	}
 
-	private static JvmPlatformTubeMetadata decodePlatformMetadata(
-		Optional<ESExpr> expr
-	) throws DecodeException {
+	private static JvmPlatformTubeMetadata decodePlatformMetadata(Optional<ESExpr> expr) throws DecodeException {
 		if(expr.isEmpty()) {
 			return EMPTY_PLATFORM_METADATA;
 		}
@@ -404,9 +367,12 @@ public final class IrReader {
 	}
 
 	private sealed interface MethodEntry {
-		record RecordOwner(TubeFileEntry.RecordMethodReference entry) implements MethodEntry {}
-		record EnumOwner(TubeFileEntry.EnumMethodReference entry) implements MethodEntry {}
-		record EnumVariant(TubeFileEntry.EnumVariantMethodReference entry) implements MethodEntry {}
+		record RecordOwner(TubeFileEntry.RecordMethodReference entry) implements MethodEntry {
+		}
+		record EnumOwner(TubeFileEntry.EnumMethodReference entry) implements MethodEntry {
+		}
+		record EnumVariant(TubeFileEntry.EnumVariantMethodReference entry) implements MethodEntry {
+		}
 		record Trait(TubeFileEntry.TraitMethodReference entry) implements MethodEntry {
 		}
 
@@ -414,9 +380,12 @@ public final class IrReader {
 		}
 	}
 	private sealed interface StaticMethodEntry {
-		record RecordOwner(TubeFileEntry.RecordStaticMethodReference entry) implements StaticMethodEntry {}
-		record EnumOwner(TubeFileEntry.EnumStaticMethodReference entry) implements StaticMethodEntry {}
-		record TraitOwner(TubeFileEntry.TraitStaticMethodReference entry) implements StaticMethodEntry {}
+		record RecordOwner(TubeFileEntry.RecordStaticMethodReference entry) implements StaticMethodEntry {
+		}
+		record EnumOwner(TubeFileEntry.EnumStaticMethodReference entry) implements StaticMethodEntry {
+		}
+		record TraitOwner(TubeFileEntry.TraitStaticMethodReference entry) implements StaticMethodEntry {
+		}
 	}
 
 	private sealed interface InstanceEntry {
@@ -459,22 +428,14 @@ public final class IrReader {
 		private final ConcurrentMap<UnsignedBigInteger, StaticMethodInfo> staticMethodInfoCache = new ConcurrentHashMap<>();
 		private final ConcurrentMap<UnsignedBigInteger, InstanceInfo> instanceInfoCache = new ConcurrentHashMap<>();
 
-		private ProgramModelImpl(
-			TubeHeader header,
-			TubeMetadata metadata,
-			DecodedMetadata decodedMetadata,
-			List<ModuleModel> modules,
-			Map<UnsignedBigInteger, TubeFileEntry.ModuleReference> moduleRefMap,
-			Map<UnsignedBigInteger, FunctionEntry> functionMap,
-			Map<UnsignedBigInteger, RecordEntry> recordMap,
-			Map<UnsignedBigInteger, RecordFieldEntry> recordFieldMap,
-			Map<UnsignedBigInteger, EnumEntry> enumMap,
+		private ProgramModelImpl(TubeHeader header, TubeMetadata metadata, DecodedMetadata decodedMetadata,
+			List<ModuleModel> modules, Map<UnsignedBigInteger, TubeFileEntry.ModuleReference> moduleRefMap,
+			Map<UnsignedBigInteger, FunctionEntry> functionMap, Map<UnsignedBigInteger, RecordEntry> recordMap,
+			Map<UnsignedBigInteger, RecordFieldEntry> recordFieldMap, Map<UnsignedBigInteger, EnumEntry> enumMap,
 			Map<UnsignedBigInteger, TubeFileEntry.EnumVariantReference> enumVariantMap,
-			Map<UnsignedBigInteger, TraitEntry> traitMap,
-			Map<UnsignedBigInteger, MethodEntry> methodMap,
+			Map<UnsignedBigInteger, TraitEntry> traitMap, Map<UnsignedBigInteger, MethodEntry> methodMap,
 			Map<UnsignedBigInteger, StaticMethodEntry> staticMethodMap,
-			Map<UnsignedBigInteger, InstanceEntry> instanceMap
-		) {
+			Map<UnsignedBigInteger, InstanceEntry> instanceMap) {
 			this.header = header;
 			this.metadata = metadata;
 			this.decodedMetadata = decodedMetadata;
@@ -518,30 +479,22 @@ public final class IrReader {
 
 		private TubeInfo computeTubeInfo(UnsignedBigInteger id) {
 			if(id.equals(UnsignedBigInteger.ZERO)) {
-				return new TubeInfo(
-					metadata.name(),
-					decodedMetadata.platformMetadata(),
-					ClassNaming.tubeModuleName(metadata.name(), decodedMetadata.platformMetadata())
-				);
+				return new TubeInfo(metadata.name(), decodedMetadata.platformMetadata(),
+					ClassNaming.tubeModuleName(metadata.name(), decodedMetadata.platformMetadata()));
 			}
 
 			var tubeRefIndexBigInt = id.toBigInteger().subtract(BigInteger.ONE);
-			if(
-				tubeRefIndexBigInt.signum() < 0 ||
-					tubeRefIndexBigInt.compareTo(BigInteger.valueOf(metadata.referencedTubes().size())) >= 0
-			) {
+			if(tubeRefIndexBigInt.signum() < 0
+				|| tubeRefIndexBigInt.compareTo(BigInteger.valueOf(metadata.referencedTubes().size())) >= 0) {
 				throw new IllegalStateException("Invalid tube id");
 			}
 
 			var tubeRef = metadata.referencedTubes().get(tubeRefIndexBigInt.intValueExact());
-			var platformMetadata = decodedMetadata.referencePlatformMetadata()
-				.getOrDefault(tubeRef.name(), EMPTY_PLATFORM_METADATA);
+			var platformMetadata = decodedMetadata.referencePlatformMetadata().getOrDefault(tubeRef.name(),
+				EMPTY_PLATFORM_METADATA);
 
-			return new TubeInfo(
-				tubeRef.name(),
-				platformMetadata,
-				ClassNaming.tubeModuleName(tubeRef.name(), platformMetadata)
-			);
+			return new TubeInfo(tubeRef.name(), platformMetadata,
+				ClassNaming.tubeModuleName(tubeRef.name(), platformMetadata));
 		}
 
 		@Override
@@ -552,7 +505,8 @@ public final class IrReader {
 		private ModuleInfo computeModuleInfo(UnsignedBigInteger id) {
 			if(id.toBigInteger().compareTo(BigInteger.valueOf(metadata.modules().size())) < 0) {
 				var module = metadata.modules().get(id.toBigInteger().intValueExact());
-				var packageName = PackageDesc.of(ClassNaming.tubeModulePackageName(this, module.path(), UnsignedBigInteger.ZERO));
+				var packageName = PackageDesc
+					.of(ClassNaming.tubeModulePackageName(this, module.path(), UnsignedBigInteger.ZERO));
 				return new ModuleInfo(UnsignedBigInteger.ZERO, module.path(), packageName);
 			}
 
@@ -561,7 +515,8 @@ public final class IrReader {
 				throw new IllegalStateException("Could not get referenced module: " + id);
 			}
 
-			var packageName = PackageDesc.of(ClassNaming.tubeModulePackageName(this, moduleRef.path(), moduleRef.tubeId()));
+			var packageName = PackageDesc
+				.of(ClassNaming.tubeModulePackageName(this, moduleRef.path(), moduleRef.tubeId()));
 			return new ModuleInfo(moduleRef.tubeId(), moduleRef.path(), packageName);
 		}
 
@@ -575,10 +530,7 @@ public final class IrReader {
 			var importSpecifier = functionImportSpecifier(entry);
 			return new FunctionInfo(
 				ClassNaming.moduleGlobalFunctionsClassName(getModuleInfo(getModuleId(importSpecifier))),
-				ClassNaming.functionName(importSpecifier),
-				functionSignature(entry),
-				functionDescriptor(entry)
-			);
+				ClassNaming.functionName(importSpecifier), functionSignature(entry), functionDescriptor(entry));
 		}
 
 		@Override
@@ -595,23 +547,11 @@ public final class IrReader {
 			var classDesc = ClassNaming.typeDefinitionClassDescriptor(this, importSpecifier);
 			var builderClass = classDesc.nested(BUILDER_CLASS_NAME);
 
-			return new RecordInfo(
-				importSpecifier,
-				signature,
-				classDesc,
-				new RecordBuilderInfo(
-					builderClass,
-					BUILDER_METHOD_NAME,
-					MethodTypeDesc.of(
-						builderClass,
-						signature.tokenParameters().stream()
-							.map(parameter -> tokenClassDesc(parameter.kind()))
-							.toArray(ClassDesc[]::new)
-					),
-					BUILD_METHOD_NAME,
-					MethodTypeDesc.of(classDesc)
-				)
-			);
+			return new RecordInfo(importSpecifier, signature, classDesc,
+				new RecordBuilderInfo(builderClass, BUILDER_METHOD_NAME,
+					MethodTypeDesc.of(builderClass, signature.tokenParameters().stream()
+						.map(parameter -> tokenClassDesc(parameter.kind())).toArray(ClassDesc[]::new)),
+					BUILD_METHOD_NAME, MethodTypeDesc.of(classDesc)));
 		}
 
 		@Override
@@ -620,39 +560,21 @@ public final class IrReader {
 		}
 
 		private RecordFieldInfo computeRecordFieldInfo(UnsignedBigInteger id) {
-			return switch(require(recordFieldMap, id, "Invalid record field id")) {
+			return switch (require(recordFieldMap, id, "Invalid record field id")) {
 				case RecordFieldEntry.OfRecord(var entry) -> {
 					var fieldType = tokenClassDesc(entry.fieldType());
 					var fieldName = ClassNaming.fieldName(entry.name());
-					yield new RecordFieldInfo(
-						RecordFieldInfo.OwnerType.RECORD,
-						entry.recordId(),
-						entry.name(),
-						fieldName,
-						fieldType,
-						"set_" + fieldName,
-						MethodTypeDesc.of(
-							getRecordInfo(entry.recordId()).builderInfo().builderClassDesc(),
-							fieldType
-						)
-					);
+					yield new RecordFieldInfo(RecordFieldInfo.OwnerType.RECORD, entry.recordId(), entry.name(),
+						fieldName, fieldType, "set_" + fieldName,
+						MethodTypeDesc.of(getRecordInfo(entry.recordId()).builderInfo().builderClassDesc(), fieldType));
 				}
 
 				case RecordFieldEntry.EnumVariant(var entry) -> {
 					var fieldType = tokenClassDesc(entry.fieldType());
 					var fieldName = ClassNaming.fieldName(entry.name());
-					yield new RecordFieldInfo(
-						RecordFieldInfo.OwnerType.ENUM_VARIANT,
-						entry.variantId(),
-						entry.name(),
-						fieldName,
-						fieldType,
-						"set_" + fieldName,
-						MethodTypeDesc.of(
-							getEnumVariantInfo(entry.variantId()).builder().builderClassDesc(),
-							fieldType
-						)
-					);
+					yield new RecordFieldInfo(RecordFieldInfo.OwnerType.ENUM_VARIANT, entry.variantId(), entry.name(),
+						fieldName, fieldType, "set_" + fieldName, MethodTypeDesc
+							.of(getEnumVariantInfo(entry.variantId()).builder().builderClassDesc(), fieldType));
 				}
 			};
 		}
@@ -666,10 +588,7 @@ public final class IrReader {
 			var importSpecifier = enumImportSpecifier(require(enumMap, id, "Invalid enum id"));
 			var classDesc = ClassNaming.typeDefinitionClassDescriptor(this, importSpecifier);
 
-			return new EnumInfo(
-				importSpecifier,
-				classDesc
-			);
+			return new EnumInfo(importSpecifier, classDesc);
 		}
 
 		@Override
@@ -685,25 +604,14 @@ public final class IrReader {
 			var builderClass = variantClassDesc.nested(BUILDER_CLASS_NAME);
 
 			var parameterTypes = new ArrayList<ClassDesc>();
-			parameterTypes.addAll(enumSignature(require(enumMap, entry.enumId(), "Invalid enum id")).tokenParameters().stream()
-				.map(parameter -> tokenClassDesc(parameter.kind()))
-				.toList());
+			parameterTypes.addAll(enumSignature(require(enumMap, entry.enumId(), "Invalid enum id")).tokenParameters()
+				.stream().map(parameter -> tokenClassDesc(parameter.kind())).toList());
 			parameterTypes.addAll(signatureParameterDescs(entry.signature()));
 
-			return new EnumVariantInfo(
-				entry.enumId(),
-				entry.name(),
-				entry.signature(),
-				variantName,
-				variantClassDesc,
-				new RecordBuilderInfo(
-					builderClass,
-					BUILDER_METHOD_NAME,
-					MethodTypeDesc.of(builderClass, parameterTypes),
-					BUILD_METHOD_NAME,
-					MethodTypeDesc.of(variantClassDesc)
-				)
-			);
+			return new EnumVariantInfo(entry.enumId(), entry.name(), entry.signature(), variantName, variantClassDesc,
+				new RecordBuilderInfo(builderClass, BUILDER_METHOD_NAME,
+					MethodTypeDesc.of(builderClass, parameterTypes), BUILD_METHOD_NAME,
+					MethodTypeDesc.of(variantClassDesc)));
 		}
 
 		@Override
@@ -715,11 +623,7 @@ public final class IrReader {
 			var entry = require(traitMap, id, "Invalid trait id");
 			var classDesc = ClassNaming.typeDefinitionClassDescriptor(this, traitImportSpecifier(entry));
 
-			return new TraitInfo(
-				traitImportSpecifier(entry),
-				traitSignature(entry),
-				classDesc
-			);
+			return new TraitInfo(traitImportSpecifier(entry), traitSignature(entry), classDesc);
 		}
 
 		@Override
@@ -727,50 +631,55 @@ public final class IrReader {
 			return methodInfoCache.computeIfAbsent(id, this::computeMethodInfo);
 		}
 
-		@Override public StaticMethodInfo getStaticMethodInfo(UnsignedBigInteger id) { return staticMethodInfoCache.computeIfAbsent(id, this::computeStaticMethodInfo); }
+		@Override
+		public StaticMethodInfo getStaticMethodInfo(UnsignedBigInteger id) {
+			return staticMethodInfoCache.computeIfAbsent(id, this::computeStaticMethodInfo);
+		}
 		private StaticMethodInfo computeStaticMethodInfo(UnsignedBigInteger id) {
-			return switch(require(staticMethodMap, id, "Invalid static method id")) {
-				case StaticMethodEntry.RecordOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getRecordInfo(ref.recordId()).recordClassDesc(), false);
-				case StaticMethodEntry.EnumOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getEnumInfo(ref.enumId()).enumClassDesc(), false);
-				case StaticMethodEntry.TraitOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getTraitInfo(ref.traitId()).traitDesc(), true);
+			return switch (require(staticMethodMap, id, "Invalid static method id")) {
+				case StaticMethodEntry.RecordOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(),
+					ref.signature(), getRecordInfo(ref.recordId()).recordClassDesc(), false);
+				case StaticMethodEntry.EnumOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(),
+					ref.signature(), getEnumInfo(ref.enumId()).enumClassDesc(), false);
+				case StaticMethodEntry.TraitOwner(var ref) -> staticMethodInfo(ref.name(), ref.erasedSignature(),
+					ref.signature(), getTraitInfo(ref.traitId()).traitDesc(), true);
 			};
 		}
-		private StaticMethodInfo staticMethodInfo(Identifier name, ErasedSignature erased, FunctionSignature signature, ClassDesc owner, boolean isInterface) { return new StaticMethodInfo(name, erased, signature, owner, ":static:" + ClassNaming.methodName(name, erased), functionSignatureDescriptor(signature), isInterface); }
+		private StaticMethodInfo staticMethodInfo(Identifier name, ErasedSignature erased, FunctionSignature signature,
+			ClassDesc owner, boolean isInterface) {
+			return new StaticMethodInfo(name, erased, signature, owner,
+				":static:" + ClassNaming.methodName(name, erased), functionSignatureDescriptor(signature), isInterface);
+		}
 
 		private MethodInfo computeMethodInfo(UnsignedBigInteger id) {
-			return switch(require(methodMap, id, "Invalid method id")) {
-				case MethodEntry.RecordOwner(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getRecordInfo(ref.recordId()).recordClassDesc());
-				case MethodEntry.EnumOwner(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getEnumInfo(ref.enumId()).enumClassDesc());
-				case MethodEntry.EnumVariant(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(), getEnumVariantInfo(ref.variantId()).variantClassDesc());
+			return switch (require(methodMap, id, "Invalid method id")) {
+				case MethodEntry.RecordOwner(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(),
+					getRecordInfo(ref.recordId()).recordClassDesc());
+				case MethodEntry.EnumOwner(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(),
+					getEnumInfo(ref.enumId()).enumClassDesc());
+				case MethodEntry.EnumVariant(var ref) -> methodInfo(ref.name(), ref.erasedSignature(), ref.signature(),
+					getEnumVariantInfo(ref.variantId()).variantClassDesc());
 				case MethodEntry.Trait(var methodRef) -> {
 					var traitInfo = getTraitInfo(methodRef.traitId());
 
-					yield new MethodInfo(
-						methodRef.name(),
-						methodRef.erasedSignature(),
-						methodRef.signature(),
-						traitInfo.traitDesc(),
-						ClassNaming.methodName(methodRef.name(), methodRef.erasedSignature()),
-						functionSignatureDescriptor(methodRef.signature())
-					);
+					yield new MethodInfo(methodRef.name(), methodRef.erasedSignature(), methodRef.signature(),
+						traitInfo.traitDesc(), ClassNaming.methodName(methodRef.name(), methodRef.erasedSignature()),
+						functionSignatureDescriptor(methodRef.signature()));
 				}
 
 				case MethodEntry.Instance(var methodRef) -> {
 					var instanceInfo = getInstanceInfo(methodRef.instanceId());
 
-					yield new MethodInfo(
-						methodRef.name(),
-						methodRef.erasedSignature(),
-						methodRef.signature(),
+					yield new MethodInfo(methodRef.name(), methodRef.erasedSignature(), methodRef.signature(),
 						instanceInfo.instanceClassDesc(),
 						ClassNaming.methodName(methodRef.name(), methodRef.erasedSignature()),
-						functionSignatureDescriptor(methodRef.signature())
-					);
+						functionSignatureDescriptor(methodRef.signature()));
 				}
 			};
 		}
 
-		private MethodInfo methodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature, ClassDesc definingClass) {
+		private MethodInfo methodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature,
+			ClassDesc definingClass) {
 			return new MethodInfo(name, erasedSignature, signature, definingClass,
 				ClassNaming.methodName(name, erasedSignature), functionSignatureDescriptor(signature));
 		}
@@ -786,15 +695,9 @@ public final class IrReader {
 			var importSpecifier = instanceImportSpecifier(entry);
 			var signature = instanceSignature(entry);
 
-			return new InstanceInfo(
-				importSpecifier,
-				signature,
+			return new InstanceInfo(importSpecifier, signature,
 				ClassNaming.typeDefinitionClassDescriptor(this, importSpecifier),
-				MethodTypeDesc.of(
-					ConstantDescs.CD_void,
-					signatureParameterDescs(signature)
-				)
-			);
+				MethodTypeDesc.of(ConstantDescs.CD_void, signatureParameterDescs(signature)));
 		}
 
 		private static <T> T require(Map<UnsignedBigInteger, T> map, UnsignedBigInteger id, String message) {
@@ -807,7 +710,7 @@ public final class IrReader {
 		}
 
 		private static ImportSpecifier functionImportSpecifier(FunctionEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case FunctionEntry.Definition definition -> definition.entry().definition()._import();
 				case FunctionEntry.Reference reference -> reference.entry()._import();
 			};
@@ -818,7 +721,7 @@ public final class IrReader {
 		}
 
 		private FunctionSignature functionSignature(FunctionEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case FunctionEntry.Definition definition -> definition.entry().definition().signature();
 				case FunctionEntry.Reference reference -> reference.entry().signature();
 			};
@@ -852,56 +755,56 @@ public final class IrReader {
 		}
 
 		private static ImportSpecifier recordImportSpecifier(RecordEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case RecordEntry.Definition definition -> definition.entry().definition()._import();
 				case RecordEntry.Reference reference -> reference.entry()._import();
 			};
 		}
 
 		private static FunctionSignature recordSignature(RecordEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case RecordEntry.Definition definition -> definition.entry().definition().signature();
 				case RecordEntry.Reference reference -> reference.entry().signature();
 			};
 		}
 
 		private static ImportSpecifier enumImportSpecifier(EnumEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case EnumEntry.Definition definition -> definition.entry().definition()._import();
 				case EnumEntry.Reference reference -> reference.entry()._import();
 			};
 		}
 
 		private static FunctionSignature enumSignature(EnumEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case EnumEntry.Definition definition -> definition.entry().definition().signature();
 				case EnumEntry.Reference reference -> reference.entry().signature();
 			};
 		}
 
 		private static ImportSpecifier traitImportSpecifier(TraitEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case TraitEntry.Definition definition -> definition.entry().definition()._import();
 				case TraitEntry.Reference reference -> reference.entry()._import();
 			};
 		}
 
 		private static FunctionSignature traitSignature(TraitEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case TraitEntry.Definition definition -> definition.entry().definition().signature();
 				case TraitEntry.Reference reference -> reference.entry().signature();
 			};
 		}
 
 		private static ImportSpecifier instanceImportSpecifier(InstanceEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case InstanceEntry.Definition definition -> definition.entry().definition()._import();
 				case InstanceEntry.Reference reference -> reference.entry()._import();
 			};
 		}
 
 		private static FunctionSignature instanceSignature(InstanceEntry entry) {
-			return switch(entry) {
+			return switch (entry) {
 				case InstanceEntry.Definition definition -> definition.entry().definition().signature();
 				case InstanceEntry.Reference reference -> reference.entry().signature();
 			};

@@ -47,7 +47,7 @@ public record Classfile(ClassModel model) {
 	}
 
 	@TypeClassInstance
-	@ESExprCodecTags(scalar = { ESExprTag.Scalar.ARRAY8 })
+	@ESExprCodecTags(scalar = {ESExprTag.Scalar.ARRAY8})
 	public static ESExprCodec<Classfile> codec() {
 		return CODEC;
 	}

@@ -5,7 +5,7 @@ import dev.argon.vm.Region;
 
 abstract class InstructionScanner {
 	public final void scan(Region region) {
-		switch(region) {
+		switch (region) {
 			case Region.BasicBlock basicBlock -> {
 				for(var instruction : basicBlock.instructions()) {
 					scan(instruction);

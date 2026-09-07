@@ -12,33 +12,23 @@ public final class PartialApplicationSupport {
 	private PartialApplicationSupport() {
 	}
 
-	public static CallSite tokenFunction(
-		MethodHandles.Lookup lookup,
-		String name,
-		MethodType factoryType,
-		MethodHandle target,
-		int tokenArgumentCount
-	) throws NoSuchMethodException, IllegalAccessException {
+	public static CallSite tokenFunction(MethodHandles.Lookup lookup, String name, MethodType factoryType,
+		MethodHandle target, int tokenArgumentCount) throws NoSuchMethodException, IllegalAccessException {
 		var runtimeLookup = MethodHandles.lookup();
-		var factory = runtimeLookup.findStatic(
-			PartialApplicationSupport.class,
-			"makeTokenFunction",
-			MethodType.methodType(FunctionToken.class, MethodHandle.class, int.class, Object[].class)
-		);
-		factory = MethodHandles
-			.insertArguments(factory, 0, target, tokenArgumentCount)
-			.asCollector(Object[].class, factoryType.parameterCount())
-			.asType(factoryType);
+		var factory = runtimeLookup.findStatic(PartialApplicationSupport.class, "makeTokenFunction",
+			MethodType.methodType(FunctionToken.class, MethodHandle.class, int.class, Object[].class));
+		factory = MethodHandles.insertArguments(factory, 0, target, tokenArgumentCount)
+			.asCollector(Object[].class, factoryType.parameterCount()).asType(factoryType);
 		return new ConstantCallSite(factory);
 	}
 
 	@SuppressWarnings("UnusedMethod")
-	private static FunctionToken<?, ?> makeTokenFunction(MethodHandle target, int tokenArgumentCount, Object[] captures) {
+	private static FunctionToken<?, ?> makeTokenFunction(MethodHandle target, int tokenArgumentCount,
+		Object[] captures) {
 		var targetWithTokenLast = tokenLastTarget(target, tokenArgumentCount);
-		var boundTarget = MethodHandles
-			.insertArguments(targetWithTokenLast, 0, captures)
+		var boundTarget = MethodHandles.insertArguments(targetWithTokenLast, 0, captures)
 			.asType(MethodType.methodType(Trampoline.class, Token.class));
-		return (FunctionToken<?, ?>)MethodHandleProxies.asInterfaceInstance(FunctionToken.class, boundTarget);
+		return (FunctionToken<?, ?>) MethodHandleProxies.asInterfaceInstance(FunctionToken.class, boundTarget);
 	}
 
 	private static MethodHandle tokenLastTarget(MethodHandle target, int tokenArgumentCount) {
@@ -66,11 +56,8 @@ public final class PartialApplicationSupport {
 			reorder[tokenArgumentCount + 1 + i] = tokenArgumentCount + i;
 		}
 
-		return MethodHandles.permuteArguments(
-			target,
-			MethodType.methodType(targetType.returnType(), reorderedParameterTypes),
-			reorder
-		);
+		return MethodHandles.permuteArguments(target,
+			MethodType.methodType(targetType.returnType(), reorderedParameterTypes), reorder);
 	}
 
 }

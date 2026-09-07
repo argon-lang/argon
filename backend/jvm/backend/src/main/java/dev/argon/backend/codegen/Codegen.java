@@ -10,13 +10,11 @@ import java.io.IOException;
 import java.util.zip.ZipOutputStream;
 
 public final class Codegen {
-	private Codegen() {}
+	private Codegen() {
+	}
 
-	public record JVMCodegenOptions(
-		InputFile inputFile,
-		OutputFile outputFile,
-		boolean executable
-	) {}
+	public record JVMCodegenOptions(InputFile inputFile, OutputFile outputFile, boolean executable) {
+	}
 
 	public static void codegen(JVMCodegenOptions options) throws SyntaxException, IOException, DecodeException {
 		var program = IrReader.readFile(options.inputFile);
@@ -38,7 +36,6 @@ public final class Codegen {
 				options.outputFile.delete();
 			}
 		}
-
 
 	}
 

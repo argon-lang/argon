@@ -34,27 +34,22 @@ public final class Main {
 	}
 
 	private static int run(String[] args) {
-		return new CommandLine(new RootCommandOptions())
-			.setCommandName("argon-jvm-backend")
+		return new CommandLine(new RootCommandOptions()).setCommandName("argon-jvm-backend")
 			.setParameterExceptionHandler((ParameterException ex, String[] ignored) -> {
 				System.err.println("argon-jvm-backend: " + ex.getMessage());
 				var commandLine = ex.getCommandLine();
 				commandLine.usage(System.err);
 				return 1;
-			})
-			.setExecutionExceptionHandler((ex, commandLine, parseResult) -> {
+			}).setExecutionExceptionHandler((ex, commandLine, parseResult) -> {
 				System.err.println("argon-jvm-backend: " + ex.getMessage());
 				ex.printStackTrace(System.err);
 				return commandLine.getCommandSpec().exitCodeOnExecutionException();
-			})
-			.execute(args);
+			}).execute(args);
 	}
 
 	private static int runPlatformMetadata(JvmPlatformMetadataCommand command) throws IOException {
 		PlatformMetadata.platformMetadata(new PlatformMetadata.JVMPlatformMetadataOptions(
-			expandInputFiles(command.externFiles),
-			OutputFile.fromPath(command.outputFile)
-		));
+			expandInputFiles(command.externFiles), OutputFile.fromPath(command.outputFile)));
 
 		return 0;
 	}
@@ -74,11 +69,8 @@ public final class Main {
 	private static List<Path> expandClassfilePath(Path path) throws IOException {
 		if(Files.isDirectory(path)) {
 			try(Stream<Path> stream = Files.walk(path)) {
-				return stream
-					.filter(Files::isRegularFile)
-					.filter(Main::isClassfilePath)
-					.sorted(Comparator.comparing(Path::toString))
-					.toList();
+				return stream.filter(Files::isRegularFile).filter(Main::isClassfilePath)
+					.sorted(Comparator.comparing(Path::toString)).toList();
 			}
 		}
 
@@ -99,21 +91,13 @@ public final class Main {
 	}
 
 	private static int runCodegen(JvmCodegenCommand command) throws Exception {
-		Codegen.codegen(new Codegen.JVMCodegenOptions(
-			InputFile.fromPath(command.input),
-			OutputFile.fromPath(command.output),
-			command.executable
-		));
+		Codegen.codegen(new Codegen.JVMCodegenOptions(InputFile.fromPath(command.input),
+			OutputFile.fromPath(command.output), command.executable));
 
 		return 0;
 	}
 
-	@Command(
-		subcommands = {
-			PlatformMetadataCommandOptions.class,
-			CodegenCommandOptions.class,
-		}
-	)
+	@Command(subcommands = {PlatformMetadataCommandOptions.class, CodegenCommandOptions.class,})
 	@SuppressWarnings("NullAway")
 	public static final class RootCommandOptions implements Callable<Integer> {
 		@Mixin
@@ -129,13 +113,8 @@ public final class Main {
 		}
 	}
 
-	@Command(
-		name = "platform-metadata",
-		description = "Load platform-specific metadata",
-		subcommands = {
-			JvmPlatformMetadataCommand.class,
-		}
-	)
+	@Command(name = "platform-metadata", description = "Load platform-specific metadata", subcommands = {
+			JvmPlatformMetadataCommand.class,})
 	@SuppressWarnings("NullAway")
 	public static final class PlatformMetadataCommandOptions implements Callable<Integer> {
 		@Mixin
@@ -151,10 +130,7 @@ public final class Main {
 		}
 	}
 
-	@Command(
-		name = "jvm",
-		description = "Load platform metadata for JVM"
-	)
+	@Command(name = "jvm", description = "Load platform metadata for JVM")
 	@SuppressWarnings("NullAway")
 	public static final class JvmPlatformMetadataCommand implements Callable<Integer> {
 		@Mixin
@@ -163,7 +139,7 @@ public final class Main {
 		@Option(names = "--extern", description = "JVM extern file")
 		public List<Path> externFiles = new ArrayList<>();
 
-		@Option(names = { "-o", "--output-file" }, required = true, description = "Output platform metadata file")
+		@Option(names = {"-o", "--output-file"}, required = true, description = "Output platform metadata file")
 		public Path outputFile;
 
 		@Override
@@ -172,13 +148,7 @@ public final class Main {
 		}
 	}
 
-	@Command(
-		name = "codegen",
-		description = "Generate code from Argon VM IR",
-		subcommands = {
-			JvmCodegenCommand.class,
-		}
-	)
+	@Command(name = "codegen", description = "Generate code from Argon VM IR", subcommands = {JvmCodegenCommand.class,})
 	@SuppressWarnings("NullAway")
 	public static final class CodegenCommandOptions implements Callable<Integer> {
 		@Mixin
@@ -194,19 +164,16 @@ public final class Main {
 		}
 	}
 
-	@Command(
-		name = "jvm",
-		description = "Generate JVM code from Argon VM IR"
-	)
+	@Command(name = "jvm", description = "Generate JVM code from Argon VM IR")
 	@SuppressWarnings("NullAway")
 	public static final class JvmCodegenCommand implements Callable<Integer> {
 		@Mixin
 		public HelpOptions helpOptions;
 
-		@Option(names = { "-i", "--input" }, required = true, description = "Input Argon VM IR file")
+		@Option(names = {"-i", "--input"}, required = true, description = "Input Argon VM IR file")
 		public Path input;
 
-		@Option(names = { "-o", "--output" }, required = true, description = "Output JAR file")
+		@Option(names = {"-o", "--output"}, required = true, description = "Output JAR file")
 		public Path output;
 
 		@Option(names = "--executable", description = "Generate an executable Main class")
@@ -219,7 +186,7 @@ public final class Main {
 	}
 
 	public static final class HelpOptions {
-		@Option(names = { "-h", "--help" }, usageHelp = true, description = "Show this help message")
+		@Option(names = {"-h", "--help"}, usageHelp = true, description = "Show this help message")
 		public boolean help;
 	}
 }

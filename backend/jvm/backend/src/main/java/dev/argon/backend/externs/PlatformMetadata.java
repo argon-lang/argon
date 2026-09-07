@@ -12,10 +12,7 @@ public final class PlatformMetadata {
 	private PlatformMetadata() {
 	}
 
-	public record JVMPlatformMetadataOptions(
-		List<InputFile> externFiles,
-		OutputFile outputFile
-	) {
+	public record JVMPlatformMetadataOptions(List<InputFile> externFiles, OutputFile outputFile) {
 	}
 
 	public static void platformMetadata(JVMPlatformMetadataOptions options) throws IOException {

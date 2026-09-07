@@ -29,21 +29,11 @@ public interface ProgramModel {
 	StaticMethodInfo getStaticMethodInfo(UnsignedBigInteger id);
 	InstanceInfo getInstanceInfo(UnsignedBigInteger id);
 
-
-
-
-
-	record DecodedMetadata(
-		JvmPlatformTubeMetadata platformMetadata,
-		ImmutableMap<TubeName, JvmPlatformTubeMetadata> referencePlatformMetadata
-	) {
+	record DecodedMetadata(JvmPlatformTubeMetadata platformMetadata,
+		ImmutableMap<TubeName, JvmPlatformTubeMetadata> referencePlatformMetadata) {
 	}
 
-	record ModuleModel(
-		ModulePath path,
-		List<ModuleExportEntry> exports,
-		UnsignedBigInteger moduleId
-	) {
+	record ModuleModel(ModulePath path, List<ModuleExportEntry> exports, UnsignedBigInteger moduleId) {
 	}
 
 	sealed interface ModuleExportEntry {
@@ -65,99 +55,49 @@ public interface ProgramModel {
 		}
 	}
 
-	record TubeInfo(
-		TubeName tubeName,
-		JvmPlatformTubeMetadata platformMetadata,
-		ModuleDesc moduleName
-	) {
+	record TubeInfo(TubeName tubeName, JvmPlatformTubeMetadata platformMetadata, ModuleDesc moduleName) {
 	}
 
-	record ModuleInfo(
-		UnsignedBigInteger tubeId,
-		ModulePath path,
-		PackageDesc packageName
-	) {
+	record ModuleInfo(UnsignedBigInteger tubeId, ModulePath path, PackageDesc packageName) {
 	}
 
-	record FunctionInfo(
-		ClassDesc definingClass,
-		String name,
-		FunctionSignature signature,
-		MethodTypeDesc descriptor
-	) {
+	record FunctionInfo(ClassDesc definingClass, String name, FunctionSignature signature, MethodTypeDesc descriptor) {
 	}
 
-	record RecordInfo(
-		ImportSpecifier importSpecifier,
-		FunctionSignature signature,
-		ClassDesc recordClassDesc,
-		RecordBuilderInfo builderInfo
-	) {
+	record RecordInfo(ImportSpecifier importSpecifier, FunctionSignature signature, ClassDesc recordClassDesc,
+		RecordBuilderInfo builderInfo) {
 	}
 
-	record RecordBuilderInfo(
-		ClassDesc builderClassDesc,
-		String builderMethodName,
-		MethodTypeDesc builderFactoryMethodDesc,
-		String buildMethodName,
-		MethodTypeDesc buildMethodDesc
-	) {}
+	record RecordBuilderInfo(ClassDesc builderClassDesc, String builderMethodName,
+		MethodTypeDesc builderFactoryMethodDesc, String buildMethodName, MethodTypeDesc buildMethodDesc) {
+	}
 
-	record RecordFieldInfo(
-		OwnerType ownerType,
-		UnsignedBigInteger recordId,
-		Identifier name,
-		String fieldName,
-		ClassDesc fieldType,
-		String builderMethodName,
-		MethodTypeDesc builderMethodDesc
-	) {
+	record RecordFieldInfo(OwnerType ownerType, UnsignedBigInteger recordId, Identifier name, String fieldName,
+		ClassDesc fieldType, String builderMethodName, MethodTypeDesc builderMethodDesc) {
 		public enum OwnerType {
-			RECORD,
-			ENUM_VARIANT,
+			RECORD, ENUM_VARIANT,
 		}
 	}
 
-	record EnumInfo(
-		ImportSpecifier importSpecifier,
-		ClassDesc enumClassDesc
-	) {
+	record EnumInfo(ImportSpecifier importSpecifier, ClassDesc enumClassDesc) {
 	}
 
-	record EnumVariantInfo(
-		UnsignedBigInteger enumId,
-		Identifier name,
-		FunctionSignature signature,
-		String nestedClassName,
-		ClassDesc variantClassDesc,
-		RecordBuilderInfo builder
-	) {
+	record EnumVariantInfo(UnsignedBigInteger enumId, Identifier name, FunctionSignature signature,
+		String nestedClassName, ClassDesc variantClassDesc, RecordBuilderInfo builder) {
 	}
 
-	record TraitInfo(
-		ImportSpecifier importSpecifier,
-		FunctionSignature signature,
-		ClassDesc traitDesc
-	) {
+	record TraitInfo(ImportSpecifier importSpecifier, FunctionSignature signature, ClassDesc traitDesc) {
 	}
 
-	record MethodInfo(
-		Identifier name,
-		ErasedSignature erasedSignature,
-		FunctionSignature signature,
-		ClassDesc definingClass,
-		String methodName,
-		MethodTypeDesc descriptor
-	) {
+	record MethodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature,
+		ClassDesc definingClass, String methodName, MethodTypeDesc descriptor) {
 	}
 
-	record StaticMethodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature, ClassDesc definingClass, String methodName, MethodTypeDesc descriptor, boolean isInterface) {}
+	record StaticMethodInfo(Identifier name, ErasedSignature erasedSignature, FunctionSignature signature,
+		ClassDesc definingClass, String methodName, MethodTypeDesc descriptor, boolean isInterface) {
+	}
 
-	record InstanceInfo(
-		ImportSpecifier importSpecifier,
-		FunctionSignature signature,
-		ClassDesc instanceClassDesc,
-		MethodTypeDesc instanceConstructorDesc
-	) {
+	record InstanceInfo(ImportSpecifier importSpecifier, FunctionSignature signature, ClassDesc instanceClassDesc,
+		MethodTypeDesc instanceConstructorDesc) {
 	}
 }

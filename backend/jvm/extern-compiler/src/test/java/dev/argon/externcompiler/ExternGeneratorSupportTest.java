@@ -13,18 +13,10 @@ import org.junit.jupiter.api.Test;
 final class ExternGeneratorSupportTest {
 	@Test
 	void buildsAnnotatedStaticExternMethod() {
-		MethodTypeDesc descriptor = MethodTypeDesc.of(
-			ExternGeneratorSupport.CD_TRAMPOLINE,
-			ConstantDescs.CD_String
-		);
-		byte[] bytes = ExternGeneratorSupport.staticExternClass(
-			ClassDesc.of("test.GeneratedExtern"),
-			ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL,
-			"generated_extern",
-			"invoke",
-			descriptor,
-			code -> code.aconst_null().areturn()
-		);
+		MethodTypeDesc descriptor = MethodTypeDesc.of(ExternGeneratorSupport.CD_TRAMPOLINE, ConstantDescs.CD_String);
+		byte[] bytes = ExternGeneratorSupport.staticExternClass(ClassDesc.of("test.GeneratedExtern"),
+			ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, "generated_extern", "invoke", descriptor,
+			code -> code.aconst_null().areturn());
 
 		var model = ClassFile.of().parse(bytes);
 		assertEquals("test/GeneratedExtern", model.thisClass().asInternalName());

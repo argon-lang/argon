@@ -1,7 +1,9 @@
 import net.ltgt.gradle.errorprone.errorprone
+import com.diffplug.gradle.spotless.SpotlessExtension
 
 plugins {
     alias(libs.plugins.errorprone) apply false
+    alias(libs.plugins.spotless) apply false
 }
 
 allprojects {
@@ -15,6 +17,15 @@ allprojects {
 }
 
 subprojects {
+    apply(plugin = "com.diffplug.spotless")
+
+    extensions.configure<SpotlessExtension> {
+        java {
+            eclipse().configFile(rootProject.file("eclipse-formatter.properties"))
+            target("src/**/*.java")
+        }
+    }
+
     plugins.withType<JavaPlugin> {
         extensions.configure<JavaPluginExtension> {
             toolchain {

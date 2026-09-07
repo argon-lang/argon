@@ -48,25 +48,19 @@ public final class ExternMetadataScanner {
 			}
 		}
 
-		var tubeMetadata = new JvmPlatformTubeMetadata(
-			metadata.moduleName,
+		var tubeMetadata = new JvmPlatformTubeMetadata(metadata.moduleName,
 			metadata.moduleMetadata.isEmpty() ? Optional.empty() : Optional.of(List.copyOf(metadata.moduleMetadata)),
-			Optional.of(classfiles)
-		);
+			Optional.of(classfiles));
 
-		return new PlatformMetadataResult(
-			"jvm",
-			JvmPlatformTubeMetadata.codec().encode(tubeMetadata),
-			new KeywordMapping<>(metadata.externs.build())
-		);
+		return new PlatformMetadataResult("jvm", JvmPlatformTubeMetadata.codec().encode(tubeMetadata),
+			new KeywordMapping<>(metadata.externs.build()));
 	}
 
 	private static void processModuleInfo(MetadataBuilder metadata, ClassModel classModel) {
 		var moduleInfoName = moduleName(classModel);
 		if(metadata.moduleName.isPresent() && !metadata.moduleName.get().equals(moduleInfoName)) {
 			throw new IllegalArgumentException(
-				"Conflicting JVM module names: " + metadata.moduleName.get() + " and " + moduleInfoName
-			);
+				"Conflicting JVM module names: " + metadata.moduleName.get() + " and " + moduleInfoName);
 		}
 
 		metadata.moduleName = Optional.of(moduleInfoName);
@@ -79,10 +73,8 @@ public final class ExternMetadataScanner {
 				continue;
 			}
 
-			metadata.moduleMetadata.add(new ModuleMetadata(
-				new ModulePath(argonModulePath(annotation)),
-				Optional.of(packageNameFromPackageInfoClass(className))
-			));
+			metadata.moduleMetadata.add(new ModuleMetadata(new ModulePath(argonModulePath(annotation)),
+				Optional.of(packageNameFromPackageInfoClass(className))));
 			return;
 		}
 	}
@@ -100,19 +92,11 @@ public final class ExternMetadataScanner {
 				throw new IllegalArgumentException("Duplicate extern function: " + externName.get());
 			}
 
-			var implementation = new JvmExtern.JvmFunction(
-				classModel.thisClass().name().stringValue(),
-				method.methodName().stringValue(),
-				method.methodType().stringValue()
-			);
+			var implementation = new JvmExtern.JvmFunction(classModel.thisClass().name().stringValue(),
+				method.methodName().stringValue(), method.methodType().stringValue());
 
-			metadata.externs.put(
-				externName.get(),
-				new Extern.ExternFunction(
-					externName.get(),
-					JvmExtern.codec().encode(implementation)
-				)
-			);
+			metadata.externs.put(externName.get(),
+				new Extern.ExternFunction(externName.get(), JvmExtern.codec().encode(implementation)));
 		}
 	}
 
@@ -141,9 +125,7 @@ public final class ExternMetadataScanner {
 	private static String moduleName(ClassModel classModel) {
 		return classModel.findAttribute(Attributes.module())
 			.orElseThrow(() -> new IllegalArgumentException("module-info classfile is missing its Module attribute"))
-			.moduleName()
-			.name()
-			.stringValue();
+			.moduleName().name().stringValue();
 	}
 
 	private static boolean isPackageInfo(ClassModel classModel) {
@@ -232,13 +214,9 @@ public final class ExternMetadataScanner {
 	private static void validateExternMethod(ClassModel classModel, MethodModel method, String externName) {
 		var flags = method.flags();
 		if(!flags.has(AccessFlag.PUBLIC) || !flags.has(AccessFlag.STATIC)) {
-			throw new IllegalArgumentException(
-				"Extern function " + externName + " must be a public static method: "
-					+ classModel.thisClass().asInternalName()
-					+ "."
-					+ method.methodName().stringValue()
-					+ method.methodType().stringValue()
-			);
+			throw new IllegalArgumentException("Extern function " + externName + " must be a public static method: "
+				+ classModel.thisClass().asInternalName() + "." + method.methodName().stringValue()
+				+ method.methodType().stringValue());
 		}
 	}
 }

@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.CLASS)
-@Target({ ElementType.TYPE, ElementType.METHOD, ElementType.FIELD })
+@Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD})
 public @interface ArgonAccess {
 	ArgonAccessModifier value();
 }
