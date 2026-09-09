@@ -1,7 +1,6 @@
-use crate::sync::mutex_lock;
+use crate::sync::{Mutex, mutex_lock};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use std::sync::Mutex;
 
 pub struct UnloadCell<A> {
     state: Mutex<UnloadCellState<A>>,

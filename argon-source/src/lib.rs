@@ -1,4 +1,8 @@
+#![no_std]
+
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 use crate::module::{process_source_file, register_module_reexports};
 use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};

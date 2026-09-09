@@ -4,6 +4,8 @@ publish = false
 edition = "2024"
 
 [features]
+default = []
+std = ["argon-expr/std", "argon-parser/std", "argon-util/std", "parse18-runtime/std"]
 test-utils = []
 
 [dependencies]

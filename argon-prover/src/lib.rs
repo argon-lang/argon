@@ -1,6 +1,10 @@
+#![no_std]
+
 mod prolog;
 
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;

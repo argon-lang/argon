@@ -1990,9 +1990,9 @@ impl<
         let dest_width = Self::fixed_integer_bit_width(dest_type);
 
         match dest_width.cmp(&source_width) {
-            std::cmp::Ordering::Less => value.extract(dest_width - 1, 0),
-            std::cmp::Ordering::Equal => value,
-            std::cmp::Ordering::Greater => {
+            core::cmp::Ordering::Less => value.extract(dest_width - 1, 0),
+            core::cmp::Ordering::Equal => value,
+            core::cmp::Ordering::Greater => {
                 let extension = dest_width - source_width;
                 if Self::fixed_integer_is_signed(source_type) {
                     value.sign_ext(extension)
@@ -3430,3 +3430,4 @@ mod tests {
         assert_eq!(SatResult::Unsat, z3expr.solver().check());
     }
 }
+use alloc::vec;

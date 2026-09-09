@@ -3,6 +3,10 @@ name = "argon-format-vm"
 publish = false
 edition = "2024"
 
+[features]
+default = []
+std = ["esexpr/std"]
+
 [dependencies]
 esexpr = { workspace = true }
 noble-idl-runtime = { workspace = true }

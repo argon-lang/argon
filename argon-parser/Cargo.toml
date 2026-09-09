@@ -4,6 +4,10 @@ publish = false
 edition = "2024"
 build = "build.rs"
 
+[features]
+default = []
+std = ["argon-util/std", "embedded-io/std", "parse18-runtime/std"]
+
 [dependencies]
 argon-util = { workspace = true }
 embedded-io = { workspace = true }

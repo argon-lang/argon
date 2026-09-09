@@ -333,3 +333,4 @@ impl<EC: ExprContext + ?Sized, T: AsLocatedExpr<EC> + ?Sized> AsLocatedExpr<EC> 
         (*self).as_located_expr()
     }
 }
+use alloc::boxed::Box;

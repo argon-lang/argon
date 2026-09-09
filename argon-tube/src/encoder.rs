@@ -1160,8 +1160,13 @@ impl TubeEncoder {
     }
 
     fn emit_location(location: &Location) -> tf::Location {
+        #[cfg(feature = "std")]
+        let file = location.file.to_string_lossy().into_owned();
+        #[cfg(not(feature = "std"))]
+        let file = location.file.clone();
+
         tf::Location {
-            file: location.file.to_string_lossy().into_owned(),
+            file,
             start: Box::new(Self::emit_file_position(&location.start)),
             end: Box::new(Self::emit_file_position(&location.end)),
         }

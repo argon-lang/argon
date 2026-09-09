@@ -3,6 +3,10 @@ name = "argon-tasks"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+std = ["argon-compiler/std", "argon-format/std", "argon-format-vm/std", "argon-io/std", "argon-opt/std", "argon-source/std", "argon-tube/std", "argon-util/std", "argon-vm/std", "embedded-io/std", "esexpr/std", "esexpr-binary/std", "parse18-runtime/std", "dep:walkdir", "dep:boa_engine", "dep:boa_runtime"]
+
 [dependencies]
 argon-compiler = { workspace = true }
 argon-format = { workspace = true }
@@ -20,16 +24,16 @@ esexpr-binary = { workspace = true }
 hashbrown = { workspace = true }
 noble-idl-runtime = { workspace = true }
 parse18-runtime = { workspace = true }
-walkdir = { workspace = true }
+walkdir = { workspace = true, optional = true }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-boa_engine = "0.21.1"
-boa_runtime = "0.21.1"
+boa_engine = { workspace = true, optional = true }
+boa_runtime = { workspace = true, optional = true }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-js-sys = "0.3.81"
+js-sys = { workspace = true }
 wasm-bindgen = { workspace = true }
-wasm-bindgen-futures = "0.4.58"
+wasm-bindgen-futures = { workspace = true }
 
 [build-dependencies]
 noble-idl-compiler-rust = { workspace = true }

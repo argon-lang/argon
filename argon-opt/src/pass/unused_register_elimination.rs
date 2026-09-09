@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 use argon_format_vm::vm as vf;
 use num_bigint::BigUint;
@@ -158,3 +158,5 @@ mod tests {
         Box::new(vf::RegisterId { id: id.into() })
     }
 }
+#[cfg(test)]
+use alloc::{boxed::Box, vec::Vec};

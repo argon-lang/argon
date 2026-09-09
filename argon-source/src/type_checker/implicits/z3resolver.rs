@@ -3,6 +3,8 @@ use crate::type_checker::{
     ExprNormalizer, Hole, Model, TypeCheckExprContext, default_to_type_check_shifter,
 };
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use argon_compiler::z3expr::Z3Expr;
 use argon_compiler::{Context, ImplicitValue};
 use argon_expr::{

@@ -353,3 +353,4 @@ impl<'tube> InlineCandidate<'tube> {
             .collect()
     }
 }
+use alloc::{boxed::Box, vec::Vec};

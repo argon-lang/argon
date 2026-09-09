@@ -396,3 +396,4 @@ mod tests {
         assert_eq!(instructions.len(), expected_len);
     }
 }
+use alloc::boxed::Box;

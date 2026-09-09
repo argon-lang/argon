@@ -1,4 +1,5 @@
 use crate::type_checker::{ExprNormalizer, TypeCheckExprContext, TypeChecker};
+use alloc::{boxed::Box, vec, vec::Vec};
 use argon_compiler::expr_type::get_expr_type;
 use argon_expr::ownership::{is_shared_type, is_use_mutable_type, is_use_type};
 use argon_expr::{

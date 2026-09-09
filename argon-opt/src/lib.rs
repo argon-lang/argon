@@ -1,3 +1,9 @@
+#![no_std]
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
 mod analysis;
 mod mutator;
 pub mod optimizer;

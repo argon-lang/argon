@@ -3,17 +3,25 @@
 //! The public API deliberately contains no raw Z3 handles and no implicit or
 //! thread-local context. Every Z3 value is tied to the lifetime of its context.
 
+#![no_std]
 #![allow(
     clippy::missing_panics_doc,
     reason = "programmer contract violations panic"
 )]
 
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
+
 use crate::ast::Ast as _;
 use crate::backend::sys;
+use alloc::ffi::CString;
+use alloc::rc::Rc;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::ffi::CStr;
 use core::fmt;
 use core::marker::PhantomData;
-use std::ffi::{CStr, CString};
-use std::rc::Rc;
 use sys::{Z3_context, Z3_func_decl, Z3_params, Z3_pattern, Z3_solver, Z3_sort};
 
 pub mod ast;

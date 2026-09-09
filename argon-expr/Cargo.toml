@@ -3,6 +3,10 @@ name = "argon-expr"
 publish = false
 edition = "2024"
 
+[features]
+default = []
+std = ["argon-parser/std", "argon-util/std", "parse18-runtime/std"]
+
 [dependencies]
 argon-util = { workspace = true }
 argon-parser = { workspace = true }

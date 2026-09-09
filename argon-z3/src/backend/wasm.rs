@@ -17,10 +17,12 @@
     reason = "Some imported entry points are only referenced by target-specific callers; the complete API remains available for the wasm backend."
 )]
 
+use alloc::boxed::Box;
+use alloc::vec;
+use core::ffi::CStr;
 use core::ffi::{c_char, c_int, c_uint};
 use core::ptr::NonNull;
 use core::{mem, ptr};
-use std::ffi::CStr;
 
 macro_rules! opaque {
     ($raw:ident, $name:ident) => {

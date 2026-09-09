@@ -602,3 +602,9 @@ fn register_host_functions(context: &mut Context) -> Result<(), String> {
     context.eval(Source::from_bytes("const __argon_decode = TextDecoder.prototype.decode; TextDecoder.prototype.decode = function(value, options) { if (arguments.length === 0) return __argon_decode.call(this, new Uint8Array(0), options); const copy = new Uint8Array(value.length); copy.set(value); return __argon_decode.call(this, copy, options); }; const __argon_set_union = function(other) { const result = new Set(); this.forEach(value => result.add(value)); other.forEach(value => result.add(value)); return result; }; const __argon_set_is_disjoint_from = function(other) { let result = true; other.forEach(value => { if (this.has(value)) result = false; }); return result; }; Set.prototype.union = __argon_set_union; Set.prototype.isDisjointFrom = __argon_set_is_disjoint_from;"))
         .map(|_| ()).map_err(display_error)
 }
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;

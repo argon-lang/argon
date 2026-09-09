@@ -1,6 +1,6 @@
 use crate::Function;
+use alloc::sync::Arc;
 use argon_expr::{ExprContext, Variable};
-use std::sync::Arc;
 
 pub enum ImplicitValue<EC: ExprContext + ?Sized> {
     OfVar(Variable<EC>),

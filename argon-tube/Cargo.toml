@@ -3,6 +3,10 @@ name = "argon-tube"
 publish = false
 edition = "2024"
 
+[features]
+default = []
+std = ["argon-compiler/std", "argon-expr/std", "argon-format/std", "argon-format-vm/std", "argon-util/std", "argon-vm/std", "embedded-io/std", "esexpr/std", "esexpr-binary/std", "parse18-runtime/std"]
+
 [dependencies]
 argon-compiler = { workspace = true }
 argon-expr = { workspace = true }

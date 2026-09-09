@@ -2,7 +2,7 @@ use super::{
     ExprNormalizer, TypeCheckExprContext, TypeChecker, build_subst_holes_for_args,
     default_to_type_check_shifter,
 };
-use alloc::{sync::Arc, vec, vec::Vec};
+use alloc::{string::ToString, sync::Arc, vec, vec::Vec};
 #[cfg(test)]
 use argon_compiler::Context;
 use argon_compiler::{Enum, EnumVariant, z3expr::Z3Expr};

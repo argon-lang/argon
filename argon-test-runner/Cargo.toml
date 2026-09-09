@@ -37,11 +37,11 @@ name = "compiler-tests-dist-jvm"
 path = "src/bin/compiler_tests_dist_jvm.rs"
 
 [dependencies]
-argon-io = { workspace = true }
-argon-opt = { workspace = true }
-argon-tasks = { workspace = true }
+argon-io = { workspace = true, features = ["std"] }
+argon-opt = { workspace = true, features = ["std"] }
+argon-tasks = { workspace = true, features = ["std"] }
 argon-testcases = { workspace = true }
-argon-util = { workspace = true }
+argon-util = { workspace = true, features = ["std"] }
 clap = { workspace = true }
 dhat = { workspace = true, optional = true }
 libtest-mimic = { workspace = true }

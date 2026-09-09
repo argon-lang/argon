@@ -2,10 +2,10 @@ use crate::{EnumType, ExprContext, LocalVariable, LocatedExpr};
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::hash::Hash;
 use derivative::Derivative;
 use num_bigint::BigInt;
 use parse18_runtime::Location;
-use std::hash::Hash;
 
 #[derive(Derivative)]
 #[derivative(Debug(bound = ""))]
@@ -24,7 +24,7 @@ impl<EC: ExprContext + ?Sized> PartialEq for LocatedPattern<EC> {
 impl<EC: ExprContext + ?Sized> Eq for LocatedPattern<EC> {}
 
 impl<EC: ExprContext + ?Sized> Hash for LocatedPattern<EC> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.value.hash(state);
     }
 }

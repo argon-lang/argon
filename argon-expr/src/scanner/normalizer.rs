@@ -5,9 +5,9 @@ use crate::{
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
 use argon_util::Fuel;
+use core::mem;
 use num_bigint::ToBigInt;
 use num_traits::ToPrimitive;
-use std::mem;
 
 pub struct NormalizerScanner<S> {
     fuel: Fuel,
@@ -1265,3 +1265,4 @@ mod tests {
         assert_eq!(expr.value, Expr::BoolLiteral(true));
     }
 }
+use alloc::boxed::Box;

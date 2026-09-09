@@ -1,6 +1,7 @@
 use crate::type_checker::implicits::prolog::PrologImplicitResolver;
 use crate::type_checker::implicits::z3resolver::Z3ImplicitResolver;
 use crate::type_checker::{Model, TypeCheckExprContext};
+use alloc::vec::Vec;
 use argon_compiler::{Context, ImplicitValue};
 use argon_expr::{LocatedExpr, Variable};
 use hashbrown::HashMap;

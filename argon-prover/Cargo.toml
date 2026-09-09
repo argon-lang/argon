@@ -3,6 +3,10 @@ name = "argon-prover"
 publish = false
 edition = "2024"
 
+[features]
+default = []
+std = ["argon-util/std"]
+
 [dependencies]
 argon-util = { workspace = true }
 hashbrown = { workspace = true }

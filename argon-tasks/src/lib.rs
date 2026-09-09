@@ -1,6 +1,11 @@
+#![no_std]
+
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 pub mod backend;
 mod context;
+#[cfg(feature = "std")]
 pub mod local_io;
 mod tubes;
 
@@ -142,10 +147,13 @@ where
     W: Write,
 {
     if let Err(err) = output_file.delete() {
+        #[cfg(feature = "std")]
         error_output.write_fmt(format_args!(
             "failed to delete output file {}: {err}",
             output_file.path().display()
         ))?;
+        #[cfg(not(feature = "std"))]
+        error_output.write_fmt(format_args!("failed to delete output file: {err}"))?;
 
         error_output.write_all(b"\n")?;
     }
@@ -227,7 +235,9 @@ where
     O::Writer: 'static,
     W: Write,
 {
-    backend.platform_metadata(options, error_output).await
+    backend
+        .platform_metadata::<I, O, W>(options, error_output)
+        .await
 }
 
 pub async fn codegen_js<B, I, O, W>(
@@ -369,6 +379,7 @@ where
     F: InputFile,
 {
     match error {
+        #[cfg(feature = "std")]
         TubeFormatError::FileError(_, err) => InternalCompilerError::TubeFormatError(
             TubeFormatError::FileError(file.path().to_path_buf(), err),
         ),
@@ -382,6 +393,7 @@ where
 {
     match error {
         ParseError::IOError(err) => match err {
+            #[cfg(feature = "std")]
             InternalCompilerError::IoError(_, io_err) => {
                 InternalCompilerError::IoError(file.path().to_path_buf(), io_err)
             }

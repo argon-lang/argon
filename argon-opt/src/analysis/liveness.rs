@@ -3,7 +3,7 @@ use super::use_def::UseDefAnalysis;
 use super::{InstructionPointer, RegionPointer, VariableSet};
 use argon_format_vm::vm as vf;
 use argon_vm::analysis::basic_blocks;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 #[derive(Debug, Default)]
 pub struct Liveness {
@@ -224,3 +224,5 @@ mod tests {
             .collect()
     }
 }
+#[cfg(test)]
+use alloc::{boxed::Box, vec::Vec};

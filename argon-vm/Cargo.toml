@@ -3,8 +3,13 @@ name = "argon-vm"
 publish = false
 edition = "2024"
 
+[features]
+default = []
+std = ["argon-format-vm/std"]
+
 [dependencies]
 argon-format-vm = { workspace = true }
+hashbrown = { workspace = true }
 num-bigint = { workspace = true }
 
 [lints]

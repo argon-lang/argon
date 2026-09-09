@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use argon_format_vm::vm as vf;
 
@@ -368,3 +368,4 @@ mod tests {
             .collect()
     }
 }
+use alloc::boxed::Box;

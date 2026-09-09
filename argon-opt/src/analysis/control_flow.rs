@@ -1,5 +1,5 @@
-use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use alloc::borrow::Cow;
+use hashbrown::{HashMap, HashSet};
 
 use argon_format_vm::vm as vf;
 
@@ -72,7 +72,7 @@ impl ControlFlowAnalysis {
                     current_blocks.clear();
                 }
 
-                if let Some(block_branches) = branches.blocks.get(&block_id) {
+                if let Some(block_branches) = branches.blocks.get(block_id.as_ref()) {
                     self.scan_region(
                         region,
                         &block_branches.retries,
@@ -94,7 +94,7 @@ impl ControlFlowAnalysis {
                 let mut entering_true_body =
                     self.scan_region(condition, incoming, always_predecessor_to, branches);
 
-                if let Some(block_branches) = branches.blocks.get(&when_true_block_id) {
+                if let Some(block_branches) = branches.blocks.get(when_true_block_id.as_ref()) {
                     entering_true_body.extend(&block_branches.breaks);
                 }
 
@@ -105,12 +105,13 @@ impl ControlFlowAnalysis {
                     branches,
                 );
 
-                let entering_false_body =
-                    if let Some(block_branches) = branches.blocks.get(&when_false_block_id) {
-                        Cow::Borrowed(&block_branches.breaks)
-                    } else {
-                        Cow::Owned(HashSet::new())
-                    };
+                let entering_false_body = if let Some(block_branches) =
+                    branches.blocks.get(when_false_block_id.as_ref())
+                {
+                    Cow::Borrowed(&block_branches.breaks)
+                } else {
+                    Cow::Owned(HashSet::new())
+                };
 
                 let exiting_false = self.scan_region(
                     when_false,

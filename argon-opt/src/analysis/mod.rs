@@ -7,7 +7,7 @@ pub mod reaching_defs;
 pub mod use_def;
 
 use argon_format_vm::vm as vf;
-use std::collections::HashSet;
+use hashbrown::HashSet;
 
 pub type InstructionPointer = *const vf::Instruction;
 

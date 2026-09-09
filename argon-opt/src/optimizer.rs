@@ -157,7 +157,7 @@ impl PendingImplementation {
             .map(|param| param.param_type.as_ref().clone());
 
         if self.is_method {
-            std::iter::once(vf::Token::Boxed {})
+            core::iter::once(vf::Token::Boxed {})
                 .chain(signature_argument_types)
                 .collect()
         } else {
@@ -324,3 +324,4 @@ impl<'program, 'args> OptimizationState<'program, 'args> {
         self.changed = true;
     }
 }
+use alloc::{boxed::Box, vec::Vec};

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 use super::control_flow::ControlFlowAnalysis;
 use super::{InstructionPointer, RegionPointer, VariableSet};
@@ -216,3 +216,5 @@ mod tests {
         instructions.into_iter().collect()
     }
 }
+#[cfg(test)]
+use alloc::{boxed::Box, vec::Vec};

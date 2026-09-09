@@ -8,52 +8,55 @@ edition = "2024"
 publish = false
 
 [workspace.dependencies]
-argon-compiler = { path = "argon-compiler" }
-argon-util = { path = "argon-util" }
-argon-expr = { path = "argon-expr" }
-argon-format = { path = "argon-format" }
-argon-format-vm = { path = "argon-format-vm" }
-argon-io = { path = "argon-io" }
-argon-opt = { path = "argon-opt" }
-argon-parser = { path = "argon-parser" }
-argon-prover = { path = "argon-prover" }
-argon-tasks = { path = "argon-tasks" }
-argon-source = { path = "argon-source" }
+argon-compiler = { path = "argon-compiler", default-features = false }
+argon-util = { path = "argon-util", default-features = false }
+argon-expr = { path = "argon-expr", default-features = false }
+argon-format = { path = "argon-format", default-features = false }
+argon-format-vm = { path = "argon-format-vm", default-features = false }
+argon-io = { path = "argon-io", default-features = false }
+argon-opt = { path = "argon-opt", default-features = false }
+argon-parser = { path = "argon-parser", default-features = false }
+argon-prover = { path = "argon-prover", default-features = false }
+argon-tasks = { path = "argon-tasks", default-features = false }
+argon-source = { path = "argon-source", default-features = false }
 argon-testcases = { path = "argon-testcases" }
 argon-test-runner = { path = "argon-test-runner" }
-argon-tube = { path = "argon-tube" }
-argon-vm = { path = "argon-vm" }
-argon-z3 = { path = "argon-z3" }
-esexpr = { version = "0.3.1" }
-esexpr-binary = { version = "0.3.1" }
+argon-tube = { path = "argon-tube", default-features = false }
+argon-vm = { path = "argon-vm", default-features = false }
+argon-z3 = { path = "argon-z3", default-features = false }
+esexpr = { version = "0.3.1", default-features = false }
+esexpr-binary = { version = "0.3.1", default-features = false }
 noble-idl-compiler-rust = { path = "../noble-idl/langs/rust/backend" }
 noble-idl-runtime = { path = "../noble-idl/langs/rust/runtime" }
 
 base64 = "0.22.1"
 bitflags = "2.13.0"
+boa_engine = "0.21.1"
+boa_runtime = "0.21.1"
 clap = { version = "4.6.1", features = ["derive"] }
 dashmap = "6.2.1"
 dhat = "0.3.3"
 derivative = { version = "2.2.0", features = ["use_core"] }
-embedded-io = { version = "0.7.1" }
-encoding_rs = { version = "0.8.35", features = ["alloc"] }
+embedded-io = { version = "0.7.1", default-features = false }
+encoding_rs = { version = "0.8.35", default-features = false, features = ["alloc"] }
 fs_extra = { version = "1.3.0" }
 futures-lite = "2.6.1"
-hashbrown = { version = "0.17.1", features = ["default-hasher"] }
+hashbrown = { version = "0.17.1", default-features = false, features = ["default-hasher"] }
+js-sys = { version = "0.3.81", default-features = false, features = ["unsafe-eval"] }
 libtest-mimic = "0.8.2"
-mitsein = { version = "0.9.0", features = ["alloc"] }
-num-bigint = { version = "0.4.6" }
-num-traits = { version = "0.2.19" }
+mitsein = { version = "0.9.0", default-features = false, features = ["alloc"] }
+num-bigint = { version = "0.4.6", default-features = false }
+num-traits = { version = "0.2.19", default-features = false }
 parse18-lexer-gen = { path = "parse18/parse18-lexer-gen" }
 parse18-ll-gen = { path = "parse18/parse18-ll-gen" }
-parse18-runtime = { path = "parse18/parse18-runtime" }
-percent-encoding = { version = "2.3.2", features = ["alloc"] }
+parse18-runtime = { path = "parse18/parse18-runtime", default-features = false }
+percent-encoding = { version = "2.3.2", default-features = false, features = ["alloc"] }
 quick-xml = "0.40.1"
 rayon = "1.12.0"
 regex-syntax = { version = "0.8.10", features = ["unicode"] }
 rpds = { version = "1.2.1" }
 rstest = "0.26.1"
-serde = { version = "1.0.228", features = ["alloc"] }
+serde = { version = "1.0.228", default-features = false, features = ["alloc"] }
 strum = { version = "0.28.0", features = ["derive"] }
 subprocess = "1.1.0"
 tempfile = "3.27.0"
@@ -61,8 +64,8 @@ toml_edit = { version = "0.25.11", features = ["parse", "serde"] }
 unicode-general-category = { version = "1.1.0" }
 walkdir = "2.5.0"
 windows-sys = "0.61.2"
-wasm-bindgen = "0.2.126"
-wasm-bindgen-futures = "0.4.78"
+wasm-bindgen = { version = "0.2.126", default-features = false }
+wasm-bindgen-futures = { version = "0.4.78", default-features = false }
 walrus = "0.26.5"
 wasm-bindgen-cli-support = "0.2.128"
 wat = "1.245.1"

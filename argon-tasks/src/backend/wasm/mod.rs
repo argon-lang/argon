@@ -1,10 +1,15 @@
 use super::backend_js::{
     BackendJS, CodegenJSOptions, PlatformMetadataJSOptions, display_error, report_error,
 };
+use alloc::borrow::ToOwned;
+use alloc::rc::Rc;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use argon_io::{InputFile, OutputDirectory, OutputFile, Read};
+use core::cell::RefCell;
 use embedded_io::Write;
 use js_sys::{Array, Function, Object, Reflect, Uint8Array};
-use std::{cell::RefCell, rc::Rc};
 use wasm_bindgen::{JsCast, JsValue, closure::Closure, prelude::wasm_bindgen};
 
 #[wasm_bindgen]
@@ -97,13 +102,7 @@ where
     let file_name = file
         .borrow()
         .as_ref()
-        .map(|file| {
-            file.path()
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("input")
-                .to_owned()
-        })
+        .map(|file| file.location_file().to_owned())
         .unwrap_or_else(|| "input".to_owned());
     let open_file = file.clone();
     let open = Closure::<dyn FnMut() -> Result<JsValue, JsValue>>::new(move || {

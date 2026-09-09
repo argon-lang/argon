@@ -8,8 +8,8 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-argon-compiler = { workspace = true }
-argon-tasks = { workspace = true }
+argon-compiler = { workspace = true, features = ["std"] }
+argon-tasks = { workspace = true, features = ["std"] }
 clap = { workspace = true }
 embedded-io = { workspace = true }
 futures-lite = { workspace = true }

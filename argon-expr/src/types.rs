@@ -2,10 +2,10 @@ use crate::{
     Builtin, Expr, ExprContext, ExprLocationExt, LocatedExpr, NormalizerScanner, Unify,
     ownership::is_shared_type,
 };
+use core::mem;
 use derivative::Derivative;
 use esexpr::core_types::num_bigint::BigInt;
 use parse18_runtime::Location;
-use std::mem;
 
 #[derive(Derivative)]
 #[derivative(Debug)]
@@ -266,3 +266,5 @@ pub trait TypeComparer: Unify {
         }
     }
 }
+use alloc::boxed::Box;
+use alloc::vec::Vec;

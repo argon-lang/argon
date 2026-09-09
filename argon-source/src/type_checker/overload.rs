@@ -2,9 +2,10 @@ use super::{
     ArgumentInfo, ExpectedType, Hole, InferredType, TypeCheckExprContext, TypeChecker,
     TypeInferResult, default_to_type_check_shifter,
 };
-use alloc::borrow::Cow;
+use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::format;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -19,6 +20,7 @@ use argon_expr::{
 use argon_parser::ast::FunctionParameterListType;
 use argon_util::{CompileError, MultiSlice, UniqueIdentifier};
 use core::cmp::Ordering;
+use core::fmt::Write;
 use parse18_runtime::Location;
 
 #[derive(Debug)]
@@ -226,7 +228,6 @@ impl<'parent, 'access, 'scope, 'model, 'e> OverloadResolver<'parent, 'access, 's
             };
 
             for (overload, reason) in &self.rejected_overloads {
-                use std::fmt::Write;
                 write!(message, "\n{overload:?} rejected because {reason:?}").unwrap();
             }
 

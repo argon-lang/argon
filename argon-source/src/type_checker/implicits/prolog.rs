@@ -4,7 +4,9 @@ use crate::type_checker::{
     unify_hole_impl,
 };
 use alloc::borrow::Cow;
+use alloc::boxed::Box;
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use argon_compiler::ImplicitValue;
 use argon_expr::{
     Builtin, ClosureParameterVariable, Expr, ExprContext, ExprLocationExt, ExprScannerMut,

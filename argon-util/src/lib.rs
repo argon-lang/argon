@@ -1,6 +1,16 @@
+#![no_std]
+
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 mod error;
 
+#[cfg(feature = "std")]
+#[path = "sync.rs"]
+pub mod sync;
+
+#[cfg(not(feature = "std"))]
+#[path = "sync_no_std.rs"]
 pub mod sync;
 
 mod multi_slice;

@@ -3,10 +3,15 @@ name = "argon-opt"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+std = ["argon-format-vm/std", "argon-vm/std"]
+
 [dependencies]
 argon-format-vm = { workspace = true }
 argon-vm = { workspace = true }
 esexpr = { workspace = true }
+hashbrown = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 

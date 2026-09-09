@@ -65,6 +65,7 @@ where
     F: InputFile,
 {
     match error {
+        #[cfg(feature = "std")]
         TubeFormatError::FileError(_, err) => InternalCompilerError::TubeFormatError(
             TubeFormatError::FileError(file.path().to_path_buf(), err),
         ),
@@ -78,6 +79,7 @@ where
 {
     match error {
         ParseError::IOError(err) => match err {
+            #[cfg(feature = "std")]
             InternalCompilerError::IoError(_, io_err) => {
                 InternalCompilerError::IoError(file.path().to_path_buf(), io_err)
             }

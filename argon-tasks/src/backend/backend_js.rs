@@ -1,3 +1,5 @@
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use argon_io::{InputFile, OutputDirectory, OutputFile};
 use embedded_io::Write;
 

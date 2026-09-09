@@ -1,7 +1,9 @@
 use crate::backend::sys;
 use crate::{Context, Sort, SortKind, display_ptr, same_context, symbol};
+use alloc::ffi::{CString, NulError};
+use alloc::string::ToString;
+use alloc::vec::Vec;
 use core::fmt;
-use std::ffi::CString;
 use sys::Z3_ast;
 
 #[derive(Copy, Clone)]
@@ -276,7 +278,7 @@ impl<'ctx> Bool<'ctx> {
 }
 
 impl<'ctx> Int<'ctx> {
-    fn numeral(ctx: &'ctx Context, value: &str) -> Result<Self, std::ffi::NulError> {
+    fn numeral(ctx: &'ctx Context, value: &str) -> Result<Self, NulError> {
         let value = CString::new(value)?;
         let sort = Sort::int(ctx);
         Ok(unsafe {
@@ -287,7 +289,7 @@ impl<'ctx> Int<'ctx> {
             )
         })
     }
-    pub fn from_str(ctx: &'ctx Context, value: &str) -> Result<Self, std::ffi::NulError> {
+    pub fn from_str(ctx: &'ctx Context, value: &str) -> Result<Self, NulError> {
         Self::numeral(ctx, value)
     }
     #[must_use]
@@ -553,7 +555,7 @@ impl<'ctx> Seq<'ctx> {
 }
 
 impl<'ctx> String<'ctx> {
-    pub fn from_str(ctx: &'ctx Context, value: &str) -> Result<Self, std::ffi::NulError> {
+    pub fn from_str(ctx: &'ctx Context, value: &str) -> Result<Self, NulError> {
         let value = CString::new(value)?;
         Ok(unsafe {
             Self::wrap(

@@ -177,3 +177,5 @@ mod tests {
         Box::new(vf::RegisterId { id: id.into() })
     }
 }
+#[cfg(test)]
+use alloc::{boxed::Box, vec::Vec};

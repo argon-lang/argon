@@ -203,3 +203,4 @@ mod tests {
         assert!(regions.is_empty());
     }
 }
+use alloc::{boxed::Box, vec::Vec};

@@ -1,4 +1,5 @@
-use std::collections::{HashSet, VecDeque};
+use alloc::collections::VecDeque;
+use hashbrown::HashSet;
 
 use crate::analysis::control_flow::ControlFlowAnalysis;
 use crate::analysis::{InstructionPointer, InstructionSet, RegionPointer, RegionSet};

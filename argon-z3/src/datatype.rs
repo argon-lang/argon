@@ -1,6 +1,10 @@
 use crate::backend::sys;
 use crate::{Context, FuncDecl, Sort, Symbol, same_context, symbol};
-use std::ffi::CString;
+use alloc::ffi::CString;
+use alloc::format;
+use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 use sys::Z3_constructor;
 
 #[derive(Debug)]

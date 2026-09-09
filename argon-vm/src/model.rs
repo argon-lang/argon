@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 use argon_format_vm::vm as vf;
 use num_bigint::BigUint;
@@ -3554,3 +3554,6 @@ mod tests {
         })
     }
 }
+use alloc::boxed::Box;
+use alloc::vec;
+use alloc::vec::Vec;

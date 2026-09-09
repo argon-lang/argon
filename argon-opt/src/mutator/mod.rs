@@ -384,3 +384,4 @@ mod tests {
         Box::new(vf::RegisterId { id: id.into() })
     }
 }
+use alloc::boxed::Box;

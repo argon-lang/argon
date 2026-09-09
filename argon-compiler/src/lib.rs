@@ -1,3 +1,8 @@
+#![no_std]
+
+#[cfg(feature = "std")]
+extern crate std;
+
 use argon_expr::{ExprScannerMut, TypeComparer, Unify};
 extern crate alloc;
 pub mod access;

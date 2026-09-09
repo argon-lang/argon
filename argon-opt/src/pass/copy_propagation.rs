@@ -1,5 +1,5 @@
 use argon_format_vm::vm as vf;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 
 use super::OptimizationPass;
 use crate::analysis::control_path::ControlPathAnalysis;
@@ -278,3 +278,4 @@ mod tests {
         Box::new(vf::RegisterId { id: id.into() })
     }
 }
+use alloc::vec::Vec;
