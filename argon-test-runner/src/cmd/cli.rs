@@ -101,8 +101,10 @@ impl CommandRunnerPlatform<JSPlatform> for CliCommandRunner {
         error_output: &mut W,
     ) -> bool
     where
-        I: InputFile,
-        O: OutputFile,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
         W: Write,
     {
         match self.platform_metadata_staged(options) {
@@ -119,8 +121,11 @@ impl CommandRunnerPlatform<JSPlatform> for CliCommandRunner {
 
     fn codegen<I, O, W>(&self, options: JsCodeGenOptions<I, O>, error_output: &mut W) -> bool
     where
-        I: InputFile,
-        O: OutputDirectory,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
         W: Write,
     {
         match self.codegen_staged(options) {
@@ -143,8 +148,10 @@ impl CommandRunnerPlatform<JVMPlatform> for CliCommandRunner {
         error_output: &mut W,
     ) -> bool
     where
-        I: InputFile,
-        O: OutputFile,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
         W: Write,
     {
         match self.jvm_platform_metadata_staged(options) {
@@ -161,8 +168,11 @@ impl CommandRunnerPlatform<JVMPlatform> for CliCommandRunner {
 
     fn codegen<I, O, W>(&self, options: JvmCodeGenOptions<I, O>, error_output: &mut W) -> bool
     where
-        I: InputFile,
-        O: OutputDirectory,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
         W: Write,
     {
         match self.jvm_codegen_staged(options) {

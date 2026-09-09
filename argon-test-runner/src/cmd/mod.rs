@@ -44,13 +44,18 @@ pub trait CommandRunnerPlatform<P: CompileTargetPlatform>: CommandRunner {
         error_output: &mut W,
     ) -> bool
     where
-        I: InputFile,
-        O: OutputFile,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
         W: Write;
 
     fn codegen<I, O, W>(&self, options: P::CodeGenOptions<I, O>, error_output: &mut W) -> bool
     where
-        I: InputFile,
-        O: OutputDirectory,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
         W: Write;
 }

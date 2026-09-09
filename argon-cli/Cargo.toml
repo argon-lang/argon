@@ -12,12 +12,14 @@ argon-compiler = { workspace = true }
 argon-tasks = { workspace = true }
 clap = { workspace = true }
 embedded-io = { workspace = true }
+futures-lite = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_Environment", "Win32_System_SystemInformation"] }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 
 [lints]
 workspace = true

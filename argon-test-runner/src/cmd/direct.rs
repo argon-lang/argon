@@ -2,11 +2,8 @@ use crate::{
     JSPlatform, JVMPlatform,
     cmd::{
         CommandRunner, CommandRunnerPlatform,
-        backend_options::{
-            js_codegen_args, js_platform_metadata_args, jvm_codegen_args,
-            jvm_platform_metadata_args,
-        },
-        staging::{copy_temp_output, copy_temp_output_dir, stage_input_file, stage_input_files},
+        backend_options::{jvm_codegen_args, jvm_platform_metadata_args},
+        staging::{copy_temp_output, stage_input_file, stage_input_files},
     },
     js_platform::{JsCodeGenOptions, JsPlatformMetadataOptions},
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
@@ -71,38 +68,47 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
         error_output: &mut W,
     ) -> bool
     where
-        I: InputFile,
-        O: OutputFile,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
         W: Write,
     {
-        match self.platform_metadata_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let backend = argon_tasks::backend::NativeBackendJS::new(
+            self.workspace_paths.root().join("backend/js/backend"),
+        );
+        futures_lite::future::block_on(argon_tasks::platform_metadata_js(
+            &backend,
+            argon_tasks::JsPlatformMetadataOptions {
+                package_name: None,
+                extern_files: options.extern_files,
+                output_file: options.output_file,
+            },
+            error_output,
+        ))
     }
 
     fn codegen<I, O, W>(&self, options: JsCodeGenOptions<I, O>, error_output: &mut W) -> bool
     where
-        I: InputFile,
-        O: OutputDirectory,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
         W: Write,
     {
-        match self.codegen_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let backend = argon_tasks::backend::NativeBackendJS::new(
+            self.workspace_paths.root().join("backend/js/backend"),
+        );
+        futures_lite::future::block_on(argon_tasks::codegen_js(
+            &backend,
+            argon_tasks::JsCodeGenOptions {
+                input_file: options.input_file,
+                output_dir: options.output_dir,
+                executable: options.executable,
+            },
+            error_output,
+        ))
     }
 }
 
@@ -113,8 +119,10 @@ impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
         error_output: &mut W,
     ) -> bool
     where
-        I: InputFile,
-        O: OutputFile,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
         W: Write,
     {
         match self.jvm_platform_metadata_staged(options) {
@@ -131,8 +139,11 @@ impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
 
     fn codegen<I, O, W>(&self, options: JvmCodeGenOptions<I, O>, error_output: &mut W) -> bool
     where
-        I: InputFile,
-        O: OutputDirectory,
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
         W: Write,
     {
         match self.jvm_codegen_staged(options) {
@@ -149,62 +160,6 @@ impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
 }
 
 impl DirectCommandRunner {
-    fn platform_metadata_staged<I, O>(
-        &self,
-        options: JsPlatformMetadataOptions<I, O>,
-    ) -> Result<String, String>
-    where
-        I: InputFile,
-        O: OutputFile,
-    {
-        let temp_dir = tempfile::TempDir::new()
-            .map_err(|err| format!("failed to create temporary command directory: {err}"))?;
-        let temp_path = temp_dir.path();
-
-        let extern_files = stage_input_files(temp_path, "extern", options.extern_files)?;
-        let output_file = temp_path.join("platform-metadata.esx");
-
-        let command_output = self.run_backend_command(
-            BackendCommand::JavaScript,
-            &js_platform_metadata_args(extern_files, output_file.clone()),
-        )?;
-        copy_temp_output(&output_file, options.output_file)?;
-
-        Ok(command_output)
-    }
-
-    fn codegen_staged<I, O>(&self, options: JsCodeGenOptions<I, O>) -> Result<String, String>
-    where
-        I: InputFile,
-        O: OutputDirectory,
-    {
-        let temp_dir = tempfile::TempDir::new()
-            .map_err(|err| format!("failed to create temporary command directory: {err}"))?;
-        let temp_path = temp_dir.path();
-
-        let input_file = stage_input_file(temp_path, "input", 0, options.input_file)?;
-        let output_dir = temp_path.join("output");
-        std::fs::create_dir_all(&output_dir).map_err(|err| {
-            format!(
-                "failed to create temporary output directory {}: {err}",
-                output_dir.display()
-            )
-        })?;
-
-        let command_output = self.run_backend_command(
-            BackendCommand::JavaScript,
-            &js_codegen_args(
-                input_file,
-                output_dir.clone(),
-                options.executable.as_deref(),
-            ),
-        )?;
-
-        copy_temp_output_dir(&output_dir, options.output_dir)?;
-
-        Ok(command_output)
-    }
-
     fn jvm_platform_metadata_staged<I, O>(
         &self,
         options: JvmPlatformMetadataOptions<I, O>,
@@ -292,15 +247,6 @@ impl DirectCommandRunner {
 
     fn backend_command(&self, backend: BackendCommand) -> Command {
         match backend {
-            BackendCommand::JavaScript => {
-                let mut command = Command::new("node");
-                command.arg(
-                    self.workspace_paths
-                        .root()
-                        .join("backend/js/backend/lib/main.js"),
-                );
-                command
-            }
             BackendCommand::JVM => {
                 let mut command = Command::new("java");
                 command
@@ -320,7 +266,6 @@ impl DirectCommandRunner {
 
 #[derive(Clone, Copy)]
 enum BackendCommand {
-    JavaScript,
     JVM,
 }
 

@@ -5,6 +5,10 @@ use crate::backend::Backend;
 use crate::options::{
     CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
 };
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+use argon_tasks::backend::NativeBackendJS;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+use argon_tasks::backend::wasm::WasmBackendJS;
 use argon_tasks::local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory};
 use clap::Parser;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -15,20 +19,18 @@ use std::ffi::OsString;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use wasm_bindgen::prelude::wasm_bindgen;
 
-/// Run argonc with command-line arguments, including the executable name.
-pub fn main<W>(args: Vec<OsString>, stdout: &mut W)
+/// Run argonc asynchronously with command-line arguments, including the executable name.
+pub async fn main<W>(args: Vec<OsString>, stdout: &mut W) -> i32
 where
     W: Write,
 {
+    let js_backend = create_js_backend();
     let options = match CommandLineOptions::try_parse_from(args.clone()) {
         Ok(options) => options,
         Err(error) => {
             let rendered = error.render().to_string();
             let _ = stdout.write_all(rendered.as_bytes());
-            #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-            std::process::exit(error.exit_code());
-            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-            return;
+            return error.exit_code();
         }
     };
     match options.command {
@@ -51,7 +53,7 @@ where
             };
 
             if !argon_tasks::compile(runner_options, stdout) {
-                std::process::exit(1);
+                return 1;
             }
         }
         Command::GenIR(cmd) => {
@@ -67,7 +69,7 @@ where
             };
 
             if !argon_tasks::gen_ir(runner_options, stdout) {
-                std::process::exit(1);
+                return 1;
             }
         }
         Command::Optimize(cmd) => {
@@ -83,34 +85,88 @@ where
             };
 
             if !argon_tasks::optimize(runner_options, stdout) {
-                std::process::exit(1);
+                return 1;
             }
         }
         Command::CodeGen(cmd) => match cmd.backend_command {
-            CodeGenBackendCommand::JS(_) => {
-                execute_backend_subcommand(Backend::JavaScript, &args);
+            CodeGenBackendCommand::JS(cmd) => {
+                let success = argon_tasks::codegen_js(
+                    &js_backend,
+                    argon_tasks::JsCodeGenOptions {
+                        input_file: LocalInputFile::new(cmd.input),
+                        output_dir: argon_tasks::local_io::LocalOutputDirectory::new(cmd.output),
+                        executable: cmd.executable,
+                    },
+                    stdout,
+                )
+                .await;
+                if !success {
+                    return 1;
+                }
             }
             CodeGenBackendCommand::JVM(_) => {
-                execute_backend_subcommand(Backend::JVM, &args);
+                return execute_backend_subcommand(Backend::JVM, &args);
             }
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
-            PlatformMetadataBackendCommand::JS(_) => {
-                execute_backend_subcommand(Backend::JavaScript, &args);
+            PlatformMetadataBackendCommand::JS(cmd) => {
+                let success = argon_tasks::platform_metadata_js(
+                    &js_backend,
+                    argon_tasks::JsPlatformMetadataOptions {
+                        package_name: cmd.package_name,
+                        extern_files: cmd
+                            .extern_files
+                            .into_iter()
+                            .map(LocalInputFile::new)
+                            .collect(),
+                        output_file: LocalOutputFile::new(cmd.output_file),
+                    },
+                    stdout,
+                )
+                .await;
+                if !success {
+                    return 1;
+                }
             }
             PlatformMetadataBackendCommand::JVM(_) => {
-                execute_backend_subcommand(Backend::JVM, &args);
+                return execute_backend_subcommand(Backend::JVM, &args);
             }
         },
     }
+
+    0
+}
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+pub fn js_backend_path() -> std::path::PathBuf {
+    let mut path = std::env::current_exe().expect("failed to get current executable path");
+    path.pop();
+    path.pop();
+    path.pop();
+    let dist_path = path.join("backend/js");
+    if dist_path.join("lib/index.js").is_file() {
+        dist_path
+    } else {
+        path.join("backend/js/backend")
+    }
+}
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn create_js_backend() -> NativeBackendJS {
+    NativeBackendJS::new(js_backend_path())
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn create_js_backend() -> WasmBackendJS {
+    WasmBackendJS::new()
 }
 
 /// Run argonc from JavaScript with command-line arguments represented as strings.
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 #[wasm_bindgen(js_name = main)]
-pub fn wasm_main(args: Vec<String>, stdout: JavaScriptWriter) {
+pub async fn wasm_main(args: Vec<String>, stdout: JavaScriptWriter) -> i32 {
     let mut stdout = WasmWriter::new(stdout);
-    main(args.into_iter().map(OsString::from).collect(), &mut stdout);
+    main(args.into_iter().map(OsString::from).collect(), &mut stdout).await
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -153,7 +209,7 @@ extern "C" {
 }
 
 #[cfg(unix)]
-fn execute_backend_subcommand(backend: Backend, args: &[OsString]) {
+fn execute_backend_subcommand(backend: Backend, args: &[OsString]) -> i32 {
     use std::os::unix::process::CommandExt;
     use std::process::Command;
 
@@ -188,10 +244,11 @@ fn execute_backend_subcommand(backend: Backend, args: &[OsString]) {
     let error = command.exec();
 
     eprintln!("unable to execute backend subcommand: {}", error);
-    std::process::exit(1);
+    1
 }
 
 #[cfg(not(unix))]
-fn execute_backend_subcommand(_backend: Backend, _args: &[OsString]) {
+fn execute_backend_subcommand(_backend: Backend, _args: &[OsString]) -> i32 {
     eprintln!("backend subcommands are not implemented on this platform");
+    1
 }

@@ -1,5 +1,5 @@
 extern crate alloc;
-mod backend;
+pub mod backend;
 mod context;
 pub mod local_io;
 mod tubes;
@@ -40,10 +40,10 @@ pub struct OptimizeOptions<IF, O> {
     pub optimizations: Vec<String>,
 }
 
-pub struct JsCodeGenOptions<I, O> {
-    pub input_file: I,
-    pub output_dir: O,
-}
+pub use backend::{
+    BackendJS, CodegenJSOptions as JsCodeGenOptions,
+    PlatformMetadataJSOptions as JsPlatformMetadataOptions,
+};
 
 pub fn compile<ID, IF, O, W>(options: CompileOptions<ID, IF, O>, error_output: &mut W) -> bool
 where
@@ -214,12 +214,37 @@ where
     false
 }
 
-pub fn codegen_js<I, O>(_options: JsCodeGenOptions<I, O>)
+pub async fn platform_metadata_js<B, I, O, W>(
+    backend: &B,
+    options: JsPlatformMetadataOptions<I, O>,
+    error_output: &mut W,
+) -> bool
 where
-    I: InputFile,
-    O: OutputDirectory,
+    B: BackendJS,
+    I: InputFile + 'static,
+    I::Reader: 'static,
+    O: OutputFile + 'static,
+    O::Writer: 'static,
+    W: Write,
 {
-    todo!("generate JavaScript code from Argon VM IR")
+    backend.platform_metadata(options, error_output).await
+}
+
+pub async fn codegen_js<B, I, O, W>(
+    backend: &B,
+    options: JsCodeGenOptions<I, O>,
+    error_output: &mut W,
+) -> bool
+where
+    B: BackendJS,
+    I: InputFile + 'static,
+    I::Reader: 'static,
+    O: OutputDirectory + 'static,
+    O::File: OutputFile + 'static,
+    <O::File as OutputFile>::Writer: 'static,
+    W: Write,
+{
+    backend.codegen_js(options, error_output).await
 }
 
 pub fn optimize<IF, O, W>(options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool

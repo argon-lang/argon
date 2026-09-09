@@ -50,34 +50,34 @@ fn main() {
         }
     }
 
+    fn native_command(mut executable_path: PathBuf) -> ProcessCommand {
+        let arch_name = unsafe {
+            let mut info = SYSTEM_INFO::default();
+            GetNativeSystemInfo(&mut info);
+
+            match info.Anonymous.Anonymous.wProcessorArchitecture {
+                PROCESSOR_ARCHITECTURE_AMD64 => "x86_64-pc-windows-gnu",
+                PROCESSOR_ARCHITECTURE_ARM64 => "aarch64-pc-windows-gnu",
+                _ => "i686-pc-windows-gnu",
+            }
+        };
+        executable_path.push("arch");
+        executable_path.push(arch_name);
+        executable_path.push("argonc.exe");
+        ProcessCommand::new(executable_path)
+    }
+
     let mut command = match options.command {
         Command::Compile(_) | Command::GenIR(_) | Command::Optimize(_) => {
-            let arch_name = unsafe {
-                let mut info = SYSTEM_INFO::default();
-                GetNativeSystemInfo(&mut info);
-
-                match info.Anonymous.Anonymous.wProcessorArchitecture {
-                    PROCESSOR_ARCHITECTURE_AMD64 => "x86_64-pc-windows-gnu",
-                    PROCESSOR_ARCHITECTURE_ARM64 => "aarch64-pc-windows-gnu",
-                    _ => "i686-pc-windows-gnu",
-                }
-            };
-
-            executable_path.push("arch");
-            executable_path.push(arch_name);
-            executable_path.push("argonc.exe");
-
-            ProcessCommand::new(executable_path)
+            native_command(executable_path)
         }
 
         Command::CodeGen(cmd) => match cmd.backend_command {
-            CodeGenBackendCommand::JS(_) => backend_command(Backend::JavaScript, executable_path),
+            CodeGenBackendCommand::JS(_) => native_command(executable_path),
             CodeGenBackendCommand::JVM(_) => backend_command(Backend::JVM, executable_path),
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
-            PlatformMetadataBackendCommand::JS(_) => {
-                backend_command(Backend::JavaScript, executable_path)
-            }
+            PlatformMetadataBackendCommand::JS(_) => native_command(executable_path),
             PlatformMetadataBackendCommand::JVM(_) => {
                 backend_command(Backend::JVM, executable_path)
             }

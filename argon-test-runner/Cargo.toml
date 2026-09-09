@@ -46,6 +46,7 @@ clap = { workspace = true }
 dhat = { workspace = true, optional = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
+futures-lite = { workspace = true }
 hashbrown = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }

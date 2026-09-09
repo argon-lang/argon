@@ -102,10 +102,42 @@ const { instance: memory } = await WebAssembly.instantiate(memoryBytes, {
 globalThis.__argon_wasm_imports = {
     "argon-memory": memory.exports,
 };
+
+const backendPath = path.resolve(wasmDirectory, "../../backend/js");
+
+globalThis.__argon_run_backend = async (task, options) => {
+    const backendUrl = pathToFileURL(path.join(backendPath, "lib/index.js"));
+    const apiUrl = pathToFileURL(path.join(backendPath, "node_modules/@argon-lang/js-backend-api/lib/metadata.js"));
+    const binaryUrl = pathToFileURL(path.join(backendPath, "node_modules/@argon-lang/esexpr/lib/binary_format.js"));
+    const backend = await import(backendUrl);
+    const { PlatformMetadataResult } = await import(apiUrl);
+    const { writeExprs } = await import(binaryUrl);
+
+    if (task === "platform-metadata") {
+        const metadata = await backend.loadMetadata({
+            packageName: options.packageName,
+            externFiles: options.externFiles,
+        });
+        const expr = PlatformMetadataResult.codec.encode({ ...metadata, platform: "js" });
+        const stream = await options.outputFile.open();
+        try {
+            for await (const chunk of writeExprs([expr])) await stream.write(chunk);
+        } finally {
+            await stream.close();
+        }
+    } else {
+        await backend.codegen({
+            tube: options.inputFile,
+            outputDirectory: options.outputDirectory,
+            executable: options.executable,
+        });
+    }
+};
+
 const argonc = await import(pathToFileURL(path.join(wasmDirectory, "argon_wasm.js")));
 
 try {
-    argonc.main(process.argv.slice(1), {
+    process.exitCode = await argonc.main(process.argv.slice(1), {
         write: (s) => process.stdout.write(s),
     });
 } finally {

@@ -22,6 +22,15 @@ noble-idl-runtime = { workspace = true }
 parse18-runtime = { workspace = true }
 walkdir = { workspace = true }
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+boa_engine = "0.21.1"
+boa_runtime = "0.21.1"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+js-sys = "0.3.81"
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = "0.4.58"
+
 [build-dependencies]
 noble-idl-compiler-rust = { workspace = true }
 
