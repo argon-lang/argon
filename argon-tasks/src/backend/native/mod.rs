@@ -9,14 +9,14 @@ use boa_engine::{
     module::{ModuleLoader, Referrer},
     object::{
         JsObject,
-        builtins::{JsArray, JsPromise, JsUint8Array},
+        builtins::{JsArray, JsFunction, JsPromise, JsUint8Array},
     },
     property::Attribute,
 };
 use boa_runtime::{RuntimeExtension, extensions::EncodingExtension};
 use embedded_io::Write as SyncWrite;
 use std::{
-    cell::RefCell,
+    cell::{OnceCell, RefCell},
     collections::HashMap,
     future::Future,
     path::{Path, PathBuf},
@@ -52,17 +52,23 @@ export default (async function(kind, options) {
 
 pub struct NativeBackendJS {
     path: PathBuf,
+    engine: OnceCell<Result<RefCell<NativeBackendJSEngine>, String>>,
+}
+
+struct NativeBackendJSEngine {
+    runner: JsFunction,
+    context: Context,
 }
 
 impl NativeBackendJS {
     pub fn new(path: PathBuf) -> Self {
-        Self { path }
+        Self {
+            path,
+            engine: OnceCell::new(),
+        }
     }
 
-    fn run_inner<F>(&self, kind: &str, make_options: F) -> Result<(), String>
-    where
-        F: FnOnce(&mut Context) -> Result<JsValue, String>,
-    {
+    fn create_engine(&self) -> Result<NativeBackendJSEngine, String> {
         let root = self.path.canonicalize().map_err(|error| {
             format!(
                 "failed to resolve backend path {}: {error}",
@@ -121,14 +127,30 @@ impl NativeBackendJS {
             .map_err(display_error)?
             .as_function()
             .ok_or_else(|| "backend task runner is not callable".to_owned())?;
-        let promise = function
+
+        Ok(NativeBackendJSEngine {
+            runner: function,
+            context,
+        })
+    }
+
+    fn run_inner<F>(&self, kind: &str, make_options: F) -> Result<(), String>
+    where
+        F: FnOnce(&mut Context) -> Result<JsValue, String>,
+    {
+        let engine = self
+            .engine
+            .get_or_init(|| self.create_engine().map(RefCell::new))
+            .as_ref()
+            .map_err(Clone::clone)?;
+        let mut engine = engine.borrow_mut();
+        let options = make_options(&mut engine.context)?;
+        let runner = engine.runner.clone();
+        let promise = runner
             .call(
                 &JsValue::undefined(),
-                &[
-                    JsValue::from(JsString::from(kind)),
-                    make_options(&mut context)?,
-                ],
-                &mut context,
+                &[JsValue::from(JsString::from(kind)), options],
+                &mut engine.context,
             )
             .map_err(display_error)?;
         let promise = JsPromise::from_object(
@@ -138,7 +160,7 @@ impl NativeBackendJS {
                 .clone(),
         )
         .map_err(display_error)?;
-        settle(promise, &mut context).map(|_| ())
+        settle(promise, &mut engine.context).map(|_| ())
     }
 }
 

@@ -13,8 +13,17 @@ use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
 use embedded_io::Write;
+use std::cell::OnceCell;
 use std::ffi::OsStr;
+use std::mem::ManuallyDrop;
 use std::process::Command;
+
+thread_local! {
+    // Boa also owns thread-local runtime state. Keep the cached context alive until process exit
+    // so Rust's unspecified thread-local destruction order cannot drop it after Boa's state.
+    static JS_BACKEND: OnceCell<ManuallyDrop<argon_tasks::backend::NativeBackendJS>> =
+        const { OnceCell::new() };
+}
 
 #[derive(Clone, Debug)]
 pub struct DirectCommandRunner {
@@ -24,6 +33,16 @@ pub struct DirectCommandRunner {
 impl DirectCommandRunner {
     pub fn new(workspace_paths: WorkspacePaths) -> Self {
         Self { workspace_paths }
+    }
+
+    fn with_js_backend<T>(&self, f: impl FnOnce(&argon_tasks::backend::NativeBackendJS) -> T) -> T {
+        JS_BACKEND.with(|backend| {
+            f(backend.get_or_init(|| {
+                ManuallyDrop::new(argon_tasks::backend::NativeBackendJS::new(
+                    self.workspace_paths.root().join("backend/js/backend"),
+                ))
+            }))
+        })
     }
 }
 
@@ -81,20 +100,19 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
         O::Writer: 'static,
         W: Write,
     {
-        let backend = argon_tasks::backend::NativeBackendJS::new(
-            self.workspace_paths.root().join("backend/js/backend"),
-        );
-        tokio::runtime::Runtime::new()
-            .expect("create Tokio runtime")
-            .block_on(argon_tasks::platform_metadata_js(
-                &backend,
-                argon_tasks::JsPlatformMetadataOptions {
-                    package_name: None,
-                    extern_files: options.extern_files,
-                    output_file: options.output_file,
-                },
-                error_output,
-            ))
+        self.with_js_backend(|backend| {
+            tokio::runtime::Runtime::new()
+                .expect("create Tokio runtime")
+                .block_on(argon_tasks::platform_metadata_js(
+                    backend,
+                    argon_tasks::JsPlatformMetadataOptions {
+                        package_name: None,
+                        extern_files: options.extern_files,
+                        output_file: options.output_file,
+                    },
+                    error_output,
+                ))
+        })
     }
 
     fn codegen<I, O, W>(&self, options: JsCodeGenOptions<I, O>, error_output: &mut W) -> bool
@@ -106,20 +124,19 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
         <O::File as OutputFile>::Writer: 'static,
         W: Write,
     {
-        let backend = argon_tasks::backend::NativeBackendJS::new(
-            self.workspace_paths.root().join("backend/js/backend"),
-        );
-        tokio::runtime::Runtime::new()
-            .expect("create Tokio runtime")
-            .block_on(argon_tasks::codegen_js(
-                &backend,
-                argon_tasks::JsCodeGenOptions {
-                    input_file: options.input_file,
-                    output_dir: options.output_dir,
-                    executable: options.executable,
-                },
-                error_output,
-            ))
+        self.with_js_backend(|backend| {
+            tokio::runtime::Runtime::new()
+                .expect("create Tokio runtime")
+                .block_on(argon_tasks::codegen_js(
+                    backend,
+                    argon_tasks::JsCodeGenOptions {
+                        input_file: options.input_file,
+                        output_dir: options.output_dir,
+                        executable: options.executable,
+                    },
+                    error_output,
+                ))
+        })
     }
 }
 
