@@ -31,8 +31,8 @@ noble-idl-runtime = { path = "../noble-idl/langs/rust/runtime" }
 
 base64 = "0.22.1"
 bitflags = "2.13.0"
-boa_engine = "0.21.1"
-boa_runtime = "0.21.1"
+boa_engine = "0.22.0"
+boa_runtime = "0.22.0"
 clap = { version = "4.6.1", features = ["derive"] }
 dashmap = "6.2.1"
 dhat = "0.3.3"

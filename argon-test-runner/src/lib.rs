@@ -33,6 +33,11 @@ macro_rules! compiler_test_entrypoint {
         }
 
         fn run_tests() -> libtest_mimic::Conclusion {
+            if std::env::var_os("RUST_MIN_STACK").is_none() {
+                // SAFETY: This is the test executable's entrypoint, before the test runner has
+                // spawned any worker threads that could access the process environment.
+                unsafe { std::env::set_var("RUST_MIN_STACK", "8388608") };
+            }
             let workspace_paths =
                 $crate::workspace::WorkspacePaths::from_cargo_manifest_dir().unwrap();
             $crate::suite::run_conclusion(

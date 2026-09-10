@@ -6,7 +6,7 @@ use boa_engine::{
     Context, JsNativeError, JsResult, JsString, JsValue, Module, NativeFunction, Source,
     builtins::promise::PromiseState,
     js_string,
-    module::{ModuleLoader, Referrer},
+    module::{ModuleLoader, ModuleRequest, Referrer},
     object::{
         JsObject,
         builtins::{JsArray, JsFunction, JsPromise, JsUint8Array},
@@ -641,11 +641,11 @@ impl ModuleLoader for BackendModuleLoader {
     fn load_imported_module(
         self: Rc<Self>,
         referrer: Referrer,
-        specifier: JsString,
+        request: ModuleRequest,
         context: &RefCell<&mut Context>,
     ) -> impl Future<Output = JsResult<Module>> {
         let result = (|| {
-            let specifier = specifier.to_std_string_escaped();
+            let specifier = request.specifier().to_std_string_escaped();
             let path = self
                 .resolve(referrer.path(), &specifier)
                 .map_err(|error| JsNativeError::typ().with_message(error))?;
