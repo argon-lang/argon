@@ -15,9 +15,10 @@ use crate::{
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
     workspace::WorkspacePaths,
 };
-use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
+use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
+use embedded_io::Write;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::Command;

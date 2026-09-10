@@ -5,13 +5,17 @@ edition = "2024"
 
 [features]
 default = []
-std = ["argon-util/std", "embedded-io/std", "esexpr-binary/std", "parse18-runtime/std"]
+std = ["argon-util/std", "embedded-io-async/std", "parse18-runtime/std"]
 
 [dependencies]
 argon-util = { workspace = true }
-embedded-io = { workspace = true }
-esexpr-binary = { workspace = true }
+embedded-io-async = { workspace = true }
 parse18-runtime = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true }
 
 [lints]
 workspace = true

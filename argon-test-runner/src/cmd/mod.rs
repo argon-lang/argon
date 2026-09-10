@@ -4,9 +4,10 @@ mod direct;
 mod staging;
 
 use crate::CompileTargetPlatform;
-use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
+use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
+use embedded_io::Write;
 
 pub use cli::CliCommandRunner;
 pub use direct::DirectCommandRunner;

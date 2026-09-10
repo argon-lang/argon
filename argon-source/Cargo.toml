@@ -19,6 +19,7 @@ mitsein = { workspace = true }
 num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
 argon-z3 = { workspace = true }
+embedded-io = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }
@@ -26,6 +27,7 @@ embedded-io = { workspace = true }
 num-bigint = { workspace = true }
 tempfile = { workspace = true }
 walkdir = { workspace = true }
+futures-lite = { workspace = true }
 
 [lints]
 workspace = true

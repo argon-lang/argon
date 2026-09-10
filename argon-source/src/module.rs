@@ -15,7 +15,7 @@ use argon_expr::{BlockLabel, BlockLabelDeclaration, LocatedExpr, LoopLabels, Var
 use argon_io::InputFile;
 use argon_parser::ast::{ExportStmt, Identifier, ImportPathSegment, ImportStmt, Stmt};
 use argon_util::sync::ThreadSafe;
-use argon_util::{CompileError, UnloadCell};
+use argon_util::{CompileError, InternalCompilerError, UnloadCell};
 use core::{iter, mem};
 use hashbrown::HashMap;
 use mitsein::vec1::Vec1;
@@ -770,21 +770,32 @@ pub struct DeclarationResult<T: ?Sized, A = AccessModifierGlobal> {
 pub fn process_source_file<'a, F>(
     context: Context,
     source: &F,
+    bytes: &[u8],
     tb: &'a TubeBuilder,
     tube_collection: Arc<TubeCollection>,
 ) -> Option<ModuleProcessResult<'a>>
 where
     F: InputFile,
 {
-    let file = match source.open() {
-        Ok(file) => file,
-        Err(e) => {
-            context.reporter().report_error(e);
-            return None;
+    struct SourceBytes<'b> {
+        bytes: &'b [u8],
+    }
+    impl embedded_io::ErrorType for SourceBytes<'_> {
+        type Error = InternalCompilerError;
+    }
+    impl embedded_io::Read for SourceBytes<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+            let count = core::cmp::min(buf.len(), self.bytes.len());
+            buf[..count].copy_from_slice(&self.bytes[..count]);
+            self.bytes = &self.bytes[count..];
+            Ok(count)
         }
-    };
-
-    let module_decl = argon_parser::parse(file, source.location_file(), context.reporter());
+    }
+    let module_decl = argon_parser::parse(
+        SourceBytes { bytes },
+        source.location_file(),
+        context.reporter(),
+    );
 
     let path = ModulePath(module_decl.module_path);
 

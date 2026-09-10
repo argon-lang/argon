@@ -1,14 +1,13 @@
 use alloc::sync::Arc;
 use argon_compiler::{Context, Tube, TubeCollectionBuilder};
 use argon_format::tube::TubeFileEntry;
-use argon_io::InputFile;
+use argon_io::{InputFile, InputStream};
 use argon_util::{InternalCompilerError, TubeFormatError};
-use core::iter;
 use esexpr::ESExprCodec;
-use esexpr_binary::ExprParserSync;
+use esexpr_binary::ExprParserAsync;
 use esexpr_binary::ParseError;
 
-pub fn load_referenced_tube<F>(
+pub async fn load_referenced_tube<F>(
     context: Context,
     tube_collection_builder: &TubeCollectionBuilder,
     referenced_tube: &F,
@@ -16,7 +15,7 @@ pub fn load_referenced_tube<F>(
 where
     F: InputFile,
 {
-    let mut file = match referenced_tube.open() {
+    let mut file = match referenced_tube.open().await {
         Ok(file) => file,
         Err(e) => {
             context.reporter().report_error(e);
@@ -24,38 +23,47 @@ where
         }
     };
 
-    let mut tube_expr_stream = esexpr_binary::parse_sync(&mut file);
-    let tube_entries = {
-        let context = context.clone();
-        iter::from_fn(move || {
-            let expr = match tube_expr_stream.try_read_next_expr() {
-                Ok(Some(expr)) => expr,
-                Ok(None) => return None,
-                Err(e) => {
-                    context
-                        .reporter()
-                        .report_error(tube_parse_error(referenced_tube, e));
-                    return None;
-                }
-            };
+    let mut tube_expr_stream = esexpr_binary::parse_async(&mut file);
+    let mut tube_entries = alloc::vec::Vec::new();
+    let mut valid = true;
+    loop {
+        let expr = match tube_expr_stream.try_read_next_expr().await {
+            Ok(Some(expr)) => expr,
+            Ok(None) => break,
+            Err(e) => {
+                context
+                    .reporter()
+                    .report_error(tube_parse_error(referenced_tube, e));
+                valid = false;
+                break;
+            }
+        };
 
-            let entry = match TubeFileEntry::decode_esexpr(expr) {
-                Ok(entry) => entry,
-                Err(e) => {
-                    context
-                        .reporter()
-                        .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
-                    return None;
-                }
-            };
+        let entry = match TubeFileEntry::decode_esexpr(expr) {
+            Ok(entry) => entry,
+            Err(e) => {
+                context
+                    .reporter()
+                    .report_error(tube_format_error(referenced_tube, TubeFormatError::from(e)));
+                valid = false;
+                break;
+            }
+        };
 
-            Some(entry)
-        })
-    };
+        tube_entries.push(entry);
+    }
+    drop(tube_expr_stream);
+    if let Err(err) = file.close().await {
+        context.reporter().report_error(err);
+        return None;
+    }
+    if !valid {
+        return None;
+    }
 
     Some(argon_tube::decoder::decode_tube(
         context,
-        tube_entries,
+        tube_entries.into_iter(),
         tube_collection_builder,
     ))
 }

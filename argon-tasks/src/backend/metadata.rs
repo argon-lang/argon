@@ -1,16 +1,16 @@
 use crate::context::RunnerContext;
 use alloc::boxed::Box;
 use argon_compiler::platform::{Extern as PlatformExtern, ExternType, PlatformMetadata};
-use argon_io::InputFile;
+use argon_io::{InputFile, InputStream};
 use argon_util::{ErrorReporter, InternalCompilerError, TubeFormatError};
 use esexpr::ESExprCodec;
-use esexpr_binary::{ExprParserSync, ParseError};
+use esexpr_binary::{ExprParserAsync, ParseError};
 use hashbrown::HashMap;
 
 noble_idl_runtime::include_noble_idl!();
 
-pub fn load_platform_metadata(context: &mut RunnerContext, input_file: impl InputFile) {
-    let mut file = match input_file.open() {
+pub async fn load_platform_metadata(context: &mut RunnerContext, input_file: impl InputFile) {
+    let mut file = match input_file.open().await {
         Ok(file) => file,
         Err(err) => {
             context.runner_reporter().report_error(err);
@@ -18,37 +18,29 @@ pub fn load_platform_metadata(context: &mut RunnerContext, input_file: impl Inpu
         }
     };
 
-    let mut expr_stream = esexpr_binary::parse_sync(&mut file);
-    let expr = match expr_stream.try_read_next_expr() {
-        Ok(Some(expr)) => expr,
-        Ok(None) => {
-            context.runner_reporter().report_error(metadata_parse_error(
+    let metadata = {
+        let mut expr_stream = esexpr_binary::parse_async(&mut file);
+        match expr_stream.try_read_next_expr().await {
+            Ok(Some(expr)) => PlatformMetadataResult::decode_esexpr(expr)
+                .map_err(|err| metadata_format_error(&input_file, TubeFormatError::from(err))),
+            Ok(None) => Err(metadata_parse_error(
                 &input_file,
                 ParseError::UnexpectedEndOfFile,
-            ));
-            return;
-        }
-        Err(err) => {
-            context
-                .runner_reporter()
-                .report_error(metadata_parse_error(&input_file, err));
-            return;
+            )),
+            Err(err) => Err(metadata_parse_error(&input_file, err)),
         }
     };
-
-    let metadata = match PlatformMetadataResult::decode_esexpr(expr) {
+    if let Err(err) = file.close().await {
+        context.runner_reporter().report_error(err);
+        return;
+    }
+    let metadata = match metadata {
         Ok(metadata) => metadata,
         Err(err) => {
-            context
-                .runner_reporter()
-                .report_error(metadata_format_error(
-                    &input_file,
-                    TubeFormatError::from(err),
-                ));
+            context.runner_reporter().report_error(err);
             return;
         }
     };
-
     context.add_platform(
         metadata.platform,
         PlatformMetadata {

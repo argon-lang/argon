@@ -2,6 +2,8 @@ use super::{
     ExprNormalizer, TypeCheckExprContext, TypeChecker, build_subst_holes_for_args,
     default_to_type_check_shifter,
 };
+#[cfg(test)]
+use alloc::borrow::ToOwned;
 use alloc::{string::ToString, sync::Arc, vec, vec::Vec};
 #[cfg(test)]
 use argon_compiler::Context;

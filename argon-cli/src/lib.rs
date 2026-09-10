@@ -52,7 +52,7 @@ where
                 output_file: output_file.clone(),
             };
 
-            if !argon_tasks::compile(runner_options, stdout) {
+            if !argon_tasks::compile(runner_options, stdout).await {
                 return 1;
             }
         }
@@ -68,7 +68,7 @@ where
                 platform: cmd.platform,
             };
 
-            if !argon_tasks::gen_ir(runner_options, stdout) {
+            if !argon_tasks::gen_ir(runner_options, stdout).await {
                 return 1;
             }
         }
@@ -84,7 +84,7 @@ where
                 optimizations: cmd.optimizations,
             };
 
-            if !argon_tasks::optimize(runner_options, stdout) {
+            if !argon_tasks::optimize(runner_options, stdout).await {
                 return 1;
             }
         }

@@ -9,13 +9,16 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 argon-compiler = { workspace = true, features = ["std"] }
-argon-tasks = { workspace = true, features = ["std"] }
+argon-tasks = { workspace = true, features = ["std", "nodejs"] }
 clap = { workspace = true }
 embedded-io = { workspace = true }
 futures-lite = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_Environment", "Win32_System_SystemInformation"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tokio = { workspace = true }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = { workspace = true }

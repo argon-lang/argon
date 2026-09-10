@@ -25,9 +25,9 @@ use argon_format_vm::vm as vf;
 use argon_util::{InternalCompilerError, TubeFormatError, UniqueIdentifier};
 use argon_vm::analysis::BlockJumpScan;
 use core::mem;
-use embedded_io::Write;
+use embedded_io_async::Write;
 use esexpr::{ESExprCodec, ESExprStatic};
-use esexpr_binary::{ExprGenerator, ExprGeneratorSync, GeneratorError};
+use esexpr_binary::{ExprGeneratorAsync, GeneratorError};
 use hashbrown::{HashMap, HashSet};
 use num_bigint::{BigInt, BigUint};
 use num_traits::ToPrimitive;
@@ -57,7 +57,7 @@ fn encode_access_modifier(access: AccessModifier) -> vf::AccessModifier {
     }
 }
 
-pub fn encode_vm_tube<W>(
+pub async fn encode_vm_tube<W>(
     out: &mut W,
     context: Context,
     tube: Arc<Tube>,
@@ -67,13 +67,13 @@ where
     W: Write,
     InternalCompilerError: From<W::Error>,
 {
-    let mut generator = ExprGenerator::new(out);
+    let mut generator = esexpr_binary::ExprGenerator::new(out);
     for entry in encode_vm_tube_stream(context, tube, platform_id) {
         let entry = entry?;
 
         let expr = entry.encode_esexpr();
 
-        match generator.generate(&expr) {
+        match generator.generate(&expr).await {
             Ok(()) => {}
             Err(GeneratorError::IOError(err)) => Err(err)?,
         }

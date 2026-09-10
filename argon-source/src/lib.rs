@@ -6,7 +6,7 @@ extern crate std;
 use crate::module::{process_source_file, register_module_reexports};
 use alloc::{sync::Arc, vec::Vec};
 use argon_compiler::{Context, Tube, TubeCollectionBuilder, TubeMetadata, TubeName};
-use argon_io::InputDirectory;
+use argon_io::{InputDirectory, InputFile, InputStream, Read};
 use argon_util::sync::{ThreadSafe, parallel::*};
 
 mod enums;
@@ -28,7 +28,7 @@ pub struct SourceCodeTubeOptions<I> {
     pub metadata: TubeMetadata,
 }
 
-pub fn define_source_tube<I>(
+pub async fn define_source_tube<I>(
     context: Context,
     options: SourceCodeTubeOptions<I>,
     tube_collection: &TubeCollectionBuilder,
@@ -39,22 +39,54 @@ where
 {
     let tb = tube_collection.add_tube(options.name, options.metadata, options.referenced_tubes);
 
-    let parse_results = options
-        .input_dirs
-        .par_iter()
-        .flat_map_iter(|source_dir| source_dir.list_files().into_iter())
-        .filter_map(|source| {
+    let mut sources = Vec::new();
+    for source_dir in &options.input_dirs {
+        for source in source_dir.list_files().await {
             let source = match source {
                 Ok(source) => source,
                 Err(err) => {
                     context.reporter().report_error(err);
-                    return None;
+                    continue;
                 }
             };
+            let mut reader = match source.open().await {
+                Ok(reader) => reader,
+                Err(err) => {
+                    context.reporter().report_error(err);
+                    continue;
+                }
+            };
+            let mut bytes = Vec::new();
+            let mut failed = false;
+            let mut buffer = [0_u8; 8192];
+            loop {
+                match reader.read(&mut buffer).await {
+                    Ok(0) => break,
+                    Ok(count) => bytes.extend_from_slice(&buffer[..count]),
+                    Err(err) => {
+                        context.reporter().report_error(err);
+                        failed = true;
+                        break;
+                    }
+                }
+            }
+            if let Err(err) = reader.close().await {
+                context.reporter().report_error(err);
+                failed = true;
+            }
+            if !failed {
+                sources.push((source, bytes));
+            }
+        }
+    }
 
+    let parse_results = sources
+        .par_iter()
+        .filter_map(|(source, bytes)| {
             process_source_file(
                 context.clone(),
-                &source,
+                source,
+                bytes,
                 &tb,
                 tube_collection.tube_collection(),
             )
@@ -75,11 +107,11 @@ mod tests {
         CompileErrorReporter, Context, ContextObject, ModulePath, TubeCollectionBuilder,
         TubeMetadata, TubeName,
     };
-    use argon_io::{InputDirectory, InputFile};
+    use argon_io::{InputDirectory, InputFile, InputStream};
     use argon_parser::ast::Identifier;
     use argon_util::sync::Mutex;
     use argon_util::{CompileError, ErrorCode, ErrorReporter, Fuel, InternalCompilerError};
-    use embedded_io::{ErrorType, Read};
+    use embedded_io::ErrorType;
     use hashbrown::HashMap;
     use mitsein::vec1::Vec1;
     use parse18_runtime::WithLocation;
@@ -182,9 +214,14 @@ mod tests {
         type Error = InternalCompilerError;
     }
 
-    impl Read for TestSourceFileReader {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
+    impl argon_io::Read for TestSourceFileReader {
+        async fn read(&mut self, buf: &mut [u8]) -> Result<usize, Self::Error> {
             std::io::Read::read(&mut self.file, buf).map_err(|_| InternalCompilerError::WriteZero)
+        }
+    }
+    impl InputStream for TestSourceFileReader {
+        async fn close(&mut self) -> Result<(), InternalCompilerError> {
+            Ok(())
         }
     }
 
@@ -195,7 +232,7 @@ mod tests {
             &self.path
         }
 
-        fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
+        async fn open(&self) -> Result<Self::Reader, InternalCompilerError> {
             let file =
                 std::fs::File::open(&self.path).map_err(|_| InternalCompilerError::WriteZero)?;
             Ok(TestSourceFileReader { file })
@@ -206,7 +243,7 @@ mod tests {
         type File = TestSourcePath;
         type Files = Vec<Result<TestSourcePath, InternalCompilerError>>;
 
-        fn list_files(&self) -> Self::Files {
+        async fn list_files(&self) -> Self::Files {
             WalkDir::new(&self.path)
                 .into_iter()
                 .map(Result::unwrap)
@@ -255,7 +292,7 @@ public def c: type = __argon_builtin never_type
 
         let (reporter_context, context) = test_context();
         let tube_collection = TubeCollectionBuilder::new(context.clone());
-        let tube = define_source_tube(
+        let tube = futures_lite::future::block_on(define_source_tube(
             context,
             SourceCodeTubeOptions {
                 name: tube_name(),
@@ -266,7 +303,7 @@ public def c: type = __argon_builtin never_type
                 },
             },
             &tube_collection,
-        );
+        ));
 
         assert!(reporter_context.reporter.compile_errors().is_empty());
         assert!(
@@ -299,7 +336,7 @@ export ::A::*
 
         let (reporter_context, context) = test_context();
         let tube_collection = TubeCollectionBuilder::new(context.clone());
-        define_source_tube(
+        futures_lite::future::block_on(define_source_tube(
             context,
             SourceCodeTubeOptions {
                 name: tube_name(),
@@ -310,7 +347,7 @@ export ::A::*
                 },
             },
             &tube_collection,
-        );
+        ));
 
         assert!(
             reporter_context

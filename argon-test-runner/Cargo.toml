@@ -47,10 +47,12 @@ dhat = { workspace = true, optional = true }
 libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
 futures-lite = { workspace = true }
+embedded-io = { workspace = true }
 hashbrown = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }
 tempfile = { workspace = true }
+tokio = { workspace = true }
 toml_edit = { workspace = true }
 walkdir = { workspace = true }
 

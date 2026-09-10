@@ -1,7 +1,7 @@
 use super::backend_js::{
     BackendJS, CodegenJSOptions, PlatformMetadataJSOptions, display_error, report_error,
 };
-use argon_io::{InputFile, OutputDirectory, OutputFile, Read};
+use argon_io::{InputFile, InputStream, OutputDirectory, OutputFile, OutputStream};
 use boa_engine::{
     Context, JsNativeError, JsResult, JsString, JsValue, Module, NativeFunction, Source,
     builtins::promise::PromiseState,
@@ -14,14 +14,17 @@ use boa_engine::{
     property::Attribute,
 };
 use boa_runtime::{RuntimeExtension, extensions::EncodingExtension};
-use embedded_io::Write;
+use embedded_io::Write as SyncWrite;
 use std::{
     cell::RefCell,
     collections::HashMap,
     future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
     rc::Rc,
 };
+
+type LocalFuture<'a, T> = Pin<Box<dyn Future<Output = T> + 'a>>;
 
 const RUNNER_SOURCE: &str = r#"
 export default (async function(kind, options) {
@@ -150,7 +153,7 @@ impl BackendJS for NativeBackendJS {
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
+        W: SyncWrite,
     {
         let extern_files = options
             .extern_files
@@ -190,7 +193,7 @@ impl BackendJS for NativeBackendJS {
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: Write,
+        W: SyncWrite,
     {
         let input = Rc::new(InputAdapter(options.input_file)) as Rc<dyn InputBridge>;
         let directory =
@@ -221,10 +224,11 @@ impl BackendJS for NativeBackendJS {
 
 trait InputBridge {
     fn file_name(&self) -> String;
-    fn open(&self) -> Result<Box<dyn InputReader>, String>;
+    fn open(&self) -> LocalFuture<'_, Result<Box<dyn InputReader>, String>>;
 }
 trait InputReader {
-    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, String>;
+    fn read<'a>(&'a mut self, buffer: &'a mut [u8]) -> LocalFuture<'a, Result<usize, String>>;
+    fn close(&mut self) -> LocalFuture<'_, Result<(), String>>;
 }
 struct InputAdapter<I>(I);
 impl<I> InputBridge for InputAdapter<I>
@@ -240,28 +244,36 @@ where
             .unwrap_or("input")
             .to_owned()
     }
-    fn open(&self) -> Result<Box<dyn InputReader>, String> {
-        Ok(Box::new(ReaderAdapter(
-            self.0.open().map_err(display_error)?,
-        )))
+    fn open(&self) -> LocalFuture<'_, Result<Box<dyn InputReader>, String>> {
+        Box::pin(async {
+            self.0
+                .open()
+                .await
+                .map(|reader| Box::new(ReaderAdapter(reader)) as Box<dyn InputReader>)
+                .map_err(display_error)
+        })
     }
 }
 struct ReaderAdapter<R>(R);
 impl<R> InputReader for ReaderAdapter<R>
 where
-    R: Read + 'static,
+    R: InputStream + 'static,
 {
-    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, String> {
-        self.0.read(buffer).map_err(display_error)
+    fn read<'a>(&'a mut self, buffer: &'a mut [u8]) -> LocalFuture<'a, Result<usize, String>> {
+        Box::pin(async { self.0.read(buffer).await.map_err(display_error) })
+    }
+    fn close(&mut self) -> LocalFuture<'_, Result<(), String>> {
+        Box::pin(async { self.0.close().await.map_err(display_error) })
     }
 }
 
 trait OutputFileBridge {
-    fn open(&self) -> Result<Box<dyn OutputWriter>, String>;
-    fn delete(&self) -> Result<(), String>;
+    fn open(&self) -> LocalFuture<'_, Result<Box<dyn OutputWriter>, String>>;
+    fn delete(&self) -> LocalFuture<'_, Result<(), String>>;
 }
 trait OutputWriter {
-    fn write(&mut self, buffer: &[u8]) -> Result<(), String>;
+    fn write<'a>(&'a mut self, buffer: &'a [u8]) -> LocalFuture<'a, Result<(), String>>;
+    fn close(&mut self) -> LocalFuture<'_, Result<(), String>>;
 }
 struct OutputFileAdapter<O>(O);
 impl<O> OutputFileBridge for OutputFileAdapter<O>
@@ -269,22 +281,32 @@ where
     O: OutputFile + 'static,
     O::Writer: 'static,
 {
-    fn open(&self) -> Result<Box<dyn OutputWriter>, String> {
-        Ok(Box::new(WriterAdapter(
-            self.0.open().map_err(display_error)?,
-        )))
+    fn open(&self) -> LocalFuture<'_, Result<Box<dyn OutputWriter>, String>> {
+        Box::pin(async {
+            self.0
+                .open()
+                .await
+                .map(|writer| Box::new(WriterAdapter(writer)) as Box<dyn OutputWriter>)
+                .map_err(display_error)
+        })
     }
-    fn delete(&self) -> Result<(), String> {
-        self.0.delete().map_err(display_error)
+    fn delete(&self) -> LocalFuture<'_, Result<(), String>> {
+        Box::pin(async { self.0.delete().await.map_err(display_error) })
     }
 }
 struct WriterAdapter<W>(W);
 impl<W> OutputWriter for WriterAdapter<W>
 where
-    W: Write + 'static,
+    W: OutputStream + 'static,
 {
-    fn write(&mut self, buffer: &[u8]) -> Result<(), String> {
-        self.0.write_all(buffer).map_err(display_error)
+    fn write<'a>(&'a mut self, buffer: &'a [u8]) -> LocalFuture<'a, Result<(), String>> {
+        Box::pin(async { self.0.write_all(buffer).await.map_err(display_error) })
+    }
+    fn close(&mut self) -> LocalFuture<'_, Result<(), String>> {
+        Box::pin(async {
+            self.0.flush().await.map_err(display_error)?;
+            self.0.close().await.map_err(display_error)
+        })
     }
 }
 
@@ -309,8 +331,19 @@ fn input_object(input: Rc<dyn InputBridge>, context: &mut Context) -> Result<JsO
     let open_input = input.clone();
     let open = unsafe {
         NativeFunction::from_closure(move |_, _, context| {
-            let reader = open_input.open().map_err(js_error)?;
-            Ok(reader_object(Rc::new(RefCell::new(Some(reader))), context).into())
+            let input = open_input.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |context| {
+                    let reader = input.open().await.map_err(js_error)?;
+                    Ok(reader_object(
+                        Rc::new(RefCell::new(Some(reader))),
+                        &mut context.borrow_mut(),
+                    )
+                    .into())
+                },
+                context,
+            )
+            .into())
         })
     };
     let mut object = boa_engine::object::ObjectInitializer::new(context);
@@ -337,33 +370,53 @@ fn reader_object(
                 .clone();
             let buffer = JsUint8Array::from_object(buffer)?;
             let length = buffer.length(context)?;
-            let mut bytes = vec![0; length];
-            let count = read_state
-                .borrow_mut()
-                .as_mut()
-                .ok_or_else(|| JsNativeError::typ().with_message("stream is closed"))?
-                .read(&mut bytes)
-                .map_err(js_error)?;
-            buffer.set_values(
-                JsArray::from_iter(
-                    bytes
-                        .into_iter()
-                        .take(count)
-                        .map(|byte| JsValue::from(u32::from(byte))),
-                    context,
-                )
-                .into(),
-                Some(0),
+            let state = read_state.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |context| {
+                    let mut reader = state
+                        .borrow_mut()
+                        .take()
+                        .ok_or_else(|| JsNativeError::typ().with_message("stream is closed"))?;
+                    let mut bytes = vec![0; length];
+                    let result = reader.read(&mut bytes).await;
+                    state.borrow_mut().replace(reader);
+                    let count = result.map_err(js_error)?;
+                    let context = &mut context.borrow_mut();
+                    buffer.set_values(
+                        JsArray::from_iter(
+                            bytes
+                                .into_iter()
+                                .take(count)
+                                .map(|byte| JsValue::from(u32::from(byte))),
+                            context,
+                        )
+                        .into(),
+                        Some(0),
+                        context,
+                    )?;
+                    Ok(JsValue::from(count as u32))
+                },
                 context,
-            )?;
-            Ok(JsValue::from(count as u32))
+            )
+            .into())
         })
     };
     let close_state = reader;
     let close = unsafe {
-        NativeFunction::from_closure(move |_, _, _| {
-            close_state.borrow_mut().take();
-            Ok(JsValue::undefined())
+        NativeFunction::from_closure(move |_, _, context| {
+            let state = close_state.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |_| {
+                    let mut reader = state
+                        .borrow_mut()
+                        .take()
+                        .ok_or_else(|| js_error("stream is closed".to_owned()))?;
+                    reader.close().await.map_err(js_error)?;
+                    Ok(JsValue::undefined())
+                },
+                context,
+            )
+            .into())
         })
     };
     let mut object = boa_engine::object::ObjectInitializer::new(context);
@@ -379,15 +432,33 @@ fn output_file_object(file: Rc<dyn OutputFileBridge>, context: &mut Context) -> 
     let open_file = file.clone();
     let open = unsafe {
         NativeFunction::from_closure(move |_, _, context| {
-            let writer = open_file.open().map_err(js_error)?;
-            Ok(writer_object(Rc::new(RefCell::new(Some(writer))), context).into())
+            let file = open_file.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |context| {
+                    let writer = file.open().await.map_err(js_error)?;
+                    Ok(writer_object(
+                        Rc::new(RefCell::new(Some(writer))),
+                        &mut context.borrow_mut(),
+                    )
+                    .into())
+                },
+                context,
+            )
+            .into())
         })
     };
     let delete_file = file;
     let delete = unsafe {
-        NativeFunction::from_closure(move |_, _, _| {
-            delete_file.delete().map_err(js_error)?;
-            Ok(JsValue::undefined())
+        NativeFunction::from_closure(move |_, _, context| {
+            let file = delete_file.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |_| {
+                    file.delete().await.map_err(js_error)?;
+                    Ok(JsValue::undefined())
+                },
+                context,
+            )
+            .into())
         })
     };
     let mut object = boa_engine::object::ObjectInitializer::new(context);
@@ -410,20 +481,39 @@ fn writer_object(
                 .clone();
             let buffer = JsUint8Array::from_object(buffer)?;
             let bytes = buffer.iter(context).collect::<Vec<_>>();
-            write_state
-                .borrow_mut()
-                .as_mut()
-                .ok_or_else(|| JsNativeError::typ().with_message("stream is closed"))?
-                .write(&bytes)
-                .map_err(js_error)?;
-            Ok(JsValue::undefined())
+            let state = write_state.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |_| {
+                    let mut writer = state
+                        .borrow_mut()
+                        .take()
+                        .ok_or_else(|| JsNativeError::typ().with_message("stream is closed"))?;
+                    let result = writer.write(&bytes).await;
+                    state.borrow_mut().replace(writer);
+                    result.map_err(js_error)?;
+                    Ok(JsValue::undefined())
+                },
+                context,
+            )
+            .into())
         })
     };
     let close_state = writer;
     let close = unsafe {
-        NativeFunction::from_closure(move |_, _, _| {
-            close_state.borrow_mut().take();
-            Ok(JsValue::undefined())
+        NativeFunction::from_closure(move |_, _, context| {
+            let state = close_state.clone();
+            Ok(JsPromise::from_async_fn(
+                async move |_| {
+                    let mut writer = state
+                        .borrow_mut()
+                        .take()
+                        .ok_or_else(|| js_error("stream is closed".to_owned()))?;
+                    writer.close().await.map_err(js_error)?;
+                    Ok(JsValue::undefined())
+                },
+                context,
+            )
+            .into())
         })
     };
     let mut object = boa_engine::object::ObjectInitializer::new(context);

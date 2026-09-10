@@ -1,4 +1,6 @@
-use alloc::string::{String, ToString};
+use alloc::string::String;
+#[cfg(not(target_family = "wasm"))]
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use argon_io::{InputFile, OutputDirectory, OutputFile};
 use embedded_io::Write;
@@ -38,6 +40,7 @@ pub trait BackendJS {
         W: Write;
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn display_error<E: core::fmt::Display>(error: E) -> String {
     error.to_string()
 }

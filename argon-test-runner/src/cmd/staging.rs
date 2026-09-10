@@ -1,4 +1,6 @@
-use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Read, Write};
+use argon_io::{
+    InputDirectory, InputFile, InputStream, OutputDirectory, OutputFile, OutputStream, Read, Write,
+};
 use std::path::{Path, PathBuf};
 
 pub(crate) fn stage_input_dirs<ID>(
@@ -20,7 +22,10 @@ where
                 )
             })?;
 
-            for (file_index, input_file) in input_dir.list_files().into_iter().enumerate() {
+            let files = tokio::runtime::Runtime::new()
+                .map_err(|err| err.to_string())?
+                .block_on(input_dir.list_files());
+            for (file_index, input_file) in files.into_iter().enumerate() {
                 let input_file = input_file.map_err(|err| err.to_string())?;
                 let staged_file = staged_dir.join(staged_source_file_name(file_index, &input_file));
                 copy_input_file_to_path(input_file, &staged_file)?;
@@ -70,9 +75,12 @@ where
             input_path.display()
         )
     })?;
-    let mut writer = output_file.open().map_err(|err| err.to_string())?;
-
-    copy_std_reader_to_writer(&mut reader, &mut writer)
+    let runtime = tokio::runtime::Runtime::new().map_err(|err| err.to_string())?;
+    runtime.block_on(async {
+        let mut writer = output_file.open().await.map_err(|err| err.to_string())?;
+        copy_std_reader_to_writer(&mut reader, &mut writer).await?;
+        writer.close().await.map_err(|err| err.to_string())
+    })
 }
 
 pub(crate) fn copy_temp_output_dir<O>(input_dir: &Path, output_dir: O) -> Result<(), String>
@@ -104,15 +112,20 @@ where
         let output_file = output_dir
             .create_file(relative_path)
             .map_err(|err| err.to_string())?;
-        let mut writer = output_file.open().map_err(|err| err.to_string())?;
-
-        copy_std_reader_to_writer(&mut reader, &mut writer).map_err(|err| {
-            format!(
-                "failed to copy generated output {} to {}: {err}",
-                path.display(),
-                relative_path
-            )
-        })?;
+        let runtime = tokio::runtime::Runtime::new().map_err(|err| err.to_string())?;
+        runtime
+            .block_on(async {
+                let mut writer = output_file.open().await.map_err(|err| err.to_string())?;
+                copy_std_reader_to_writer(&mut reader, &mut writer).await?;
+                writer.close().await.map_err(|err| err.to_string())
+            })
+            .map_err(|err| {
+                format!(
+                    "failed to copy generated output {} to {}: {err}",
+                    path.display(),
+                    relative_path
+                )
+            })?;
     }
 
     Ok(())
@@ -159,7 +172,6 @@ where
         })?;
     }
 
-    let mut reader = input_file.open().map_err(|err| err.to_string())?;
     let mut writer = std::fs::File::create(output_path).map_err(|err| {
         format!(
             "failed to create staged file {}: {err}",
@@ -167,22 +179,32 @@ where
         )
     })?;
 
-    copy_reader_to_std_writer(&mut reader, &mut writer).map_err(|err| {
-        format!(
-            "failed to write staged file {}: {err}",
-            output_path.display()
-        )
-    })
+    let runtime = tokio::runtime::Runtime::new().map_err(|err| err.to_string())?;
+    runtime
+        .block_on(async {
+            let mut reader = input_file.open().await.map_err(|err| err.to_string())?;
+            copy_reader_to_std_writer(&mut reader, &mut writer).await?;
+            reader.close().await.map_err(|err| err.to_string())
+        })
+        .map_err(|err| {
+            format!(
+                "failed to write staged file {}: {err}",
+                output_path.display()
+            )
+        })
 }
 
-fn copy_reader_to_std_writer<R, W>(reader: &mut R, writer: &mut W) -> Result<(), String>
+async fn copy_reader_to_std_writer<R, W>(reader: &mut R, writer: &mut W) -> Result<(), String>
 where
     R: Read,
     W: std::io::Write,
 {
     let mut buffer = [0u8; 8192];
     loop {
-        let count = reader.read(&mut buffer).map_err(|err| err.to_string())?;
+        let count = reader
+            .read(&mut buffer)
+            .await
+            .map_err(|err| err.to_string())?;
         if count == 0 {
             return Ok(());
         }
@@ -191,7 +213,7 @@ where
     }
 }
 
-fn copy_std_reader_to_writer<R, W>(reader: &mut R, writer: &mut W) -> Result<(), String>
+async fn copy_std_reader_to_writer<R, W>(reader: &mut R, writer: &mut W) -> Result<(), String>
 where
     R: std::io::Read,
     W: Write,
@@ -205,8 +227,9 @@ where
 
         writer
             .write_all(&buffer[..count])
+            .await
             .map_err(|err| err.to_string())?;
     }
 
-    writer.flush().map_err(|err| err.to_string())
+    writer.flush().await.map_err(|err| err.to_string())
 }

@@ -622,6 +622,7 @@ pub enum InternalCompilerError {
     #[cfg(feature = "std")]
     WalkDirError(walkdir::Error),
     TubeFormatError(TubeFormatError),
+    JavaScript(String),
 }
 
 impl core::fmt::Display for InternalCompilerError {
@@ -637,6 +638,7 @@ impl core::fmt::Display for InternalCompilerError {
             #[cfg(feature = "std")]
             Self::WalkDirError(err) => write!(f, "directory traversal error: {err}"),
             Self::TubeFormatError(err) => write!(f, "{err}"),
+            Self::JavaScript(err) => write!(f, "JavaScript error: {err}"),
         }
     }
 }
@@ -655,6 +657,7 @@ impl embedded_io::Error for InternalCompilerError {
                 .io_error()
                 .map_or(embedded_io::ErrorKind::Other, |err| err.kind().into()),
             Self::TubeFormatError(_) => embedded_io::ErrorKind::Other,
+            Self::JavaScript(_) => embedded_io::ErrorKind::Other,
         }
     }
 }

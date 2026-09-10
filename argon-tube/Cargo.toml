@@ -5,7 +5,7 @@ edition = "2024"
 
 [features]
 default = []
-std = ["argon-compiler/std", "argon-expr/std", "argon-format/std", "argon-format-vm/std", "argon-util/std", "argon-vm/std", "embedded-io/std", "esexpr/std", "esexpr-binary/std", "parse18-runtime/std"]
+std = ["argon-compiler/std", "argon-expr/std", "argon-format/std", "argon-format-vm/std", "argon-util/std", "argon-vm/std", "embedded-io/std", "embedded-io-async/std", "esexpr/std", "esexpr-binary/std", "parse18-runtime/std"]
 
 [dependencies]
 argon-compiler = { workspace = true }
@@ -15,6 +15,7 @@ argon-format-vm = { workspace = true }
 argon-util = { workspace = true }
 argon-vm = { workspace = true }
 embedded-io = { workspace = true }
+embedded-io-async = { workspace = true }
 esexpr = { workspace = true }
 esexpr-binary = { workspace = true }
 hashbrown = { workspace = true }

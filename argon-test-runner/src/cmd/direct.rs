@@ -9,9 +9,10 @@ use crate::{
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
     workspace::WorkspacePaths,
 };
-use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile, Write};
+use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
 use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
+use embedded_io::Write;
 use std::ffi::OsStr;
 use std::process::Command;
 
@@ -39,7 +40,9 @@ impl CommandRunner for DirectCommandRunner {
         O: OutputFile,
         W: Write,
     {
-        argon_tasks::compile(options, error_output)
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::compile(options, error_output))
     }
 
     fn gen_ir<IF, O, W>(&self, options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
@@ -48,7 +51,9 @@ impl CommandRunner for DirectCommandRunner {
         O: OutputFile,
         W: Write,
     {
-        argon_tasks::gen_ir(options, error_output)
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::gen_ir(options, error_output))
     }
 
     fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
@@ -57,7 +62,9 @@ impl CommandRunner for DirectCommandRunner {
         O: OutputFile,
         W: Write,
     {
-        argon_tasks::optimize(options, error_output)
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::optimize(options, error_output))
     }
 }
 
@@ -77,15 +84,17 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
         let backend = argon_tasks::backend::NativeBackendJS::new(
             self.workspace_paths.root().join("backend/js/backend"),
         );
-        futures_lite::future::block_on(argon_tasks::platform_metadata_js(
-            &backend,
-            argon_tasks::JsPlatformMetadataOptions {
-                package_name: None,
-                extern_files: options.extern_files,
-                output_file: options.output_file,
-            },
-            error_output,
-        ))
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::platform_metadata_js(
+                &backend,
+                argon_tasks::JsPlatformMetadataOptions {
+                    package_name: None,
+                    extern_files: options.extern_files,
+                    output_file: options.output_file,
+                },
+                error_output,
+            ))
     }
 
     fn codegen<I, O, W>(&self, options: JsCodeGenOptions<I, O>, error_output: &mut W) -> bool
@@ -100,15 +109,17 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
         let backend = argon_tasks::backend::NativeBackendJS::new(
             self.workspace_paths.root().join("backend/js/backend"),
         );
-        futures_lite::future::block_on(argon_tasks::codegen_js(
-            &backend,
-            argon_tasks::JsCodeGenOptions {
-                input_file: options.input_file,
-                output_dir: options.output_dir,
-                executable: options.executable,
-            },
-            error_output,
-        ))
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::codegen_js(
+                &backend,
+                argon_tasks::JsCodeGenOptions {
+                    input_file: options.input_file,
+                    output_dir: options.output_dir,
+                    executable: options.executable,
+                },
+                error_output,
+            ))
     }
 }
 
