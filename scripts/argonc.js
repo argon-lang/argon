@@ -101,6 +101,7 @@ const { instance: memory } = await WebAssembly.instantiate(memoryBytes, {
 
 globalThis.__argon_wasm_imports = {
     "argon-memory": memory.exports,
+    z3: z3.exports,
 };
 
 const backendPath = path.resolve(wasmDirectory, "../../backend/js");

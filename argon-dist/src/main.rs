@@ -264,7 +264,7 @@ fn build_wasm_and_backends(root: &Path, path: &OsStr) -> Result<(), String> {
             argonc_wasm.display()
         )
     })?;
-    let argonc_memory = move_argonc_memory(&argonc_wasm)?;
+    move_argonc_memory(&argonc_wasm)?;
     let bindgen_dir = wasm_dir.join("wasm-bindgen");
     if bindgen_dir.exists() {
         fs::remove_dir_all(&bindgen_dir).map_err(|error| {
@@ -285,6 +285,7 @@ fn build_wasm_and_backends(root: &Path, path: &OsStr) -> Result<(), String> {
         .map_err(|error| format!("failed to generate Node.js wasm-bindgen bindings: {error}"))?;
     patch_bindgen_imports(&bindgen_dir.join("argon_wasm.js"))?;
 
+    let argonc_memory = generated_argonc_memory(&bindgen_dir.join("argon_wasm_bg.wasm"))?;
     compile_memory_bridge(root, &argonc_memory)?;
 
     for (directory, command) in [
@@ -340,6 +341,28 @@ fn move_argonc_memory(path: &Path) -> Result<(u64, Option<u64>), String> {
         .map_err(|error| format!("failed to rewrite {}: {error}", path.display()))?;
 
     Ok((initial, maximum))
+}
+
+fn generated_argonc_memory(path: &Path) -> Result<(u64, Option<u64>), String> {
+    let bytes =
+        fs::read(path).map_err(|error| format!("failed to read {}: {error}", path.display()))?;
+    let module = walrus::ModuleConfig::new()
+        .parse(&bytes)
+        .map_err(|error| format!("failed to parse {}: {error}", path.display()))?;
+    let mut memories = module
+        .memories
+        .iter()
+        .filter(|memory| memory.import.is_some());
+    let memory = memories
+        .next()
+        .ok_or_else(|| format!("{} does not import its linear memory", path.display()))?;
+    if memories.next().is_some() {
+        return Err(format!(
+            "{} imports multiple linear memories",
+            path.display()
+        ));
+    }
+    Ok((memory.initial, memory.maximum))
 }
 
 fn compile_memory_bridge(root: &Path, argonc_memory: &(u64, Option<u64>)) -> Result<(), String> {
@@ -402,18 +425,61 @@ fn patch_bindgen_imports(path: &Path) -> Result<(), String> {
         .file_stem()
         .ok_or_else(|| format!("wasm-bindgen output has no file name: {}", path.display()))?
         .to_string_lossy();
-    let old = format!(
-        "    return {{\n        __proto__: null,\n        \"./{name}_bg.js\": import0,\n    }};"
-    );
-    let new = format!(
-        "    return {{\n        __proto__: null,\n        \"./{name}_bg.js\": import0,\n        ...globalThis.__argon_wasm_imports,\n    }};"
-    );
-    let patched = source.replace(&old, &new);
-    if patched == source {
+    let table_start = source
+        .find(&format!(
+            "    return {{\n        __proto__: null,\n        \"./{name}_bg.js\": import0,"
+        ))
+        .ok_or_else(|| {
+            format!(
+                "wasm-bindgen output {} did not contain its expected import table",
+                path.display()
+            )
+        })?;
+    let table_end = source[table_start..]
+        .find("\n    };\n}")
+        .map(|offset| table_start + offset)
+        .ok_or_else(|| {
+            format!(
+                "wasm-bindgen output {} had an unterminated import table",
+                path.display()
+            )
+        })?;
+    let mut source = source;
+    source.insert_str(table_end, "\n        ...globalThis.__argon_wasm_imports,");
+    let default_imports = "__wbg_get_imports())";
+    let shared_imports =
+        "__wbg_get_imports(globalThis.__argon_wasm_imports[\"argon-memory\"].memory))";
+    if !source.contains(default_imports) {
         return Err(format!(
-            "wasm-bindgen output {} did not contain its expected import table",
+            "wasm-bindgen output {} did not contain its expected instantiation",
             path.display()
         ));
+    }
+    source = source.replace(default_imports, shared_imports);
+    let mut patched = String::with_capacity(source.len());
+    for line in source.split_inclusive('\n') {
+        let Some(import) = line.strip_prefix("import * as ") else {
+            patched.push_str(line);
+            continue;
+        };
+        let Some((binding, module)) = import.split_once(" from \"") else {
+            patched.push_str(line);
+            continue;
+        };
+        let Some(module) = module
+            .strip_suffix("\"\n")
+            .or_else(|| module.strip_suffix('"'))
+        else {
+            patched.push_str(line);
+            continue;
+        };
+        if module.starts_with('.') {
+            patched.push_str(line);
+        } else {
+            patched.push_str(&format!(
+                "const {binding} = globalThis.__argon_wasm_imports[{module:?}];\n"
+            ));
+        }
     }
     fs::write(path, patched).map_err(|error| format!("failed to write {}: {error}", path.display()))
 }
@@ -692,9 +758,13 @@ mod tests {
         bindgen.nodejs_module(true).unwrap();
         bindgen.generate(&output).unwrap();
         patch_bindgen_imports(&output.join("argon_wasm.js")).unwrap();
+        let memory = generated_argonc_memory(&output.join("argon_wasm_bg.wasm")).unwrap();
+        compile_memory_bridge(&root, &memory).unwrap();
 
         let generated = fs::read_to_string(output.join("argon_wasm.js")).unwrap();
         assert!(generated.contains("...globalThis.__argon_wasm_imports"));
+        assert!(!generated.contains(" from \"z3\""));
+        assert!(!generated.contains(" from \"argon-memory\""));
         let bridge = root.join("target/wasm32-unknown-unknown/release/argon-memory.wasm");
         let script = temporary.join("load.js");
         fs::write(
@@ -704,7 +774,8 @@ mod tests {
                  const wasm = fs.readFileSync({:?});\n\
                  const z3 = new WebAssembly.Memory({{ initial: 1 }});\n\
                  const bridge = new WebAssembly.Instance(new WebAssembly.Module(wasm), {{ z3: {{ memory: z3 }} }});\n\
-                 globalThis.__argon_wasm_imports = {{ 'argon-memory': bridge.exports }};\n\
+                 const z3Exports = new Proxy({{}}, {{ get: () => () => 0 }});\n\
+                 globalThis.__argon_wasm_imports = {{ 'argon-memory': bridge.exports, z3: z3Exports }};\n\
                  const argonc = require({:?});\n\
                  if (typeof argonc.main !== 'function') process.exit(1);\n",
                 bridge,
