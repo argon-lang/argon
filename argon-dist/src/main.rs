@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread::available_parallelism;
 
-const EMSCRIPTEN_VERSION: &str = "6.0.5";
-const Z3_VERSION: &str = "4.16.0";
+const EMSCRIPTEN_VERSION: &str = "6.0.9";
+const Z3_VERSION: &str = "5.1.0";
 
 fn main() {
     if let Err(error) = build_distribution() {
