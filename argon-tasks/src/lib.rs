@@ -49,8 +49,8 @@ pub struct OptimizeOptions<IF, O> {
 }
 
 pub use backend::{
-    BackendJS, CodegenJSOptions as JsCodeGenOptions,
-    PlatformMetadataJSOptions as JsPlatformMetadataOptions,
+    BackendJS, BackendJVM, CodegenJSOptions as JsCodeGenOptions, JvmCodegenOptions,
+    JvmPlatformMetadataOptions, PlatformMetadataJSOptions as JsPlatformMetadataOptions,
 };
 
 pub async fn compile<ID, IF, O, W>(options: CompileOptions<ID, IF, O>, error_output: &mut W) -> bool
@@ -280,6 +280,38 @@ where
     W: Write,
 {
     backend.codegen_js(options, error_output).await
+}
+
+pub async fn platform_metadata_jvm<B, I, O, W>(
+    backend: &B,
+    options: JvmPlatformMetadataOptions<I, O>,
+    error_output: &mut W,
+) -> bool
+where
+    B: BackendJVM,
+    I: InputFile + 'static,
+    I::Reader: 'static,
+    O: OutputFile + 'static,
+    O::Writer: 'static,
+    W: Write,
+{
+    backend.platform_metadata(options, error_output).await
+}
+
+pub async fn codegen_jvm<B, I, O, W>(
+    backend: &B,
+    options: JvmCodegenOptions<I, O>,
+    error_output: &mut W,
+) -> bool
+where
+    B: BackendJVM,
+    I: InputFile + 'static,
+    I::Reader: 'static,
+    O: OutputFile + 'static,
+    O::Writer: 'static,
+    W: Write,
+{
+    backend.codegen_jvm(options, error_output).await
 }
 
 pub async fn optimize<IF, O, W>(options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool

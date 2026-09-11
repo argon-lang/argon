@@ -1,14 +1,13 @@
 pub mod backend;
 pub mod options;
 
-use crate::backend::Backend;
 use crate::options::{
     CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
 };
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-use argon_tasks::backend::NativeBackendJS;
+use argon_tasks::backend::{NativeBackendJS, NativeBackendJVM};
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use argon_tasks::backend::wasm::WasmBackendJS;
+use argon_tasks::backend::{WasmBackendJS, WasmBackendJVM};
 use argon_tasks::local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory};
 use clap::Parser;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -25,7 +24,8 @@ where
     W: Write,
 {
     let js_backend = create_js_backend();
-    let options = match CommandLineOptions::try_parse_from(args.clone()) {
+    let jvm_backend = create_jvm_backend();
+    let options = match CommandLineOptions::try_parse_from(args) {
         Ok(options) => options,
         Err(error) => {
             let rendered = error.render().to_string();
@@ -104,8 +104,20 @@ where
                     return 1;
                 }
             }
-            CodeGenBackendCommand::JVM(_) => {
-                return execute_backend_subcommand(Backend::JVM, &args);
+            CodeGenBackendCommand::JVM(cmd) => {
+                let success = argon_tasks::codegen_jvm(
+                    &jvm_backend,
+                    argon_tasks::JvmCodegenOptions {
+                        input_file: LocalInputFile::new(cmd.input),
+                        output_file: LocalOutputFile::new(cmd.output),
+                        executable: cmd.executable,
+                    },
+                    stdout,
+                )
+                .await;
+                if !success {
+                    return 1;
+                }
             }
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
@@ -128,8 +140,23 @@ where
                     return 1;
                 }
             }
-            PlatformMetadataBackendCommand::JVM(_) => {
-                return execute_backend_subcommand(Backend::JVM, &args);
+            PlatformMetadataBackendCommand::JVM(cmd) => {
+                let success = argon_tasks::platform_metadata_jvm(
+                    &jvm_backend,
+                    argon_tasks::JvmPlatformMetadataOptions {
+                        extern_files: cmd
+                            .extern_files
+                            .into_iter()
+                            .map(LocalInputFile::new)
+                            .collect(),
+                        output_file: LocalOutputFile::new(cmd.output_file),
+                    },
+                    stdout,
+                )
+                .await;
+                if !success {
+                    return 1;
+                }
             }
         },
     }
@@ -159,6 +186,25 @@ fn create_js_backend() -> NativeBackendJS {
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 fn create_js_backend() -> WasmBackendJS {
     WasmBackendJS::new()
+}
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn create_jvm_backend() -> NativeBackendJVM {
+    let mut path = std::env::current_exe().expect("failed to get current executable path");
+    path.pop();
+    path.pop();
+    path.pop();
+    let dist_path = path.join("backend/jvm");
+    if dist_path.join("backend-0.1.0.jar").is_file() {
+        NativeBackendJVM::new(dist_path)
+    } else {
+        NativeBackendJVM::new(path.join("backend/jvm/backend/build/install/backend/lib"))
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn create_jvm_backend() -> WasmBackendJVM {
+    WasmBackendJVM::new()
 }
 
 /// Run argonc from JavaScript with command-line arguments represented as strings.
@@ -206,49 +252,4 @@ extern "C" {
 
     #[wasm_bindgen(method, structural, js_name = write)]
     fn write(this: &JavaScriptWriter, text: &str);
-}
-
-#[cfg(unix)]
-fn execute_backend_subcommand(backend: Backend, args: &[OsString]) -> i32 {
-    use std::os::unix::process::CommandExt;
-    use std::process::Command;
-
-    let mut command;
-
-    let mut executable_path =
-        std::env::current_exe().expect("failed to get current executable path");
-    executable_path.pop();
-    executable_path.pop();
-    executable_path.pop();
-
-    match backend {
-        Backend::JavaScript => {
-            executable_path.push("backend/js/lib/main.js");
-
-            command = Command::new("node");
-            command.arg(executable_path);
-        }
-        Backend::JVM => {
-            executable_path.push("backend/jvm");
-
-            command = Command::new("java");
-            command
-                .arg("--module-path")
-                .arg(executable_path)
-                .arg("--module")
-                .arg("dev.argon.backend");
-        }
-    }
-
-    command.args(args.iter().skip(1));
-    let error = command.exec();
-
-    eprintln!("unable to execute backend subcommand: {}", error);
-    1
-}
-
-#[cfg(not(unix))]
-fn execute_backend_subcommand(_backend: Backend, _args: &[OsString]) -> i32 {
-    eprintln!("backend subcommands are not implemented on this platform");
-    1
 }

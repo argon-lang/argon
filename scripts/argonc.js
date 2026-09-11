@@ -135,6 +135,87 @@ globalThis.__argon_run_backend = async (task, options) => {
     }
 };
 
+async function copyInputFile(inputFile, destination) {
+    const input = await inputFile.open();
+    const output = await fs.open(destination, "w");
+    const buffer = new Uint8Array(64 * 1024);
+    try {
+        while (true) {
+            const count = await input.read(buffer);
+            if (count === 0) break;
+            await output.write(buffer.subarray(0, count));
+        }
+    } finally {
+        await input.close();
+        await output.close();
+    }
+}
+
+async function copyOutputFile(source, outputFile) {
+    const input = await fs.open(source, "r");
+    const output = await outputFile.open();
+    const buffer = new Uint8Array(64 * 1024);
+    try {
+        while (true) {
+            const { bytesRead } = await input.read(buffer);
+            if (bytesRead === 0) break;
+            await output.write(buffer.subarray(0, bytesRead));
+        }
+    } finally {
+        await input.close();
+        await output.close();
+    }
+}
+
+async function runJava(args) {
+    const { spawn } = await import("node:child_process");
+    return await new Promise((resolve, reject) => {
+        const child = spawn("java", args, { stdio: ["ignore", "pipe", "pipe"] });
+        const chunks = [];
+        child.stdout.on("data", chunk => chunks.push(chunk));
+        child.stderr.on("data", chunk => chunks.push(chunk));
+        child.on("error", reject);
+        child.on("close", (code, signal) => resolve({ code, signal, output: Buffer.concat(chunks).toString() }));
+    });
+}
+
+globalThis.__argon_run_jvm_backend = async (task, options) => {
+    const os = await import("node:os");
+    const temp = await fs.mkdtemp(path.join(os.tmpdir(), "argon-jvm-"));
+    try {
+        const outputPath = path.join(temp, task === "codegen" ? "output.jar" : "platform-metadata.esx");
+        const args = ["--module-path", path.resolve(wasmDirectory, "../../backend/jvm"), "--module", "dev.argon.backend"];
+        if (task === "platform-metadata") {
+            args.push("platform-metadata", "jvm");
+            for (let i = 0; i < options.externFiles.length; ++i) {
+                const input = options.externFiles[i];
+                const inputPath = path.join(temp, `extern-${i}-${path.basename(input.fileName || "input.class")}`);
+                await copyInputFile(input, inputPath);
+                args.push("--extern", inputPath);
+            }
+            args.push("--output-file", outputPath);
+        } else if (task === "codegen") {
+            const inputPath = path.join(temp, `input-${path.basename(options.inputFile.fileName || "input.avm")}`);
+            await copyInputFile(options.inputFile, inputPath);
+            args.push("codegen", "jvm", "--input", inputPath, "--output", outputPath);
+            if (options.executable) args.push("--executable");
+        } else {
+            throw new Error(`unknown JVM backend task: ${task}`);
+        }
+
+        const result = await runJava(args);
+        if (result.code !== 0) {
+            throw new Error(`java exited with status ${result.code ?? `signal ${result.signal}`}\n${result.output}`);
+        }
+        await copyOutputFile(outputPath, options.outputFile);
+    } catch (error) {
+        await options.outputFile.delete();
+        throw error;
+    } finally {
+        await fs.rm(temp, { recursive: true, force: true });
+    }
+};
+
 const argonc = await import(pathToFileURL(path.join(wasmDirectory, "argon_wasm.js")));
 
 try {
@@ -143,4 +224,5 @@ try {
     });
 } finally {
     delete globalThis.__argon_wasm_imports;
+    delete globalThis.__argon_run_jvm_backend;
 }

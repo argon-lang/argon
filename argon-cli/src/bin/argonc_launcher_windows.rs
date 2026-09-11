@@ -6,7 +6,6 @@ fn main() {
 
 #[cfg(windows)]
 fn main() {
-    use argon_cli::backend::Backend;
     use argon_cli::options::{
         CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
     };
@@ -27,28 +26,6 @@ fn main() {
     let mut executable_path =
         std::env::current_exe().expect("failed to get current executable path");
     executable_path.pop();
-
-    fn backend_command(backend: Backend, mut executable_path: PathBuf) -> ProcessCommand {
-        match backend {
-            Backend::JavaScript => {
-                executable_path.push("backend/js/lib/main.js");
-                let mut command = ProcessCommand::new("node");
-                command.arg(executable_path);
-                command
-            }
-            Backend::JVM => {
-                executable_path.push("backend/jvm");
-
-                let mut command = ProcessCommand::new("java");
-                command
-                    .arg("--module-path")
-                    .arg(executable_path)
-                    .arg("--module")
-                    .arg("dev.argon.backend");
-                command
-            }
-        }
-    }
 
     fn native_command(mut executable_path: PathBuf) -> ProcessCommand {
         let arch_name = unsafe {
@@ -73,13 +50,13 @@ fn main() {
         }
 
         Command::CodeGen(cmd) => match cmd.backend_command {
-            CodeGenBackendCommand::JS(_) => native_command(executable_path),
-            CodeGenBackendCommand::JVM(_) => backend_command(Backend::JVM, executable_path),
+            CodeGenBackendCommand::JS(_) | CodeGenBackendCommand::JVM(_) => {
+                native_command(executable_path)
+            }
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
-            PlatformMetadataBackendCommand::JS(_) => native_command(executable_path),
-            PlatformMetadataBackendCommand::JVM(_) => {
-                backend_command(Backend::JVM, executable_path)
+            PlatformMetadataBackendCommand::JS(_) | PlatformMetadataBackendCommand::JVM(_) => {
+                native_command(executable_path)
             }
         },
     };
