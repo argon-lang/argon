@@ -151,6 +151,7 @@ impl ControlFlowAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::{boxed::Box, vec, vec::Vec};
     use argon_vm::analysis::basic_blocks;
 
     #[test]

@@ -2567,7 +2567,7 @@ mod tests {
         DefaultExprContext,
         test_utils::{TestEnum, TestEnumVariant},
     };
-    use alloc::{sync::Arc, vec};
+    use alloc::{boxed::Box, sync::Arc, vec};
     use argon_expr::{Builtin, ExprLocationExt};
     use argon_util::UniqueIdentifier;
     use argon_z3::{SatResult, SortKind};

@@ -1,6 +1,7 @@
 use super::super::backend_js::{
     BackendJS, CodegenJSOptions, PlatformMetadataJSOptions, display_error, report_error,
 };
+use crate::message::TaskLogger;
 use argon_io::{InputFile, InputStream, OutputDirectory, OutputFile, OutputStream};
 use boa_engine::{
     Context, JsNativeError, JsResult, JsString, JsValue, Module, NativeFunction, Source,
@@ -14,7 +15,6 @@ use boa_engine::{
     property::Attribute,
 };
 use boa_runtime::{RuntimeExtension, extensions::EncodingExtension};
-use embedded_io::Write as SyncWrite;
 use std::{
     cell::{OnceCell, RefCell},
     collections::HashMap,
@@ -165,17 +165,16 @@ impl NativeBackendJS {
 }
 
 impl BackendJS for NativeBackendJS {
-    async fn platform_metadata<I, O, W>(
+    async fn platform_metadata<I, O>(
         &self,
         options: PlatformMetadataJSOptions<I, O>,
-        output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: SyncWrite,
     {
         let extern_files = options
             .extern_files
@@ -204,18 +203,21 @@ impl BackendJS for NativeBackendJS {
         });
         match result {
             Ok(()) => true,
-            Err(error) => report_error(output, error),
+            Err(error) => report_error(logger, error),
         }
     }
 
-    async fn codegen_js<I, O, W>(&self, options: CodegenJSOptions<I, O>, output: &mut W) -> bool
+    async fn codegen_js<I, O>(
+        &self,
+        options: CodegenJSOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: SyncWrite,
     {
         let input = Rc::new(InputAdapter(options.input_file)) as Rc<dyn InputBridge>;
         let directory =
@@ -239,7 +241,7 @@ impl BackendJS for NativeBackendJS {
         });
         match result {
             Ok(()) => true,
-            Err(error) => report_error(output, error),
+            Err(error) => report_error(logger, error),
         }
     }
 }

@@ -1,9 +1,9 @@
 use super::super::backend_jvm::{
     BackendJVM, JvmCodegenOptions, JvmPlatformMetadataOptions, display_error, report_error,
 };
+use crate::message::TaskLogger;
 use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 use argon_io::{InputFile, InputStream, OutputFile, OutputStream, Read, Write as AsyncWrite};
-use embedded_io::Write;
 use jni::{
     InitArgsBuilder, JNIVersion, JavaVM, jni_sig, jni_str,
     objects::{JByteArray, JObject, JValue},
@@ -104,17 +104,16 @@ impl NativeBackendJVM {
 }
 
 impl BackendJVM for NativeBackendJVM {
-    async fn platform_metadata<I, O, W>(
+    async fn platform_metadata<I, O>(
         &self,
         options: JvmPlatformMetadataOptions<I, O>,
-        output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
         let result = async {
             let mut files = Vec::with_capacity(options.extern_files.len());
@@ -131,16 +130,19 @@ impl BackendJVM for NativeBackendJVM {
             write_output(&options.output_file, &bytes).await
         }
         .await;
-        finish(result, &options.output_file, output).await
+        finish(result, &options.output_file, logger).await
     }
 
-    async fn codegen_jvm<I, O, W>(&self, options: JvmCodegenOptions<I, O>, output: &mut W) -> bool
+    async fn codegen_jvm<I, O>(
+        &self,
+        options: JvmCodegenOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
         let result = async {
             let name = options
@@ -155,7 +157,7 @@ impl BackendJVM for NativeBackendJVM {
             write_output(&options.output_file, &bytes).await
         }
         .await;
-        finish(result, &options.output_file, output).await
+        finish(result, &options.output_file, logger).await
     }
 }
 
@@ -181,16 +183,16 @@ async fn write_output<O: OutputFile>(file: &O, bytes: &[u8]) -> Result<(), Strin
     writer.close().await.map_err(display_error)
 }
 
-async fn finish<O: OutputFile, W: Write>(
+async fn finish<O: OutputFile>(
     result: Result<(), String>,
     file: &O,
-    output: &mut W,
+    logger: &mut dyn TaskLogger,
 ) -> bool {
     match result {
         Ok(()) => true,
         Err(error) => {
             let _ = file.delete().await;
-            report_error(output, error)
+            report_error(logger, error)
         }
     }
 }

@@ -1,8 +1,8 @@
-use crate::cmd::{CommandRunner, CommandRunnerPlatform};
+use crate::cmd::{CommandRunner, CommandRunnerPlatform, TaskMessageLog};
 use argon_opt::pass::ALL_OPTIMIZATIONS;
 use argon_tasks::{
     CompileOptions, GenIrOptions, OptimizeOptions,
-    local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory, StdIoWrite},
+    local_io::{LocalInputFile, LocalOutputFile, LocalSourceDirectory},
 };
 use argon_testcases::{ExpectedResult, TestCase, load_test_case};
 use hashbrown::{HashMap, HashSet};
@@ -163,7 +163,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
             .clone()
             .build_library_metadata(library_name);
 
-        let mut output = Vec::new();
+        let mut output = TaskMessageLog::default();
         let success = library.test_suite_context.command_runner.compile(
             CompileOptions {
                 tube_name: library.name.parse().unwrap(),
@@ -178,14 +178,13 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                     .collect(),
                 output_file: LocalOutputFile::new(output_file.clone()),
             },
-            &mut StdIoWrite::new(&mut output),
+            &mut output,
         );
 
         assert!(
             success,
             "Compilation of library {} failed\n{}",
-            library.name,
-            String::from_utf8_lossy(&output),
+            library.name, output,
         );
 
         tube_map.insert(library_name.to_owned(), output_file.clone());
@@ -242,7 +241,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
             })
             .collect::<Vec<_>>();
 
-        let mut output = Vec::new();
+        let mut output = TaskMessageLog::default();
         let success = library.test_suite_context.command_runner.gen_ir(
             GenIrOptions {
                 input_tube: LocalInputFile::new(input_file),
@@ -253,14 +252,13 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 platform: P::ID.to_owned(),
                 output_file: LocalOutputFile::new(gen_ir_output_file.clone()),
             },
-            &mut StdIoWrite::new(&mut output),
+            &mut output,
         );
 
         assert!(
             success,
             "IR Generation of library {} failed\n{}",
-            library.name,
-            String::from_utf8_lossy(&output),
+            library.name, output,
         );
 
         if library.test_suite_context.options.optimize_ir {
@@ -275,7 +273,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 .map(LocalInputFile::new)
                 .collect();
 
-            let mut output = Vec::new();
+            let mut output = TaskMessageLog::default();
             let success = library.test_suite_context.command_runner.optimize(
                 OptimizeOptions {
                     input_file: LocalInputFile::new(gen_ir_output_file),
@@ -283,14 +281,13 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                     output_file: LocalOutputFile::new(output_file.clone()),
                     optimizations: default_optimizations(),
                 },
-                &mut StdIoWrite::new(&mut output),
+                &mut output,
             );
 
             assert!(
                 success,
                 "IR optimization of library {} failed\n{}",
-                library.name,
-                String::from_utf8_lossy(&output),
+                library.name, output,
             );
         }
 
@@ -358,7 +355,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
             .referenced_libraries(&self.test_case.1.libraries)
     }
 
-    pub fn compile_test_case(&self) -> Result<PathBuf, String> {
+    pub fn compile_test_case(&self) -> Result<PathBuf, TaskMessageLog> {
         let output_file = self.test_data_dir.join("Argon.TestCase.artube");
         if output_file.exists() {
             return Ok(output_file);
@@ -384,7 +381,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
             .map(LocalInputFile::new)
             .collect();
 
-        let mut output = Vec::new();
+        let mut output = TaskMessageLog::default();
         let success = self.test_suite_context.command_runner.compile(
             CompileOptions {
                 tube_name: "Argon.TestCase".parse().unwrap(),
@@ -393,13 +390,13 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 platform_metadata: Vec::new(),
                 output_file: LocalOutputFile::new(output_file.clone()),
             },
-            &mut StdIoWrite::new(&mut output),
+            &mut output,
         );
 
         if success {
             Ok(output_file)
         } else {
-            Err(String::from_utf8_lossy(&output).into_owned())
+            Err(output)
         }
     }
 
@@ -423,7 +420,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
             .map(LocalInputFile::new)
             .collect();
 
-        let mut output = Vec::new();
+        let mut output = TaskMessageLog::default();
         let success = self.test_suite_context.command_runner.gen_ir(
             GenIrOptions {
                 input_tube: LocalInputFile::new(input_file),
@@ -431,14 +428,10 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 platform: P::ID.to_owned(),
                 output_file: LocalOutputFile::new(gen_ir_output_file.clone()),
             },
-            &mut StdIoWrite::new(&mut output),
+            &mut output,
         );
 
-        assert!(
-            success,
-            "IR generation of test case failed\n{}",
-            String::from_utf8_lossy(&output),
-        );
+        assert!(success, "IR generation of test case failed\n{}", output,);
 
         if self.test_suite_context.options.optimize_ir {
             let referenced_tubes = self
@@ -452,7 +445,7 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                 .map(LocalInputFile::new)
                 .collect();
 
-            let mut output = Vec::new();
+            let mut output = TaskMessageLog::default();
             let success = self.test_suite_context.command_runner.optimize(
                 OptimizeOptions {
                     input_file: LocalInputFile::new(gen_ir_output_file),
@@ -460,14 +453,10 @@ impl<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P>> Test
                     output_file: LocalOutputFile::new(output_file.clone()),
                     optimizations: default_optimizations(),
                 },
-                &mut StdIoWrite::new(&mut output),
+                &mut output,
             );
 
-            assert!(
-                success,
-                "IR optimization of test case failed\n{}",
-                String::from_utf8_lossy(&output),
-            );
+            assert!(success, "IR optimization of test case failed\n{}", output,);
         }
 
         output_file
@@ -554,7 +543,7 @@ fn run_test<P: CompileTargetPlatform, R: CommandRunner + CommandRunnerPlatform<P
             assert!(
                 expected_errors
                     .iter()
-                    .all(|expected_error| output.contains(expected_error)),
+                    .all(|expected_error| output.contains_compile_error(expected_error)),
                 "Expected compilation to fail with errors: {:?}\nActual:\n{}",
                 expected_errors,
                 output,

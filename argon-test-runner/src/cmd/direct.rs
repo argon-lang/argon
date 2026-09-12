@@ -6,9 +6,9 @@ use crate::{
     workspace::WorkspacePaths,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
+use argon_tasks::message::{TaskLogger, task_error};
 use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
 use argon_util::sync::ThreadSafe;
-use embedded_io::Write;
 use std::cell::OnceCell;
 use std::mem::ManuallyDrop;
 
@@ -49,58 +49,54 @@ impl DirectCommandRunner {
 }
 
 impl CommandRunner for DirectCommandRunner {
-    fn compile<ID, IF, O, W>(
+    fn compile<ID, IF, O>(
         &self,
         options: CompileOptions<ID, IF, O>,
-        error_output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         ID: InputDirectory + ThreadSafe,
         ID::File: ThreadSafe,
         IF: InputFile + ThreadSafe,
         O: OutputFile,
-        W: Write,
     {
         tokio::runtime::Runtime::new()
             .expect("create Tokio runtime")
-            .block_on(argon_tasks::compile(options, error_output))
+            .block_on(argon_tasks::compile(options, logger))
     }
 
-    fn gen_ir<IF, O, W>(&self, options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
+    fn gen_ir<IF, O>(&self, options: GenIrOptions<IF, O>, logger: &mut dyn TaskLogger) -> bool
     where
         IF: InputFile + ThreadSafe,
         O: OutputFile,
-        W: Write,
     {
         tokio::runtime::Runtime::new()
             .expect("create Tokio runtime")
-            .block_on(argon_tasks::gen_ir(options, error_output))
+            .block_on(argon_tasks::gen_ir(options, logger))
     }
 
-    fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
+    fn optimize<IF, O>(&self, options: OptimizeOptions<IF, O>, logger: &mut dyn TaskLogger) -> bool
     where
         IF: InputFile + ThreadSafe,
         O: OutputFile,
-        W: Write,
     {
         tokio::runtime::Runtime::new()
             .expect("create Tokio runtime")
-            .block_on(argon_tasks::optimize(options, error_output))
+            .block_on(argon_tasks::optimize(options, logger))
     }
 }
 
 impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
-    fn platform_metadata<I, O, W>(
+    fn platform_metadata<I, O>(
         &self,
         options: JsPlatformMetadataOptions<I, O>,
-        error_output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
         self.with_js_backend(|backend| {
             tokio::runtime::Runtime::new()
@@ -112,19 +108,18 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
                         extern_files: options.extern_files,
                         output_file: options.output_file,
                     },
-                    error_output,
+                    logger,
                 ))
         })
     }
 
-    fn codegen<I, O, W>(&self, options: JsCodeGenOptions<I, O>, error_output: &mut W) -> bool
+    fn codegen<I, O>(&self, options: JsCodeGenOptions<I, O>, logger: &mut dyn TaskLogger) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: Write,
     {
         self.with_js_backend(|backend| {
             tokio::runtime::Runtime::new()
@@ -136,24 +131,23 @@ impl CommandRunnerPlatform<JSPlatform> for DirectCommandRunner {
                         output_dir: options.output_dir,
                         executable: options.executable,
                     },
-                    error_output,
+                    logger,
                 ))
         })
     }
 }
 
 impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
-    fn platform_metadata<I, O, W>(
+    fn platform_metadata<I, O>(
         &self,
         options: JvmPlatformMetadataOptions<I, O>,
-        error_output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
         tokio::runtime::Runtime::new()
             .expect("create Tokio runtime")
@@ -163,23 +157,22 @@ impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
                     extern_files: options.extern_files,
                     output_file: options.output_file,
                 },
-                error_output,
+                logger,
             ))
     }
 
-    fn codegen<I, O, W>(&self, options: JvmCodeGenOptions<I, O>, error_output: &mut W) -> bool
+    fn codegen<I, O>(&self, options: JvmCodeGenOptions<I, O>, logger: &mut dyn TaskLogger) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: Write,
     {
         let output_file = match options.output_dir.create_file(&options.output_name) {
             Ok(file) => file,
             Err(error) => {
-                write_message(error_output, &error.to_string());
+                logger.log(task_error(error.to_string()));
                 return false;
             }
         };
@@ -192,18 +185,7 @@ impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
                     output_file,
                     executable: options.executable,
                 },
-                error_output,
+                logger,
             ))
     }
-}
-
-fn write_message<W>(output: &mut W, message: &str)
-where
-    W: Write,
-{
-    let _ = output.write_all(message.as_bytes());
-    if !message.ends_with('\n') {
-        let _ = output.write_all(b"\n");
-    }
-    let _ = output.flush();
 }

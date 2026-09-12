@@ -20,6 +20,7 @@ tasks.withType<NobleIDLCodeGenTask>().configureEach {
     generateGraalJSAdapters.set(false)
     inputFiles.setFrom(
         rootProject.file("../nobleidl/api/metadata.nidl"),
+        rootProject.file("../../argon-tasks/src/task-messages.nidl"),
         rootProject.file("../nobleidl/jvm/jvm-platform-metadata.nidl"),
         rootProject.file("../nobleidl/vm/vm.nidl"),
     )

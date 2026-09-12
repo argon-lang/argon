@@ -33,6 +33,12 @@ fn main() {
     println!(
         "cargo::rerun-if-changed={}",
         workspace_dir
+            .join("argon-tasks/src/task-messages.nidl")
+            .display(),
+    );
+    println!(
+        "cargo::rerun-if-changed={}",
+        workspace_dir
             .join("backend/nobleidl/js/js-platform-metadata.nidl")
             .display(),
     );

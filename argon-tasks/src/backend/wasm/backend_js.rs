@@ -1,8 +1,10 @@
-use super::super::backend_js::{BackendJS, CodegenJSOptions, PlatformMetadataJSOptions, report_error};
+use super::super::backend_js::{
+    BackendJS, CodegenJSOptions, PlatformMetadataJSOptions, report_error,
+};
+use crate::message::TaskLogger;
 use alloc::borrow::ToOwned;
 use alloc::vec::Vec;
 use argon_io::{InputFile, OutputDirectory, OutputFile};
-use embedded_io::Write;
 use js_sys::{Array, Object, Reflect};
 use wasm_bindgen::{JsValue, prelude::wasm_bindgen};
 
@@ -20,17 +22,16 @@ impl WasmBackendJS {
 }
 
 impl BackendJS for WasmBackendJS {
-    async fn platform_metadata<I, O, W>(
+    async fn platform_metadata<I, O>(
         &self,
         options: PlatformMetadataJSOptions<I, O>,
-        output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
         let extern_files = options
             .extern_files
@@ -48,17 +49,20 @@ impl BackendJS for WasmBackendJS {
         );
         set(&js_options, "externFiles", array_of(extern_files));
         set(&js_options, "outputFile", output_file);
-        run("platform-metadata", js_options.into(), output).await
+        run("platform-metadata", js_options.into(), logger).await
     }
 
-    async fn codegen_js<I, O, W>(&self, options: CodegenJSOptions<I, O>, output: &mut W) -> bool
+    async fn codegen_js<I, O>(
+        &self,
+        options: CodegenJSOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: Write,
     {
         let input = options.input_file.into_js_value();
         let directory = options.output_dir.into_js_value();
@@ -72,15 +76,15 @@ impl BackendJS for WasmBackendJS {
                 .executable
                 .map_or(JsValue::UNDEFINED, |value| JsValue::from_str(&value)),
         );
-        run("codegen", js_options.into(), output).await
+        run("codegen", js_options.into(), logger).await
     }
 }
 
-async fn run<W: Write>(task: &str, options: JsValue, output: &mut W) -> bool {
+async fn run(task: &str, options: JsValue, logger: &mut dyn TaskLogger) -> bool {
     match run_backend(task, options).await {
         Ok(_) => true,
         Err(error) => report_error(
-            output,
+            logger,
             error
                 .as_string()
                 .unwrap_or_else(|| "JavaScript backend failed".to_owned()),

@@ -16,12 +16,16 @@ use crate::{
     workspace::WorkspacePaths,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
-use argon_tasks::{CompileOptions, GenIrOptions, OptimizeOptions};
+use argon_tasks::{
+    CompileOptions, GenIrOptions, OptimizeOptions,
+    message::{TaskLogger, TaskMessage, task_error},
+};
 use argon_util::sync::ThreadSafe;
-use embedded_io::Write;
+use esexpr::ESExprCodec;
+use esexpr_binary::ExprParserSync;
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 pub struct CliCommandRunner {
     workspace_paths: WorkspacePaths,
@@ -34,158 +38,95 @@ impl CliCommandRunner {
 }
 
 impl CommandRunner for CliCommandRunner {
-    fn compile<ID, IF, O, W>(
+    fn compile<ID, IF, O>(
         &self,
         options: CompileOptions<ID, IF, O>,
-        error_output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         ID: InputDirectory + ThreadSafe,
         ID::File: ThreadSafe,
         IF: InputFile + ThreadSafe,
         O: OutputFile,
-        W: Write,
     {
-        match self.compile_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.compile_staged(options, logger);
+        log_result(logger, result)
     }
 
-    fn gen_ir<IF, O, W>(&self, options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
+    fn gen_ir<IF, O>(&self, options: GenIrOptions<IF, O>, logger: &mut dyn TaskLogger) -> bool
     where
         IF: InputFile + ThreadSafe,
         O: OutputFile,
-        W: Write,
     {
-        match self.gen_ir_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.gen_ir_staged(options, logger);
+        log_result(logger, result)
     }
 
-    fn optimize<IF, O, W>(&self, options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
+    fn optimize<IF, O>(&self, options: OptimizeOptions<IF, O>, logger: &mut dyn TaskLogger) -> bool
     where
         IF: InputFile + ThreadSafe,
         O: OutputFile,
-        W: Write,
     {
-        match self.optimize_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.optimize_staged(options, logger);
+        log_result(logger, result)
     }
 }
 
 impl CommandRunnerPlatform<JSPlatform> for CliCommandRunner {
-    fn platform_metadata<I, O, W>(
+    fn platform_metadata<I, O>(
         &self,
         options: JsPlatformMetadataOptions<I, O>,
-        error_output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
-        match self.platform_metadata_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.platform_metadata_staged(options, logger);
+        log_result(logger, result)
     }
 
-    fn codegen<I, O, W>(&self, options: JsCodeGenOptions<I, O>, error_output: &mut W) -> bool
+    fn codegen<I, O>(&self, options: JsCodeGenOptions<I, O>, logger: &mut dyn TaskLogger) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: Write,
     {
-        match self.codegen_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.codegen_staged(options, logger);
+        log_result(logger, result)
     }
 }
 
 impl CommandRunnerPlatform<JVMPlatform> for CliCommandRunner {
-    fn platform_metadata<I, O, W>(
+    fn platform_metadata<I, O>(
         &self,
         options: JvmPlatformMetadataOptions<I, O>,
-        error_output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
         O::Writer: 'static,
-        W: Write,
     {
-        match self.jvm_platform_metadata_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.jvm_platform_metadata_staged(options, logger);
+        log_result(logger, result)
     }
 
-    fn codegen<I, O, W>(&self, options: JvmCodeGenOptions<I, O>, error_output: &mut W) -> bool
+    fn codegen<I, O>(&self, options: JvmCodeGenOptions<I, O>, logger: &mut dyn TaskLogger) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
         <O::File as OutputFile>::Writer: 'static,
-        W: Write,
     {
-        match self.jvm_codegen_staged(options) {
-            Ok(output) => {
-                write_message(error_output, &output);
-                true
-            }
-            Err(err) => {
-                write_message(error_output, &err);
-                false
-            }
-        }
+        let result = self.jvm_codegen_staged(options, logger);
+        log_result(logger, result)
     }
 }
 
@@ -193,7 +134,8 @@ impl CliCommandRunner {
     fn compile_staged<ID, IF, O>(
         &self,
         options: CompileOptions<ID, IF, O>,
-    ) -> Result<String, String>
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         ID: InputDirectory,
         IF: InputFile,
@@ -229,13 +171,17 @@ impl CliCommandRunner {
         args.push("--output".into());
         args.push(output_file.clone().into_os_string());
 
-        let command_output = self.run_argonc_command(&args)?;
+        self.run_argonc_command(&args, logger)?;
         copy_temp_output(&output_file, options.output_file)?;
 
-        Ok(command_output)
+        Ok(())
     }
 
-    fn gen_ir_staged<IF, O>(&self, options: GenIrOptions<IF, O>) -> Result<String, String>
+    fn gen_ir_staged<IF, O>(
+        &self,
+        options: GenIrOptions<IF, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         IF: InputFile,
         O: OutputFile,
@@ -262,13 +208,17 @@ impl CliCommandRunner {
             args.push(reference.into_os_string());
         }
 
-        let command_output = self.run_argonc_command(&args)?;
+        self.run_argonc_command(&args, logger)?;
         copy_temp_output(&output_file, options.output_file)?;
 
-        Ok(command_output)
+        Ok(())
     }
 
-    fn optimize_staged<IF, O>(&self, options: OptimizeOptions<IF, O>) -> Result<String, String>
+    fn optimize_staged<IF, O>(
+        &self,
+        options: OptimizeOptions<IF, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         IF: InputFile,
         O: OutputFile,
@@ -297,16 +247,17 @@ impl CliCommandRunner {
             args.push(optimization.into());
         }
 
-        let command_output = self.run_argonc_command(&args)?;
+        self.run_argonc_command(&args, logger)?;
         copy_temp_output(&output_file, options.output_file)?;
 
-        Ok(command_output)
+        Ok(())
     }
 
     fn platform_metadata_staged<I, O>(
         &self,
         options: JsPlatformMetadataOptions<I, O>,
-    ) -> Result<String, String>
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         I: InputFile,
         O: OutputFile,
@@ -318,16 +269,20 @@ impl CliCommandRunner {
         let extern_files = stage_input_files(temp_path, "extern", options.extern_files)?;
         let output_file = temp_path.join("platform-metadata.esx");
 
-        let command_output = self.run_argonc_command(&js_platform_metadata_args(
-            extern_files,
-            output_file.clone(),
-        ))?;
+        self.run_argonc_command(
+            &js_platform_metadata_args(extern_files, output_file.clone()),
+            logger,
+        )?;
         copy_temp_output(&output_file, options.output_file)?;
 
-        Ok(command_output)
+        Ok(())
     }
 
-    fn codegen_staged<I, O>(&self, options: JsCodeGenOptions<I, O>) -> Result<String, String>
+    fn codegen_staged<I, O>(
+        &self,
+        options: JsCodeGenOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         I: InputFile,
         O: OutputDirectory,
@@ -345,21 +300,25 @@ impl CliCommandRunner {
             )
         })?;
 
-        let command_output = self.run_argonc_command(&js_codegen_args(
-            input_file,
-            output_dir.clone(),
-            options.executable.as_deref(),
-        ))?;
+        self.run_argonc_command(
+            &js_codegen_args(
+                input_file,
+                output_dir.clone(),
+                options.executable.as_deref(),
+            ),
+            logger,
+        )?;
 
         copy_temp_output_dir(&output_dir, options.output_dir)?;
 
-        Ok(command_output)
+        Ok(())
     }
 
     fn jvm_platform_metadata_staged<I, O>(
         &self,
         options: JvmPlatformMetadataOptions<I, O>,
-    ) -> Result<String, String>
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         I: InputFile,
         O: OutputFile,
@@ -371,16 +330,20 @@ impl CliCommandRunner {
         let extern_files = stage_input_files(temp_path, "extern", options.extern_files)?;
         let output_file = temp_path.join("platform-metadata.esx");
 
-        let command_output = self.run_argonc_command(&jvm_platform_metadata_args(
-            extern_files,
-            output_file.clone(),
-        ))?;
+        self.run_argonc_command(
+            &jvm_platform_metadata_args(extern_files, output_file.clone()),
+            logger,
+        )?;
         copy_temp_output(&output_file, options.output_file)?;
 
-        Ok(command_output)
+        Ok(())
     }
 
-    fn jvm_codegen_staged<I, O>(&self, options: JvmCodeGenOptions<I, O>) -> Result<String, String>
+    fn jvm_codegen_staged<I, O>(
+        &self,
+        options: JvmCodeGenOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String>
     where
         I: InputFile,
         O: OutputDirectory,
@@ -392,11 +355,10 @@ impl CliCommandRunner {
         let input_file = stage_input_file(temp_path, "input", 0, options.input_file)?;
         let output_file = temp_path.join("output.jar");
 
-        let command_output = self.run_argonc_command(&jvm_codegen_args(
-            input_file,
-            output_file.clone(),
-            options.executable,
-        ))?;
+        self.run_argonc_command(
+            &jvm_codegen_args(input_file, output_file.clone(), options.executable),
+            logger,
+        )?;
 
         copy_temp_output(
             &output_file,
@@ -406,36 +368,47 @@ impl CliCommandRunner {
                 .map_err(|err| err.to_string())?,
         )?;
 
-        Ok(command_output)
+        Ok(())
     }
 
-    fn run_argonc_command<S: AsRef<OsStr>>(&self, args: &[S]) -> Result<String, String> {
+    fn run_argonc_command<S: AsRef<OsStr>>(
+        &self,
+        args: &[S],
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String> {
         let mut command = Command::new(self.argon_bin());
-        command.args(args.iter().map(AsRef::as_ref));
+        command
+            .arg("--output-format")
+            .arg("esexpr")
+            .args(args.iter().map(AsRef::as_ref))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit());
 
-        let output = command.output().map_err(|err| {
-            format!(
-                "failed to run argon command {}: {}",
-                format_command(&command),
-                err
-            )
-        })?;
-
-        let command_output = format!(
-            "{}{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-
-        if output.status.success() {
-            Ok(command_output)
-        } else {
-            Err(format!(
-                "argon command failed: {}\n{}",
-                format_command(&command),
-                command_output
-            ))
+        let command_text = format_command(&command);
+        let mut child = command
+            .spawn()
+            .map_err(|err| format!("failed to run argon command {}: {}", command_text, err))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| "argon command stdout was not piped".to_owned())?;
+        let mut stdout = StdRead(stdout);
+        let mut parser = esexpr_binary::parse_sync(&mut stdout);
+        while let Some(expression) = parser.try_read_next_expr().map_err(|error| {
+            format!("invalid task message stream from {command_text}: {error:?}")
+        })? {
+            let message = TaskMessage::decode_esexpr(expression)
+                .map_err(|error| format!("invalid task message from {command_text}: {error:?}"))?;
+            logger.log(message);
         }
+        let status = child
+            .wait()
+            .map_err(|err| format!("failed to wait for argon command {command_text}: {err}"))?;
+
+        status
+            .success()
+            .then_some(())
+            .ok_or_else(|| format!("argon command failed: {command_text}"))
     }
 
     fn argon_bin(&self) -> PathBuf {
@@ -443,15 +416,26 @@ impl CliCommandRunner {
     }
 }
 
-fn write_message<W>(output: &mut W, message: &str)
-where
-    W: Write,
-{
-    let _ = output.write_all(message.as_bytes());
-    if !message.ends_with('\n') {
-        let _ = output.write_all(b"\n");
+struct StdRead<R>(R);
+
+impl<R> embedded_io::ErrorType for StdRead<R> {
+    type Error = std::io::Error;
+}
+
+impl<R: std::io::Read> embedded_io::Read for StdRead<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> Result<usize, Self::Error> {
+        self.0.read(buffer)
     }
-    let _ = output.flush();
+}
+
+fn log_result(logger: &mut dyn TaskLogger, result: Result<(), String>) -> bool {
+    match result {
+        Ok(()) => true,
+        Err(error) => {
+            logger.log(task_error(error));
+            false
+        }
+    }
 }
 
 fn format_command(command: &Command) -> String {

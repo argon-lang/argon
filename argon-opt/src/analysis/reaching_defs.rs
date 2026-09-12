@@ -163,6 +163,7 @@ impl ReachingDefinitionsAnalysis {
 mod tests {
     use super::*;
     use crate::analysis::InstructionSet;
+    use alloc::vec;
 
     #[test]
     fn finds_uses_until_the_register_is_redefined() {

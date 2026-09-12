@@ -1,8 +1,8 @@
 use crate::{
     CompileTargetPlatform, LibraryInfo, TestContext, TestExecutionResult,
-    cmd::{CommandRunner, CommandRunnerPlatform},
+    cmd::{CommandRunner, CommandRunnerPlatform, TaskMessageLog},
 };
-use argon_tasks::local_io::{LocalInputFile, LocalOutputDirectory, LocalOutputFile, StdIoWrite};
+use argon_tasks::local_io::{LocalInputFile, LocalOutputDirectory, LocalOutputFile};
 use fs_extra::dir::CopyOptions;
 use hashbrown::HashMap;
 use std::path::PathBuf;
@@ -52,25 +52,24 @@ impl JSPlatform {
                 let output_dir = library.library_output_path.join("js");
                 std::fs::create_dir_all(&output_dir).unwrap();
 
-                let mut output = Vec::new();
+                let mut output = TaskMessageLog::default();
                 let success = library.test_suite_context.command_runner.codegen(
                     JsCodeGenOptions {
                         input_file: LocalInputFile::new(input_file),
                         output_dir: LocalOutputDirectory::new(output_dir.clone()),
                         executable: None,
                     },
-                    &mut StdIoWrite::new(&mut output),
+                    &mut output,
                 );
 
                 assert!(
                     success,
                     "Code generation of library {} failed\n{}",
-                    library.name,
-                    String::from_utf8_lossy(&output),
+                    library.name, output,
                 );
 
                 if library.test_suite_context.print_commands && !output.is_empty() {
-                    print!("{}", String::from_utf8_lossy(&output));
+                    print!("{output}");
                 }
 
                 output_dir
@@ -104,24 +103,23 @@ impl CompileTargetPlatform for JSPlatform {
             }
         }
 
-        let mut output = Vec::new();
+        let mut output = TaskMessageLog::default();
         let success = library.test_suite_context.command_runner.platform_metadata(
             JsPlatformMetadataOptions {
                 extern_files,
                 output_file: LocalOutputFile::new(path.clone()),
             },
-            &mut StdIoWrite::new(&mut output),
+            &mut output,
         );
 
         assert!(
             success,
             "Getting metadata for library {} failed:\n{}",
-            library.name,
-            String::from_utf8_lossy(&output),
+            library.name, output,
         );
 
         if library.test_suite_context.print_commands && !output.is_empty() {
-            print!("{}", String::from_utf8_lossy(&output));
+            print!("{output}");
         }
 
         vec![path]
@@ -166,24 +164,20 @@ impl CompileTargetPlatform for JSPlatform {
 
         let input_file = test_context.genir_test_case();
 
-        let mut output = Vec::new();
+        let mut output = TaskMessageLog::default();
         let success = test_context.test_suite_context.command_runner.codegen(
             JsCodeGenOptions {
                 input_file: LocalInputFile::new(input_file),
                 output_dir: LocalOutputDirectory::new(output_dir.clone()),
                 executable: Some("test-program".to_owned()),
             },
-            &mut StdIoWrite::new(&mut output),
+            &mut output,
         );
 
-        assert!(
-            success,
-            "Code generation of test case failed\n{}",
-            String::from_utf8_lossy(&output),
-        );
+        assert!(success, "Code generation of test case failed\n{}", output,);
 
         if test_context.test_suite_context.print_commands && !output.is_empty() {
-            print!("{}", String::from_utf8_lossy(&output));
+            print!("{output}");
         }
     }
 

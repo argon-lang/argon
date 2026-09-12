@@ -309,6 +309,7 @@ impl<'a> BlockJumpScan<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn mutably_visits_top_level_and_nested_instructions() {

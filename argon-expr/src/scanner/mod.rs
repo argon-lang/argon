@@ -780,6 +780,7 @@ where
 mod tests {
     use super::{ExprScanner, ExprScannerMut};
     use crate::{Builtin, Expr, ExprContext, ExprLocationExt, LocatedExpr};
+    use alloc::boxed::Box;
     use alloc::vec;
     use alloc::vec::Vec;
     use parse18_runtime::{FilePosition, Location};

@@ -1,8 +1,8 @@
+use crate::message::{TaskLogger, task_error};
 #[cfg(not(target_family = "wasm"))]
 use alloc::string::String;
 use alloc::vec::Vec;
 use argon_io::{InputFile, OutputFile};
-use embedded_io::Write;
 
 pub struct JvmPlatformMetadataOptions<I, O> {
     pub extern_files: Vec<I>,
@@ -16,29 +16,31 @@ pub struct JvmCodegenOptions<I, O> {
 }
 
 pub trait BackendJVM {
-    async fn platform_metadata<I, O, W>(
+    async fn platform_metadata<I, O>(
         &self,
         options: JvmPlatformMetadataOptions<I, O>,
-        output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
-        O::Writer: 'static,
-        W: Write;
+        O::Writer: 'static;
 
-    async fn codegen_jvm<I, O, W>(&self, options: JvmCodegenOptions<I, O>, output: &mut W) -> bool
+    async fn codegen_jvm<I, O>(
+        &self,
+        options: JvmCodegenOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
-        O::Writer: 'static,
-        W: Write;
+        O::Writer: 'static;
 }
 
-pub(crate) fn report_error<W: Write>(output: &mut W, error: impl core::fmt::Display) -> bool {
-    let _ = output.write_fmt(format_args!("JVM backend error: {error}\n"));
+pub(crate) fn report_error(logger: &mut dyn TaskLogger, error: impl core::fmt::Display) -> bool {
+    logger.log(task_error(alloc::format!("JVM backend error: {error}")));
     false
 }
 

@@ -313,6 +313,7 @@ fn use_registers<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::{vec, vec::Vec};
 
     #[test]
     fn computes_instruction_uses_and_definitions() {

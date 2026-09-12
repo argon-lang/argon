@@ -1,9 +1,9 @@
+use crate::message::{TaskLogger, task_error};
 use alloc::string::String;
 #[cfg(not(target_family = "wasm"))]
 use alloc::string::ToString;
 use alloc::vec::Vec;
 use argon_io::{InputFile, OutputDirectory, OutputFile};
-use embedded_io::Write;
 
 pub struct PlatformMetadataJSOptions<I, O> {
     pub package_name: Option<String>,
@@ -18,26 +18,28 @@ pub struct CodegenJSOptions<I, O> {
 }
 
 pub trait BackendJS {
-    async fn platform_metadata<I, O, W>(
+    async fn platform_metadata<I, O>(
         &self,
         options: PlatformMetadataJSOptions<I, O>,
-        output: &mut W,
+        logger: &mut dyn TaskLogger,
     ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputFile + 'static,
-        O::Writer: 'static,
-        W: Write;
+        O::Writer: 'static;
 
-    async fn codegen_js<I, O, W>(&self, options: CodegenJSOptions<I, O>, output: &mut W) -> bool
+    async fn codegen_js<I, O>(
+        &self,
+        options: CodegenJSOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
     where
         I: InputFile + 'static,
         I::Reader: 'static,
         O: OutputDirectory + 'static,
         O::File: OutputFile + 'static,
-        <O::File as OutputFile>::Writer: 'static,
-        W: Write;
+        <O::File as OutputFile>::Writer: 'static;
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -45,7 +47,9 @@ pub(crate) fn display_error<E: core::fmt::Display>(error: E) -> String {
     error.to_string()
 }
 
-pub(crate) fn report_error<W: Write>(output: &mut W, error: impl core::fmt::Display) -> bool {
-    let _ = output.write_fmt(format_args!("JavaScript backend error: {error}\n"));
+pub(crate) fn report_error(logger: &mut dyn TaskLogger, error: impl core::fmt::Display) -> bool {
+    logger.log(task_error(alloc::format!(
+        "JavaScript backend error: {error}"
+    )));
     false
 }

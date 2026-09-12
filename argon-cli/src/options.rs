@@ -1,12 +1,24 @@
 use argon_compiler::TubeName;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "argonc")]
 pub struct CommandLineOptions {
+    /// Format used for task messages written to standard output.
+    #[arg(long, global = true, value_enum, default_value_t = OutputFormat::Text)]
+    pub output_format: OutputFormat,
+
     #[clap(subcommand)]
     pub command: Command,
+}
+
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+pub enum OutputFormat {
+    #[default]
+    Text,
+    #[value(name = "esexpr")]
+    ESExpr,
 }
 
 #[derive(Subcommand)]

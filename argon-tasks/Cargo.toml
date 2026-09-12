@@ -49,3 +49,4 @@ workspace = true
 
 [package.metadata.noble-idl.package_mapping]
 "argon.backend.metadata" = "backend::metadata"
+"argon.tasks" = "message"

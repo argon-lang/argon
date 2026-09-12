@@ -48,6 +48,8 @@ libtest-mimic = { workspace = true }
 fs_extra = { workspace = true }
 futures-lite = { workspace = true }
 embedded-io = { workspace = true }
+esexpr = { workspace = true, features = ["std"] }
+esexpr-binary = { workspace = true, features = ["std"] }
 hashbrown = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 subprocess = { workspace = true }

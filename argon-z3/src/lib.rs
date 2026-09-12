@@ -448,8 +448,11 @@ fn display_ptr(ptr: *const core::ffi::c_char, f: &mut fmt::Formatter<'_>) -> fmt
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
     use crate::ast::{Ast, Bool, Dynamic, Int};
+    use std::vec;
 
     #[test]
     fn solves_basic_constraints() {

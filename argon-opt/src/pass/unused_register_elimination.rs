@@ -67,6 +67,7 @@ impl OptimizationPass for UnusedRegisterElimination {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn removes_unreferenced_register_declarations_and_renumbers_references() {

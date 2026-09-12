@@ -81,6 +81,7 @@ fn flatten_sequence(regions: &mut Vec<Box<vf::Region>>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn flattens_nested_sequences_and_removes_empty_basic_blocks() {

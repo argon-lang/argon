@@ -6,6 +6,7 @@ import { Command } from "@commander-js/extra-typings";
 import { writeExprs } from "@argon-lang/esexpr/binary_format";
 import type { InputFile, InputStream, OutputDirectory, OutputFile, OutputStream } from "@argon-lang/js-backend-api";
 import { PlatformMetadataResult } from "@argon-lang/js-backend-api/metadata.js";
+import { TaskMessage } from "@argon-lang/js-backend-api/task-messages.js";
 import { loadMetadata, codegen } from "./index.js";
 
 
@@ -136,7 +137,13 @@ const program = new Command();
 
 program
     .name("argon-js-backend")
-    .description("Argon JavaScript backend CLI");
+    .description("Argon JavaScript backend CLI")
+    .option("--output-format <format>", "Task message output format (text or esexpr)", value => {
+        if(value !== "text" && value !== "esexpr") {
+            throw new Error(`Invalid output format: ${value}`);
+        }
+        return value;
+    }, "text");
 
 program
     .command("platform-metadata")
@@ -163,9 +170,18 @@ try {
 }
 catch(err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`argon-js-backend: ${message}`);
-    if(err instanceof Error && err.stack) {
-        console.error(err.stack);
+    const taskMessage = `argon-js-backend: ${message}`;
+    if((program.opts() as { outputFormat: string }).outputFormat === "esexpr") {
+        const expr = TaskMessage.codec.encode({ $type: "task-error", message: taskMessage });
+        for await(const chunk of writeExprs([expr])) {
+            process.stdout.write(chunk);
+        }
+    }
+    else {
+        console.error(taskMessage);
+        if(err instanceof Error && err.stack) {
+            console.error(err.stack);
+        }
     }
     process.exitCode = 1;
 }

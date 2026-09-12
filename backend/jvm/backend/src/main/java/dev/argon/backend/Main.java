@@ -4,6 +4,8 @@ import dev.argon.backend.codegen.Codegen;
 import dev.argon.backend.externs.PlatformMetadata;
 import dev.argon.backend.io.InputFile;
 import dev.argon.backend.io.OutputFile;
+import dev.argon.esexpr.ESExprBinaryWriter;
+import dev.argon.tasks.TaskMessage;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
@@ -35,16 +37,38 @@ public final class Main {
 
 	private static int run(String[] args) {
 		return new CommandLine(new RootCommandOptions()).setCommandName("argon-jvm-backend")
+			.setCaseInsensitiveEnumValuesAllowed(true)
 			.setParameterExceptionHandler((ParameterException ex, String[] ignored) -> {
 				System.err.println("argon-jvm-backend: " + ex.getMessage());
 				var commandLine = ex.getCommandLine();
 				commandLine.usage(System.err);
 				return 1;
 			}).setExecutionExceptionHandler((ex, commandLine, parseResult) -> {
-				System.err.println("argon-jvm-backend: " + ex.getMessage());
-				ex.printStackTrace(System.err);
+				if(parseResult.matchedOptionValue("--output-format", OutputFormat.TEXT) == OutputFormat.ESEXPR) {
+					writeTaskError("argon-jvm-backend: " + ex.getMessage());
+				}
+				else {
+					System.err.println("argon-jvm-backend: " + ex.getMessage());
+					ex.printStackTrace(System.err);
+				}
 				return commandLine.getCommandSpec().exitCodeOnExecutionException();
 			}).execute(args);
+	}
+
+	private static void writeTaskError(String message) {
+		try {
+			new ESExprBinaryWriter(System.out)
+				.write(TaskMessage.codec().encode(new TaskMessage.TaskError(message)));
+			System.out.flush();
+		}
+		catch(IOException ex) {
+			System.err.println("argon-jvm-backend: failed to write task error: " + ex.getMessage());
+		}
+	}
+
+	public enum OutputFormat {
+		TEXT,
+		ESEXPR,
 	}
 
 	private static int runPlatformMetadata(JvmPlatformMetadataCommand command) throws IOException {
@@ -100,6 +124,10 @@ public final class Main {
 	@Command(subcommands = {PlatformMetadataCommandOptions.class, CodegenCommandOptions.class,})
 	@SuppressWarnings("NullAway")
 	public static final class RootCommandOptions implements Callable<Integer> {
+		@Option(names = "--output-format", defaultValue = "text", scope = CommandLine.ScopeType.INHERIT,
+			description = "Task message output format: ${COMPLETION-CANDIDATES}")
+		public OutputFormat outputFormat;
+
 		@Mixin
 		public HelpOptions helpOptions;
 

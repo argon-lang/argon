@@ -42,9 +42,7 @@ const minimalWasi = {
             const bytes = new Uint8Array(z3Memory.buffer, ptr, len);
             const text = textDecoder.decode(bytes);
 
-            if (fd === 1) {
-                console.log(text);
-            } else if (fd === 2) {
+            if (fd === 1 || fd === 2) {
                 console.error(text);
             }
 
@@ -167,16 +165,23 @@ async function copyOutputFile(source, outputFile) {
     }
 }
 
-async function runJava(args) {
+async function runJava(args, processStdout) {
     const { spawn } = await import("node:child_process");
-    return await new Promise((resolve, reject) => {
-        const child = spawn("java", args, { stdio: ["ignore", "pipe", "pipe"] });
-        const chunks = [];
-        child.stdout.on("data", chunk => chunks.push(chunk));
-        child.stderr.on("data", chunk => chunks.push(chunk));
-        child.on("error", reject);
-        child.on("close", (code, signal) => resolve({ code, signal, output: Buffer.concat(chunks).toString() }));
-    });
+    const { once } = await import("node:events");
+    const child = spawn("java", args, { stdio: ["ignore", "pipe", "inherit"] });
+    const completion = once(child, "close");
+    try {
+        const [[code, signal]] = await Promise.all([
+            completion,
+            processStdout(child.stdout),
+        ]);
+        return { code, signal };
+    }
+    catch(error) {
+        child.kill();
+        await completion.catch(() => {});
+        throw error;
+    }
 }
 
 globalThis.__argon_run_jvm_backend = async (task, options) => {
@@ -184,7 +189,11 @@ globalThis.__argon_run_jvm_backend = async (task, options) => {
     const temp = await fs.mkdtemp(path.join(os.tmpdir(), "argon-jvm-"));
     try {
         const outputPath = path.join(temp, task === "codegen" ? "output.jar" : "platform-metadata.esx");
-        const args = ["--module-path", path.resolve(wasmDirectory, "../../backend/jvm"), "--module", "dev.argon.backend"];
+        const args = [
+            "--module-path", path.resolve(wasmDirectory, "../../backend/jvm"),
+            "--module", "dev.argon.backend",
+            "--output-format", "esexpr",
+        ];
         if (task === "platform-metadata") {
             args.push("platform-metadata", "jvm");
             for (let i = 0; i < options.externFiles.length; ++i) {
@@ -203,11 +212,27 @@ globalThis.__argon_run_jvm_backend = async (task, options) => {
             throw new Error(`unknown JVM backend task: ${task}`);
         }
 
-        const result = await runJava(args);
-        if (result.code !== 0) {
-            throw new Error(`java exited with status ${result.code ?? `signal ${result.signal}`}\n${result.output}`);
+        const apiUrl = pathToFileURL(path.join(wasmDirectory,
+            "../../backend/js/node_modules/@argon-lang/js-backend-api/lib/task-messages.js"));
+        const binaryUrl = pathToFileURL(path.join(wasmDirectory,
+            "../../backend/js/node_modules/@argon-lang/esexpr/lib/binary_format.js"));
+        const { TaskMessage } = await import(apiUrl);
+        const { readExprStream, writeExprs } = await import(binaryUrl);
+        const processStdout = async stdout => {
+            for await (const expr of readExprStream(stdout)) {
+                const message = TaskMessage.codec.decode(expr);
+                const chunks = [];
+                for await (const chunk of writeExprs([TaskMessage.codec.encode(message)])) {
+                    chunks.push(chunk);
+                }
+                await options.logMessage(new Uint8Array(Buffer.concat(chunks)));
+            }
+        };
+        const result = await runJava(args, processStdout);
+        if (result.code === 0) {
+            await copyOutputFile(outputPath, options.outputFile);
         }
-        await copyOutputFile(outputPath, options.outputFile);
+        return { success: result.code === 0 };
     } catch (error) {
         await options.outputFile.delete();
         throw error;
@@ -219,9 +244,11 @@ globalThis.__argon_run_jvm_backend = async (task, options) => {
 const argonc = await import(pathToFileURL(path.join(wasmDirectory, "argon_wasm.js")));
 
 try {
-    process.exitCode = await argonc.main(process.argv.slice(1), {
-        write: (s) => process.stdout.write(s),
-    });
+    process.exitCode = await argonc.main(
+        process.argv.slice(1),
+        { write: bytes => process.stdout.write(bytes) },
+        { write: bytes => process.stderr.write(bytes) },
+    );
 } finally {
     delete globalThis.__argon_wasm_imports;
     delete globalThis.__argon_run_jvm_backend;

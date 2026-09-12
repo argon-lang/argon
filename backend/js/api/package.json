@@ -7,12 +7,13 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "codegen": "cpy --flat ../../nobleidl/api/metadata.nidl ../../nobleidl/js/js-platform-metadata.nidl ../../nobleidl/vm/vm.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "codegen": "cpy --flat ../../nobleidl/api/metadata.nidl ../../../argon-tasks/src/task-messages.nidl ../../nobleidl/js/js-platform-metadata.nidl ../../nobleidl/vm/vm.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
     "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/"
   },
   "exports": {
     ".": "./lib/index.js",
     "./metadata.js": "./lib/metadata.js",
+    "./task-messages.js": "./lib/task-messages.js",
     "./js-platform-metadata.js": "./lib/js-platform-metadata.js",
     "./vm.js": "./lib/vm.js"
   },
@@ -33,11 +34,13 @@
   "NobleIDL": {
     "inputFiles": [
       "src/metadata.nidl",
+      "src/task-messages.nidl",
       "src/js-platform-metadata.nidl",
       "src/vm.nidl"
     ],
     "packageMapping": {
       "argon.backend.metadata": "metadata",
+      "argon.tasks": "task-messages",
       "argon.jsbackendmetadata": "js-platform-metadata",
       "argon.vm": "vm"
     }

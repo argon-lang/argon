@@ -3,7 +3,6 @@ use argon_compiler::platform::{ExternType, PlatformExtern, PlatformMetadata};
 use argon_compiler::{CompileErrorReporter, Context, ContextObject};
 use argon_util::sync::{Mutex, mutex_lock};
 use argon_util::{CompileError, ErrorReporter, Fuel, InternalCompilerError};
-use embedded_io::{Write, WriteFmtError};
 use esexpr::ESExpr;
 use hashbrown::{HashMap, hash_map};
 use parse18_runtime::WithLocation;
@@ -142,11 +141,8 @@ impl RunnerErrorReporter {
         mutex_lock(&self.compile_errors).clone()
     }
 
-    pub fn print_error_messages<W>(&self, writer: &mut W) -> Result<(), WriteFmtError<W::Error>>
-    where
-        W: Write,
-    {
-        print_error_messages(self, writer)
+    pub fn log_error_messages(&self, logger: &mut dyn crate::message::TaskLogger) {
+        log_error_messages(self, logger);
     }
 
     pub fn has_errors(&self) -> bool {
@@ -174,27 +170,21 @@ fn push_error<E>(errors: &Mutex<Vec<E>>, error: E) {
     mutex_lock(errors).push(error);
 }
 
-fn print_error_messages<W>(
-    reporter: &RunnerErrorReporter,
-    writer: &mut W,
-) -> Result<(), WriteFmtError<W::Error>>
-where
-    W: Write,
-{
+fn log_error_messages(reporter: &RunnerErrorReporter, logger: &mut dyn crate::message::TaskLogger) {
     let internal_errors = mutex_lock(&reporter.internal_compiler_errors);
     if !internal_errors.is_empty() {
         for error in internal_errors.iter() {
-            writer.write_fmt(format_args!("internal compiler error: {error}\n"))?;
+            logger.log(crate::message::task_error(alloc::format!(
+                "internal compiler error: {error}"
+            )));
         }
 
-        return Ok(());
+        return;
     }
     drop(internal_errors);
 
     let compile_errors = mutex_lock(&reporter.compile_errors);
     for error in compile_errors.iter() {
-        writer.write_fmt(format_args!("compile error: {error}\n"))?;
+        logger.log(crate::message::compile_error(error.clone()));
     }
-
-    Ok(())
 }

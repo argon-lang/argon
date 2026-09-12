@@ -325,6 +325,7 @@ fn visit_register(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::{vec, vec::Vec};
 
     #[test]
     fn filters_instruction_registers_by_use_and_definition() {

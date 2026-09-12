@@ -235,6 +235,7 @@ fn is_unconditional_branch(instruction: &vf::Instruction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::{vec, vec::Vec};
 
     #[test]
     fn removes_trailing_break_to_current_block() {

@@ -2,7 +2,8 @@ pub mod backend;
 pub mod options;
 
 use crate::options::{
-    CodeGenBackendCommand, Command, CommandLineOptions, PlatformMetadataBackendCommand,
+    CodeGenBackendCommand, Command, CommandLineOptions, OutputFormat,
+    PlatformMetadataBackendCommand,
 };
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use argon_tasks::backend::{NativeBackendJS, NativeBackendJVM};
@@ -19,21 +20,35 @@ use std::ffi::OsString;
 use wasm_bindgen::prelude::wasm_bindgen;
 
 /// Run argonc asynchronously with command-line arguments, including the executable name.
-pub async fn main<W>(args: Vec<OsString>, stdout: &mut W) -> i32
+pub async fn main<WO, WE>(args: Vec<OsString>, stdout: &mut WO, stderr: &mut WE) -> i32
 where
-    W: Write,
+    WO: Write,
+    WE: Write,
 {
-    let js_backend = create_js_backend();
-    let jvm_backend = create_jvm_backend();
     let options = match CommandLineOptions::try_parse_from(args) {
         Ok(options) => options,
         Err(error) => {
             let rendered = error.render().to_string();
-            let _ = stdout.write_all(rendered.as_bytes());
+            let _ = stderr.write_all(rendered.as_bytes());
             return error.exit_code();
         }
     };
-    match options.command {
+    match options.output_format {
+        OutputFormat::Text => {
+            let mut logger = argon_tasks::message::TextTaskLogger::new(stdout);
+            run(options.command, &mut logger).await
+        }
+        OutputFormat::ESExpr => {
+            let mut logger = argon_tasks::message::ESExprTaskLogger::new(stdout);
+            run(options.command, &mut logger).await
+        }
+    }
+}
+
+async fn run(command: Command, logger: &mut dyn argon_tasks::message::TaskLogger) -> i32 {
+    let js_backend = create_js_backend();
+    let jvm_backend = create_jvm_backend();
+    match command {
         Command::Compile(cmd) => {
             let output_file = LocalOutputFile::new(cmd.output_file.clone());
             let runner_options = argon_tasks::CompileOptions {
@@ -52,7 +67,7 @@ where
                 output_file: output_file.clone(),
             };
 
-            if !argon_tasks::compile(runner_options, stdout).await {
+            if !argon_tasks::compile(runner_options, logger).await {
                 return 1;
             }
         }
@@ -68,7 +83,7 @@ where
                 platform: cmd.platform,
             };
 
-            if !argon_tasks::gen_ir(runner_options, stdout).await {
+            if !argon_tasks::gen_ir(runner_options, logger).await {
                 return 1;
             }
         }
@@ -84,7 +99,7 @@ where
                 optimizations: cmd.optimizations,
             };
 
-            if !argon_tasks::optimize(runner_options, stdout).await {
+            if !argon_tasks::optimize(runner_options, logger).await {
                 return 1;
             }
         }
@@ -97,7 +112,7 @@ where
                         output_dir: argon_tasks::local_io::LocalOutputDirectory::new(cmd.output),
                         executable: cmd.executable,
                     },
-                    stdout,
+                    logger,
                 )
                 .await;
                 if !success {
@@ -112,7 +127,7 @@ where
                         output_file: LocalOutputFile::new(cmd.output),
                         executable: cmd.executable,
                     },
-                    stdout,
+                    logger,
                 )
                 .await;
                 if !success {
@@ -133,7 +148,7 @@ where
                             .collect(),
                         output_file: LocalOutputFile::new(cmd.output_file),
                     },
-                    stdout,
+                    logger,
                 )
                 .await;
                 if !success {
@@ -151,7 +166,7 @@ where
                             .collect(),
                         output_file: LocalOutputFile::new(cmd.output_file),
                     },
-                    stdout,
+                    logger,
                 )
                 .await;
                 if !success {
@@ -210,9 +225,19 @@ fn create_jvm_backend() -> WasmBackendJVM {
 /// Run argonc from JavaScript with command-line arguments represented as strings.
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 #[wasm_bindgen(js_name = main)]
-pub async fn wasm_main(args: Vec<String>, stdout: JavaScriptWriter) -> i32 {
+pub async fn wasm_main(
+    args: Vec<String>,
+    stdout: JavaScriptWriter,
+    stderr: JavaScriptWriter,
+) -> i32 {
     let mut stdout = WasmWriter::new(stdout);
-    main(args.into_iter().map(OsString::from).collect(), &mut stdout).await
+    let mut stderr = WasmWriter::new(stderr);
+    main(
+        args.into_iter().map(OsString::from).collect(),
+        &mut stdout,
+        &mut stderr,
+    )
+    .await
 }
 
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
@@ -235,8 +260,7 @@ impl ErrorType for WasmWriter {
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 impl Write for WasmWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, Self::Error> {
-        let text = core::str::from_utf8(buf).expect("argonc output must be valid UTF-8");
-        self.writer.write(text);
+        self.writer.write(buf);
         Ok(buf.len())
     }
 
@@ -251,5 +275,5 @@ extern "C" {
     pub type JavaScriptWriter;
 
     #[wasm_bindgen(method, structural, js_name = write)]
-    fn write(this: &JavaScriptWriter, text: &str);
+    fn write(this: &JavaScriptWriter, bytes: &[u8]);
 }

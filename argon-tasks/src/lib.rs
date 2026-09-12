@@ -7,6 +7,7 @@ pub mod backend;
 mod context;
 #[cfg(feature = "std")]
 pub mod local_io;
+pub mod message;
 mod tubes;
 
 use crate::backend::metadata::load_platform_metadata;
@@ -22,7 +23,6 @@ use argon_io::{
 use argon_source::SourceCodeTubeOptions;
 use argon_util::sync::ThreadSafe;
 use argon_util::{CompileError, ErrorReporter, InternalCompilerError, TubeFormatError};
-use embedded_io::{Write, WriteFmtError};
 use esexpr::ESExprCodec;
 use esexpr_binary::{ExprGeneratorAsync, ExprParserAsync, GeneratorError, ParseError};
 
@@ -53,13 +53,15 @@ pub use backend::{
     JvmPlatformMetadataOptions, PlatformMetadataJSOptions as JsPlatformMetadataOptions,
 };
 
-pub async fn compile<ID, IF, O, W>(options: CompileOptions<ID, IF, O>, error_output: &mut W) -> bool
+pub async fn compile<ID, IF, O>(
+    options: CompileOptions<ID, IF, O>,
+    logger: &mut dyn message::TaskLogger,
+) -> bool
 where
     ID: InputDirectory + ThreadSafe,
     ID::File: ThreadSafe,
     IF: InputFile + ThreadSafe,
     O: OutputFile,
-    W: Write,
 {
     let mut context = RunnerContext::new();
     for input_file in options.platform_metadata {
@@ -143,45 +145,40 @@ where
             break 'errors;
         }
 
-        let _ = writeln!(error_output, "Compilation succeeded.");
         tube_collection.tube_collection().unload();
         return true;
     }
 
     tube_collection.tube_collection().unload();
-    let _ = context.runner_reporter().print_error_messages(error_output);
-    let _ = delete_output_file(&options.output_file, error_output).await;
+    context.runner_reporter().log_error_messages(logger);
+    delete_output_file(&options.output_file, logger).await;
     false
 }
 
-async fn delete_output_file<O, W>(
-    output_file: &O,
-    error_output: &mut W,
-) -> Result<(), WriteFmtError<W::Error>>
+async fn delete_output_file<O>(output_file: &O, logger: &mut dyn message::TaskLogger)
 where
     O: OutputFile,
-    W: Write,
 {
     if let Err(err) = output_file.delete().await {
         #[cfg(feature = "std")]
-        error_output.write_fmt(format_args!(
+        logger.log(message::task_error(alloc::format!(
             "failed to delete output file {}: {err}",
             output_file.path().display()
-        ))?;
+        )));
         #[cfg(not(feature = "std"))]
-        error_output.write_fmt(format_args!("failed to delete output file: {err}"))?;
-
-        error_output.write_all(b"\n")?;
+        logger.log(message::task_error(alloc::format!(
+            "failed to delete output file: {err}"
+        )));
     }
-
-    Ok(())
 }
 
-pub async fn gen_ir<IF, O, W>(options: GenIrOptions<IF, O>, error_output: &mut W) -> bool
+pub async fn gen_ir<IF, O>(
+    options: GenIrOptions<IF, O>,
+    logger: &mut dyn message::TaskLogger,
+) -> bool
 where
     IF: InputFile + ThreadSafe,
     O: OutputFile,
-    W: Write,
 {
     let context = RunnerContext::new();
     let context = Arc::new(context);
@@ -236,21 +233,20 @@ where
             break 'errors;
         }
 
-        let _ = writeln!(error_output, "Compilation succeeded.");
         tube_collection.tube_collection().unload();
         return true;
     }
 
     tube_collection.tube_collection().unload();
-    let _ = context.runner_reporter().print_error_messages(error_output);
-    let _ = delete_output_file(&options.output_file, error_output).await;
+    context.runner_reporter().log_error_messages(logger);
+    delete_output_file(&options.output_file, logger).await;
     false
 }
 
-pub async fn platform_metadata_js<B, I, O, W>(
+pub async fn platform_metadata_js<B, I, O>(
     backend: &B,
     options: JsPlatformMetadataOptions<I, O>,
-    error_output: &mut W,
+    logger: &mut dyn message::TaskLogger,
 ) -> bool
 where
     B: BackendJS,
@@ -258,17 +254,14 @@ where
     I::Reader: 'static,
     O: OutputFile + 'static,
     O::Writer: 'static,
-    W: Write,
 {
-    backend
-        .platform_metadata::<I, O, W>(options, error_output)
-        .await
+    backend.platform_metadata::<I, O>(options, logger).await
 }
 
-pub async fn codegen_js<B, I, O, W>(
+pub async fn codegen_js<B, I, O>(
     backend: &B,
     options: JsCodeGenOptions<I, O>,
-    error_output: &mut W,
+    logger: &mut dyn message::TaskLogger,
 ) -> bool
 where
     B: BackendJS,
@@ -277,15 +270,14 @@ where
     O: OutputDirectory + 'static,
     O::File: OutputFile + 'static,
     <O::File as OutputFile>::Writer: 'static,
-    W: Write,
 {
-    backend.codegen_js(options, error_output).await
+    backend.codegen_js(options, logger).await
 }
 
-pub async fn platform_metadata_jvm<B, I, O, W>(
+pub async fn platform_metadata_jvm<B, I, O>(
     backend: &B,
     options: JvmPlatformMetadataOptions<I, O>,
-    error_output: &mut W,
+    logger: &mut dyn message::TaskLogger,
 ) -> bool
 where
     B: BackendJVM,
@@ -293,15 +285,14 @@ where
     I::Reader: 'static,
     O: OutputFile + 'static,
     O::Writer: 'static,
-    W: Write,
 {
-    backend.platform_metadata(options, error_output).await
+    backend.platform_metadata(options, logger).await
 }
 
-pub async fn codegen_jvm<B, I, O, W>(
+pub async fn codegen_jvm<B, I, O>(
     backend: &B,
     options: JvmCodegenOptions<I, O>,
-    error_output: &mut W,
+    logger: &mut dyn message::TaskLogger,
 ) -> bool
 where
     B: BackendJVM,
@@ -309,16 +300,17 @@ where
     I::Reader: 'static,
     O: OutputFile + 'static,
     O::Writer: 'static,
-    W: Write,
 {
-    backend.codegen_jvm(options, error_output).await
+    backend.codegen_jvm(options, logger).await
 }
 
-pub async fn optimize<IF, O, W>(options: OptimizeOptions<IF, O>, error_output: &mut W) -> bool
+pub async fn optimize<IF, O>(
+    options: OptimizeOptions<IF, O>,
+    logger: &mut dyn message::TaskLogger,
+) -> bool
 where
     IF: InputFile,
     O: OutputFile,
-    W: Write,
 {
     let context = RunnerContext::new();
 
@@ -328,7 +320,7 @@ where
             context
                 .runner_reporter()
                 .report_error(CompileError::unknown_optimization(optimization));
-            let _ = context.runner_reporter().print_error_messages(error_output);
+            context.runner_reporter().log_error_messages(logger);
             return false;
         };
 
@@ -392,12 +384,11 @@ where
             break 'errors;
         }
 
-        let _ = writeln!(error_output, "Optimization succeeded.");
         return true;
     }
 
-    let _ = context.runner_reporter().print_error_messages(error_output);
-    let _ = delete_output_file(&options.output_file, error_output).await;
+    context.runner_reporter().log_error_messages(logger);
+    delete_output_file(&options.output_file, logger).await;
     false
 }
 

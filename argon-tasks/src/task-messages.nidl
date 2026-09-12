@@ -1,0 +1,39 @@
+package argon.tasks;
+
+import nobleidl.core;
+
+
+@esexpr:(derive-codec)
+record source-position {
+    line: nat;
+    column: nat;
+}
+
+@esexpr:(derive-codec)
+record source-location {
+    file: string;
+    start: source-position;
+    end: source-position;
+}
+
+@esexpr:(derive-codec)
+record compile-error {
+    code: nat;
+    message: string;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    location: optional-field[source-location];
+}
+
+@esexpr:(derive-codec)
+enum task-message {
+    @esexpr:(inline-value)
+    compile-error {
+        error: compile-error;
+    },
+
+    task-error {
+        message: string;
+    },
+}

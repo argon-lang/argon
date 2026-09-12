@@ -89,6 +89,7 @@ fn discard_unused_function_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn removes_pure_instruction_with_no_live_definitions() {

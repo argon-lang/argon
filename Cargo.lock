@@ -284,6 +284,8 @@ dependencies = [
  "clap",
  "dhat",
  "embedded-io",
+ "esexpr",
+ "esexpr-binary",
  "fs_extra",
  "futures-lite",
  "hashbrown 0.17.1",

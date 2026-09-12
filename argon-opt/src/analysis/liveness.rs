@@ -138,6 +138,7 @@ impl LivenessAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::vec;
 
     #[test]
     fn computes_live_in_and_live_out() {

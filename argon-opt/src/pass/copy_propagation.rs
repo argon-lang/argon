@@ -225,6 +225,7 @@ fn is_safe_propagation(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloc::{boxed::Box, vec};
 
     #[test]
     fn propagates_copy_into_use() {
