@@ -46,20 +46,8 @@ impl RunnerContext {
             .map(|(platform, metadata)| (platform.clone(), metadata.metadata.clone()))
             .collect()
     }
-}
 
-impl Default for RunnerContext {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ContextObject for RunnerContext {
-    fn reporter(&self) -> &dyn CompileErrorReporter {
-        &self.reporter
-    }
-
-    fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern {
+    fn extern_of_type(&self, name: &WithLocation<String>, expected: ExternType) -> PlatformExtern {
         if self.platform_metadata.is_empty() {
             self.reporter
                 .report_error(CompileError::platform_independent_extern(
@@ -84,14 +72,45 @@ impl ContextObject for RunnerContext {
                         ));
                     return None;
                 };
-
-                match &ext.extern_type {
-                    ExternType::Function => Some((platform.clone(), ext.implementation.clone())),
+                if ext.extern_type != expected {
+                    self.reporter
+                        .report_error(CompileError::invalid_platform_extern_type(
+                            name.location.clone(),
+                            platform,
+                            &name.value,
+                            expected.name(),
+                            ext.extern_type.name(),
+                        ));
+                    return None;
                 }
+                Some((platform.clone(), ext.implementation.clone()))
             })
             .collect();
-
         PlatformExtern { externs }
+    }
+}
+
+impl Default for RunnerContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContextObject for RunnerContext {
+    fn reporter(&self) -> &dyn CompileErrorReporter {
+        &self.reporter
+    }
+
+    fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern {
+        self.extern_of_type(name, ExternType::Function)
+    }
+
+    fn extern_method(&self, name: &WithLocation<String>) -> PlatformExtern {
+        self.extern_of_type(name, ExternType::Method)
+    }
+
+    fn extern_static_method(&self, name: &WithLocation<String>) -> PlatformExtern {
+        self.extern_of_type(name, ExternType::StaticMethod)
     }
 
     fn normalize_fuel(&self) -> Fuel {

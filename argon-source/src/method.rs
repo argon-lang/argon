@@ -262,7 +262,7 @@ impl<MC: MethodClosure + 'static> Method for SourceMethod<MC> {
                     FunctionImplementation::Expr(expr)
                 }
                 ast::FunctionBody::ExternBody(name) => {
-                    let externs = self.context.extern_function(name);
+                    let externs = self.context.extern_method(name);
                     FunctionImplementation::Extern(externs)
                 }
             })

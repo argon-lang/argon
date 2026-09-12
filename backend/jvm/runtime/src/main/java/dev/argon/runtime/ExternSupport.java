@@ -15,6 +15,10 @@ public final class ExternSupport {
 	private ExternSupport() {
 	}
 
+	public static Trampoline<String> stringResult(String value) {
+		return new Trampoline.Result<>(value);
+	}
+
 	public static Trampoline<String> i8ToS(byte value, Tuple0 _empty) {
 		return new Trampoline.Result<>(Byte.toString(value));
 	}

@@ -1,6 +1,6 @@
 import { closeSync, openSync, readSync, writeSync } from "node:fs";
 
-externFunction("path_from_string", (() => {
+externStaticMethod("path_from_string", (() => {
     const inputStreamType = InputStream$a$r$_.specialize();
     const outputStreamType = OutputStream$a$r$_.specialize();
     const pathType = Path$a$r$_.specialize();

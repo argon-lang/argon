@@ -158,7 +158,7 @@ impl<MC: StaticMethodClosure + 'static> StaticMethod for SourceStaticMethod<MC> 
                     FunctionImplementation::Expr(expr)
                 }
                 ast::FunctionBody::ExternBody(name) => {
-                    FunctionImplementation::Extern(self.context.extern_function(name))
+                    FunctionImplementation::Extern(self.context.extern_static_method(name))
                 }
             })
         }))

@@ -70,6 +70,10 @@ pub trait ContextObject: ThreadSafe {
 
     fn extern_function(&self, name: &WithLocation<String>) -> PlatformExtern;
 
+    fn extern_method(&self, name: &WithLocation<String>) -> PlatformExtern;
+
+    fn extern_static_method(&self, name: &WithLocation<String>) -> PlatformExtern;
+
     fn normalize_fuel(&self) -> Fuel;
 
     fn prolog_fuel(&self) -> Fuel;

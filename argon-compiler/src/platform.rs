@@ -7,8 +7,21 @@ pub struct PlatformMetadata {
     pub externs: HashMap<String, Extern>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExternType {
     Function,
+    Method,
+    StaticMethod,
+}
+
+impl ExternType {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Function => "function",
+            Self::Method => "method",
+            Self::StaticMethod => "static method",
+        }
+    }
 }
 
 pub struct Extern {

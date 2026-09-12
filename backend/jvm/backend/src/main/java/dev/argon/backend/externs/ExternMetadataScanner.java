@@ -26,6 +26,8 @@ import java.util.Optional;
 
 public final class ExternMetadataScanner {
 	private static final String EXTERN_FUNCTION_DESCRIPTOR = "Ldev/argon/runtime/ExternFunction;";
+	private static final String EXTERN_METHOD_DESCRIPTOR = "Ldev/argon/runtime/ExternMethod;";
+	private static final String EXTERN_STATIC_METHOD_DESCRIPTOR = "Ldev/argon/runtime/ExternStaticMethod;";
 	private static final String ARGON_MODULE_DESCRIPTOR = "Ldev/argon/runtime/ArgonModule;";
 
 	private ExternMetadataScanner() {
@@ -81,22 +83,28 @@ public final class ExternMetadataScanner {
 
 	private static void processClass(MetadataBuilder metadata, ClassModel classModel) {
 		for(var method : classModel.methods()) {
-			var externName = externFunctionName(method);
-			if(externName.isEmpty()) {
+			var externAnnotation = externAnnotation(method);
+			if(externAnnotation.isEmpty()) {
 				continue;
 			}
+			var externName = externAnnotation.get().name();
 
-			validateExternMethod(classModel, method, externName.get());
+			validateExternMethod(classModel, method, externName);
 
-			if(!metadata.externNames.add(externName.get())) {
-				throw new IllegalArgumentException("Duplicate extern function: " + externName.get());
+			if(!metadata.externNames.add(externName)) {
+				throw new IllegalArgumentException("Duplicate extern: " + externName);
 			}
 
 			var implementation = new JvmExtern.JvmFunction(classModel.thisClass().name().stringValue(),
 				method.methodName().stringValue(), method.methodType().stringValue());
 
-			metadata.externs.put(externName.get(),
-				new Extern.ExternFunction(externName.get(), JvmExtern.codec().encode(implementation)));
+			var encoded = JvmExtern.codec().encode(implementation);
+			Extern extern = switch(externAnnotation.get().kind()) {
+				case FUNCTION -> new Extern.ExternFunction(externName, encoded);
+				case METHOD -> new Extern.ExternMethod(externName, encoded);
+				case STATIC_METHOD -> new Extern.ExternStaticMethod(externName, encoded);
+			};
+			metadata.externs.put(externName, extern);
 		}
 	}
 
@@ -170,16 +178,25 @@ public final class ExternMetadataScanner {
 		throw new IllegalArgumentException("@ArgonModule must specify a module path");
 	}
 
-	private static Optional<String> externFunctionName(MethodModel method) {
+	private enum ExternKind { FUNCTION, METHOD, STATIC_METHOD }
+	private record ExternAnnotation(ExternKind kind, String name) {}
+
+	private static Optional<ExternAnnotation> externAnnotation(MethodModel method) {
+		ExternAnnotation result = null;
 		for(var annotation : annotations(method)) {
-			if(!annotation.classSymbol().descriptorString().equals(EXTERN_FUNCTION_DESCRIPTOR)) {
-				continue;
-			}
-
-			return Optional.of(annotationValue(annotation).orElse(method.methodName().stringValue()));
+			var kind = switch(annotation.classSymbol().descriptorString()) {
+				case EXTERN_FUNCTION_DESCRIPTOR -> ExternKind.FUNCTION;
+				case EXTERN_METHOD_DESCRIPTOR -> ExternKind.METHOD;
+				case EXTERN_STATIC_METHOD_DESCRIPTOR -> ExternKind.STATIC_METHOD;
+				default -> null;
+			};
+			if(kind == null) continue;
+			if(result != null) throw new IllegalArgumentException("Method has multiple extern annotations: "
+				+ method.methodName().stringValue());
+			result = new ExternAnnotation(kind,
+				annotationValue(annotation).orElse(method.methodName().stringValue()));
 		}
-
-		return Optional.empty();
+		return Optional.ofNullable(result);
 	}
 
 	private static List<Annotation> annotations(AttributedElement element) {
@@ -205,7 +222,7 @@ public final class ExternMetadataScanner {
 				return value.isEmpty() ? Optional.empty() : Optional.of(value);
 			}
 
-			throw new IllegalArgumentException("@ExternFunction value must be a string");
+			throw new IllegalArgumentException("Extern annotation value must be a string");
 		}
 
 		return Optional.empty();

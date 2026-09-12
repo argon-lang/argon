@@ -63,6 +63,20 @@ fn convert_extern(extern_: Box<Extern>) -> PlatformExtern {
             extern_type: ExternType::Function,
             implementation: implementation.into_inner(),
         },
+        Extern::ExternMethod {
+            name: _,
+            implementation,
+        } => PlatformExtern {
+            extern_type: ExternType::Method,
+            implementation: implementation.into_inner(),
+        },
+        Extern::ExternStaticMethod {
+            name: _,
+            implementation,
+        } => PlatformExtern {
+            extern_type: ExternType::StaticMethod,
+            implementation: implementation.into_inner(),
+        },
     }
 }
 

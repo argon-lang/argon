@@ -15,7 +15,7 @@ public final class IoExternGenerator implements ExternGenerator {
 		MethodTypeDesc descriptor = MethodTypeDesc.of(
 			ExternGeneratorSupport.CD_TRAMPOLINE, ConstantDescs.CD_String
 		);
-		byte[] pathExterns = ExternGeneratorSupport.staticExternClass(
+		byte[] pathExterns = ExternGeneratorSupport.staticExternMethodClass(
 			ClassDesc.of("argontube2.Argon.IO.PathExterns"),
 			ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL,
 			"path_from_string",

@@ -1,0 +1,12 @@
+module _
+
+import Argon.Core::String::String
+
+public def extern_function(): String = extern test_extern_function
+
+public enum ExternOwner
+    Value
+
+    public def self.extern_method(): String = extern test_extern_method
+    public def static.extern_static_method(): String = extern test_extern_static_method
+end

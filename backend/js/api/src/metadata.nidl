@@ -20,5 +20,12 @@ enum extern {
         name: string;
         implementation: esexpr;
     },
+    extern-method {
+        name: string;
+        implementation: esexpr;
+    },
+    extern-static-method {
+        name: string;
+        implementation: esexpr;
+    },
 }
-

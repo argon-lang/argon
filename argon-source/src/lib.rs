@@ -160,6 +160,14 @@ mod tests {
             }
         }
 
+        fn extern_method(&self, name: &WithLocation<String>) -> PlatformExtern {
+            self.extern_function(name)
+        }
+
+        fn extern_static_method(&self, name: &WithLocation<String>) -> PlatformExtern {
+            self.extern_function(name)
+        }
+
         fn normalize_fuel(&self) -> Fuel {
             Fuel::new(5)
         }

@@ -24,15 +24,37 @@ function inputFile(source) {
     };
 }
 
-async function decodeExtern(source, name = "test") {
+async function decodeExtern(source, name = "test", kind = "extern-function") {
     const externs = await loadExterns([inputFile(source)]);
     const metadata = externs.get(name);
     assert.ok(metadata);
-    assert.equal(metadata.$type, "extern-function");
+    assert.equal(metadata.$type, kind);
     const decoded = JsExtern.codec.decode(metadata.implementation);
     assert.equal(decoded.success, true);
     return decoded.value;
 }
+
+test("method factories emit their distinct metadata kinds", async () => {
+    const method = await decodeExtern(`externMethod("test", self => self);`, "test", "extern-method");
+    assert.equal(method.declaration.type, "ArrowFunctionExpression");
+
+    const staticMethod = await decodeExtern(
+        `externStaticMethod("test", () => "static");`, "test", "extern-static-method",
+    );
+    assert.equal(staticMethod.declaration.type, "ArrowFunctionExpression");
+});
+
+test("extern names are unique across all kinds", async () => {
+    await assert.rejects(loadExterns([inputFile(`
+        externFunction("same", () => 1);
+        externMethod("same", () => 2);
+    `)]), /Duplicate extern: same/);
+});
+
+test("unknown extern factories are rejected", async () => {
+    await assert.rejects(loadExterns([inputFile(`externUnknown("test", () => 1);`)]),
+        /Unknown extern factory function: externUnknown/);
+});
 
 test("arrow functions are retained as extern expressions", async () => {
     const extern = await decodeExtern(`

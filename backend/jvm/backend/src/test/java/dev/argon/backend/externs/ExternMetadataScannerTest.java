@@ -79,6 +79,42 @@ final class ExternMetadataScannerTest {
 	}
 
 	@Test
+	void distinguishesAllExternAnnotationKinds() throws Exception {
+		var classes = compileSources(source("test/externs/Externs.java", """
+			package test.externs;
+			import dev.argon.runtime.ExternFunction;
+			import dev.argon.runtime.ExternMethod;
+			import dev.argon.runtime.ExternStaticMethod;
+			public final class Externs {
+				@ExternFunction public static void functionName() {}
+				@ExternMethod("method_name") public static void methodName() {}
+				@ExternStaticMethod("static_name") public static void staticName() {}
+			}
+			"""));
+		var externs = ExternMetadataScanner.platformMetadata(inputFiles(classes)).externs().map();
+		assertInstanceOf(Extern.ExternFunction.class, externs.get("functionName"));
+		assertInstanceOf(Extern.ExternMethod.class, externs.get("method_name"));
+		assertInstanceOf(Extern.ExternStaticMethod.class, externs.get("static_name"));
+	}
+
+	@Test
+	void rejectsMultipleExternAnnotations() throws Exception {
+		var classes = compileSources(source("test/externs/Externs.java", """
+			package test.externs;
+			import dev.argon.runtime.ExternFunction;
+			import dev.argon.runtime.ExternMethod;
+			public final class Externs {
+				@ExternFunction @ExternMethod public static void duplicate() {}
+			}
+			"""));
+		var ex = assertThrows(IllegalArgumentException.class,
+			() -> ExternMetadataScanner.platformMetadata(inputFiles(classes)));
+		var message = ex.getMessage();
+		assertNotNull(message);
+		assertTrue(message.contains("multiple extern annotations"));
+	}
+
+	@Test
 	void rejectsAnnotatedNonStaticMethod() throws Exception {
 		var classes = compileSources(source("test/externs/Externs.java", """
 			package test.externs;

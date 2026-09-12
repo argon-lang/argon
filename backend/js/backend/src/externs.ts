@@ -24,7 +24,7 @@ export async function loadExterns(files: readonly InputFile[]): Promise<Map<stri
             switch(extern.extern.$type) {
                 case "js-function":
                     metadata = {
-                        $type: "extern-function",
+                        $type: extern.kind,
                         name: extern.name,
                         implementation: encoded,
                     }
@@ -90,13 +90,19 @@ class ModuleExternLoader {
                 case "ExpressionStatement":
                 {
                     const expr = stmt.expression;
-                    if(expr.type !== "CallExpression" || expr.callee.type !== "Identifier" || expr.callee.name !== "externFunction") {
+                    if(expr.type !== "CallExpression" || expr.callee.type !== "Identifier") {
                         throw new Error("Externs must be defined by calling an extern factory function.");
                     }
 
                     switch(expr.callee.name) {
                         case "externFunction":
-                            yield this.addExternFunctionCall(expr);
+                            yield this.addExternCall(expr, "extern-function");
+                            break;
+                        case "externMethod":
+                            yield this.addExternCall(expr, "extern-method");
+                            break;
+                        case "externStaticMethod":
+                            yield this.addExternCall(expr, "extern-static-method");
                             break;
 
                         default:
@@ -106,7 +112,7 @@ class ModuleExternLoader {
                 }
 
                 default:
-                    throw new Error("Only import statements and externFunction calls are allowed in module used for externs.");
+                    throw new Error("Only import statements and extern factory calls are allowed in module used for externs.");
             }
         }
     }
@@ -159,24 +165,27 @@ class ModuleExternLoader {
         }
     }
 
-    private addExternFunctionCall(expr: ReadonlyDeep<estree.CallExpression>): NamedExtern {
+    private addExternCall(expr: ReadonlyDeep<estree.CallExpression>, kind: ExternMetadata["$type"]): NamedExtern {
+        const factoryName = kind === "extern-function" ? "externFunction"
+            : kind === "extern-method" ? "externMethod" : "externStaticMethod";
         if(expr.arguments.length !== 2) {
-            throw new Error("externFunction must be called with a name and function.");
+            throw new Error(factoryName + " must be called with a name and function.");
         }
 
         const nameArg = expr.arguments[0]!;
         const funcArg = expr.arguments[1]!;
 
         if(nameArg.type !== "Literal" || typeof nameArg.value !== "string") {
-            throw new Error("externFunction name must be a string literal.");
+            throw new Error(factoryName + " name must be a string literal.");
         }
 
         if(funcArg.type === "SpreadElement") {
-            throw new Error("externFunction implementation must be an expression.");
+            throw new Error(factoryName + " implementation must be an expression.");
         }
 
         return {
             name: nameArg.value,
+            kind,
             extern: this.buildExternFunction(funcArg),
         };
     }
@@ -207,6 +216,7 @@ class ModuleExternLoader {
 
 interface NamedExtern {
     readonly name: string;
+    readonly kind: ExternMetadata["$type"];
     readonly extern: JsExtern;
 }
 

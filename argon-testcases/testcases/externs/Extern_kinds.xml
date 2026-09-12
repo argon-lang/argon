@@ -1,0 +1,20 @@
+<ArgonTest>
+    <Name>Extern declaration kinds</Name>
+    <InputSource name="index.argon"><![CDATA[
+        module _
+        import Argon.Core::puts
+        import Argon.TestExterns::*
+
+        proc main(): () do
+            puts (extern_function ())
+            puts (ExternOwner.Value.extern_method ())
+            puts (ExternOwner.extern_static_method ())
+        end
+    ]]></InputSource>
+    <Libraries>
+        <Library>Argon.TestExterns</Library>
+    </Libraries>
+    <ExpectedOutput>function result
+method result
+static method result</ExpectedOutput>
+</ArgonTest>

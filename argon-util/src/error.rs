@@ -47,7 +47,7 @@ pub enum ErrorCode {
     DuplicatePlatform = 0x0021,
     PlatformIndependentExtern = 0x0022,
     UnknownPlatformExtern = 0x0023,
-    PlatformExternNotFunction = 0x0024,
+    InvalidPlatformExternType = 0x0024,
     RecordTypeRequired = 0x0025,
     RecordLiteralExtraArguments = 0x0026,
     DuplicateRecordLiteralField = 0x0027,
@@ -405,17 +405,21 @@ impl CompileError {
         )
     }
 
-    pub fn platform_extern_not_function(
+    pub fn invalid_platform_extern_type(
         loc: Location,
         platform: impl AsRef<str>,
         name: impl AsRef<str>,
+        expected: impl AsRef<str>,
+        actual: impl AsRef<str>,
     ) -> Self {
         Self::new(
-            ErrorCode::PlatformExternNotFunction,
+            ErrorCode::InvalidPlatformExternType,
             format!(
-                "Extern {} for platform {} is not a function",
+                "Extern {} for platform {} has type {}, expected {}",
                 name.as_ref(),
-                platform.as_ref()
+                platform.as_ref(),
+                actual.as_ref(),
+                expected.as_ref()
             ),
             Some(loc),
         )
