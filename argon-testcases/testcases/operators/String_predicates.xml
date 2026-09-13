@@ -1,0 +1,61 @@
+<ArgonTest>
+
+    <Name>String predicates</Name>
+
+    <InputSource name="index.argon">
+
+        module _
+
+        import Argon.Core::*
+
+        proc main(): () do
+            puts ("alphabet".starts_with?("alpha").to_s())
+            puts ("alphabet".starts_with?("beta").to_s())
+            puts ("alphabet".ends_with?("bet").to_s())
+            puts ("alphabet".ends_with?("alpha").to_s())
+            puts ("alphabet".contains?("pha").to_s())
+            puts ("alphabet".contains?("z").to_s())
+            puts ("same".starts_with?("same").to_s())
+            puts ("same".ends_with?("same").to_s())
+            puts ("same".contains?("same").to_s())
+            puts ("".starts_with?("").to_s())
+            puts ("".ends_with?("").to_s())
+            puts ("".contains?("").to_s())
+            puts ("".starts_with?("a").to_s())
+            puts ("".ends_with?("a").to_s())
+            puts ("".contains?("a").to_s())
+            puts ("alphabet".starts_with?("").to_s())
+            puts ("alphabet".ends_with?("").to_s())
+            puts ("alphabet".contains?("").to_s())
+            puts ("Alphabet".starts_with?("alpha").to_s())
+            puts ("Alphabet".ends_with?("Bet").to_s())
+            puts ("Alphabet".contains?("PHA").to_s())
+        end
+
+    </InputSource>
+
+    <ExpectedOutput>
+        true
+        false
+        true
+        false
+        true
+        false
+        true
+        true
+        true
+        true
+        true
+        true
+        false
+        false
+        false
+        true
+        true
+        true
+        false
+        false
+        false
+    </ExpectedOutput>
+
+</ArgonTest>

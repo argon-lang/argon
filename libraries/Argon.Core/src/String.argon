@@ -8,3 +8,7 @@ public inline def operator ++ (a: String) (b: String): String = __argon_builtin 
 
 public inline def operator = (a: String) (b: String): Bool = __argon_builtin string_eq a b
 public inline def operator != (a: String) (b: String): Bool = !(__argon_builtin string_eq a b)
+
+public def extension starts_with? (value: String)(prefix: String): Bool = extern string_starts_with
+public def extension ends_with? (value: String)(suffix: String): Bool = extern string_ends_with
+public def extension contains? (value: String)(substring: String): Bool = extern string_contains

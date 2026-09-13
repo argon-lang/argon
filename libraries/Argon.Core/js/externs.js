@@ -35,6 +35,18 @@ externFunction("i64_to_s", function i64_to_s(i64) {
     return BigInt.asIntN(64, i64).toString();
 })
 
+externFunction("string_starts_with", function string_starts_with(value, prefix) {
+    return value.startsWith(prefix);
+});
+
+externFunction("string_ends_with", function string_ends_with(value, suffix) {
+    return value.endsWith(suffix);
+});
+
+externFunction("string_contains", function string_contains(value, substring) {
+    return value.includes(substring);
+});
+
 externFunction("puts", function puts(s) {
     console.log(s);
 });

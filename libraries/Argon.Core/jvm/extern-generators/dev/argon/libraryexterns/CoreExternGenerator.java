@@ -33,7 +33,35 @@ public final class CoreExternGenerator implements ExternGenerator {
 			"argontube2.Argon.Core.Puts.PutsExterns", "puts", "puts", "puts",
 			MethodTypeDesc.of(ExternGeneratorSupport.CD_TRAMPOLINE, ConstantDescs.CD_String), code -> code.aload(0)
 		));
+		classes.add(stringPredicates());
 		return List.copyOf(classes);
+	}
+
+	private static byte[] stringPredicates() {
+		ClassDesc className = ClassDesc.of("argontube2.Argon.Core.String.StringExterns");
+		MethodTypeDesc descriptor = MethodTypeDesc.of(
+			ExternGeneratorSupport.CD_TRAMPOLINE, ConstantDescs.CD_String, ConstantDescs.CD_String
+		);
+		return ExternGeneratorSupport.CLASS_FILE.build(className, classBuilder -> {
+			stringPredicate(classBuilder, "string_starts_with", "stringStartsWith", descriptor);
+			stringPredicate(classBuilder, "string_ends_with", "stringEndsWith", descriptor);
+			stringPredicate(classBuilder, "string_contains", "stringContains", descriptor);
+		});
+	}
+
+	private static void stringPredicate(
+		java.lang.classfile.ClassBuilder classBuilder,
+		String externName,
+		String methodName,
+		MethodTypeDesc descriptor
+	) {
+		classBuilder.withFlags(ClassFile.ACC_FINAL).withMethod(
+			methodName, descriptor, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC,
+			methodBuilder -> methodBuilder.with(ExternGeneratorSupport.externFunction(externName)).withCode(
+				code -> code.aload(0).aload(1)
+					.invokestatic(ExternGeneratorSupport.CD_EXTERN_SUPPORT, methodName, descriptor).areturn()
+			)
+		);
 	}
 
 	private static void primitive(

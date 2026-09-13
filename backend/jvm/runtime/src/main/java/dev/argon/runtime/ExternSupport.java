@@ -46,6 +46,15 @@ public final class ExternSupport {
 	public static Trampoline<String> intToS(BigInteger value, Tuple0 _empty) {
 		return new Trampoline.Result<>(value.toString());
 	}
+	public static Trampoline<Boolean> stringStartsWith(String value, String prefix) {
+		return new Trampoline.Result<>(value.startsWith(prefix));
+	}
+	public static Trampoline<Boolean> stringEndsWith(String value, String suffix) {
+		return new Trampoline.Result<>(value.endsWith(suffix));
+	}
+	public static Trampoline<Boolean> stringContains(String value, String substring) {
+		return new Trampoline.Result<>(value.contains(substring));
+	}
 	public static Trampoline<Tuple0> puts(String value) {
 		System.out.println(value);
 		return new Trampoline.Result<>(new Tuple0());
