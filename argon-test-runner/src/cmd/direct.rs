@@ -1,8 +1,9 @@
 use crate::{
-    JSPlatform, JVMPlatform,
+    JSPlatform, JVMPlatform, PerlPlatform,
     cmd::{CommandRunner, CommandRunnerPlatform},
     js_platform::{JsCodeGenOptions, JsPlatformMetadataOptions},
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
+    perl_platform::{PerlCodeGenOptions, PerlPlatformMetadataOptions},
     workspace::WorkspacePaths,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
@@ -183,6 +184,54 @@ impl CommandRunnerPlatform<JVMPlatform> for DirectCommandRunner {
                 argon_tasks::JvmCodegenOptions {
                     input_file: options.input_file,
                     output_file,
+                    executable: options.executable,
+                },
+                logger,
+            ))
+    }
+}
+
+impl CommandRunnerPlatform<PerlPlatform> for DirectCommandRunner {
+    fn platform_metadata<I, O>(
+        &self,
+        options: PerlPlatformMetadataOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
+    where
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
+    {
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::platform_metadata_perl(
+                &argon_tasks::PerlBackend::new(),
+                argon_tasks::PerlPlatformMetadataOptions {
+                    distribution_name: None,
+                    root_package: None,
+                    extern_files: options.extern_files,
+                    output_file: options.output_file,
+                },
+                logger,
+            ))
+    }
+
+    fn codegen<I, O>(&self, options: PerlCodeGenOptions<I, O>, logger: &mut dyn TaskLogger) -> bool
+    where
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
+    {
+        tokio::runtime::Runtime::new()
+            .expect("create Tokio runtime")
+            .block_on(argon_tasks::codegen_perl(
+                &argon_tasks::PerlBackend::new(),
+                argon_tasks::PerlCodegenOptions {
+                    input_file: options.input_file,
+                    output_dir: options.output_dir,
                     executable: options.executable,
                 },
                 logger,

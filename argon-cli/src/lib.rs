@@ -48,6 +48,7 @@ where
 async fn run(command: Command, logger: &mut dyn argon_tasks::message::TaskLogger) -> i32 {
     let js_backend = create_js_backend();
     let jvm_backend = create_jvm_backend();
+    let perl_backend = argon_tasks::PerlBackend::new();
     match command {
         Command::Compile(cmd) => {
             let output_file = LocalOutputFile::new(cmd.output_file.clone());
@@ -104,6 +105,21 @@ async fn run(command: Command, logger: &mut dyn argon_tasks::message::TaskLogger
             }
         }
         Command::CodeGen(cmd) => match cmd.backend_command {
+            CodeGenBackendCommand::Perl(cmd) => {
+                if !argon_tasks::codegen_perl(
+                    &perl_backend,
+                    argon_tasks::PerlCodegenOptions {
+                        input_file: LocalInputFile::new(cmd.input),
+                        output_dir: argon_tasks::local_io::LocalOutputDirectory::new(cmd.output),
+                        executable: cmd.executable,
+                    },
+                    logger,
+                )
+                .await
+                {
+                    return 1;
+                }
+            }
             CodeGenBackendCommand::JS(cmd) => {
                 let success = argon_tasks::codegen_js(
                     &js_backend,
@@ -136,6 +152,26 @@ async fn run(command: Command, logger: &mut dyn argon_tasks::message::TaskLogger
             }
         },
         Command::PlatformMetadata(cmd) => match cmd.backend_command {
+            PlatformMetadataBackendCommand::Perl(cmd) => {
+                if !argon_tasks::platform_metadata_perl(
+                    &perl_backend,
+                    argon_tasks::PerlPlatformMetadataOptions {
+                        distribution_name: cmd.distribution_name,
+                        root_package: cmd.root_package,
+                        extern_files: cmd
+                            .extern_files
+                            .into_iter()
+                            .map(LocalInputFile::new)
+                            .collect(),
+                        output_file: LocalOutputFile::new(cmd.output_file),
+                    },
+                    logger,
+                )
+                .await
+                {
+                    return 1;
+                }
+            }
             PlatformMetadataBackendCommand::JS(cmd) => {
                 let success = argon_tasks::platform_metadata_js(
                     &js_backend,

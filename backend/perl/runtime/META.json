@@ -1,0 +1,10 @@
+{
+  "abstract": "Runtime support for generated Argon Perl distributions",
+  "dynamic_config": false,
+  "generated_by": "Argon",
+  "license": ["unknown"],
+  "meta-spec": {"url": "https://metacpan.org/pod/CPAN::Meta::Spec", "version": 2},
+  "name": "Argon-Runtime",
+  "prereqs": {"runtime": {"requires": {"Math::BigInt": "0", "Scalar::Util": "0", "perl": "5.020"}}},
+  "version": "0.1.0"
+}

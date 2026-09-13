@@ -1,10 +1,10 @@
 use crate::{
-    JSPlatform, JVMPlatform,
+    JSPlatform, JVMPlatform, PerlPlatform,
     cmd::{
         CommandRunner, CommandRunnerPlatform,
         backend_options::{
             js_codegen_args, js_platform_metadata_args, jvm_codegen_args,
-            jvm_platform_metadata_args,
+            jvm_platform_metadata_args, perl_codegen_args, perl_platform_metadata_args,
         },
         staging::{
             copy_temp_output, copy_temp_output_dir, stage_input_dirs, stage_input_file,
@@ -13,6 +13,7 @@ use crate::{
     },
     js_platform::{JsCodeGenOptions, JsPlatformMetadataOptions},
     jvm_platform::{JvmCodeGenOptions, JvmPlatformMetadataOptions},
+    perl_platform::{PerlCodeGenOptions, PerlPlatformMetadataOptions},
     workspace::WorkspacePaths,
 };
 use argon_io::{InputDirectory, InputFile, OutputDirectory, OutputFile};
@@ -130,7 +131,78 @@ impl CommandRunnerPlatform<JVMPlatform> for CliCommandRunner {
     }
 }
 
+impl CommandRunnerPlatform<PerlPlatform> for CliCommandRunner {
+    fn platform_metadata<I, O>(
+        &self,
+        options: PerlPlatformMetadataOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> bool
+    where
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputFile + 'static,
+        O::Writer: 'static,
+    {
+        let result = self.perl_platform_metadata_staged(options, logger);
+        log_result(logger, result)
+    }
+
+    fn codegen<I, O>(&self, options: PerlCodeGenOptions<I, O>, logger: &mut dyn TaskLogger) -> bool
+    where
+        I: InputFile + 'static,
+        I::Reader: 'static,
+        O: OutputDirectory + 'static,
+        O::File: OutputFile + 'static,
+        <O::File as OutputFile>::Writer: 'static,
+    {
+        let result = self.perl_codegen_staged(options, logger);
+        log_result(logger, result)
+    }
+}
+
 impl CliCommandRunner {
+    fn perl_platform_metadata_staged<I: InputFile, O: OutputFile>(
+        &self,
+        options: PerlPlatformMetadataOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String> {
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| format!("failed to create temporary command directory: {e}"))?;
+        let extern_files = stage_input_files(temp_dir.path(), "extern", options.extern_files)?;
+        let output_file = temp_dir.path().join("platform-metadata.esx");
+        self.run_argonc_command(
+            &perl_platform_metadata_args(extern_files, output_file.clone()),
+            logger,
+        )?;
+        copy_temp_output(&output_file, options.output_file)
+    }
+
+    fn perl_codegen_staged<I: InputFile, O: OutputDirectory>(
+        &self,
+        options: PerlCodeGenOptions<I, O>,
+        logger: &mut dyn TaskLogger,
+    ) -> Result<(), String> {
+        let temp_dir = tempfile::TempDir::new()
+            .map_err(|e| format!("failed to create temporary command directory: {e}"))?;
+        let input_file = stage_input_file(temp_dir.path(), "input", 0, options.input_file)?;
+        let output_dir = temp_dir.path().join("output");
+        std::fs::create_dir_all(&output_dir).map_err(|e| {
+            format!(
+                "failed to create temporary output directory {}: {e}",
+                output_dir.display()
+            )
+        })?;
+        self.run_argonc_command(
+            &perl_codegen_args(
+                input_file,
+                output_dir.clone(),
+                options.executable.as_deref(),
+            ),
+            logger,
+        )?;
+        copy_temp_output_dir(&output_dir, options.output_dir)
+    }
+
     fn compile_staged<ID, IF, O>(
         &self,
         options: CompileOptions<ID, IF, O>,

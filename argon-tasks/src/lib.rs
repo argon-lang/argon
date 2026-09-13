@@ -49,9 +49,25 @@ pub struct OptimizeOptions<IF, O> {
 }
 
 pub use backend::{
-    BackendJS, BackendJVM, CodegenJSOptions as JsCodeGenOptions, JvmCodegenOptions,
-    JvmPlatformMetadataOptions, PlatformMetadataJSOptions as JsPlatformMetadataOptions,
+    BackendJS, BackendJVM, BackendPerl, CodegenJSOptions as JsCodeGenOptions, JvmCodegenOptions,
+    JvmPlatformMetadataOptions, PerlBackend, PerlCodegenOptions, PerlPlatformMetadataOptions,
+    PlatformMetadataJSOptions as JsPlatformMetadataOptions,
 };
+
+pub async fn platform_metadata_perl<B: BackendPerl, I: InputFile, O: OutputFile>(
+    backend: &B,
+    options: PerlPlatformMetadataOptions<I, O>,
+    logger: &mut dyn message::TaskLogger,
+) -> bool {
+    backend.platform_metadata(options, logger).await
+}
+pub async fn codegen_perl<B: BackendPerl, I: InputFile, O: OutputDirectory>(
+    backend: &B,
+    options: PerlCodegenOptions<I, O>,
+    logger: &mut dyn message::TaskLogger,
+) -> bool {
+    backend.codegen_perl(options, logger).await
+}
 
 pub async fn compile<ID, IF, O>(
     options: CompileOptions<ID, IF, O>,

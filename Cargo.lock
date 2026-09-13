@@ -98,6 +98,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
+name = "argon-backend-perl"
+version = "0.1.0"
+dependencies = [
+ "argon-format-vm",
+ "argon-io",
+ "argon-vm",
+ "esexpr",
+ "noble-idl-runtime",
+ "num-bigint 0.4.8",
+ "perl-parser-core",
+]
+
+[[package]]
 name = "argon-cli"
 version = "0.1.0"
 dependencies = [
@@ -245,6 +258,7 @@ dependencies = [
 name = "argon-tasks"
 version = "0.1.0"
 dependencies = [
+ "argon-backend-perl",
  "argon-compiler",
  "argon-format",
  "argon-format-vm",
@@ -2081,6 +2095,102 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "perl-ast"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3400b5da583e4025e772454eb4ea4719113b82a19e65b34727536d3e2a1e9ea7"
+dependencies = [
+ "perl-ast-v2",
+ "perl-position-tracking",
+ "perl-token",
+ "strum",
+]
+
+[[package]]
+name = "perl-ast-v2"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38e5b532e908e22a3e7f3c3f4e727049ff71c977b94552cd3f3a517bcc052aca"
+dependencies = [
+ "perl-position-tracking",
+]
+
+[[package]]
+name = "perl-lexer"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73fc97b6c235bf23ae961b7c9826e9e7cd1c39874fd8e6f2d7669e62e84b1844"
+dependencies = [
+ "memchr",
+ "perl-position-tracking",
+ "phf",
+ "thiserror",
+ "tracing",
+ "unicode-ident",
+]
+
+[[package]]
+name = "perl-parser-core"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc2067e87ebef1b6c93c87244f01d23a3f8b298c0648e89915c8d809a8a835df"
+dependencies = [
+ "perl-ast",
+ "perl-ast-v2",
+ "perl-lexer",
+ "perl-position-tracking",
+ "perl-pragma",
+ "perl-regex",
+ "perl-semantic-facts",
+ "perl-token",
+ "thiserror",
+]
+
+[[package]]
+name = "perl-position-tracking"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2352b7f25557b422a6ad455042a26ee415bdfac11b6676dbce738784b0d29c4f"
+dependencies = [
+ "ropey",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "perl-pragma"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89e60ed112f9fbad450c1d572654bb8b6f7d769443d037d1a4b8d6f7d992705e"
+dependencies = [
+ "perl-ast",
+]
+
+[[package]]
+name = "perl-regex"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86ed1cbc63b1d728d239615cdbaf0a3bece1ba746420677c819e4faac01c7b62"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "perl-semantic-facts"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "981575269ee9460d404bb5d6af1a4c0bc4b82a85e305cc7c3a043ae9129a9059"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "perl-token"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b89dde53c8f215ac2c9309a269878da31146522e5744d1e42ec46422bb7be8e4"
+
+[[package]]
 name = "phf"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2088,6 +2198,7 @@ checksum = "010378780309880b08997fae13be7834dba947d36393bd372f2b1556deb2a2f6"
 dependencies = [
  "phf_macros",
  "phf_shared",
+ "serde",
 ]
 
 [[package]]
@@ -2321,6 +2432,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba39f3699c378cd8970968dcbff9c43159ea4cfbd88d43c00b22f2ef10a435d2"
 
 [[package]]
+name = "ropey"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93411e420bcd1a75ddd1dc3caf18c23155eda2c090631a85af21ba19e97093b5"
+dependencies = [
+ "smallvec",
+ "str_indices",
+]
+
+[[package]]
 name = "rstest"
 version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2538,6 +2659,12 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "str_indices"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d08889ec5408683408db66ad89e0e1f93dff55c73a4ccc71c427d5b277ee47e6"
 
 [[package]]
 name = "strsim"
@@ -2820,6 +2947,37 @@ name = "toml_writer"
 version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
+
+[[package]]
+name = "tracing"
+version = "0.1.44"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
+dependencies = [
+ "pin-project-lite",
+ "tracing-attributes",
+ "tracing-core",
+]
+
+[[package]]
+name = "tracing-attributes"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "tracing-core"
+version = "0.1.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
+dependencies = [
+ "once_cell",
+]
 
 [[package]]
 name = "unicode-general-category"

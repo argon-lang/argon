@@ -24,6 +24,16 @@ name = "compiler_tests_jvm_opt"
 path = "tests/compiler_tests_jvm_opt.rs"
 harness = false
 
+[[test]]
+name = "compiler_tests_perl"
+path = "tests/compiler_tests_perl.rs"
+harness = false
+
+[[test]]
+name = "compiler_tests_perl_opt"
+path = "tests/compiler_tests_perl_opt.rs"
+harness = false
+
 [[bin]]
 name = "compile-testcases"
 path = "src/bin/compile_testcases.rs"
@@ -35,6 +45,10 @@ path = "src/bin/compiler_tests_dist_js.rs"
 [[bin]]
 name = "compiler-tests-dist-jvm"
 path = "src/bin/compiler_tests_dist_jvm.rs"
+
+[[bin]]
+name = "compiler-tests-dist-perl"
+path = "src/bin/compiler_tests_dist_perl.rs"
 
 [dependencies]
 argon-io = { workspace = true, features = ["std"] }

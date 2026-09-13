@@ -1,0 +1,21 @@
+[package]
+name = "argon-backend-perl"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[features]
+default = ["std"]
+std = ["argon-format-vm/std", "argon-vm/std", "esexpr/std"]
+
+[dependencies]
+argon-format-vm = { workspace = true }
+argon-io = { workspace = true }
+argon-vm = { workspace = true }
+esexpr = { workspace = true }
+num-bigint = { workspace = true }
+noble-idl-runtime = { workspace = true }
+perl-parser-core = { workspace = true }
+
+[lints]
+workspace = true

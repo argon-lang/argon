@@ -80,3 +80,23 @@ pub(crate) fn jvm_codegen_args(
 ) -> Vec<OsString> {
     codegen_args("jvm", input_file, output_file, executable)
 }
+
+pub(crate) fn perl_platform_metadata_args(
+    extern_files: Vec<PathBuf>,
+    output_file: PathBuf,
+) -> Vec<OsString> {
+    platform_metadata_args("perl", extern_files, output_file)
+}
+
+pub(crate) fn perl_codegen_args(
+    input_file: PathBuf,
+    output_dir: PathBuf,
+    executable: Option<&str>,
+) -> Vec<OsString> {
+    let mut args = codegen_args("perl", input_file, output_dir, false);
+    if let Some(name) = executable {
+        args.push(OsString::from("--executable"));
+        args.push(OsString::from(name));
+    }
+    args
+}

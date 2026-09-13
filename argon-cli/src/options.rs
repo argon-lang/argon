@@ -111,6 +111,9 @@ pub struct CodeGenCommand {
 
 #[derive(Subcommand)]
 pub enum CodeGenBackendCommand {
+    /// Generate a Perl distribution from Argon VM IR.
+    #[command(name = "perl")]
+    Perl(PerlCodeGenOptions),
     /// Generate JavaScript code from Argon VM IR.
     #[command(name = "js")]
     JS(JsCodeGenOptions),
@@ -118,6 +121,16 @@ pub enum CodeGenBackendCommand {
     /// Generate JVM code from Argon VM IR.
     #[command(name = "jvm")]
     JVM(JvmCodeGenOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct PerlCodeGenOptions {
+    #[arg(short, long)]
+    pub input: PathBuf,
+    #[arg(short, long)]
+    pub output: PathBuf,
+    #[arg(long)]
+    pub executable: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -158,6 +171,9 @@ pub struct PlatformMetadataCommand {
 
 #[derive(Subcommand)]
 pub enum PlatformMetadataBackendCommand {
+    /// Load platform metadata for Perl.
+    #[command(name = "perl")]
+    Perl(PerlPlatformMetadataOptions),
     /// Load platform metadata for JavaScript.
     #[command(name = "js")]
     JS(JsPlatformMetadataOptions),
@@ -165,6 +181,18 @@ pub enum PlatformMetadataBackendCommand {
     /// Load platform metadata for JVM.
     #[command(name = "jvm")]
     JVM(JvmPlatformMetadataOptions),
+}
+
+#[derive(Args, Debug)]
+pub struct PerlPlatformMetadataOptions {
+    #[arg(long)]
+    pub distribution_name: Option<String>,
+    #[arg(long = "root-package", value_delimiter = ':')]
+    pub root_package: Option<Vec<String>>,
+    #[arg(long = "extern")]
+    pub extern_files: Vec<PathBuf>,
+    #[arg(short, long)]
+    pub output_file: PathBuf,
 }
 
 #[derive(Args, Debug)]
