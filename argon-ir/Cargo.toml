@@ -1,0 +1,19 @@
+[package]
+name = "argon-ir"
+publish = false
+edition = "2024"
+
+[features]
+default = []
+std = ["argon-expr/std", "argon-parser/std", "argon-util/std", "parse18-runtime/std"]
+
+[dependencies]
+argon-expr = { workspace = true }
+argon-parser = { workspace = true }
+argon-util = { workspace = true }
+derivative = { workspace = true }
+num-bigint = { workspace = true }
+parse18-runtime = { workspace = true }
+
+[lints]
+workspace = true
