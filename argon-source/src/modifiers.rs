@@ -228,6 +228,8 @@ fn find_best_match<T: Clone>(spec: ModifierSpec<T>, modifiers: &HashMap<Modifier
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
     use argon_compiler::test_utils::{TestContext, TestReporter};
     use argon_util::ErrorCode;

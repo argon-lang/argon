@@ -3,7 +3,7 @@ use argon_expr::{ErasureMode, ExprContext};
 use derivative::Derivative;
 use parse18_runtime::Location;
 
-use crate::{Instruction, ProgramPoint, RegisterDeclaration};
+use crate::{Instruction, ProgramPoint, Register};
 
 #[derive(Derivative)]
 #[derivative(
@@ -14,12 +14,12 @@ use crate::{Instruction, ProgramPoint, RegisterDeclaration};
     Hash(bound = "")
 )]
 pub struct FunctionBody<EC: ExprContext + ?Sized> {
-    pub registers: Vec<RegisterDeclaration<EC>>,
     pub region: Region<EC>,
 }
 
 /// An ordered instruction region. `entry` addresses the state before its first
-/// instruction, including when `instructions` is empty.
+/// instruction, including when `instructions` is empty, and `result` identifies
+/// the register containing the region's value.
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = ""),
@@ -31,6 +31,7 @@ pub struct FunctionBody<EC: ExprContext + ?Sized> {
 pub struct Region<EC: ExprContext + ?Sized> {
     pub entry: ProgramPoint,
     pub instructions: Vec<InstructionNode<EC>>,
+    pub result: Register,
 }
 
 #[derive(Derivative)]

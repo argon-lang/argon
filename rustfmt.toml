@@ -1,1 +1,4 @@
+edition = "2024"
 control_brace_style = "ClosingNextLine"
+# hard_tabs = true
+

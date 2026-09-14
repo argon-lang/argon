@@ -372,12 +372,12 @@ enum TypeInferResult<'a> {
         function_literal: &'a FunctionLiteral,
     },
 
+    // The remaining cases are compound expressions that may have subexpressions that require additional type information
     Tuple {
         location: &'a Location,
         elements: Vec<TypeInferResult<'a>>,
     },
 
-    // The remaining cases are compound expressions that may have subexpressions that require additional type information
     Finally {
         location: &'a Location,
         body_result: Box<TypeInferResult<'a>>,

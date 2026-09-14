@@ -83,6 +83,12 @@ pub enum Value<EC: ExprContext + ?Sized> {
     },
 }
 
+impl<EC: ExprContext> Value<EC> {
+    pub fn bool_type() -> Value<EC> {
+        Value::BuiltinType(BuiltinType::Bool)
+    }
+}
+
 #[derive(Derivative)]
 #[derivative(
     Debug(bound = ""),

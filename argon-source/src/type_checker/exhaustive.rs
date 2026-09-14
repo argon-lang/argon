@@ -445,6 +445,8 @@ fn z3_int_from_big_int<'z3>(context: &'z3 Z3Context, value: &BigInt) -> Int<'z3>
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::*;
     use crate::type_checker::Model;
     use argon_compiler::access::AccessToken;
@@ -456,7 +458,7 @@ mod tests {
 
     fn test_location() -> Location {
         Location {
-            file: std::path::PathBuf::from("test"),
+            file: "test".into(),
             start: parse18_runtime::FilePosition { line: 0, column: 0 },
             end: parse18_runtime::FilePosition { line: 0, column: 0 },
         }

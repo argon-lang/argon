@@ -5,7 +5,7 @@ use num_bigint::BigInt;
 
 use crate::{
     BlockLabel, EnumType, LocatedPattern, MethodInstanceType, ProgramPoint, RecordType, Region,
-    Register,
+    Register, RegisterDeclaration,
 };
 
 #[derive(Derivative)]
@@ -44,6 +44,10 @@ pub struct FieldRegister<EC: ExprContext + ?Sized> {
     Hash(bound = "")
 )]
 pub enum Instruction<EC: ExprContext + ?Sized> {
+    /// Introduces a register and its source-level metadata into the function body.
+    DeclareRegister {
+        declaration: RegisterDeclaration<EC>,
+    },
     Hole {
         destination: Register,
         hole: EC::Hole,
@@ -322,6 +326,10 @@ pub enum Instruction<EC: ExprContext + ?Sized> {
         body: Region<EC>,
         finally: Region<EC>,
     },
+    Not {
+        destination: Register,
+        value: Register,
+    },
     And {
         destination: Register,
         lhs: Register,
@@ -463,9 +471,6 @@ pub enum Builtin<EC: ExprContext + ?Sized> {
     },
     UnsafeAssumeErased {
         r#type: Register,
-    },
-    Not {
-        value: Register,
     },
     Is {
         value: Register,

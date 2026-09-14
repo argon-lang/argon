@@ -22,6 +22,42 @@ impl ExprContext for ContextWithoutTraits {
     type Instance = u8;
 }
 
+struct ShiftedContext;
+impl ExprContext for ShiftedContext {
+    type Hole = u16;
+    type Function = u8;
+    type Record = u8;
+    type Enum = u8;
+    type Trait = u8;
+    type RecordField = u8;
+    type EnumVariant = u8;
+    type Method = u8;
+    type StaticMethod = u8;
+    type Instance = u8;
+}
+
+struct TestIrShifter;
+
+impl IrContextShifter for TestIrShifter {
+    type EC1 = ContextWithoutTraits;
+    type EC2 = ShiftedContext;
+
+    fn shift_hole(&mut self, hole: u8) -> Value<Self::EC2> {
+        Value::Hole(u16::from(hole))
+    }
+
+    fn shift_instruction_hole(
+        &mut self,
+        destination: Register,
+        hole: u8,
+    ) -> Instruction<Self::EC2> {
+        Instruction::Hole {
+            destination,
+            hole: u16::from(hole),
+        }
+    }
+}
+
 fn location() -> Location {
     let position = FilePosition { line: 1, column: 2 };
     Location {
@@ -36,6 +72,26 @@ fn assert_model_traits<T: Clone + Debug + Eq + Hash>() {}
 #[test]
 fn model_traits_do_not_require_traits_on_context() {
     assert_model_traits::<FunctionBody<ContextWithoutTraits>>();
+}
+
+#[test]
+fn not_is_a_standalone_instruction_and_shifts_unchanged() {
+    let destination = Register::new();
+    let value = Register::new();
+    let instruction = Instruction::<ContextWithoutTraits>::Not {
+        destination: destination.clone(),
+        value: value.clone(),
+    };
+
+    let shifted = TestIrShifter.shift_instruction(instruction);
+
+    assert!(matches!(
+        shifted,
+        Instruction::Not {
+            destination: shifted_destination,
+            value: shifted_value,
+        } if shifted_destination == destination && shifted_value == value
+    ));
 }
 
 #[test]
@@ -64,10 +120,12 @@ fn node_preserves_metadata_and_structured_join() {
             when_true: Region {
                 entry: true_entry.clone(),
                 instructions: Vec::new(),
+                result: Register::new(),
             },
             when_false: Region {
                 entry: false_entry.clone(),
                 instructions: Vec::new(),
+                result: Register::new(),
             },
         },
         location: location(),
@@ -86,9 +144,75 @@ fn empty_region_has_an_addressable_entry() {
     let region = Region::<ContextWithoutTraits> {
         entry: entry.clone(),
         instructions: Vec::new(),
+        result: Register::new(),
     };
     assert_eq!(region.entry, entry);
     assert!(region.instructions.is_empty());
+}
+
+#[test]
+fn context_shifter_traverses_values_and_function_bodies() {
+    let shifted_value = TestIrShifter.shift_value(Value::BuiltinType(BuiltinType::Array {
+        element_type: Box::new(Value::Hole(7)),
+    }));
+    assert!(matches!(
+        shifted_value,
+        Value::BuiltinType(BuiltinType::Array { element_type })
+            if matches!(*element_type, Value::Hole(7_u16))
+    ));
+
+    let destination = Register::new();
+    let declaration = RegisterDeclaration {
+        register: destination.clone(),
+        r#type: Value::Hole(1),
+        name: None,
+        is_mutable: false,
+        erasure_mode: ErasureMode::Concrete,
+        is_witness: false,
+        origin: RegisterOrigin::Temporary,
+    };
+    let body = FunctionBody::<ContextWithoutTraits> {
+        region: Region {
+            entry: ProgramPoint::new(),
+            instructions: vec![
+                InstructionNode {
+                    instruction: Instruction::DeclareRegister { declaration },
+                    location: location(),
+                    exit: ProgramPoint::new(),
+                    erasure_mode: ErasureMode::Concrete,
+                },
+                InstructionNode {
+                    instruction: Instruction::Hole {
+                        destination: destination.clone(),
+                        hole: 2,
+                    },
+                    location: location(),
+                    exit: ProgramPoint::new(),
+                    erasure_mode: ErasureMode::Concrete,
+                },
+            ],
+            result: destination.clone(),
+        },
+    };
+
+    let shifted_body = TestIrShifter.shift_function_body(body);
+    assert_eq!(shifted_body.region.result, destination);
+    assert!(matches!(
+        &shifted_body.region.instructions[0].instruction,
+        Instruction::DeclareRegister {
+            declaration: RegisterDeclaration {
+                r#type: Value::Hole(1_u16),
+                ..
+            },
+        }
+    ));
+    assert!(matches!(
+        &shifted_body.region.instructions[1].instruction,
+        Instruction::Hole {
+            destination: actual_destination,
+            hole: 2_u16,
+        } if actual_destination == &destination
+    ));
 }
 
 #[test]
@@ -279,6 +403,7 @@ fn patterns_witnesses_and_closures_bind_registers() {
         body: Region {
             entry: ProgramPoint::new(),
             instructions: Vec::new(),
+            result: Register::new(),
         },
     };
 

@@ -20,6 +20,7 @@ mod signature;
 mod static_method;
 mod traits;
 mod type_checker;
+mod type_checker_ir;
 
 pub struct SourceCodeTubeOptions<I> {
     pub name: TubeName,
@@ -100,6 +101,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
+
     use super::{SourceCodeTubeOptions, define_source_tube};
     use alloc::{string::String, string::ToString, vec, vec::Vec};
     use argon_compiler::platform::PlatformExtern;
@@ -236,8 +239,14 @@ mod tests {
     impl InputFile for TestSourcePath {
         type Reader = TestSourceFileReader;
 
+        #[cfg(feature = "std")]
         fn path(&self) -> &Path {
             &self.path
+        }
+
+        #[cfg(not(feature = "std"))]
+        fn location_file(&self) -> &str {
+            self.path.to_str().unwrap()
         }
 
         async fn open(&self) -> Result<Self::Reader, InternalCompilerError> {

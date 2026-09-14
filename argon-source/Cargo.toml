@@ -5,12 +5,13 @@ edition = "2024"
 
 [features]
 default = []
-std = ["argon-compiler/std", "argon-expr/std", "argon-io/std", "argon-parser/std", "argon-prover/std", "argon-util/std", "parse18-runtime/std"]
+std = ["argon-compiler/std", "argon-expr/std", "argon-io/std", "argon-ir/std", "argon-parser/std", "argon-prover/std", "argon-util/std", "parse18-runtime/std"]
 
 [dependencies]
 argon-compiler = { workspace = true }
 argon-expr = { workspace = true }
 argon-io = { workspace = true }
+argon-ir = { workspace = true }
 argon-parser = { workspace = true }
 argon-prover = { workspace = true }
 argon-util = { workspace = true }
@@ -20,6 +21,7 @@ num-bigint = { workspace = true }
 parse18-runtime = { workspace = true }
 argon-z3 = { workspace = true }
 embedded-io = { workspace = true }
+rpds = { workspace = true }
 
 [dev-dependencies]
 argon-compiler = { workspace = true, features = ["test-utils"] }
