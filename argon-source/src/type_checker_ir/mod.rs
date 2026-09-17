@@ -1,16 +1,45 @@
 #![allow(dead_code, reason = "the IR type checker is not integrated yet")]
 
 // Implementation plan:
-// 1. Complete the bidirectional checking foundation: checking expressions and types,
-//    creating and solving holes, normalization, unification, and resolution of partial
-//    inference results.
+// 1. Complete the bidirectional checking foundation:
+//    a. Represent expected types as either an exact IR value or any meta-type. Give
+//       every hole a stable identity, source location, and meta-type; store bindings as
+//       aliases or solved regions, resolve aliases transitively, reject recursive
+//       bindings, and validate solutions before committing them. Holes may occur in
+//       both values and instructions while using `TypeCheckExprContext`.
+//    b. Add program-point-aware normalization for every IR value. Resolve solved holes,
+//       registers whose guarded states agree on a known value, and register snapshots;
+//       preserve path-dependent registers symbolically and bound normalization with the
+//       context's fuel. Evaluate region results for type regions, leaving function-call
+//       reduction as an extension point for the later resolver stage.
+//    c. Unify normalized values transactionally so failed comparisons do not retain
+//       speculative hole bindings. Compare structural and nominal values recursively,
+//       compare dependent function types modulo parameter-register renaming, apply an
+//       occurs check when solving holes, and treat error values as compatible for
+//       recovery. On top of unification, support `Never`, cumulative universes, and
+//       checking that a value has any meta-type; defer ownership conversions.
+//    d. Implement checking by inferring an expression, resolving its inference result
+//       with the expected type, normalizing both types, checking compatibility, and
+//       reporting one mismatch diagnostic. Resume partial tuples and interpolated
+//       strings in source order without emitting any subexpression twice, while leaving
+//       closure-specific resolution for the function-type and closure stage.
+//    e. Eliminate holes as part of shifting to `DefaultExprContext`, whose hole type is
+//       uninhabited. Resolve value holes from the completed model. Override region
+//       shifting to replace a solved instruction hole by its recursively shifted
+//       solution region and a final copy into the reserved destination, retaining the
+//       placeholder's exit point. For an unresolved or cyclic hole, report
+//       `could_not_infer` once and produce valid recovery IR, remapping program points as
+//       needed. The generic instruction-hole shift must therefore be unreachable.
+//    f. Implement the type-expression entry point with the any-meta-type expectation,
+//       evaluate expected type regions before checking ordinary expressions, and run
+//       ownership, erasure, and purity hooks only after producing hole-free default IR.
 // 2. Implement the remaining expressions in dependency order:
 //    a. Finish the leaf expressions first: error recovery, `Type`, builtin types and
 //       values, identifiers, variables, tuple-element loads, and function-result values.
 //       These establish lookup, register reads, and the representation of type values.
 //    b. Add type-forming and expected-type-driven expressions: function types, boxed
-//       types, `as`, and closure literals. Resume partially inferred tuples and
-//       interpolated strings once checking can push an expected type into their holes.
+//       types, `as`, and closure literals, using the expected-type and partial-inference
+//       foundation established above.
 //    c. Add builtins and operator desugaring, then function-object calls. Next port
 //       overload collection, applicability checks, generic argument substitution,
 //       implicit arguments, and dispatch for functions, methods, static methods,
@@ -164,11 +193,29 @@ impl ExprContext for TypeCheckExprContext {
 struct HoleInfo {
     id: UniqueIdentifier,
     location: Location,
-    hole_type: Region<TypeCheckExprContext>,
+    hole_type: ExpectedType,
 }
 
 #[derive(Clone)]
 struct Hole(Arc<HoleInfo>);
+
+impl Hole {
+    fn new(location: Location, hole_type: ExpectedType) -> Self {
+        Self(Arc::new(HoleInfo {
+            id: UniqueIdentifier::new(),
+            location,
+            hole_type,
+        }))
+    }
+
+    fn location(&self) -> &Location {
+        &self.0.location
+    }
+
+    fn hole_type(&self) -> &ExpectedType {
+        &self.0.hole_type
+    }
+}
 
 impl core::fmt::Debug for Hole {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -178,7 +225,7 @@ impl core::fmt::Debug for Hole {
 
 impl PartialEq for Hole {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
+        self.0.id == other.0.id
     }
 }
 
@@ -186,8 +233,14 @@ impl Eq for Hole {}
 
 impl Hash for Hole {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        Arc::as_ptr(&self.0).hash(state);
+        self.0.id.hash(state);
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ExpectedType {
+    AnyMetaType,
+    Exact(Value<TypeCheckExprContext>),
 }
 
 struct TypeChecker<'access, 'scope, 'model> {
@@ -282,7 +335,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let register = Register::new();
         let exit = ProgramPoint::new();
         self.model
-            .fork_program_point(&self.current_label, exit.clone());
+            .fork_program_point(&self.current_label, exit.clone(), []);
         self.instructions.push(InstructionNode {
             location: location.clone(),
             erasure_mode: ErasureMode::Concrete,
@@ -313,7 +366,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let register = self.declare_temporary(location, inferred_type.clone());
         let exit = ProgramPoint::new();
         self.model
-            .fork_program_point(&self.current_label, exit.clone());
+            .fork_program_point(&self.current_label, exit.clone(), []);
         self.model
             .set_register_value(&exit, register.clone(), value);
         self.instructions.push(InstructionNode {
@@ -339,7 +392,7 @@ impl<'access, 'scope, 'model> TypeChecker<'access, 'scope, 'model> {
         let register = self.declare_temporary(location, inferred_type.clone());
         let exit = ProgramPoint::new();
         self.model
-            .fork_program_point(&self.current_label, exit.clone());
+            .fork_program_point(&self.current_label, exit.clone(), []);
         self.instructions.push(InstructionNode {
             location: location.clone(),
             erasure_mode: ErasureMode::Concrete,

@@ -69,6 +69,79 @@ fn location() -> Location {
 
 fn assert_model_traits<T: Clone + Debug + Eq + Hash>() {}
 
+#[derive(Default)]
+struct HoleScanner {
+    holes: Vec<u8>,
+}
+
+impl IrScanner for HoleScanner {
+    type EC = ContextWithoutTraits;
+
+    fn scan_hole(&mut self, hole: &u8) -> bool {
+        self.holes.push(*hole);
+        true
+    }
+}
+
+#[test]
+fn scanner_finds_value_and_instruction_holes_in_nested_regions() {
+    let nested_entry = ProgramPoint::new();
+    let nested = Region {
+        entry: nested_entry,
+        instructions: vec![InstructionNode {
+            instruction: Instruction::Hole {
+                destination: Register::new(),
+                hole: 2,
+            },
+            location: location(),
+            exit: ProgramPoint::new(),
+            erasure_mode: ErasureMode::Erased,
+        }],
+        result: Register::new(),
+    };
+    let region = Region {
+        entry: ProgramPoint::new(),
+        instructions: vec![
+            InstructionNode {
+                instruction: Instruction::DeclareRegister {
+                    declaration: RegisterDeclaration {
+                        register: Register::new(),
+                        r#type: Value::Tuple(vec![Value::Hole(1)]),
+                        name: None,
+                        is_mutable: false,
+                        erasure_mode: ErasureMode::Erased,
+                        is_witness: false,
+                        origin: RegisterOrigin::Temporary,
+                    },
+                },
+                location: location(),
+                exit: ProgramPoint::new(),
+                erasure_mode: ErasureMode::Erased,
+            },
+            InstructionNode {
+                instruction: Instruction::IfElse {
+                    destination: Register::new(),
+                    condition: Register::new(),
+                    when_true: nested,
+                    when_false: Region {
+                        entry: ProgramPoint::new(),
+                        instructions: Vec::new(),
+                        result: Register::new(),
+                    },
+                },
+                location: location(),
+                exit: ProgramPoint::new(),
+                erasure_mode: ErasureMode::Erased,
+            },
+        ],
+        result: Register::new(),
+    };
+
+    let mut scanner = HoleScanner::default();
+    assert!(scanner.scan_region(&region));
+    assert_eq!(scanner.holes, vec![1, 2]);
+}
+
 #[test]
 fn model_traits_do_not_require_traits_on_context() {
     assert_model_traits::<FunctionBody<ContextWithoutTraits>>();

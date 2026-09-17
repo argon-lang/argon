@@ -8,6 +8,7 @@ pub mod control;
 pub mod identity;
 pub mod instruction;
 pub mod pattern;
+pub mod scanner;
 pub mod shifter;
 pub mod value;
 
@@ -18,5 +19,6 @@ pub use control::*;
 pub use identity::*;
 pub use instruction::*;
 pub use pattern::*;
+pub use scanner::*;
 pub use shifter::*;
 pub use value::*;
